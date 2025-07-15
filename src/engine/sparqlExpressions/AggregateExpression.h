@@ -78,7 +78,7 @@ class AggregateExpression : public SparqlExpression {
   }
 
   // Get the cache key for this expression.
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   // Needed for the pattern trick, see `SparqlExpression.h`.

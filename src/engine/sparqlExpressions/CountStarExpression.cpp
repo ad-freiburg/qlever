@@ -59,8 +59,8 @@ ExpressionResult CountStarExpression::evaluate(
   ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
-  ad_utility::callFixedSize(table.numColumns(), [&table]<int I>() {
-    Engine::sort<I>(&table, ql::ranges::lexicographical_compare);
+  ad_utility::callFixedSizeVi(table.numColumns(), [&table](auto i) {
+    Engine::sort<i>(&table, ql::ranges::lexicographical_compare);
   });
   return Id::makeFromInt(
       static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));
@@ -73,7 +73,7 @@ SparqlExpression::AggregateStatus CountStarExpression::isAggregate() const {
 }
 
 // _____________________________________________________________________________
-string CountStarExpression::getCacheKey(
+std::string CountStarExpression::getCacheKey(
     [[maybe_unused]] const VariableToColumnMap& varColMap) const {
   return absl::StrCat("COUNT * with DISTINCT = ", distinct_);
 }

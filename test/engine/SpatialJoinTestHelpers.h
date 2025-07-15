@@ -11,15 +11,16 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace SpatialJoinTestHelpers {
 
-auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
+constexpr inline auto makePointLiteral = [](std::string_view c1,
+                                            std::string_view c2) {
   return absl::StrCat(" \"POINT(", c1, " ", c2, ")\"^^<", GEO_WKT_LITERAL, ">");
 };
 
-auto makeAreaLiteral = [](std::string_view coordinateList) {
+constexpr inline auto makeAreaLiteral = [](std::string_view coordinateList) {
   return absl::StrCat("\"POLYGON((", coordinateList, "))\"^^<", GEO_WKT_LITERAL,
                       ">");
 };
@@ -374,7 +375,9 @@ inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
   TripleComponent subject{Variable{triple.at(0)}};
   TripleComponent object{Variable{triple.at(2)}};
   return ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{
+          subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildJoin(
@@ -421,7 +424,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   if (!qec) {
     qec = buildTestQEC();
   }
-  MaxDistanceConfig task{maxDist};
+  MaxDistanceConfig task{static_cast<double>(maxDist)};
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec.value(),

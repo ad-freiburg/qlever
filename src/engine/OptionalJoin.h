@@ -37,10 +37,10 @@ class OptionalJoin : public Operation {
                std::shared_ptr<QueryExecutionTree> t2);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -59,6 +59,9 @@ class OptionalJoin : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.

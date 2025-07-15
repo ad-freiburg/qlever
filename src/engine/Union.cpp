@@ -87,7 +87,7 @@ Union::Union(QueryExecutionContext* qec,
   }
 }
 
-string Union::getCacheKeyImpl() const {
+std::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
@@ -106,7 +106,7 @@ string Union::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-string Union::getDescriptor() const { return "Union"; }
+std::string Union::getDescriptor() const { return "Union"; }
 
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of
@@ -313,7 +313,8 @@ IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
   // NOTE: previously the check was for `getResultWidth()`, but that is wrong if
   // some variables in the subtree are invisible because of a subquery.
-  auto maxNumRequiredColumns = ql::ranges::max(permutation) + 1;
+  auto maxNumRequiredColumns =
+      permutation.empty() ? ColumnIndex{0} : ql::ranges::max(permutation) + 1;
   while (idTable.numColumns() < maxNumRequiredColumns) {
     idTable.addEmptyColumn();
     ad_utility::chunkedFill(idTable.getColumn(idTable.numColumns() - 1),
@@ -363,10 +364,11 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> Union::createSortedVariant(
-    const vector<ColumnIndex>& sortOrder) const {
-  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
-                                 _subtrees.at(1), sortOrder);
+std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return ad_utility::makeExecutionTree<Union>(
+      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________
@@ -399,10 +401,10 @@ Result::LazyResult Union::computeResultKeepOrder(
   return std::visit(
       [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
        &applyPermutation](auto left, auto right) {
-        return ad_utility::callFixedSize(
+        return ad_utility::callFixedSizeVi(
             trimmedTargetOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
+             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),

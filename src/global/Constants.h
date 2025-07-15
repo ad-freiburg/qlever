@@ -155,6 +155,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+static constexpr std::string_view GEO_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
 
 enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
@@ -164,6 +166,8 @@ constexpr inline std::string_view UNIT_KILOMETER_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
 constexpr inline std::string_view UNIT_MILE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
+
+constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";

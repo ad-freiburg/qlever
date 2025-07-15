@@ -19,8 +19,6 @@ constexpr std::string_view languageTaggedPredicatePrefix = "@";
 // removed as soon as we also store strongly-typed IRIs in the predicates of the
 // `SparqlTriple` class.
 triple_component::Iri convertLangtagToEntityUri(const std::string& tag);
-std::string convertToLanguageTaggedPredicate(const std::string& pred,
-                                             const std::string& langtag);
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag);
 }  // namespace ad_utility

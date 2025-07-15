@@ -44,7 +44,8 @@ class GraphTerm : public GraphTermBase,
   // ___________________________________________________________________________
   // Constructs a TripleComponent from the GraphTerm.
   [[nodiscard]] TripleComponent toTripleComponent() const {
-    return visit([]<typename T>(const T& element) -> TripleComponent {
+    return visit([](const auto& element) -> TripleComponent {
+      using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
       } else if constexpr (std::is_same_v<T, Literal> ||

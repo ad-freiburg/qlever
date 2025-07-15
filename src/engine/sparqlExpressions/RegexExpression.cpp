@@ -111,8 +111,8 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
       continue;
     }
     char c = regex[i];
-    const static string regexSpecialChars = "[]^$.|?*+()";
-    bool isControlChar = regexSpecialChars.find(c) != string::npos;
+    constexpr std::string_view regexSpecialChars = "[]^$.|?*+()";
+    bool isControlChar = regexSpecialChars.find(c) != std::string_view::npos;
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
@@ -153,7 +153,7 @@ PrefixRegexExpression::PrefixRegexExpression(Ptr child, std::string prefixRegex,
 }
 
 // _____________________________________________________________________________
-string PrefixRegexExpression::getCacheKey(
+std::string PrefixRegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("Prefix REGEX expression: ", prefixRegex_,
                       " child:", child_->getCacheKey(varColMap),
@@ -276,6 +276,26 @@ auto PrefixRegexExpression::getEstimatesForFilterExpression(
 void PrefixRegexExpression::checkCancellation(
     const EvaluationContext* context, ad_utility::source_location location) {
   context->cancellationHandle_->throwIfCancelled(location);
+}
+
+// _____________________________________________________________________________
+std::vector<PrefilterExprVariablePair>
+PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  // It is currently not possible to prefilter PREFIX expressions involving
+  // STR(?var), since we not only have to match "Bob", but also "Bob"@en,
+  // "Bob"^^<iri>, and so on. The current prefilter expressions do not consider
+  // this matching logic.
+  if (childIsStrExpression_) {
+    return {};
+  }
+  std::vector<PrefilterExprVariablePair> prefilterVec;
+  prefilterVec.emplace_back(
+      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+          TripleComponent::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(prefixRegex_))),
+      variable_);
+  return prefilterVec;
 }
 
 // _____________________________________________________________________________

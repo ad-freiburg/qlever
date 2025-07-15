@@ -15,7 +15,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
-    std::variant<Variable, std::string> entity, string word)
+    std::variant<Variable, std::string> entity, std::string word)
     : Operation(qec),
       config_(TextIndexScanForEntityConfiguration{
           std::move(textRecordVar), std::move(entity), std::move(word)}) {
@@ -128,13 +128,13 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForEntity::getDescriptor() const {
+std::string TextIndexScanForEntity::getDescriptor() const {
   return absl::StrCat("TextIndexScanForEntity on ",
                       config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForEntity::getCacheKeyImpl() const {
+std::string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << config_.word_ << "\" and fixed-entity: \""

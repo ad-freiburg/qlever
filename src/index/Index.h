@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "global/Id.h"
-#include "index/CompressedString.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
@@ -56,17 +55,17 @@ class Index {
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
     // Stores the index of the TextRecord of each result.
-    vector<TextRecordIndex> cids_;
+    std::vector<TextRecordIndex> cids_;
     // For every instance should wids_.size() never be < 1.
     // For prefix-queries stores for each term and result the index of
     // the Word the prefixed-word was completed to.
-    vector<vector<WordIndex>> wids_ = {{}};
+    std::vector<std::vector<WordIndex>> wids_ = {{}};
     // Stores the index of the entity of each result.
-    vector<Id> eids_;
+    std::vector<Id> eids_;
     // Stores for each result how often an entity
     // appears in its associated TextRecord. [[OLD DEFINITION]]
     // Now scores BM25 scores for all words that are in the voacabulary
-    vector<Score> scores_;
+    std::vector<Score> scores_;
   };
 
   using Filetype = qlever::Filetype;
@@ -96,18 +95,6 @@ class Index {
   // handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
-
-  // Add a text index to a complete KB index. First read the given context
-  // file (if file name not empty), then add words from literals (if true).
-  void buildTextIndexFile(
-      const std::optional<std::pair<std::string, std::string>>&
-          wordsAndDocsFile,
-      bool addWordsFromLiterals,
-      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
-      std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
-
-  // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const std::string& docsFile);
 
   // Add text index from on-disk index that has previously been constructed.
   // Read necessary metadata into memory and open file handles.
@@ -180,10 +167,11 @@ class Index {
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   IdTable getEntityMentionsForWord(
-      const string& term,
+      const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+  size_t getIndexOfBestSuitedElTerm(
+      const std::vector<std::string>& terms) const;
 
   [[nodiscard]] std::string getTextExcerpt(TextRecordIndex cid) const;
 
@@ -233,12 +221,12 @@ class Index {
   bool hasAllPermutations() const;
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(
+  std::vector<float> getMultiplicities(
       const TripleComponent& key, Permutation::Enum permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutation::Enum p) const;
+  std::vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
    * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ

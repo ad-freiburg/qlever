@@ -26,20 +26,6 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase,
 }
 
 // ____________________________________________________________________________
-void Index::buildTextIndexFile(
-    const std::optional<std::pair<std::string, std::string>>& wordsAndDocsFile,
-    bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
-    std::pair<float, float> bAndKForBM25) {
-  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals,
-                             textScoringMetric, bAndKForBM25);
-}
-
-// ____________________________________________________________________________
-void Index::buildDocsDB(const std::string& docsFile) {
-  pimpl_->buildDocsDB(docsFile);
-}
-
-// ____________________________________________________________________________
 void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
 
 // ____________________________________________________________________________
@@ -138,13 +124,14 @@ IdTable Index::getWordPostingsForTerm(
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   return pimpl_->getEntityMentionsForWord(term, allocator);
 }
 
 // ____________________________________________________________________________
-size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+size_t Index::getIndexOfBestSuitedElTerm(
+    const vector<std::string>& terms) const {
   return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 

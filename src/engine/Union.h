@@ -36,10 +36,10 @@ class Union : public Operation {
         std::vector<ColumnIndex> targetOrder = {});
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
@@ -73,8 +73,8 @@ class Union : public Operation {
   // push the sort down to its children. If one of the children is already
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
-  std::shared_ptr<Operation> createSortedVariant(
-      const vector<ColumnIndex>& sortColumns) const;
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {

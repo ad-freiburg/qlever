@@ -39,18 +39,21 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     return std::tuple{std::move(calc), std::move(addValue)};
   }
 
-  std::string idToString(Id result) const {
+  std::string idToString(Id result, bool stripQuotes = true) const {
     auto index = result.getLocalVocabIndex();
     auto resultString = localVocab_.getWord(index).toStringRepresentation();
+    if (!stripQuotes) {
+      return resultString;
+    }
     // Strip leading and trailing quotes.
     AD_CORRECTNESS_CHECK(resultString.size() >= 2);
     size_t endIndex = resultString.size() - 1;
     return std::move(resultString).substr(1, endIndex - 1);
   };
 
-  Id idFromString(std::string string) {
+  Id idFromString(std::string_view string) {
     using ad_utility::triple_component::LiteralOrIri;
-    auto literal = LiteralOrIri::literalWithoutQuotes(std::move(string));
+    auto literal = LiteralOrIri::literalWithoutQuotes(string);
     return Id::makeFromLocalVocabIndex(
         localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
   };
@@ -192,10 +195,12 @@ TEST_F(GroupByHashMapOptimizationTest,
   GroupConcatAggregationData data{";"};
   auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  auto getResultString = [&]() { return idToString(calc()); };
+  auto getResultString = [&](bool stripQuotes = true) {
+    return idToString(calc(), stripQuotes);
+  };
 
-  auto addString = [&](std::string string) {
-    addValue(idFromString(std::move(string)));
+  auto addString = [&](std::string_view string) {
+    addValue(idFromString(string));
   };
 
   EXPECT_EQ(getResultString(), "");
@@ -205,13 +210,53 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_EQ(getResultString(), "a;b");
   addString("c");
   EXPECT_EQ(getResultString(), "a;b;c");
+  addString("");
+  EXPECT_EQ(getResultString(), "a;b;c;");
+  addString("");
+  EXPECT_EQ(getResultString(), "a;b;c;;");
+  addString("d");
+  EXPECT_EQ(getResultString(), "a;b;c;;;d");
 
   data.reset();
   EXPECT_EQ(getResultString(), "");
   addString("a");
   EXPECT_EQ(getResultString(), "a");
   addValue(Id::makeUndefined());
+  EXPECT_EQ(calc(), Id::makeUndefined());
+  addString("a");
+  EXPECT_EQ(calc(), Id::makeUndefined());
+
+  auto addStringWithLangTag = [&](std::string_view string,
+                                  std::string langTag) {
+    using ad_utility::triple_component::LiteralOrIri;
+    auto literal =
+        LiteralOrIri::literalWithoutQuotes(string, std::move(langTag));
+    addValue(Id::makeFromLocalVocabIndex(
+        localVocab_.getIndexAndAddIfNotContained(std::move(literal))));
+  };
+
+  data.reset();
+  EXPECT_EQ(getResultString(), "");
+  addString("a");
   EXPECT_EQ(getResultString(), "a");
+  addStringWithLangTag("b", "en");
+  EXPECT_EQ(getResultString(false), "\"a;b\"");
+
+  data.reset();
+  EXPECT_EQ(getResultString(), "");
+  addStringWithLangTag("a", "en");
+  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  addStringWithLangTag("b", "en");
+  EXPECT_EQ(getResultString(false), "\"a;b\"@en");
+  addStringWithLangTag("c", "de");
+  EXPECT_EQ(getResultString(false), "\"a;b;c\"");
+
+  data.reset();
+  EXPECT_EQ(getResultString(), "");
+  addStringWithLangTag("a", "en");
+  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  addString("b");
+  EXPECT_EQ(getResultString(false), "\"a;b\"");
 }
 
 // _____________________________________________________________________________

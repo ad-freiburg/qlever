@@ -15,7 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -257,7 +257,8 @@ class SpatialJoinParamTest
         ad_utility::triple_component::Iri::fromIriref(geometry)};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
-        SparqlTriple{subject, std::string{"<asWKT>"}, point1});
+        SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),
+                           point1});
     // ====================== build big input ================================
     auto bigChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
@@ -904,7 +905,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
 }
 
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
-  auto maxDist = std::numeric_limits<size_t>::max();
+  auto maxDist = std::numeric_limits<double>::max();
   MaxDistanceConfig maxDistConf{maxDist};
   bool addLeftChildFirst = std::get<1>(GetParam());
 
@@ -1573,8 +1574,9 @@ TEST(SpatialJoin, trueAreaDistance) {
       TripleComponent object{Variable{objStr}};
       return ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
-          SparqlTriple{TripleComponent::Iri::fromIriref(subject), "<asWKT>",
-                       object});
+          SparqlTripleSimple{TripleComponent::Iri::fromIriref(subject),
+                             TripleComponent::Iri::fromIriref("<asWKT>"),
+                             object});
     };
     auto scan1 = makeIndexScan(nr1);
     auto scan2 = makeIndexScan(nr2);

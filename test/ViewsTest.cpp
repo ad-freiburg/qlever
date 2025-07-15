@@ -49,37 +49,6 @@ TEST(Views, BufferedAsyncView) {
   testWithVector(strings);
 }
 
-TEST(Views, uniqueView) {
-  std::vector<int> ints;
-  const uint64_t numInts = 50'000;
-  ints.reserve(numInts);
-  ad_utility::SlowRandomIntGenerator<int> r;
-  for (size_t i = 0; i < numInts; ++i) {
-    ints.push_back(r());
-  }
-
-  std::vector<int> intsWithDuplicates;
-  intsWithDuplicates.reserve(3 * numInts);
-  for (size_t i = 0; i < 3; ++i) {
-    for (auto num : ints) {
-      intsWithDuplicates.push_back(num);
-    }
-  }
-
-  std::sort(intsWithDuplicates.begin(), intsWithDuplicates.end());
-  auto unique = ad_utility::uniqueView(intsWithDuplicates);
-  std::vector<int> result;
-  for (const auto& element : unique) {
-    result.push_back(element);
-  }
-  std::sort(ints.begin(), ints.end());
-  // Erase "accidental" duplicates from the random initialization.
-  auto it = std::unique(ints.begin(), ints.end());
-  ints.erase(it, ints.end());
-  ASSERT_EQ(ints.size(), result.size());
-  ASSERT_EQ(ints, result);
-}
-
 TEST(Views, uniqueBlockView) {
   const uint64_t numInts = 50'000;
   std::vector<int> ints;
@@ -264,4 +233,42 @@ TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
 
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
+
+TEST(Views, CallbackOnEndView) {
+  using namespace ad_utility;
+  size_t numCalls{0};
+  auto callback = [&numCalls]() { ++numCalls; };
+
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    for (auto it = view.begin(); it != view.end(); ++it) {
+      EXPECT_EQ(numCalls, 0u);
+    }
+    // Callback invoked because of the end of the range.
+    EXPECT_EQ(numCalls, 1);
+  }
+  // Callback not invoked again during destruction.
+  EXPECT_EQ(numCalls, 1);
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    for ([[maybe_unused]] size_t i : integerRange(5ul)) {
+      EXPECT_EQ(numCalls, 1u);
+    }
+    // Callback not invoked, because because end was not reached yet.
+    EXPECT_EQ(numCalls, 1);
+  }
+  EXPECT_EQ(numCalls, 2);
+
+  {
+    auto viewA = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    auto view = std::move(viewA);
+    for (auto it = view.begin(); it != view.end(); ++it) {
+      EXPECT_EQ(numCalls, 2u);
+    }
+    // Callback invoked because of the end of the range.
+    EXPECT_EQ(numCalls, 3);
+  }
+  // Callback not invoked for the destructor of the moved-from `viewA`.
+  EXPECT_EQ(numCalls, 3);
 }

@@ -16,8 +16,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
-#include "parser/RdfEscaping.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
@@ -34,16 +34,24 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << s_ << ", p: " << p_ << ", o: " << o_ << "}";
+  os << "{s: " << s_ << ", p: "
+     << std::visit(ad_utility::OverloadCallOperator{
+                       [](const Variable& var) { return var.name(); },
+                       [](const PropertyPath& propertyPath) {
+                         return propertyPath.asString();
+                       }},
+                   p_)
+     << ", o: " << o_ << "}";
   return std::move(os).str();
 }
 
 // ________________________________________________________________________
 Variable ParsedQuery::addInternalBind(
-    sparqlExpression::SparqlExpressionPimpl expression) {
+    sparqlExpression::SparqlExpressionPimpl expression,
+    InternalVariableGenerator internalVariableGenerator) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = getNewInternalVariable();
+  auto targetVariable = internalVariableGenerator();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be selected by SELECT * (this is the `bool`
   // argument to `addBind`).
@@ -56,10 +64,11 @@ Variable ParsedQuery::addInternalBind(
 
 // ________________________________________________________________________
 Variable ParsedQuery::addInternalAlias(
-    sparqlExpression::SparqlExpressionPimpl expression) {
+    sparqlExpression::SparqlExpressionPimpl expression,
+    InternalVariableGenerator internalVariableGenerator) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = getNewInternalVariable();
+  auto targetVariable = internalVariableGenerator();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be visible to the user.
   selectClause().addAlias(Alias{std::move(expression), targetVariable}, true);
@@ -77,9 +86,12 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 }
 
 // ________________________________________________________________________
-void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
+void ParsedQuery::addSolutionModifiers(
+    SolutionModifiers modifiers,
+    InternalVariableGenerator internalVariableGenerator) {
   // Process groupClause
-  addGroupByClause(std::move(modifiers.groupByVariables_));
+  addGroupByClause(std::move(modifiers.groupByVariables_),
+                   internalVariableGenerator);
 
   const bool isExplicitGroupBy = !_groupByVariables.empty();
   const bool isImplicitGroupBy =
@@ -100,11 +112,12 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       noteForImplicitGroupBy;
 
   // Process HAVING clause
-  addHavingClause(std::move(modifiers.havingClauses_), isGroupBy);
+  addHavingClause(std::move(modifiers.havingClauses_), isGroupBy,
+                  internalVariableGenerator);
 
   // Process ORDER BY clause
   addOrderByClause(std::move(modifiers.orderBy_), isGroupBy,
-                   noteForImplicitGroupBy);
+                   noteForImplicitGroupBy, internalVariableGenerator);
 
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
@@ -271,17 +284,16 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple.o_ == variable &&
-          (triple.p_.operation_ == PropertyPath::Operation::IRI &&
-           !isVariable(triple.p_)) &&
-          !triple.p_.iri_.starts_with(
+      auto predicate = triple.getSimplePredicate();
+      if (triple.o_ == variable && predicate.has_value() &&
+          !predicate.value().starts_with(
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
       // TODO<RobinTF> There might be more cases where the variable is matched
       // against a pattern.
       if (triple.s_ == variable || triple.o_ == variable ||
-          (isVariable(triple.p_) && triple.p_.iri_ == variable.name())) {
+          triple.predicateIs(variable)) {
         // If at some point we find a triple using the variable, we know that it
         // is safe to join it with an index scan to filter out non-matching
         // language tags.
@@ -292,8 +304,12 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_.iri_ = ad_utility::convertToLanguageTaggedPredicate(
-        triplePtr->p_.iri_, langTag);
+    AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
+    auto& predicate = std::get<PropertyPath>(triplePtr->p_);
+    AD_CORRECTNESS_CHECK(predicate.isIri());
+    predicate =
+        PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+            predicate.getIri(), langTag));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
@@ -321,9 +337,11 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple(variable,
-                        PropertyPath::fromIri(std::string{LANGUAGE_PREDICATE}),
-                        langEntity);
+    SparqlTriple triple{
+        variable,
+        PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
+        langEntity};
     t.push_back(std::move(triple));
   }
   return true;
@@ -369,7 +387,9 @@ void ParsedQuery::checkUsedVariablesAreVisible(
 }
 
 // ____________________________________________________________________________
-void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
+void ParsedQuery::addGroupByClause(
+    std::vector<GroupKey> groupKeys,
+    InternalVariableGenerator internalVariableGenerator) {
   // Deduplicate the group by variables to support e.g. `GROUP BY ?x ?x ?x`.
   // Note: The `GroupBy` class expects the grouped variables to be unique.
   ad_utility::HashSet<Variable> deduplicatedGroupByVars;
@@ -383,8 +403,9 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
 
   ad_utility::HashSet<Variable> variablesDefinedInGroupBy;
   auto processExpression =
-      [this, &variablesDefinedInGroupBy,
-       &processVariable](sparqlExpression::SparqlExpressionPimpl groupKey) {
+      [this, &variablesDefinedInGroupBy, &processVariable,
+       &internalVariableGenerator](
+          sparqlExpression::SparqlExpressionPimpl groupKey) {
         // Handle the case of redundant braces around a variable, e.g. `GROUP BY
         // (?x)`, which is parsed as an expression by the parser.
         if (auto var = groupKey.getVariableOrNullopt(); var.has_value()) {
@@ -394,7 +415,8 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
         checkUsedVariablesAreVisible(groupKey, "GROUP BY",
                                      variablesDefinedInGroupBy,
                                      " or previously in the same GROUP BY");
-        auto helperTarget = addInternalBind(std::move(groupKey));
+        auto helperTarget =
+            addInternalBind(std::move(groupKey), internalVariableGenerator);
         _groupByVariables.push_back(helperTarget);
       };
 
@@ -416,8 +438,9 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
 }
 
 // ____________________________________________________________________________
-void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
-                                  bool isGroupBy) {
+void ParsedQuery::addHavingClause(
+    std::vector<SparqlFilter> havingClauses, bool isGroupBy,
+    InternalVariableGenerator internalVariableGenerator) {
   if (!isGroupBy && !havingClauses.empty()) {
     throw InvalidSparqlQueryException(
         "A HAVING clause is only supported in queries with GROUP BY");
@@ -433,7 +456,8 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
     checkUsedVariablesAreVisible(
         havingClause.expression_, "HAVING", variablesFromAliases,
         " and also not bound inside the SELECT clause");
-    auto newVariable = addInternalAlias(std::move(havingClause.expression_));
+    auto newVariable = addInternalAlias(std::move(havingClause.expression_),
+                                        internalVariableGenerator);
     _havingClauses.emplace_back(
         sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
             newVariable));
@@ -441,8 +465,10 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
 }
 
 // ____________________________________________________________________________
-void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
-                                   std::string_view noteForImplicitGroupBy) {
+void ParsedQuery::addOrderByClause(
+    OrderClause orderClause, bool isGroupBy,
+    std::string_view noteForImplicitGroupBy,
+    InternalVariableGenerator internalVariableGenerator) {
   // The variables that are used in the ORDER BY can also come from aliases in
   // the SELECT clause
   ad_utility::HashSet<Variable> variablesFromAliases;
@@ -480,16 +506,17 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
   auto processExpressionOrderKey =
-      [this, isGroupBy, &variablesFromAliases,
-       additionalError](ExpressionOrderKey orderKey) {
+      [this, isGroupBy, &variablesFromAliases, additionalError,
+       &internalVariableGenerator](ExpressionOrderKey orderKey) {
         checkUsedVariablesAreVisible(orderKey.expression_, "ORDER BY",
                                      variablesFromAliases, additionalError);
         if (isGroupBy) {
-          auto newVariable = addInternalAlias(std::move(orderKey.expression_));
+          auto newVariable = addInternalAlias(std::move(orderKey.expression_),
+                                              internalVariableGenerator);
           _orderBy.emplace_back(std::move(newVariable), orderKey.isDescending_);
         } else {
-          auto additionalVariable =
-              addInternalBind(std::move(orderKey.expression_));
+          auto additionalVariable = addInternalBind(
+              std::move(orderKey.expression_), internalVariableGenerator);
           _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
         }
       };
@@ -500,21 +527,6 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
                std::move(orderKey));
   }
   _isInternalSort = orderClause.isInternalSort;
-}
-
-// ________________________________________________________________
-Variable ParsedQuery::getNewInternalVariable() {
-  auto variable = Variable{
-      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
-  numInternalVariables_++;
-  return variable;
-}
-
-// _____________________________________________________________________________
-Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
-  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
-  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
-                               blankNode.substr(2))};
 }
 
 // _____________________________________________________________________________

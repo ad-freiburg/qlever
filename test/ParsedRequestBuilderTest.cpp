@@ -4,10 +4,9 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <engine/ParsedRequestBuilder.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
+#include "engine/ParsedRequestBuilder.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/TypeIdentity.h"
@@ -44,7 +43,8 @@ TEST(ParsedRequestBuilderTest, Constructor) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractAccessToken) {
-  auto expect = [](const auto& request, const std::optional<string>& expected,
+  auto expect = [](const auto& request,
+                   const std::optional<std::string>& expected,
                    const ad_utility::source_location l =
                        ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);

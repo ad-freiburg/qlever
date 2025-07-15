@@ -15,6 +15,7 @@
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
+#include "parser/data/Types.h"
 
 class QueryPlanner {
   using TextLimitMap =
@@ -38,6 +39,8 @@ class QueryPlanner {
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
 
+  virtual ~QueryPlanner() = default;
+
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
   QueryExecutionTree createExecutionTree(ParsedQuery& pq,
@@ -57,13 +60,13 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_.s_)) {
+        if (triple_.s_.isVariable()) {
           _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_.iri_});
+        if (auto predicate = triple_.getPredicateVariable()) {
+          _variables.insert(predicate.value());
         }
-        if (isVariable(triple_.o_)) {
+        if (triple_.o_.isVariable()) {
           _variables.insert(triple_.o_.getVariable());
         }
         if (graphVariable.has_value()) {
@@ -118,7 +121,7 @@ class QueryPlanner {
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
-    string asString() const;
+    std::string asString() const;
 
     bool isTextNode(size_t i) const;
 
@@ -132,7 +135,7 @@ class QueryPlanner {
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes)
+        ad_utility::HashMap<std::string, vector<size_t>>& contextVarTotextNodes)
         const;
 
     vector<SparqlFilter> pickFilters(const vector<SparqlFilter>& origFilters,
@@ -157,12 +160,27 @@ class QueryPlanner {
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
+    bool containsFilterSubstitute_ = false;
     Type type = Type::BASIC;
 
     size_t getCostEstimate() const;
 
     size_t getSizeEstimate() const;
   };
+
+  // This struct represents a single SPARQL FILTER. Additionally, it has the
+  // option to also store a subtree plan, which is semantically equivalent to
+  // the filter, but might be cheaper to compute. This is currently used to
+  // rewrite FILTERs on geof: functions to spatial join operations.
+  struct FilterAndOptionalSubstitute {
+    SparqlFilter filter_;
+    std::optional<SubtreePlan> substitute_;
+
+    bool hasSubstitute() const { return substitute_.has_value(); }
+  };
+
+  using FiltersAndOptionalSubstitutes =
+      std::vector<FilterAndOptionalSubstitute>;
 
   // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
@@ -192,16 +210,19 @@ class QueryPlanner {
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
     static std::vector<size_t> computeConnectedComponents(
-        const std::vector<SubtreePlan>& nodes) {
+        const std::vector<SubtreePlan>& nodes,
+        const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
       QueryGraph graph;
-      graph.setupGraph(nodes);
+      graph.setupGraph(nodes, filtersAndOptionalSubstitutes);
       return graph.dfsForAllNodes();
     }
 
    private:
     // The actual implementation of `setupGraph`. First build a
     // graph from the `leafOperations` and then run DFS and return the result.
-    void setupGraph(const std::vector<SubtreePlan>& leafOperations);
+    void setupGraph(
+        const std::vector<SubtreePlan>& leafOperations,
+        const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes);
 
     // Run a single DFS startint at the `startNode`. All nodes that are
     // connected to this node (including the node itself) will have
@@ -233,6 +254,9 @@ class QueryPlanner {
   // of the query, which ordering of the result is best.
   std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq,
                                                 bool isSubquery = false);
+
+ protected:
+  QueryExecutionContext* getQec() const { return _qec; }
 
  private:
   QueryExecutionContext* _qec;
@@ -294,33 +318,50 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
 
-  /**
-   * @brief Returns a parsed query for the property path.
-   */
+  // Function for optimization query rewrites: The function returns pairs of
+  // filters with the corresponding substitute subtree plan. This is currently
+  // used to translate GeoSPARQL filters to spatial join operations.
+  virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
+      const std::vector<SparqlFilter>& filters) const;
+
+  // TODO<RobinTF> Extract to dedicated module, this has little to do with
+  // actual query planning.
+  // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
+  // further planning.
   ParsedQuery::GraphPattern seedFromPropertyPath(const TripleComponent& left,
                                                  const PropertyPath& path,
                                                  const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromSequence(const TripleComponent& left,
-                                             const PropertyPath& path,
-                                             const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromAlternative(const TripleComponent& left,
-                                                const PropertyPath& path,
-                                                const TripleComponent& right);
+
+  // Turn a sequence of `PropertyPath`s into a `GraphPattern` that can be used
+  // for further planning. This handles the case for predicates separated by
+  // `/`, for example in `SELECT ?x { ?x <a>/<b> ?y }`.
+  ParsedQuery::GraphPattern seedFromSequence(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+
+  // Turn a union of `PropertyPath`s into a `GraphPattern` that can be used for
+  // further planning. This handles the case for predicates separated by `|`,
+  // for example in `SELECT ?x { ?x <a>|<b> ?y }`.
+  ParsedQuery::GraphPattern seedFromAlternative(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+
+  // Create `GraphPattern` for property paths of the form `<a>+`, `<a>?` or
+  // `<a>*`, where `<a>` can also be a complex `PropertyPath` (e.g. a sequence
+  // or an alternative).
   ParsedQuery::GraphPattern seedFromTransitive(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right,
                                                size_t min, size_t max);
-  ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
   // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
   // `!<a>` and similar.
-  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
-                                               const PropertyPath& path,
-                                               const TripleComponent& right);
+  ParsedQuery::GraphPattern seedFromNegated(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+  static ParsedQuery::GraphPattern seedFromVarOrIri(
+      const TripleComponent& left,
+      const ad_utility::sparql_types::VarOrIri& varOrIri,
+      const TripleComponent& right);
 
   Variable generateUniqueVarName();
 
@@ -418,17 +459,38 @@ class QueryPlanner {
       const parsedQuery::Values& values,
       const std::vector<SubtreePlan>& currentPlans) const;
 
-  bool connected(const SubtreePlan& a, const SubtreePlan& b,
-                 const TripleGraph& graph) const;
+  JoinColumns connected(const SubtreePlan& a, const SubtreePlan& b,
+                        boost::optional<const TripleGraph&> tg) const;
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
-  string getPruningKey(const SubtreePlan& plan,
-                       const vector<ColumnIndex>& orderedOnColumns) const;
+  std::string getPruningKey(const SubtreePlan& plan,
+                            const vector<ColumnIndex>& orderedOnColumns) const;
 
-  template <bool replaceInsteadOfAddPlans>
-  void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
-                              const std::vector<SparqlFilter>& filters) const;
+  // Configure the behavior of the `applyFiltersIfPossible` function below.
+  enum class FilterMode {
+    // Only apply matching filters, that is filters are only added to plans that
+    // already bind all the variables that are used in the filter. The plans
+    // with the added filters are added to the candidate set. This mode is used
+    // in the dynamic programming approach, where we don't apply the filters
+    // greedily. Applying filter substitutes is permitted in this mode.
+    KeepUnfiltered,
+    // Only apply matching filters (see above), but the plans with added filters
+    // replace the plans without filters. This is used in the greedy approach,
+    // where filters are always applied as early as possible. Applying filter
+    // substitutes is permitted in this mode.
+    ReplaceUnfiltered,
+    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    ReplaceUnfilteredNoSubstitutes,
+    // Apply all filters (also the nonmatching ones) and replace the unfiltered
+    // plans. This has to be called at the end of parsing a group graph pattern
+    // where we have to make sure that all filters are applied.
+    ApplyAllFiltersAndReplaceUnfiltered,
+  };
+  template <FilterMode mode = FilterMode::KeepUnfiltered>
+  void applyFiltersIfPossible(
+      std::vector<SubtreePlan>& row,
+      const FiltersAndOptionalSubstitutes& filters) const;
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -505,16 +567,16 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-      const TripleGraph& tg) const;
+      const FiltersAndOptionalSubstitutes& filters,
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-      const TripleGraph& tg) const;
+      const FiltersAndOptionalSubstitutes& filters,
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
@@ -558,10 +620,18 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
+    // We remember the potential filter substitutions so we can avoid
+    // unnecessarily recomputing them.
+    FiltersAndOptionalSubstitutes filtersAndSubst_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
+        : planner_{planner},
+          rootPattern_{rootPattern},
+          qec_{planner._qec},
+          filtersAndSubst_{
+              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
