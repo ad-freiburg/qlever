@@ -18,112 +18,11 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
+#include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
-
-namespace {
-
-struct LazyFindSmaller
-    : ad_utility::InputRangeFromGet<ql::span<const Id>::iterator> {
-  ql::span<const Id>::iterator beg_;
-  ql::span<const Id>::iterator end_;
-
-  LazyFindSmaller(ql::span<const Id>::iterator b,
-                  ql::span<const Id>::iterator e)
-      : beg_{b}, end_{e} {}
-
-  // The `get` function that is needed for the `InputRangeFromGet`.
-  std::optional<ql::span<const Id>::iterator> get() override {
-    if (beg_ == end_) {
-      return std::nullopt;
-    }
-    return beg_++;
-  }
-};
-
-template <bool Left, typename T, typename B1, typename B2, typename UndefBlocks,
-          typename CompatibleRowAction>
-struct findUndefValuesHelperFromGet : ad_utility::InputRangeFromGet<T> {
-  const B1& fullBlockLeft_;
-  const B2& fullBlockRight_;
-
-  T& begL_;
-  T& begR_;
-
-  UndefBlocks::const_iterator undefBlocksIter_;
-  UndefBlocks::const_iterator undefBlocksEnd_;
-
-  std::size_t subrangePosition_{0};
-  bool flag_ = true;
-  CompatibleRowAction& compatibleRowAction_;
-
-  findUndefValuesHelperFromGet(const B1& fullBlockLeft,
-                               const B2& fullBlockRight, T& begL, T& begR,
-                               const UndefBlocks& undefBlocks,
-                               CompatibleRowAction& compatibleRowAction)
-      : fullBlockLeft_{fullBlockLeft},
-        fullBlockRight_{fullBlockRight},
-        begL_{begL},
-        begR_{begR},
-        undefBlocksIter_{undefBlocks.begin()},
-        undefBlocksEnd_(undefBlocks.end()),
-        compatibleRowAction_{compatibleRowAction} {}
-
-  std::optional<T> get() override {
-    auto check_and_move_iterator = [this](auto it, auto itEnd) {
-      if (it == itEnd) {  // subrange has no data
-        this->undefBlocksIter_++;
-        this->flag_ = true;
-        this->subrangePosition_ = 0;
-        return true;
-      }
-
-      return false;
-    };
-
-    while (undefBlocksIter_ != undefBlocksEnd_) {
-      if (Left && flag_) {
-        begL_ = undefBlocksIter_->fullBlock().begin();
-        compatibleRowAction_.setInput(undefBlocksIter_->fullBlock(),
-                                      fullBlockRight_.get());
-        flag_ = false;
-      } else if (!Left && flag_) {
-        begR_ = undefBlocksIter_->fullBlock().begin();
-        compatibleRowAction_.setInput(fullBlockLeft_.get(),
-                                      undefBlocksIter_->fullBlock());
-        flag_ = false;
-      }
-
-      const auto& subrange = undefBlocksIter_->subrange();
-      auto iter = subrange.begin();
-      if (check_and_move_iterator(iter,
-                                  subrange.end())) {  // subrange has no data
-
-        continue;
-      }
-
-      std::advance(iter, subrangePosition_);
-      subrangePosition_++;
-      if (check_and_move_iterator(
-              iter,
-              subrange.end())) {  // check if we're not returning end()
-
-        continue;
-      }
-
-      return iter;
-    }
-
-    begL_ = fullBlockLeft_.get().begin();
-    begR_ = fullBlockRight_.get().begin();
-    compatibleRowAction_.setInput(fullBlockLeft_.get(), fullBlockRight_.get());
-    return std::nullopt;  // no more subranges
-  }
-};
-
-}  // namespace
 
 namespace ad_utility {
 
@@ -663,10 +562,8 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     // also not only for `OPTIONAL` joins.
     auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
 
-    LazyFindSmaller smaller_undef_range_left(leftSub.begin(), endOfUndef);
-    auto findSmallerUndefRangeLeft =
-        [smaller_undef_range_left](auto&&...) -> LazyFindSmaller {
-      return smaller_undef_range_left;
+    auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
+      return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
     };
 
     // Also set up the actions for compatible rows that now work on single
@@ -1100,12 +997,35 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
             typename UndefBlocks>
   auto findUndefValuesHelper(const B1& fullBlockLeft, const B2& fullBlockRight,
                              T& begL, T& begR, const UndefBlocks& undefBlocks) {
-    auto find_helper =
-        findUndefValuesHelperFromGet<left, T, B1, B2, UndefBlocks,
-                                     CompatibleRowAction>(
-            fullBlockLeft, fullBlockRight, begL, begR, undefBlocks,
-            compatibleRowAction_);
-    return find_helper;
+    auto perBlockCallback =
+        ad_utility::makeAssignableLambda([&, this](const auto& undefBlock) {
+          // Select proper input table from the stored undef blocks
+          if constexpr (left) {
+            begL = undefBlock.fullBlock().begin();
+            compatibleRowAction_.setInput(undefBlock.fullBlock(),
+                                          fullBlockRight.get());
+          } else {
+            begR = undefBlock.fullBlock().begin();
+            compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                          undefBlock.fullBlock());
+          }
+          const auto& subr = undefBlock.subrange();
+          return ad_utility::IteratorRange(subr.begin(), subr.end());
+        });
+
+    auto endCallback = [&, this]() {
+      // Reset back to original input
+      begL = fullBlockLeft.get().begin();
+      begR = fullBlockRight.get().begin();
+      compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    };
+
+    // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
+    // without having to specify `makeAssignableLambda`.
+    return ad_utility::CallbackOnEndView{
+        ql::views::join(ad_utility::CachingTransformInputRange(
+            undefBlocks, std::move(perBlockCallback))),
+        std::move(endCallback)};
   }
 
   // Create a generator that yields iterators to all undefined values that
