@@ -300,24 +300,23 @@ struct LazyExistsJoinImpl
   // Store the current index in the right child that was last being checked.
   size_t currentRightIndex_ = 0;
 
-  // If we found undef values on the right, or the right ranges has been
+  // Helper enum to indicate if we can avoid expensive checks.
+  enum class FastForwardState { Unknown, Yes, No };
+
+  // If we found undef values on the right, or the right ranges have been
   // consumed, we can fast-forward and skip expensive checks.
-  std::optional<bool> remainingMatches_ = std::nullopt;
+  FastForwardState allRowsFromLeftExist_ = FastForwardState::Unknown;
 
   // Convert result to an owned range of `IdTableVocabPair`s. This is used for
   // the left side.
-  static ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>
-  toOwnedRange(const std::shared_ptr<const Result>& result) {
+  static Result::LazyResult toOwnedRange(
+      const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
-      return ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{
-          ad_utility::CachingTransformInputRange{
-              std::array{Result::IdTableVocabPair{
-                  result->idTable().clone(), result->getCopyOfLocalVocab()}},
-              [](auto& value) { return std::move(value); }}};
+      return ad_utility::InputRangeTypeErased{
+          std::array{Result::IdTableVocabPair{result->idTable().clone(),
+                                              result->getCopyOfLocalVocab()}}};
     }
-    return ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{
-        ad_utility::CachingTransformInputRange{
-            result->idTables(), [](auto& value) { return std::move(value); }}};
+    return ad_utility::InputRangeTypeErased{result->idTables()};
   }
 
   // Convert result to a view of `IdTable`s. This is used for the right side.
@@ -325,11 +324,7 @@ struct LazyExistsJoinImpl
   toRangeView(const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          ad_utility::CachingTransformInputRange{
-              std::array{std::cref(result->idTable())},
-              [](auto wrapper) -> std::reference_wrapper<const IdTable> {
-                return wrapper;
-              }}};
+          std::array{std::cref(result->idTable())}};
     }
     return ad_utility::InputRangeTypeErased{
         ad_utility::CachingTransformInputRange{
@@ -351,24 +346,20 @@ struct LazyExistsJoinImpl
         rightJoinColumn_{rightJoinColumn} {}
 
   // Get the next non-empty result from the given range.
-  static std::optional<Result::IdTableVocabPair> getNextNonEmptyResult(
-      ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>& range) {
-    std::optional<Result::IdTableVocabPair> current;
+  template <typename T>
+  static std::optional<T> getNextNonEmptyResult(
+      ad_utility::InputRangeTypeErased<T>& range) {
+    auto accessor = [](const T& object) -> const IdTable& {
+      if constexpr (ad_utility::isSimilar<T, Result::IdTableVocabPair>) {
+        return object.idTable_;
+      } else {
+        return object;
+      }
+    };
+    std::optional<T> current;
     do {
       current = range.get();
-    } while (current.has_value() && current.value().idTable_.empty());
-    return current;
-  }
-
-  // Get the next non-empty result from the given range.
-  static std::optional<std::reference_wrapper<const IdTable>>
-  getNextNonEmptyResult(
-      ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>&
-          range) {
-    std::optional<std::reference_wrapper<const IdTable>> current;
-    do {
-      current = range.get();
-    } while (current.has_value() && current.value().get().empty());
+    } while (current.has_value() && accessor(current.value()).empty());
     return current;
   }
 
@@ -376,7 +367,10 @@ struct LazyExistsJoinImpl
   // index until a match is found, or no matches exist.
   bool hasMatch(Id id) {
     if (id.isUndefined()) {
-      return true;
+      // This is correct, because undefined values are processed first and
+      // `currentRight_` is not-reassigned until a non-undefined value is
+      // processed.
+      return currentRight_.has_value();
     }
     while (currentRight_.has_value() &&
            currentRightIndex_ < currentRight_.value().get().size()) {
@@ -392,6 +386,10 @@ struct LazyExistsJoinImpl
       if (currentRightIndex_ == currentRight_.value().get().size()) {
         currentRight_ = getNextNonEmptyResult(rightRange_);
         currentRightIndex_ = 0;
+        // Optimization to copy all remaining blocks in one.
+        if (!currentRight_.has_value()) {
+          allRowsFromLeftExist_ = FastForwardState::No;
+        }
       }
     }
     return false;
@@ -400,23 +398,25 @@ struct LazyExistsJoinImpl
   // Get the next result from the left side that is augmented with EXISTS
   // information.
   std::optional<Result::IdTableVocabPair> get() override {
-    if (!currentRight_.has_value() && !remainingMatches_.has_value()) {
+    if (!currentRight_.has_value() &&
+        allRowsFromLeftExist_ == FastForwardState::Unknown) {
       currentRight_ = getNextNonEmptyResult(rightRange_);
       if (currentRight_.has_value()) {
-        if (currentRight_.value().get().at(0, 0).isUndefined()) {
-          remainingMatches_ = true;
+        if (currentRight_.value().get().at(0, rightJoinColumn_).isUndefined()) {
+          allRowsFromLeftExist_ = FastForwardState::Yes;
         }
       } else {
-        remainingMatches_ = false;
+        allRowsFromLeftExist_ = FastForwardState::No;
       }
     }
-    if (remainingMatches_.has_value()) {
+    if (allRowsFromLeftExist_ != FastForwardState::Unknown) {
       auto result = leftRange_.get();
       if (result.has_value()) {
         auto& idTable = result.value().idTable_;
         idTable.addEmptyColumn();
-        ql::ranges::fill(idTable.getColumn(idTable.numColumns() - 1),
-                         Id::makeFromBool(remainingMatches_.value()));
+        ql::ranges::fill(
+            idTable.getColumn(idTable.numColumns() - 1),
+            Id::makeFromBool(allRowsFromLeftExist_ == FastForwardState::Yes));
       }
       return result;
     }
@@ -446,6 +446,9 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
   // efficiently.
   AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||
                     !right->isFullyMaterialized());
+  // If `requestLaziness` is false, we expect the left result to be fully
+  // materialized as well.
+  AD_CONTRACT_CHECK(left->isFullyMaterialized() || requestLaziness);
   // Currently only supports a single join column.
   AD_CORRECTNESS_CHECK(joinColumns_.size() == 1);
 
