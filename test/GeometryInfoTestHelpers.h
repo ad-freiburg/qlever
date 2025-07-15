@@ -16,26 +16,42 @@ using namespace ad_utility;
 using Loc = source_location;
 
 // ____________________________________________________________________________
-inline void checkGeometryType(GeometryType a, GeometryType b,
+inline void checkGeometryType(std::optional<GeometryType> a,
+                              std::optional<GeometryType> b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.type(), b.type());
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_EQ(a.value().type(), b.value().type());
 }
 
 // ____________________________________________________________________________
-inline void checkCentroid(Centroid a, Centroid b,
+inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.centroid().getLat(), b.centroid().getLat(), 0.001);
-  ASSERT_NEAR(a.centroid().getLng(), b.centroid().getLng(), 0.001);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().centroid().getLat(), b.value().centroid().getLat(),
+              0.001);
+  ASSERT_NEAR(a.value().centroid().getLng(), b.value().centroid().getLng(),
+              0.001);
 }
 
 // ____________________________________________________________________________
-inline void checkBoundingBox(BoundingBox a, BoundingBox b,
+inline void checkBoundingBox(std::optional<BoundingBox> a,
+                             std::optional<BoundingBox> b,
                              Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto [all, aur] = a.pair();
-  auto [bll, bur] = b.pair();
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  auto [all, aur] = a.value().pair();
+  auto [bll, bur] = b.value().pair();
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
   ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);

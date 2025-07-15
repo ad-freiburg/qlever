@@ -56,8 +56,14 @@ MetricLength::MetricLength(double length) : length_{length} {
 };
 
 // ____________________________________________________________________________
-GeometryType GeometryInfo::getWktType(std::string_view wkt) {
-  return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
+std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
+  auto wktType =
+      static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
+  if (wktType == 0) {
+    // Type 0 represents invalid type
+    return std::nullopt;
+  }
+  return wktType;
 };
 
 // ____________________________________________________________________________
@@ -83,9 +89,11 @@ Centroid GeometryInfo::getCentroid() const {
 }
 
 // ____________________________________________________________________________
-Centroid GeometryInfo::getCentroid(std::string_view wkt) {
+std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
   return detail::centroidAsGeoPoint(parsed.value());
 }
 
@@ -96,9 +104,11 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 }
 
 // ____________________________________________________________________________
-BoundingBox GeometryInfo::getBoundingBox(std::string_view wkt) {
+std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
   return detail::boundingBoxAsGeoPoints(parsed.value());
 }
 
@@ -185,11 +195,10 @@ template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
 // ____________________________________________________________________________
 template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
-RequestedInfo GeometryInfo::getRequestedInfo(std::string_view wkt) {
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+    std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
-    auto optionalGeoInfo = GeometryInfo::fromWktLiteral(wkt);
-    AD_CORRECTNESS_CHECK(optionalGeoInfo.has_value());
-    return optionalGeoInfo.value();
+    return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
     return GeometryInfo::getCentroid(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, BoundingBox>) {
@@ -204,15 +213,15 @@ RequestedInfo GeometryInfo::getRequestedInfo(std::string_view wkt) {
 };
 
 // Explicit instantiations
-template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>(
+template std::optional<GeometryInfo>
+GeometryInfo::getRequestedInfo<GeometryInfo>(std::string_view wkt);
+template std::optional<Centroid> GeometryInfo::getRequestedInfo<Centroid>(
     std::string_view wkt);
-template Centroid GeometryInfo::getRequestedInfo<Centroid>(
+template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
-template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>(
-    std::string_view wkt);
-template GeometryType GeometryInfo::getRequestedInfo<GeometryType>(
-    std::string_view wkt);
-template MetricLength GeometryInfo::getRequestedInfo<MetricLength>(
-    std::string_view wkt);
+template std::optional<GeometryType>
+GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
+template std::optional<MetricLength>
+GeometryInfo::getRequestedInfo<MetricLength>(std::string_view wkt);
 
 }  // namespace ad_utility
