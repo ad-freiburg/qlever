@@ -366,6 +366,7 @@ struct LazyExistsJoinImpl
       // processed.
       return currentRight_.has_value();
     }
+    // Search for the next match.
     while (currentRight_.has_value() &&
            currentRightIndex_ < currentRight_.value().get().size()) {
       auto comparison = currentRight_.value().get().at(currentRightIndex_,
@@ -377,6 +378,8 @@ struct LazyExistsJoinImpl
         return false;
       }
       currentRightIndex_++;
+      // Get the next block from the range if we couldn't find a matching value
+      // in this one.
       if (currentRightIndex_ == currentRight_.value().get().size()) {
         currentRight_ = getNextNonEmptyResult(rightRange_);
         currentRightIndex_ = 0;
