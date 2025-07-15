@@ -95,7 +95,8 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
 
       // If point is not contained in the prefilter box, we can skip it
       // immediately instead of feeding it to the parser.
-      if (!util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
+      if (prefilterLatLngBox.has_value() &&
+          !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
         prefilterCounter++;
         continue;
       }
