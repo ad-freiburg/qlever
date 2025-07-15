@@ -439,12 +439,12 @@ CPP_template(typename Parser)(
     return std::move(parser.triples_[0].object_);
   }
 
-  string_view getUnparsedRemainder() const { return this->tok_.view(); }
+  std::string_view getUnparsedRemainder() const { return this->tok_.view(); }
 
   // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
-  void raiseManually(string_view message) { this->raise(message); }
+  void raiseManually(std::string_view message) { this->raise(message); }
 
   void setPositionOffset(size_t offset) { positionOffset_ = offset; }
 

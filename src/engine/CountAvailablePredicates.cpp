@@ -21,7 +21,7 @@ CountAvailablePredicates::CountAvailablePredicates(
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getCacheKeyImpl() const {
+std::string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
@@ -33,7 +33,7 @@ string CountAvailablePredicates::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getDescriptor() const {
+std::string CountAvailablePredicates::getDescriptor() const {
   if (subtree_ == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }
@@ -165,10 +165,11 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
   auto fullHasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_,
-                    locatedTriplesSnapshot());
+      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
+                    std::nullopt, {}, cancellationHandle_, locatedTriple);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);

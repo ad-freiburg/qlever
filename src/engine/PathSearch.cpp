@@ -165,7 +165,7 @@ std::string PathSearch::getCacheKeyImpl() const {
 };
 
 // _____________________________________________________________________________
-string PathSearch::getDescriptor() const {
+std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();

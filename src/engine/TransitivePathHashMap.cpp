@@ -32,7 +32,7 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    auto [it, success] = edges.try_emplace(startCol[i], allocator());
+    auto [it, _] = edges.try_emplace(startCol[i], allocator());
     it->second.insert(targetCol[i]);
   }
   return HashMapWrapper{std::move(edges), allocator()};

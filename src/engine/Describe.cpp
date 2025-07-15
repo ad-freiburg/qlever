@@ -28,7 +28,7 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 }
 
 // _____________________________________________________________________________
-string Describe::getCacheKeyImpl() const {
+std::string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` (the variables and IRIs of
   // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
   std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
@@ -65,7 +65,7 @@ string Describe::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string Describe::getDescriptor() const { return "DESCRIBE"; }
+std::string Describe::getDescriptor() const { return "DESCRIBE"; }
 
 // _____________________________________________________________________________
 size_t Describe::getResultWidth() const { return 3; }

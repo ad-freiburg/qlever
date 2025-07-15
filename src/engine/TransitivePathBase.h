@@ -78,6 +78,10 @@ using SetWithGraph =
     std::unordered_set<std::pair<Id, Id>, absl::Hash<std::pair<Id, Id>>,
                        std::equal_to<std::pair<Id, Id>>,
                        ad_utility::AllocatorWithLimit<std::pair<Id, Id>>>;
+
+// Alias for common type
+using PayloadTable = std::optional<IdTableView<0>>;
+
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
 // index of the node in the input table. The `IdTable` pointer might be null if
@@ -87,7 +91,7 @@ struct NodeWithTargets {
   Id node_;
   Set targets_;
   LocalVocab localVocab_;
-  std::optional<IdTableView<0>> idTable_;
+  PayloadTable idTable_;
   size_t row_;
   // Graph id, undefined if no graph is set.
   Id graph_;
@@ -95,7 +99,7 @@ struct NodeWithTargets {
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  std::optional<IdTableView<0>> idTable, size_t row, Id graph)
+                  PayloadTable idTable, size_t row, Id graph)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},

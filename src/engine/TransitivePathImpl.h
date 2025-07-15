@@ -20,16 +20,16 @@ namespace detail {
 // the correct lifetime).
 template <typename ColumnType>
 struct TableColumnWithVocab {
-  std::optional<IdTableView<0>> table_;
-  ColumnType column_;
+  PayloadTable payload_;
+  ColumnType startNodes_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(std::optional<IdTableView<0>> table, ColumnType column,
-                       LocalVocab vocab)
-      : table_{std::move(table)},
-        column_{std::move(column)},
+  TableColumnWithVocab(std::optional<IdTableView<0>> payload,
+                       ColumnType startNodes, LocalVocab vocab)
+      : payload_{std::move(payload)},
+        startNodes_{std::move(startNodes)},
         vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
@@ -251,7 +251,7 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
-      for (const auto& [startNode, graphId] : tableColumn.column_) {
+      for (const auto& [startNode, graphId] : tableColumn.startNodes_) {
         // TODO<RobinTF> make sure undef matches all nodes for queries of
         // the form SELECT * { VALUES ?a { UNDEF } ?a a+ ?b}
         // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
@@ -272,7 +272,7 @@ class TransitivePathImpl : public TransitivePathBase {
           timer.stop();
           co_yield NodeWithTargets{
               startNode,           std::move(connectedNodes),
-              mergedVocab.clone(), tableColumn.table_,
+              mergedVocab.clone(), tableColumn.payload_,
               currentRow,          graphId};
           timer.cont();
           // Reset vocab to prevent merging the same vocab over and over again.
@@ -337,12 +337,13 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param startSide The TransitivePathSide where the edges start
    * @param startSideResult A `Result` wrapping an `IdTable` containing the Ids
    * for the startSide
-   * @return cppcoro::generator<TableColumnWithVocab> An generator for
+   * @return ad_utility::InputRangeTypeErased<TableColumnWithVocab> A range for
    * the transitive hull computation
    */
-  cppcoro::generator<TableColumnWithVocab> setupNodes(
+  ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) const {
+    using namespace ad_utility;
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn =
@@ -354,29 +355,44 @@ class TransitivePathImpl : public TransitivePathBase {
             : std::nullopt;
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
-    auto columnsToRange = [&graphColumn, joinColumn](const auto& idTable) {
+    auto columnsToRange = [graphColumn = std::move(graphColumn),
+                           joinColumn](const auto& idTable) {
       ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
       return graphColumn.has_value()
-                 ? ad_utility::InputRangeTypeErased{zipColumns(
+                 ? InputRangeTypeErased{zipColumns(
                        startNodes, idTable.getColumn(graphColumn.value()))}
-                 : ad_utility::InputRangeTypeErased{
-                       padWithMissingGraph(startNodes)};
+                 : InputRangeTypeErased{padWithMissingGraph(startNodes)};
     };
+
+    auto toView = [columnsWithoutJoinColumns = std::move(
+                       columnsWithoutJoinColumns)](const IdTable& idTable) {
+      return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
+    };
+
     if (startSideResult->isFullyMaterialized()) {
-      // Bound -> var|id
-      co_yield TableColumnWithVocab{
-          startSideResult->idTable().asColumnSubsetView(
-              columnsWithoutJoinColumns),
-          columnsToRange(startSideResult->idTable()),
-          startSideResult->getCopyOfLocalVocab()};
-    } else {
-      for (auto& [idTable, localVocab] : startSideResult->idTables()) {
-        // Bound -> var|id
-        co_yield TableColumnWithVocab{
-            idTable.asColumnSubsetView(columnsWithoutJoinColumns),
-            columnsToRange(idTable), std::move(localVocab)};
-      }
+      return InputRangeTypeErased(lazySingleValueRange(
+          [toView = std::move(toView),
+           columnsToRange = std::move(columnsToRange),
+           startSideResult = std::move(startSideResult)]() {
+            const IdTable& idTable = startSideResult->idTable();
+            return TableColumnWithVocab{toView(idTable),
+                                        columnsToRange(idTable),
+                                        startSideResult->getCopyOfLocalVocab()};
+          }));
     }
+
+    return InputRangeTypeErased(CachingTransformInputRange(
+        startSideResult->idTables(),
+        // the lambda uses a buffer to ensure the lifetime of the pointer to
+        // the idTable, but releases ownership of the localVocab
+        [toView = std::move(toView), columnsToRange = std::move(columnsToRange),
+         buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
+            auto& idTableAndVocab) mutable {
+          buf = std::move(idTableAndVocab);
+          auto& [idTable, localVocab] = buf.value();
+          return TableColumnWithVocab{toView(idTable), columnsToRange(idTable),
+                                      std::move(localVocab)};
+        }));
   }
 
   virtual T setupEdgesMap(const IdTable& dynSub,
@@ -388,17 +404,17 @@ class TransitivePathImpl : public TransitivePathBase {
   // result.
   static std::vector<ColumnIndex> computeColumnsWithoutJoinColumns(
       ColumnIndex joinColumn, size_t totalColumns,
-      const std::optional<ColumnIndex>& graphColumn) {
+      std::optional<ColumnIndex> graphColumn) {
     std::vector<ColumnIndex> columnsWithoutJoinColumn;
     uint8_t graphPadding = graphColumn.has_value() && joinColumn != graphColumn;
     AD_CORRECTNESS_CHECK(totalColumns > graphPadding);
     columnsWithoutJoinColumn.reserve(totalColumns - graphPadding - 1);
-    for (ColumnIndex i = 0; i < totalColumns; ++i) {
-      if (i == joinColumn || i == graphColumn) {
-        continue;
-      }
-      columnsWithoutJoinColumn.push_back(i);
-    }
+    ql::ranges::copy(
+        ql::views::iota(static_cast<size_t>(0), totalColumns) |
+            ql::views::filter([joinColumn, &graphColumn](size_t i) {
+              return i != joinColumn && i != graphColumn;
+            }),
+        std::back_inserter(columnsWithoutJoinColumn));
     return columnsWithoutJoinColumn;
   }
 

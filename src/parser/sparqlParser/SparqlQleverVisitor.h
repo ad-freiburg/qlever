@@ -55,7 +55,7 @@ class SparqlQleverVisitor {
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
-  using PrefixMap = ad_utility::HashMap<string, string>;
+  using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
@@ -67,6 +67,9 @@ class SparqlQleverVisitor {
   // members.
 
   size_t _blankNodeCounter = 0;
+  // Counter that increments for every variable generated using
+  // `getNewInternalVariable` to ensure distinctness.
+  int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
@@ -375,12 +378,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an exception
-  // because the corresponding feature is not (yet) supported by QLever. Most
-  // of them have a return type of `void`. Some of the don't, in order to make
-  // the usage of abstractions like `visitAlternative` easier.
-
-  [[noreturn]] static void visit(Parser::PathModContext* ctx);
+  // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
+  // lower and upper bounds of the path length.
+  static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
@@ -500,15 +500,15 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  string visit(Parser::IrirefContext* ctx) const;
+  std::string visit(Parser::IrirefContext* ctx) const;
 
-  string visit(Parser::PrefixedNameContext* ctx);
+  std::string visit(Parser::PrefixedNameContext* ctx);
 
   GraphTerm visit(Parser::BlankNodeContext* ctx);
 
-  string visit(Parser::PnameLnContext* ctx);
+  std::string visit(Parser::PnameLnContext* ctx);
 
-  string visit(Parser::PnameNsContext* ctx);
+  std::string visit(Parser::PnameNsContext* ctx);
 
   DatasetClause visit(Parser::UsingClauseContext* ctx);
 
@@ -526,6 +526,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
+  // Return the next internal variable.
+  Variable getNewInternalVariable();
+
+  // Return a callable (not threadsafe) that when being called creates a new
+  // internal variable by calling `getNewInternalVariable()` above.
+  auto makeInternalVariableGenerator();
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 
@@ -533,6 +540,12 @@ class SparqlQleverVisitor {
   // this inside of a CONSTRUCT block, and a new variable otherwise, which is
   // required for graph pattern matching inside `WHERE` clauses.
   GraphTerm newBlankNodeOrVariable();
+
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that

@@ -67,8 +67,8 @@ void Operation::forAllDescendants(F f) const {
 }
 
 // _____________________________________________________________________________
-vector<string> Operation::collectWarnings() const {
-  vector<string> res{*getWarnings().rlock()};
+vector<std::string> Operation::collectWarnings() const {
+  vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -169,9 +169,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
-    AD_CORRECTNESS_CHECK(result.idTable().empty() || !knownEmptyResult(),
-                         "Operation returned non-empty result, but "
-                         "knownEmptyResult() returned true");
+    AD_CORRECTNESS_CHECK(
+        result.idTable().empty() || !knownEmptyResult(), [&]() {
+          return absl::StrCat("Operation ", getDescriptor(),
+                              "returned non-empty result, but "
+                              "knownEmptyResult() returned true");
+        });
   } else {
     auto& rti = runtimeInfo();
     rti.status_ = RuntimeInformation::lazilyMaterialized;
@@ -307,6 +310,11 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
+  // If pinned there's no point in computing the result lazily.
+  if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
