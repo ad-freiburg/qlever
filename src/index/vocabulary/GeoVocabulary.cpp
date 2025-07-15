@@ -85,6 +85,16 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
 
 // ____________________________________________________________________________
 template <typename V>
+GeoVocabulary<V>::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`GeoVocabulary`");
+  }
+}
+
+// ____________________________________________________________________________
+template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   AD_CONTRACT_CHECK(index < size());
   // Allocate the required number of bytes

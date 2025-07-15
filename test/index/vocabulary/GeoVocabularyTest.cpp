@@ -164,4 +164,30 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
           "0, which is incompatible"));
 }
 
+// _____________________________________________________________________________
+TEST(GeoVocabularyTest, WordWriterDestructor) {
+  const std::string lit =
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+  // Create a `GeoVocabulary::WordWriter` and destruct it without a call to
+  // `finish()`.
+  AnyGeoVocab sv1;
+  auto wordWriter1 =
+      sv1.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor1.dat");
+  (*wordWriter1)(lit, true);
+  ASSERT_FALSE(wordWriter1->finishWasCalled());
+  wordWriter1.reset();
+
+  // Create a `GeoVocabulary::WordWriter` and destruct it after an explicit
+  // call to `finish()`.
+  AnyGeoVocab sv2;
+  auto wordWriter2 =
+      sv2.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor2.dat");
+  (*wordWriter2)(lit, true);
+  wordWriter2->finish();
+  ASSERT_TRUE(wordWriter2->finishWasCalled());
+  wordWriter2.reset();
+}
+
 }  // namespace
