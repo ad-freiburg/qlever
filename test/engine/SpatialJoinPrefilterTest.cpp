@@ -41,17 +41,39 @@ using Loc = ad_utility::source_location;
 
 // Helpers for testing the `LibspatialjoinAlgorithm`
 // TODO configurable for different tests
-std::string buildLibSJTestDataset() {
-  auto kg = absl::StrCat(
-      "<uni> <wkt-de> ", areaUniFreiburg, " . \n <uni-p> <wkt-de> ",
-      pointUniFreiburg, " .\n <minster> <wkt-de> ", areaMuenster,
-      " .\n <minster-p> <wkt-de> ", pointMinster, " .\n <gk-allee> <wkt-de> ",
-      lineSegmentGeorgesKoehlerAllee, " .\n <london> <wkt-other> ",
-      areaLondonEye, " .\n <lib> <wkt-other> ", areaStatueOfLiberty,
-      " .\n <eiffel> <wkt-other> ", areaEiffelTower,
-      " .\n <eiffel-p> <wkt-other> ", pointEiffelTower, " .\n");
-  // auto approxDe =
-  //     absl::StrCat("<approx-de> <wkt-de> ", approximatedAreaGermany, " .\n");
+std::string buildLibSJTestDataset(bool addApproxGermany = false,
+                                  bool germanyDifferentPredicate = true,
+                                  bool addSeparateUni = false) {
+  std::vector<std::tuple<std::string, std::string, bool>> geometries{
+      {"uni", areaUniFreiburg, true},
+      {"uni-p", pointUniFreiburg, true},
+      {"minster", areaMuenster, true},
+      {"minster-p", pointMinster, true},
+      {"gk-allee", lineSegmentGeorgesKoehlerAllee, true},
+      {"london", areaLondonEye, false},
+      {"lib", areaStatueOfLiberty, false},
+      {"eiffel", areaEiffelTower, false},
+      {"eiffel-p", pointEiffelTower, false},
+  };
+
+  std::string kg;
+  for (const auto& [name, wkt, isInGermany] : geometries) {
+    kg = absl::StrCat(
+        kg, "<", name, "> <wkt-",
+        (isInGermany && germanyDifferentPredicate ? "de" : "other"), "> ", wkt,
+        " .\n");
+  }
+
+  if (addApproxGermany) {
+    kg = absl::StrCat(kg, "<approx-de> <wkt-approx-de> ",
+                      approximatedAreaGermany, " .\n");
+  }
+
+  if (addSeparateUni) {
+    kg = absl::StrCat(kg, "<uni-separate> <wkt-uni-separate> ", areaUniFreiburg,
+                      " .\n");
+  }
+
   return kg;
 }
 
@@ -114,7 +136,6 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
                           SweeperTestResult& testResult,
                           bool usePrefilter = true, Loc loc = Loc::current()) {
   using V = Variable;
-  using enum SpatialJoinType;
   auto l = generateLocationTrace(loc);
 
   SpatialJoinConfiguration config{libSJConfig, V{"?geom1"}, V{"?geom2"}};
@@ -159,11 +180,53 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
           : 0;
   size_t numEl = sweeper.numElements();
   sweeper.sweep();
+
+  if (libSJConfig.maxDist_.has_value()) {
+    ASSERT_EQ(results.size(), resultDists.size());
+  }
+
   testResult = {results, resultDists, box, boxRight, numEl, numSkipped};
 }
 
 //
-void x() { SweeperTestResult result; }
+void checkPrefilterBox(const util::geo::I32Box& actual,
+                       const util::geo::I32Box& expected,
+                       Loc loc = Loc::current()) {
+  auto l = generateLocationTrace(loc);
+
+  auto actualLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(actual);
+  ASSERT_TRUE(actualLatLng.has_value());
+  auto expectedLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(expected);
+  ASSERT_TRUE(expectedLatLng.has_value());
+
+  auto lla = actualLatLng.value().getLowerLeft();
+  auto lle = expectedLatLng.value().getLowerLeft();
+  ASSERT_NEAR(lla.getX(), lle.getX(), 0.0001);
+  ASSERT_NEAR(lla.getY(), lle.getY(), 0.0001);
+
+  auto ura = actualLatLng.value().getUpperRight();
+  auto ure = expectedLatLng.value().getUpperRight();
+  ASSERT_NEAR(ura.getX(), ure.getX(), 0.0001);
+  ASSERT_NEAR(ura.getY(), ure.getY(), 0.0001);
+}
+
+//
+void checkSweeperTestResult(const SweeperTestResult& actual,
+                            const SweeperTestResult& expected,
+                            Loc loc = Loc::current()) {
+  auto l = generateLocationTrace(loc);
+
+  ASSERT_EQ(actual.results_.size(), expected.results_.size());
+  ASSERT_EQ(actual.resultDists_.size(), expected.resultDists_.size());
+  // TODO actually compare results_ and resultDists_
+
+  checkPrefilterBox(actual.boxAfterAddingLeft_, expected.boxAfterAddingLeft_);
+  checkPrefilterBox(actual.boxAfterAddingRight_, expected.boxAfterAddingRight_);
+
+  ASSERT_EQ(actual.numElementsInSweeper_, expected.numElementsInSweeper_);
+  ASSERT_EQ(actual.numElementsSkippedByPrefilter_,
+            expected.numElementsSkippedByPrefilter_);
+}
 
 }  // namespace libSJPrefilterTestHelpers
 
@@ -187,6 +250,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
   // Create a `QueryExecutionContext` on a `GeoVocabulary` which holds various
   // literals. In particular, prefiltering can be applied using the Germany
   // bounding box.
+  using enum SpatialJoinType;
 
   auto kg = buildLibSJTestDataset();
   auto qec = buildQec(kg, true);
@@ -195,8 +259,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<wkt-other>"}, "?geom2"});
   SweeperTestResult testResult;
-  runParsingAndSweeper(qec, leftChild, rightChild,
-                       {SpatialJoinType::INTERSECTS, std::nullopt}, testResult,
+  runParsingAndSweeper(qec, leftChild, rightChild, {INTERSECTS}, testResult,
                        true);
 
   // Now check results / resultDists
@@ -212,6 +275,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
 
   // also test maxdist because of extension of bounding box (e.g. uni-tf in
   // first run, minster in second, maxdist 50km)
+
+  //  intersects wkt-de/wkt-other , wkt intersects all against approx-de , wkt
+  //  all against uni-tf with maxdist
 }
 
 }  // namespace
