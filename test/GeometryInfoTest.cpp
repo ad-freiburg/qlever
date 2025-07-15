@@ -138,7 +138,8 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+  ASSERT_TRUE(bb3.has_value());
+  ASSERT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
 }
 
 // ____________________________________________________________________________
@@ -196,10 +197,12 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto parsed1 = parseRes1.second.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
-  checkCentroid(centroid1, {{4, 3}});
+  Centroid centroidExp1{{4, 3}};
+  checkCentroid(centroid1, centroidExp1);
 
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
-  checkBoundingBox(bb1, {{4, 3}, {4, 3}});
+  BoundingBox bbExp1{{4, 3}, {4, 3}};
+  checkBoundingBox(bb1, bbExp1);
 
   auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
@@ -209,6 +212,23 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
+  ASSERT_FALSE(GeometryInfo::fromWktLiteral(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getWktType(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getCentroid(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getBoundingBox(litInvalid).has_value());
+
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<GeometryInfo>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<GeometryType>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<Centroid>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<BoundingBox>(litInvalid).has_value());
 }
 
 }  // namespace

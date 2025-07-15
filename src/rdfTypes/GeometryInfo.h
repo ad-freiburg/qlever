@@ -114,19 +114,19 @@ class GeometryInfo {
   GeometryType getWktType() const;
 
   // Parse an arbitrary WKT literal and return only the geometry type.
-  static GeometryType getWktType(std::string_view wkt);
+  static std::optional<GeometryType> getWktType(std::string_view wkt);
 
   // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
   Centroid getCentroid() const;
 
   // Parse an arbitrary WKT literal and compute only the centroid.
-  static Centroid getCentroid(std::string_view wkt);
+  static std::optional<Centroid> getCentroid(std::string_view wkt);
 
   // Convert the bounding box to GeoPoints.
   BoundingBox getBoundingBox() const;
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
-  static BoundingBox getBoundingBox(std::string_view wkt);
+  static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>
@@ -135,7 +135,7 @@ class GeometryInfo {
   // Parse the given WKT literal and compute only the requested information.
   template <typename RequestedInfo = GeometryInfo>
   requires RequestedInfoT<RequestedInfo>
-  static RequestedInfo getRequestedInfo(std::string_view wkt);
+  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // For the disk serialization we require that a `GeometryInfo` is trivially

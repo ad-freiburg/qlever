@@ -72,6 +72,17 @@ const ad_utility::triple_component::Iri a =
 }  // namespace
 
 // _____________________________________________________________________________
+Variable Visitor::getNewInternalVariable() {
+  return Variable{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_++)};
+}
+
+// _____________________________________________________________________________
+auto Visitor::makeInternalVariableGenerator() {
+  return [this]() { return getNewInternalVariable(); };
+}
+
+// _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
   std::string label = std::to_string(_blankNodeCounter);
   _blankNodeCounter++;
@@ -86,8 +97,15 @@ GraphTerm Visitor::newBlankNodeOrVariable() {
   } else {
     AD_CORRECTNESS_CHECK(treatBlankNodesAs_ ==
                          TreatBlankNodesAs::InternalVariables);
-    return parsedQuery_.getNewInternalVariable();
+    return getNewInternalVariable();
   }
+}
+
+// _____________________________________________________________________________
+Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
+  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                               blankNode.substr(2))};
 }
 
 // _____________________________________________________________________________
@@ -376,8 +394,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
       // Blank Nodes in the pattern are to be treated as internal variables
       // inside WHERE.
-      return TripleComponent{
-          ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
+      return TripleComponent{blankNodeToInternalVariable(item.toSparql())};
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
       return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
@@ -436,7 +453,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
     query._rootGraphPattern._graphPatterns.emplace_back(
         toGraphPattern(query.constructClause().triples_));
   }
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
 
   return query;
 }
@@ -491,7 +509,8 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -524,7 +543,8 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers());
+  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1540,7 +1560,8 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1549,7 +1570,8 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
@@ -2224,7 +2246,7 @@ SubjectOrObjectAndPathTriples Visitor::visit(
 // ____________________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::BlankNodePropertyListPathContext* ctx) {
-  auto subject = parsedQuery_.getNewInternalVariable();
+  auto subject = getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
     triples.emplace_back(subject, std::move(predicate), std::move(object));
@@ -3003,8 +3025,7 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
       return BlankNode{false, label};
     } else {
       AD_CORRECTNESS_CHECK(mode == TreatBlankNodesAs::InternalVariables);
-      return ParsedQuery::blankNodeToInternalVariable(
-          ctx->BLANK_NODE_LABEL()->getText());
+      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
     }
   }
 }
