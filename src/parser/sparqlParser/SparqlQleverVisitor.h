@@ -67,6 +67,9 @@ class SparqlQleverVisitor {
   // members.
 
   size_t _blankNodeCounter = 0;
+  // Counter that increments for every variable generated using
+  // `getNewInternalVariable` to ensure distinctness.
+  int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
@@ -523,6 +526,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
+  // Return the next internal variable.
+  Variable getNewInternalVariable();
+
+  // Return a callable (not threadsafe) that when being called creates a new
+  // internal variable by calling `getNewInternalVariable()` above.
+  auto makeInternalVariableGenerator();
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 
@@ -530,6 +540,12 @@ class SparqlQleverVisitor {
   // this inside of a CONSTRUCT block, and a new variable otherwise, which is
   // required for graph pattern matching inside `WHERE` clauses.
   GraphTerm newBlankNodeOrVariable();
+
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
