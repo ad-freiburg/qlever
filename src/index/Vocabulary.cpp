@@ -188,8 +188,12 @@ void Vocabulary<S, C, I>::initializeInternalizedLangs(const StringRange& s) {
 template <typename S, typename C, typename I>
 std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
-  AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
+  AD_CONTRACT_CHECK(word.ends_with(PREFIX_CHAR));
   IdRange<I> range;
+  if (word.size() == 1) {
+    range = IdRange{I::make(0), I::make(size()).decremented()};
+    return range;
+  }
   auto [begin, end] = vocabulary_.prefix_range(word.substr(0, word.size() - 1));
   bool notEmpty =
       begin.has_value() && (!end.has_value() || end.value() > begin.value());
