@@ -15,6 +15,7 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using Loc = source_location;
 
+// ____________________________________________________________________________
 inline void checkGeometryType(std::optional<GeometryType> a,
                               std::optional<GeometryType> b,
                               Loc sourceLocation = Loc::current()) {
@@ -23,9 +24,10 @@ inline void checkGeometryType(std::optional<GeometryType> a,
   if (!a.has_value()) {
     return;
   }
-  ASSERT_EQ(a.value().type_, b.value().type_);
+  ASSERT_EQ(a.value().type(), b.value().type());
 }
 
+// ____________________________________________________________________________
 inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -33,12 +35,13 @@ inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
   if (!a.has_value()) {
     return;
   }
-  ASSERT_NEAR(a.value().centroid_.getLat(), b.value().centroid_.getLat(),
+  ASSERT_NEAR(a.value().centroid().getLat(), b.value().centroid().getLat(),
               0.001);
-  ASSERT_NEAR(a.value().centroid_.getLng(), b.value().centroid_.getLng(),
+  ASSERT_NEAR(a.value().centroid().getLng(), b.value().centroid().getLng(),
               0.001);
 }
 
+// ____________________________________________________________________________
 inline void checkBoundingBox(std::optional<BoundingBox> a,
                              std::optional<BoundingBox> b,
                              Loc sourceLocation = Loc::current()) {
@@ -47,15 +50,29 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
   if (!a.has_value()) {
     return;
   }
-  auto [all, aur] = a.value();
-  auto [bll, bur] = b.value();
+  auto [all, aur] = a.value().pair();
+  auto [bll, bur] = b.value().pair();
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
   ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
 }
 
-// Helper that asserts (approx.) equality of two GeometryInfo objects
+// ____________________________________________________________________________
+inline void checkMetricLength(std::optional<MetricLength> a,
+                              std::optional<MetricLength> b,
+                              Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().length(), b.value().length(),
+              // The metric length may be off by up to 1%
+              0.01 * a.value().length());
+}
+
+// ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
                          Loc sourceLocation = Loc::current()) {
@@ -73,8 +90,11 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkCentroid(a.getCentroid(), b.getCentroid());
 
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
+
+  checkMetricLength(a.getMetricLength(), b.getMetricLength());
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
     std::optional<GeometryInfo> optGeoInfo,
     Loc sourceLocation = Loc::current()) {
@@ -88,8 +108,10 @@ inline void checkRequestedInfoForInstance(
                 sourceLocation);
   checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>(),
                     sourceLocation);
+  checkMetricLength(gi.getMetricLength(), gi.getRequestedInfo<MetricLength>());
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForWktLiteral(
     const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -103,6 +125,8 @@ inline void checkRequestedInfoForWktLiteral(
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
   checkGeometryType(gi.getWktType(),
                     GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+  checkMetricLength(gi.getMetricLength(),
+                    GeometryInfo::getRequestedInfo<MetricLength>(wkt));
 }
 
 };  // namespace geoInfoTestHelpers

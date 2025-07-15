@@ -21,10 +21,14 @@ namespace ad_utility {
 
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
+ private:
   GeoPoint centroid_;
 
+ public:
   Centroid(GeoPoint centroid) : centroid_{centroid} {};
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
+
+  GeoPoint centroid() const { return centroid_; }
 };
 
 // The individual coordinates describing the bounding box.
@@ -33,9 +37,21 @@ enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
 struct BoundingBox {
+ private:
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
 
+ public:
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight);
+
+  GeoPoint lowerLeft() const { return lowerLeft_; }
+  GeoPoint upperRight() const { return upperRight_; }
+  std::pair<GeoPoint, GeoPoint> pair() const {
+    return {lowerLeft_, upperRight_};
+  }
+
+  // Return a `POLYGON` WKT literal without quotes or datatype representing this
+  // bounding box.
   std::string asWkt() const;
 
   // Extract the minimum or maximum coordinates
@@ -54,11 +70,27 @@ struct EncodedBoundingBox {
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
 struct GeometryType {
+ private:
   uint8_t type_;
-  GeometryType(uint8_t type) : type_{type} {};
+
+ public:
+  GeometryType(uint8_t type);
+
+  uint8_t type() const { return type_; }
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
+};
+
+// Represents the length of the geometry in meters.
+struct MetricLength {
+ private:
+  double length_;
+
+ public:
+  MetricLength(double length);
+
+  double length() const { return length_; }
 };
 
 // Forward declaration for concept
@@ -67,8 +99,8 @@ class GeometryInfo;
 // Concept for the `RequestedInfo` template parameter: any of these types is
 // allowed to be requested.
 template <typename T>
-CPP_concept RequestedInfoT =
-    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
+CPP_concept RequestedInfoT = SameAsAny<T, GeometryInfo, Centroid, BoundingBox,
+                                       GeometryType, MetricLength>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
@@ -86,10 +118,11 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  double metricLength_ = 0.0;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
-  //   double metricSize_ = 0;
+  // float metricArea_ = 0.0;
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
@@ -99,7 +132,7 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid);
+               Centroid centroid, MetricLength metricLength);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
@@ -127,6 +160,13 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
+
+  // Extract the length in meters.
+  MetricLength getMetricLength() const;
+
+  // Parse an arbitrary WKT literal and compute only the length in meters.
+  static std::optional<MetricLength> getMetricLength(
+      const std::string_view& wkt);
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>
