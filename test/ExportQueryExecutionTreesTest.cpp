@@ -1671,7 +1671,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       pq, qet, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
-  for (std::string& chunk : jsonStream) {
+  for (std::string_view chunk : jsonStream) {
     aggregateString += chunk;
   }
   nlohmann::json json = nlohmann::json::parse(aggregateString);

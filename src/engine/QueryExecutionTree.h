@@ -15,7 +15,6 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
-#include "util/stream_generator.h"
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.

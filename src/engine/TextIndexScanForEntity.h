@@ -14,6 +14,10 @@
 // entities from the fulltext index that contain a certain word or prefix.
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
+// In detail, it retrieves all blocks the word or prefix touches. No filtering
+// happens why it is necessary to join this with a TextIndexScanForWord on the
+// textVar. During tests where this join doesn't happen, this can lead to
+// unexpected behavior.
 class TextIndexScanForEntity : public Operation {
   TextIndexScanForEntityConfiguration config_;
 

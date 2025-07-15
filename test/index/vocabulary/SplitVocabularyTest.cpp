@@ -415,4 +415,26 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   ASSERT_EQ(u7, VocabIndex::make(4));
 }
 
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
+  // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
+  // `finish()`.
+  TwoSplitVocabulary sv1;
+  auto wordWriter1 =
+      sv1.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor1.dat");
+  (*wordWriter1)("\"abc\"", true);
+  ASSERT_FALSE(wordWriter1->finishWasCalled());
+  wordWriter1.reset();
+
+  // Create a `SplitVocabulary::WordWriter` and destruct it after an explicit
+  // call to `finish()`.
+  TwoSplitVocabulary sv2;
+  auto wordWriter2 =
+      sv2.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor2.dat");
+  (*wordWriter2)("\"abc\"", true);
+  wordWriter2->finish();
+  ASSERT_TRUE(wordWriter2->finishWasCalled());
+  wordWriter2.reset();
+}
+
 }  // namespace

@@ -19,6 +19,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "util/BlankNodeManager.h"
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -66,6 +67,10 @@ class SparqlQleverVisitor {
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
 
+  // The blank node manager is needed to handle blank nodes in the templates of
+  // UPDATE requests.
+  ad_utility::BlankNodeManager* blankNodeManager_;
+
   size_t _blankNodeCounter = 0;
   // Counter that increments for every variable generated using
   // `getNewInternalVariable` to ensure distinctness.
@@ -102,10 +107,29 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
-  // This is set to true if and only if we are only inside the template of a
-  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
-  // meaning of blank and anonymous nodes is different.
-  bool isInsideConstructTriples_ = false;
+  // In most contexts, blank node labels in a SPARQL query are actually
+  // variables. But sometimes they are in fact blank node labels (e.g. in
+  // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by
+  // the standard (e.g. in DELETE clauses). The following enum keeps track of
+  // which of these modes is currently active.
+  enum struct TreatBlankNodesAs { InternalVariables, BlankNodes, Illegal };
+  TreatBlankNodesAs treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+
+  // Set the blank node treatment (see above) the `newValue` and return a
+  // cleanup object that in its destructor restores the original blank node
+  // treatment. If blank nodes were already illegal before calling this
+  // function, then they remain illegal (because "blank nodes forbidden" from an
+  // outer scope is more important than a local rule). This behavior is used
+  // when parsing DELETE requests, which don't support updates, but recursively
+  // use the same parser rules as INSERT requests which do support updates, but
+  // under some circumstances require them to be treated as blank nodes instead
+  // of internal variables.
+  [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
+    bool wasIllegal = treatBlankNodesAs_ == TreatBlankNodesAs::Illegal;
+    auto previous = wasIllegal ? treatBlankNodesAs_
+                               : std::exchange(treatBlankNodesAs_, newValue);
+    return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
+  }
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -121,28 +145,29 @@ class SparqlQleverVisitor {
                              Func iriStringToPredicate);
 
  public:
-  SparqlQleverVisitor() = default;
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : blankNodeManager_{bnodeManager},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
       activeDatasetClauses_ = std::move(*datasetOverride);
       datasetsAreFixed_ = true;
     }
+    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
   }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
-    isInsideConstructTriples_ = true;
+    treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
   }
 
   // ___________________________________________________________________________

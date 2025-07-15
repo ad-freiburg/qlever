@@ -87,6 +87,55 @@ std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};
 
+// Combines the given string with first doc text
+auto withFirst(const std::string& s) {
+  return h::combineToString(firstDocText, s);
+}
+
+// Same but with second
+auto withSecond(const std::string& s) {
+  return h::combineToString(secondDocText, s);
+}
+
+// Struct to reduce code duplication
+struct TextResult {
+  QueryExecutionContext* qec_;
+  const Result& result_;
+  bool isPrefixSearch_ = true;
+  bool scoreIsInt_ = true;
+
+  auto getRow(size_t row) const {
+    return h::combineToString(
+        h::getTextRecordFromResultTable(qec_, result_, row),
+        h::getWordFromResultTable(qec_, result_, row));
+  }
+
+  auto getId(size_t row) const {
+    return h::getTextRecordIdFromResultTable(qec_, result_, row);
+  }
+
+  auto getTextRecord(size_t row) const {
+    return h::getTextRecordFromResultTable(qec_, result_, row);
+  }
+
+  auto getWord(size_t row) const {
+    return h::getWordFromResultTable(qec_, result_, row);
+  }
+
+  auto getScore(size_t row) const {
+    return h::getScoreFromResultTable(qec_, result_, row, isPrefixSearch_,
+                                      scoreIsInt_);
+  }
+
+  void checkListOfWords(const std::vector<std::string>& expectedWords,
+                        size_t& startingIndex) const {
+    for (const auto& word : expectedWords) {
+      ASSERT_EQ(word, getWord(startingIndex));
+      ++startingIndex;
+    }
+  }
+};
+
 // Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
 // text index that contains the literals from the `kg` as well as the
 // `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
@@ -145,58 +194,44 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Tests if the correct texts are retrieved from a mix of non literal and
   // literal texts
-  ASSERT_EQ(h::combineToString(secondDocText, "tester"),
-            h::combineToString(h::getTextRecordFromResultTable(qec, result, 0),
-                               h::getWordFromResultTable(qec, result, 0)));
-
-  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"),
-            h::combineToString(h::getTextRecordFromResultTable(qec, result, 1),
-                               h::getWordFromResultTable(qec, result, 1)));
+  TextResult tr{qec, result};
+  ASSERT_EQ(withSecond("tester"), tr.getRow(0));
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"), tr.getRow(1));
   ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
-            h::combineToString(h::getTextRecordFromResultTable(qec, result, 2),
-                               h::getWordFromResultTable(qec, result, 2)));
+            tr.getRow(2));
   ASSERT_EQ(
       h::combineToString("\"the test on friday was really hard\"", "test"),
-      h::combineToString(h::getTextRecordFromResultTable(qec, result, 3),
-                         h::getWordFromResultTable(qec, result, 3)));
+      tr.getRow(3));
 
   // Tests if the correct texts are retrieved from the non literal texts
   TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
-  auto tresult = t1.computeResultOnlyForTesting();
-  ASSERT_EQ(TextRecordIndex::make(1),
-            h::getTextRecordIdFromResultTable(qec, tresult, 0));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 0));
-  ASSERT_EQ(TextRecordIndex::make(1),
-            h::getTextRecordIdFromResultTable(qec, tresult, 1));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 1));
-  ASSERT_EQ(TextRecordIndex::make(2),
-            h::getTextRecordIdFromResultTable(qec, tresult, 2));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 2));
-  ASSERT_EQ(TextRecordIndex::make(2),
-            h::getTextRecordIdFromResultTable(qec, tresult, 3));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 3));
-  ASSERT_EQ(TextRecordIndex::make(3),
-            h::getTextRecordIdFromResultTable(qec, tresult, 4));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 4));
-  ASSERT_EQ(TextRecordIndex::make(4),
-            h::getTextRecordIdFromResultTable(qec, tresult, 5));
-  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 5));
-  ASSERT_EQ(TextRecordIndex::make(5),
-            h::getTextRecordIdFromResultTable(qec, tresult, 6));
-  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, tresult, 6));
-  ASSERT_EQ(TextRecordIndex::make(6),
-            h::getTextRecordIdFromResultTable(qec, tresult, 7));
-  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, tresult, 7));
+  result = t1.computeResultOnlyForTesting();
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(0));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(0));
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(1));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(1));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(2));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(2));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(3));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(3));
+  ASSERT_EQ(TextRecordIndex::make(3), tr.getId(4));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(4));
+  ASSERT_EQ(TextRecordIndex::make(4), tr.getId(5));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(5));
+  ASSERT_EQ(TextRecordIndex::make(5), tr.getId(6));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(6));
+  ASSERT_EQ(TextRecordIndex::make(6), tr.getId(7));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(7));
 
   // Tests if correct words are deducted from prefix
-  ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 0));
-  ASSERT_EQ("astronomy", h::getWordFromResultTable(qec, tresult, 1));
-  ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 2));
-  ASSERT_EQ("astronomy", h::getWordFromResultTable(qec, tresult, 3));
-  ASSERT_EQ("astronomy", h::getWordFromResultTable(qec, tresult, 4));
-  ASSERT_EQ("astronomy", h::getWordFromResultTable(qec, tresult, 5));
-  ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 6));
-  ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 7));
+  ASSERT_EQ("astronomer", tr.getWord(0));
+  ASSERT_EQ("astronomy", tr.getWord(1));
+  ASSERT_EQ("astronomer", tr.getWord(2));
+  ASSERT_EQ("astronomy", tr.getWord(3));
+  ASSERT_EQ("astronomy", tr.getWord(4));
+  ASSERT_EQ("astronomy", tr.getWord(5));
+  ASSERT_EQ("astronomer", tr.getWord(6));
+  ASSERT_EQ("astronomer", tr.getWord(7));
 
   // Tests if the correct scores are retrieved from the non literal texts for
   // Explicit scores
@@ -204,67 +239,148 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 0, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 1, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 2, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 3, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 4, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 5, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 6, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 7, true));
+  auto tr1 = TextResult{qec, scoreResultCount, true};
+  ASSERT_EQ(1, tr1.getScore(0));
+  ASSERT_EQ(1, tr1.getScore(1));
+  ASSERT_EQ(0, tr1.getScore(2));
+  ASSERT_EQ(0, tr1.getScore(3));
+  ASSERT_EQ(1, tr1.getScore(4));
+  ASSERT_EQ(1, tr1.getScore(5));
+  ASSERT_EQ(1, tr1.getScore(6));
+  ASSERT_EQ(0, tr1.getScore(7));
 
   // Tests if the correct scores are retrieved from the non-literal texts for
   // TFIDF
   qec = getQecWithTextIndex(TextScoringMetric::TFIDF);
   TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
+  auto tr2 = TextResult{qec, scoreResultTFIDF, true, false};
   float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord1Doc7 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord2Doc4 = h::calculateTFIDFFromParameters(1, 1, 6);
-  ASSERT_EQ(tfidfWord1Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 0, true, false));
-  ASSERT_EQ(tfidfWord2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 1, true, false));
-  ASSERT_EQ(tfidfWord1Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 2, true, false));
-  ASSERT_EQ(tfidfWord2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 3, true, false));
-  ASSERT_EQ(tfidfWord2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 4, true, false));
-  ASSERT_EQ(tfidfWord2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 5, true, false));
-  ASSERT_EQ(tfidfWord1Doc7,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 6, true, false));
-  ASSERT_EQ(tfidfWord1Doc7,
-            h::getScoreFromResultTable(qec, scoreResultTFIDF, 7, true, false));
+  ASSERT_EQ(tfidfWord1Doc4, tr2.getScore(0));
+  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(1));
+  ASSERT_EQ(tfidfWord1Doc4, tr2.getScore(2));
+  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(3));
+  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(4));
+  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(5));
+  ASSERT_EQ(tfidfWord1Doc7, tr2.getScore(6));
+  ASSERT_EQ(tfidfWord1Doc7, tr2.getScore(7));
 
   // Tests if the correct scores are retrieved from the non literal texts for
   // BM25
   qec = getQecWithTextIndex(TextScoringMetric::BM25);
   TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultBM25 = score3.computeResultOnlyForTesting();
+  auto tr3 = TextResult{qec, scoreResultBM25, true, false};
   float bm25Word1Doc4 =
       h::calculateBM25FromParameters(1, 2, 6, 7, 15, 0.75, 1.75);
   float bm25Word1Doc7 =
       h::calculateBM25FromParameters(1, 2, 6, 7, 10, 0.75, 1.75);
   float bm25Word2Doc4 =
       h::calculateBM25FromParameters(1, 1, 6, 7, 15, 0.75, 1.75);
-  ASSERT_EQ(bm25Word1Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 0, true, false));
-  ASSERT_EQ(bm25Word2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 1, true, false));
-  ASSERT_EQ(bm25Word1Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 2, true, false));
-  ASSERT_EQ(bm25Word2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 3, true, false));
-  ASSERT_EQ(bm25Word2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 4, true, false));
-  ASSERT_EQ(bm25Word2Doc4,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 5, true, false));
-  ASSERT_EQ(bm25Word1Doc7,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 6, true, false));
-  ASSERT_EQ(bm25Word1Doc7,
-            h::getScoreFromResultTable(qec, scoreResultBM25, 7, true, false));
+  ASSERT_EQ(bm25Word1Doc4, tr3.getScore(0));
+  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(1));
+  ASSERT_EQ(bm25Word1Doc4, tr3.getScore(2));
+  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(3));
+  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(4));
+  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(5));
+  ASSERT_EQ(bm25Word1Doc7, tr3.getScore(6));
+  ASSERT_EQ(bm25Word1Doc7, tr3.getScore(7));
+}
+
+TEST(TextIndexScanForWord, WordScanShortPrefix) {
+  auto qec = getQecWithTextIndex();
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "a*"};
+  // Test if size calculations are right
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  auto tr = TextResult{qec, result};
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 10);
+
+  // Check if word and text are correctly retrieved
+  ASSERT_EQ(withFirst("astronomer"), tr.getRow(0));
+  ASSERT_EQ(withFirst("astronomy"), tr.getRow(1));
+  ASSERT_EQ(withFirst("astronomer"), tr.getRow(2));
+  ASSERT_EQ(withFirst("astronomy"), tr.getRow(3));
+  ASSERT_EQ(withFirst("astronomy"), tr.getRow(4));
+  ASSERT_EQ(withFirst("astronomy"), tr.getRow(5));
+  ASSERT_EQ(withSecond("although"), tr.getRow(6));
+  ASSERT_EQ(withSecond("astronomer"), tr.getRow(7));
+  ASSERT_EQ(withSecond("although"), tr.getRow(8));
+  ASSERT_EQ(withSecond("astronomer"), tr.getRow(9));
+}
+
+TEST(TextIndexScanForWord, WordScanStarPrefix) {
+  auto qec = getQecWithTextIndex();
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "*"};
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  auto tr = TextResult{qec, result};
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 50);
+
+  // Things to look out for: Documents come before Literals. Literals are
+  // Sorted wrt. the StringSortComparator. The both of them are classified as
+  // contexts. In one context the words are ordered wrt. the
+  // StringSortComparator.
+  std::vector<std::string> words = {"astronomer",
+                                    "astronomy",
+                                    "field",
+                                    "scientist",
+                                    ":s:firstsentence",
+                                    "astronomer",
+                                    "astronomy",
+                                    "field",
+                                    "scientist",
+                                    "astronomy",
+                                    "concentrates",
+                                    "earth",
+                                    "outside",
+                                    "question",
+                                    "scope",
+                                    "specific",
+                                    "studies",
+                                    "astronomy",
+                                    "concentrates",
+                                    "earth",
+                                    "field",
+                                    "outside",
+                                    "scope",
+                                    "studies",
+                                    "although",
+                                    "astronomer",
+                                    "rockets",
+                                    "tester",
+                                    "although",
+                                    "astronomer",
+                                    "space",
+                                    "earth",
+                                    "space",
+                                    "failed",
+                                    "he",
+                                    "test",
+                                    "the",
+                                    "other",
+                                    "sentence",
+                                    "some",
+                                    "can",
+                                    "help",
+                                    "testing",
+                                    "friday",
+                                    "hard",
+                                    "on",
+                                    "really",
+                                    "test",
+                                    "the",
+                                    "was"};
+  size_t startingIndex = 0;
+  tr.checkListOfWords(words, startingIndex);
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
@@ -275,34 +391,34 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s1.getResultWidth(), 2);
 
   auto result = s1.computeResultOnlyForTesting();
+  auto tr1 = TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 2);
 
-  ASSERT_EQ("\"he failed the test\"",
-            h::getTextRecordFromResultTable(qec, result, 0));
-  ASSERT_EQ("\"the test on friday was really hard\"",
-            h::getTextRecordFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"he failed the test\"", tr1.getTextRecord(0));
+  ASSERT_EQ("\"the test on friday was really hard\"", tr1.getTextRecord(1));
 
   TextIndexScanForWord s2{qec, Variable{"?text1"}, "testing"};
 
   ASSERT_EQ(s2.getResultWidth(), 2);
 
   result = s2.computeResultOnlyForTesting();
+  auto tr2 = TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
-  ASSERT_EQ("\"testing can help\"",
-            h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"", tr2.getTextRecord(0));
 
   TextIndexScanForWord s3{qec, Variable{"?text1"}, "tester"};
 
   ASSERT_EQ(s3.getResultWidth(), 2);
 
   result = s3.computeResultOnlyForTesting();
+  auto tr3 = TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
-  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ(secondDocText, tr3.getTextRecord(0));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
