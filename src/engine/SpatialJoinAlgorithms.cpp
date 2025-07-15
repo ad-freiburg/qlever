@@ -38,12 +38,11 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       geometries_{qec->getAllocator()} {}
 
 // ____________________________________________________________________________
-util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
-    bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
-    sj::Sweeper& sweeper, size_t numThreads,
-    std::optional<util::geo::I32Box> prefilterBox) const {
-  // Initialize the parser.
-  sj::WKTParser parser(&sweeper, numThreads);
+std::optional<util::geo::DBox> SpatialJoinAlgorithms::prefilterBoxToLatLng(
+    std::optional<util::geo::I32Box> prefilterBox) {
+  if (!prefilterBox.has_value()) {
+    return std::nullopt;
+  }
 
   // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
   // mercator int32 to normal lat-long double coordinates.
@@ -53,36 +52,56 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
         static_cast<double>(p.getY()) / PREC);
   };
 
+  return util::geo::DBox{projection(prefilterBox.value().getLowerLeft()),
+                         projection(prefilterBox.value().getUpperRight())};
+}
+
+// ____________________________________________________________________________
+bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+    const std::optional<util::geo::DBox>& prefilterLatLngBox,
+    VocabIndex vocabIndex) const {
+  if (prefilterLatLngBox.has_value()) {
+    auto geoInfo = qec_->getIndex().getVocab().getGeoInfo(vocabIndex);
+    // TODO if we only use this if we certainly have a GeoVocabulary then we can
+    // also return true if geoInfo has no value
+    if (geoInfo.has_value()) {
+      // We have a bounding box: Check intersection with prefilter box.
+      auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
+          geoInfo.value().getBoundingBox());
+      return !util::geo::intersects(prefilterLatLngBox.value(), boundingBox);
+    }
+  }
+  // If we don't have the required information, we cannot discard the geometry.
+  return false;
+}
+
+// ____________________________________________________________________________
+util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
+    bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+    sj::Sweeper& sweeper, size_t numThreads,
+    std::optional<util::geo::I32Box> prefilterBox) const {
+  const auto [idTable, column] = idTableAndCol;
+
+  // Initialize the parser.
+  sj::WKTParser parser(&sweeper, numThreads);
+
   // Convert prefilter box to lat lng for comparing against geometry info from
   // vocabulary.
-  std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
+  const std::optional<util::geo::DBox> prefilterLatLngBox =
+      prefilterBoxToLatLng(prefilterBox);
   size_t prefilterCounter = 0;
-  if (prefilterBox.has_value()) {
-    prefilterLatLngBox =
-        util::geo::DBox{projection(prefilterBox.value().getLowerLeft()),
-                        projection(prefilterBox.value().getUpperRight())};
-  }
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
     throwIfCancelled();
 
-    auto id = idTable->at(row, column);
+    const auto id = idTable->at(row, column);
     if (id.getDatatype() == Datatype::VocabIndex) {
-      // If we have a prefilter box, check if we have a precomputed bounding
-      // box.
-      if (prefilterLatLngBox.has_value()) {
-        auto geoInfo =
-            qec_->getIndex().getVocab().getGeoInfo(id.getVocabIndex());
-        if (geoInfo.has_value()) {
-          // We have a bounding box: Check intersection with prefilter box.
-          auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
-              geoInfo.value().getBoundingBox());
-          if (!util::geo::intersects(prefilterLatLngBox.value(), boundingBox)) {
-            prefilterCounter++;
-            continue;
-          }
-        }
+      // If we have a prefilter box, check if we also have a precomputed
+      // bounding box for the geometry this `VocabIndex` is refering to.
+      if (prefilterGeoByBoundingBox(prefilterLatLngBox, id.getVocabIndex())) {
+        prefilterCounter++;
+        continue;
       }
 
       // If we have not filtered out this geometry, read and parse the full
@@ -117,10 +136,12 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
   // Wait for all parser threads to finish, then return the bounding box of all
   // the geometries parsed so far.
   parser.done();
-  if (prefilterBox.has_value()) {
-    spatialJoin_.value()->runtimeInfo().addDetail("prefiltered geometries",
-                                                  prefilterCounter);
+
+  if (spatialJoin_.has_value() && prefilterBox.has_value()) {
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-dropped-by-prefilter", prefilterCounter);
   }
+
   return parser.getBoundingBox();
 }
 
@@ -427,18 +448,22 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // smaller one. Compute the bounding box of the smaller table (appropriately
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
+  auto runParser = [&](IdTableAndJoinColumn smaller,
+                       IdTableAndJoinColumn larger) {
+    // Parse and add all geometries of the smaller side
+    auto box =
+        libspatialjoinParse(false, smaller, sweeper, NUM_THREADS, std::nullopt);
+    sweeper.setFilterBox(box);
+
+    // Parse and add the relevant (intersection with the bounding box)
+    // geometries from the larger side
+    libspatialjoinParse(true, larger, sweeper, NUM_THREADS,
+                        sweeper.getPaddedBoundingBox(box));
+  };
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper,
-                                   NUM_THREADS, std::nullopt);
-    sweeper.setFilterBox(box);
-    libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS,
-                        sweeper.getPaddedBoundingBox(box));
+    runParser({idTableLeft, leftJoinCol}, {idTableRight, rightJoinCol});
   } else {
-    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
-                                   NUM_THREADS, std::nullopt);
-    sweeper.setFilterBox(box);
-    libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS,
-                        sweeper.getPaddedBoundingBox(box));
+    runParser({idTableRight, rightJoinCol}, {idTableLeft, leftJoinCol});
   }
 
   // Flush the geometry caches and the sweepline event list cache to disk and

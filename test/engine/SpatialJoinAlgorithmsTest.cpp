@@ -1,3 +1,8 @@
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller @Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
@@ -9,13 +14,13 @@
 #include <variant>
 
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -994,7 +999,7 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{3, 500000}),
         ::testing::Bool()));
 
-}  // end of Namespace computeResultTest
+}  // namespace computeResultTest
 
 namespace boundingBox {
 
@@ -1665,5 +1670,27 @@ TEST(SpatialJoin, mixedDataSet) {
 }
 
 }  // namespace boundingBox
+
+namespace libSJPrefilter {
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, prefilterBoxToLatLng) {
+  // TODO SpatialJoinAlgorithms::prefilterBoxToLatLng;
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, prefilterGeoByBoundingBox) {
+  // TODO SpatialJoinAlgorithms::prefilterGeoByBoundingBox;
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialjoinParseBoundingBoxPrefilter) {
+  // TODO SpatialJoinAlgorithms::libspatialjoinParse  (with and without
+  // prefilterbox
+  // ,
+  // ...)
+}
+
+}  // namespace libSJPrefilter
 
 }  // namespace

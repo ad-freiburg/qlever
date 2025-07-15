@@ -4,7 +4,6 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -12,6 +11,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 
