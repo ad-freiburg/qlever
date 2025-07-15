@@ -126,6 +126,7 @@ class TransitivePathImpl : public TransitivePathBase {
         std::move(edges), sub->getCopyOfLocalVocab(), ql::span{&tableInfo, 1},
         startSide.value_, targetSide.value_, yieldOnce);
 
+    // We don't pass a payload table, so our `inputWidth` is 0.
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce, 0);
 

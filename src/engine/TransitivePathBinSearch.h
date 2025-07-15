@@ -35,13 +35,14 @@
  *       5 |        6
  *
  */
-struct BinSearchMap {
+class BinSearchMap {
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
   ql::span<const Id> graphIds_;
   size_t offset_ = 0;
   size_t size_;
 
+ public:
   BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
                ql::span<const Id> graphIds)
       : startIds_{startIds},

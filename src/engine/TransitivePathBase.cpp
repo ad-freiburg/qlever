@@ -511,7 +511,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     }
   } else if (graphIsJoin) {
     // If the join column originates from the knowledge graph and it's the same
-    // as the actuve graph variable we still don't know for sure if the value is
+    // as the active graph variable we still don't know for sure if the value is
     // an actual graph name, so we have to join to get a column of genuine graph
     // columns, which will then be compared for equality in
     // `TransitivePathImpl::transitiveHull`.

@@ -141,7 +141,8 @@ class TransitivePathBase : public Operation {
 
   // Helper variable to allow joining a graph column without name clashes in
   // case the graph variable is the same as the join variable when the graph is
-  // bound in `minDist_ == 0` scenarios.
+  // bound in `minDist_ == 0` scenarios. This is necesssary for queries of the
+  // form `?x wdt:P31 ?g . GRAPH ?g { ?g wdt:P279* ?y }`.
   static const Variable internalGraphHelper_;
 
  public:

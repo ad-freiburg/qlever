@@ -18,7 +18,8 @@
  * implements the successors function, which is used in transitiveHull function.
  *
  */
-struct HashMapWrapper {
+class HashMapWrapper {
+ public:
   // We deliberately use the `std::` variants of a hash map because `absl`s
   // types are not exception safe.
   using Map = std::unordered_map<
@@ -28,11 +29,13 @@ struct HashMapWrapper {
       Id, Map, absl::Hash<Id>, std::equal_to<Id>,
       ad_utility::AllocatorWithLimit<std::pair<const Id, Map>>>;
 
+ private:
   MapOfMaps graphMap_;
   Map* map_;
   Set emptySet_;
   Map emptyMap_;
 
+ public:
   // Constructor with no graph column.
   HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)
       : graphMap_{allocator},
