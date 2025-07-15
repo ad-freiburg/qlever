@@ -1689,6 +1689,13 @@ TEST(SpatialJoin, LibspatialjoinParseBoundingBoxPrefilter) {
   // prefilterbox
   // ,
   // ...)
+
+  // Create a `QueryExecutionContext` on a `GeoVocabulary` which holds various
+  // literals. In particular, prefiltering can be applied using the Germany
+  // bouding box.
+  //   auto qec1 = buildMixedAreaPointQEC(true, true);
+  // approximatedAreaGermany;
+  //   auto qec2 = buildMixedAreaPointQEC(false, true);
 }
 
 }  // namespace libSJPrefilter

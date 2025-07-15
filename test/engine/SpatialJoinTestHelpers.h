@@ -10,6 +10,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -338,36 +339,44 @@ inline std::string createTrueDistanceDataset() {
 
 // Build a `QueryExecutionContext` from the given turtle, but set some memory
 // defaults to higher values to make it possible to test large geometric
-// literals.
-inline auto buildQec(std::string turtleKg) {
+// literals. `vocabType` can be set
+inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
+  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  if (useGeoVocab) {
+    using enum ad_utility::VocabularyType::Enum;
+    vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
+  }
+  config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
 
-inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  return buildQec(createSmallDataset(useAreas));
+inline QueryExecutionContext* buildTestQEC(bool useAreas = false,
+                                           bool useGeoVocab = false) {
+  return buildQec(createSmallDataset(useAreas), useGeoVocab);
 }
 
 inline QueryExecutionContext* buildMixedAreaPointQEC(
-    bool useTrueDistanceDataset = false) {
+    bool useTrueDistanceDataset = false, bool useGeoVocab = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
-  return buildQec(kg);
+  return buildQec(kg, useGeoVocab);
 }
 
 // Create `QueryExecutionContext` with a dataset that contains an additional
 // area without `<name>` predicate (so that our `libspatialjoin` test has two
 // sides of different size), as well as an object with an invalid geometry.
-inline QueryExecutionContext* buildNonSelfJoinDataset() {
+inline QueryExecutionContext* buildNonSelfJoinDataset(
+    bool useGeoVocab = false) {
   std::string kg = createTrueDistanceDataset();
   kg += absl::StrCat(
       "<nodeAreaAdded> <hasGeometry> <geometryAreaAdded> .\n",
       "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
       "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
       "<geometryInvalidAdded> <asWKT> 42 .\n");
-  return buildQec(kg);
+  return buildQec(kg, useGeoVocab);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
