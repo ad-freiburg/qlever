@@ -3,20 +3,12 @@
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
-#include <s2/s2earth.h>
-#include <s2/s2point.h>
 #include <spatialjoin/Sweeper.h>
 
 #include <cstdlib>
-#include <fstream>
-#include <regex>
-#include <variant>
 
 #include "../util/GTestHelpers.h"
-#include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
@@ -278,6 +270,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
 
   //  intersects wkt-de/wkt-other , wkt intersects all against approx-de , wkt
   //  all against uni-tf with maxdist
+  // all of them also without prefiltering , should be more to parse but same
+  // result
 }
 
 }  // namespace
