@@ -24,7 +24,7 @@
 namespace {
 using ad_utility::data_structures::ThreadSafeQueue;
 
-template <typename Range>
+template <typename Range, bool logTime>
 struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<typename Range::value_type> {
   using value_type = typename Range::value_type;
@@ -32,9 +32,35 @@ struct AsyncStreamGenerator
       : queue{bufferLimit},
         exception{nullptr},
         thread{&AsyncStreamGenerator::thread_function, std::move(range),
-               std::ref(queue), std::ref(exception)} {}
+               std::ref(queue), std::ref(exception)} {
+    ifTiming([this] { t.emplace(ad_utility::Timer::Started); });
+  }
 
-  std::optional<value_type> get() override { return queue.pop(); }
+  std::optional<value_type> get() override {
+    ifTiming([this] { t->cont(); });
+    auto value{queue.pop()};
+    ifTiming([this] { t->stop(); });
+
+    if (!value) {
+      auto cleanup =
+          ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this] {
+            queue.finish();
+            thread.join();
+            // This exception will only be thrown once all the values that were
+            // pushed to the queue before the exception occurred.
+            if (exception) {
+              std::rethrow_exception(exception);
+            }
+          });
+      ifTiming([this] {
+        t->stop();
+        LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
+                   << "ms" << std::endl;
+      });
+    }
+
+    return value;
+  }
 
   static void thread_function(Range range, ThreadSafeQueue<value_type>& queue,
                               std::exception_ptr& exception_ptr) {
@@ -50,12 +76,20 @@ struct AsyncStreamGenerator
     queue.finish();
   }
 
+  void ifTiming(std::function<void()> function) {
+    if constexpr (logTime) {
+      std::invoke(function);
+    }
+  }
+
   ThreadSafeQueue<value_type> queue;
   std::exception_ptr exception;
   ad_utility::JThread thread;
+  std::optional<ad_utility::Timer> t;
 };
 
 }  // namespace
+
 namespace ad_utility::streams {
 
 using ad_utility::data_structures::ThreadSafeQueue;
@@ -68,69 +102,12 @@ using ad_utility::data_structures::ThreadSafeQueue;
  * elements is cheap because of the synchronization overhead.
  */
 template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
-cppcoro::generator<typename Range::value_type> runStreamAsync(
+ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsync(
     Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
 
-  ThreadSafeQueue<value_type> queue{bufferLimit};
-  std::exception_ptr exception = nullptr;
-  std::thread thread{[&] {
-    try {
-      for (auto& value : range) {
-        if (!queue.push(std::move(value))) {
-          return;
-        }
-      }
-    } catch (...) {
-      exception = std::current_exception();
-    }
-    queue.finish();
-  }};
-
-  // Only rethrow an exception from the `thread` if no exception occurred in
-  // this thread to avoid crashes because of multiple active exceptions.
-  auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [&queue, &thread, &exception] {
-        queue.finish();
-        thread.join();
-        // This exception will only be thrown once all the values that were
-        // pushed to the queue before the exception occurred.
-        if (exception) {
-          std::rethrow_exception(exception);
-        }
-      });
-
-  auto ifTiming = [](std::invocable auto function) {
-    if constexpr (logTime) {
-      std::invoke(function);
-    }
-  };
-
-  std::optional<ad_utility::Timer> t{ad_utility::Timer::Started};
-  ifTiming([&t] { t.emplace(ad_utility::Timer::Started); });
-  while (std::optional<value_type> value = queue.pop()) {
-    ifTiming([&t] { t->stop(); });
-    co_yield value.value();
-    ifTiming([&t] { t->cont(); });
-  }
-  ifTiming([&t] {
-    t->stop();
-    LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
-               << "ms" << std::endl;
-  });
-}
-
-/**
- * This is iterator based runStreamAsync template to facilitate refactoring from
- * cppcoro::generator<ValueType> to ad_utility::InputRangeTypeErased<ValueType>
- */
-template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
-ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsyncV2(
-    Range range, size_t bufferLimit) {
-  using value_type = typename Range::value_type;
-
-  auto generator{std::make_unique<AsyncStreamGenerator<Range>>(std::move(range),
-                                                               bufferLimit)};
+  auto generator{std::make_unique<AsyncStreamGenerator<Range, logTime>>(
+      std::move(range), bufferLimit)};
   return ad_utility::InputRangeTypeErased<value_type>{std::move(generator)};
 }
 

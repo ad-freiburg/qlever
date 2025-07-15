@@ -10,7 +10,6 @@
 #include <optional>
 #include <type_traits>
 
-#include "Generator.h"
 #include "backports/algorithm.h"
 #include "util/Enums.h"
 #include "util/LambdaHelpers.h"

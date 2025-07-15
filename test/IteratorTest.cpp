@@ -259,9 +259,3 @@ TEST(Iterator, IteratorRange) {
   EXPECT_EQ(beg[3], v.begin() + 3);
   EXPECT_EQ(*beg[3], 7);
 }
-
-cppcoro::generator<int> simpleGenerator(const int max) {
-  for (int i{0}; i < max; ++i) {
-    co_yield i;
-  }
-}
