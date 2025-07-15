@@ -54,8 +54,13 @@ class RdfParserBase {
       TurtleParserIntegerOverflowBehavior::Error;
   bool invalidLiteralsAreSkipped_ = false;
 
+  const EncodedValues* encodedValues_;
+
  public:
   virtual ~RdfParserBase() = default;
+
+  explicit RdfParserBase(const EncodedValues* encodedValues)
+      : encodedValues_{encodedValues} {}
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLineImpl(&triple); }
 
@@ -108,6 +113,8 @@ class TurtleParser : public RdfParserBase {
  public:
   using ParseException = ::ParseException;
 
+  explicit TurtleParser(const EncodedValues* encodedValues)
+      : RdfParserBase{encodedValues} {}
   // Get the result of the single rule that was parsed most recently. Used for
   // testing.
   const TripleComponent& getLastParseResult() const { return lastParseResult_; }
@@ -395,8 +402,9 @@ CPP_template(typename Parser)(
   using Parser::getLine;
   using Parser::prefixMap_;
   RdfStringParser() = default;
-  explicit RdfStringParser(TripleComponent defaultGraph)
-      : Parser{std::move(defaultGraph)} {}
+  explicit RdfStringParser(const EncodedValues* encodedValues,
+                           TripleComponent defaultGraph)
+      : Parser{encodedValues, std::move(defaultGraph)} {}
   bool getLineImpl(TurtleTriple* triple) override {
     (void)triple;
     throw std::runtime_error(
@@ -678,7 +686,8 @@ class RdfParallelParser : public Parser {
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
-  RdfMultifileParser() = default;
+  RdfMultifileParser(const EncodedValues* encodedValues)
+      : RdfParserBase{encodedValues} {};
 
   // Construct the parser from a vector of file specifications and eagerly start
   // parsing them on background threads.

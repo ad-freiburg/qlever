@@ -11,32 +11,18 @@
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
 
-struct EncodedValues {
-  static constexpr std::tuple prefixes{
-      ctll::fixed_string{"<http://www.wikidata.org/entity/Q"},
-      ctll::fixed_string{"<https://www.openstreetmap.org/way/"},
-      ctll::fixed_string{"<https://www.openstreetmap.org/relation/"},
-      ctll::fixed_string{"<https://www.openstreetmap.org/node/"},
-      ctll::fixed_string{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_node_"},
-      ctll::fixed_string{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_relarea_"},
-      ctll::fixed_string{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_wayarea_"},
-  };
-  // TODO<joka921> Make sure to keep those two in sync by automating this
-  // process.
-  static constexpr std::tuple prefixesRt{
-      std::string_view{"<http://www.wikidata.org/entity/Q"},
-      std::string_view{"<https://www.openstreetmap.org/way/"},
-      std::string_view{"<https://www.openstreetmap.org/relation/"},
-      std::string_view{"<https://www.openstreetmap.org/node/"},
-      std::string_view{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_node_"},
-      std::string_view{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_relarea_"},
-      std::string_view{
-          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_wayarea_"},
+template <size_t NumBitsTotal, size_t NumBitsTags>
+// TODO<joka921> Add several assertions.
+struct EncodedValuesImpl {
+  static constexpr size_t NumBitsEncoding = NumBitsTotal - NumBitsTags;
+  std::vector<std::string> prefixes{
+      "<http://www.wikidata.org/entity/Q",
+      "<https://www.openstreetmap.org/way/",
+      "<https://www.openstreetmap.org/relation/",
+      "<https://www.openstreetmap.org/node/",
+      "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_node_",
+      "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_relarea_",
+      "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_wayarea_",
   };
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -65,91 +51,65 @@ struct EncodedValues {
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
     // AD_LOG_WARN << "encoding is " << std::hex << encoded << std::endl;
     size_t shift = N - 4;
-    size_t len = (N - std::countr_zero(encoded)) / 4;
-    // AD_LOG_WARN << "len of encoded is " << len << std::endl;
+    auto numZeros = std::countr_zero(encoded);
+    size_t len = (N / 4) - (numZeros / 4);
+    // AD_LOG_WARN << "num zeros:" << std::dec << numZeros << " len of encoded
+    // is " << len << std::endl;
     for (size_t i = 0; i < len; ++i) {
       result.push_back(static_cast<char>(((encoded >> shift) & 0xF) + '0' - 1));
       shift -= 4;
     }
   }
 
-  template <size_t I>
-  static std::optional<Id> encodeSingle(std::string_view repr) {
-    static constexpr size_t numBitsEncoding = 48;
-    // Note: The `12` in the following regex is `48/4` and has to be adjusted
-    // should we ever change the characteristics.
-    static constexpr auto regex =
-        std::get<I>(prefixes) + "(?<digits>[0-9]{1,12})>";
+  std::optional<Id> encode(std::string_view repr) const {
+    auto it = ql::ranges::find_if(prefixes, [&repr](std::string_view prefix) {
+      return repr.starts_with(prefix);
+    });
+    if (it == prefixes.end()) {
+      return std::nullopt;
+    }
+    repr.remove_prefix(it->size());
+    static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
     auto match = ctre::match<regex>(repr);
     if (!match) {
       return std::nullopt;
     }
     const auto& numString = match.template get<"digits">().to_view();
-    // TODO<joka921> Compute this constant.
-    static_assert(I < (2ull << 10));
+
+    // TODO<joka921> magic constant.
+    if (numString.size() > NumBitsEncoding / 4) {
+      return std::nullopt;
+    }
+    auto prefixIndex = static_cast<size_t>(it - prefixes.begin());
+    // TODO<joka921> Compute this magic constant and assert during construction.
+    AD_CORRECTNESS_CHECK(prefixIndex < (1ull << 10));
+
     return Id::makeFromEncodedVal(
-        encodeDecimalToNBit<numBitsEncoding>(numString) |
-        (I << numBitsEncoding));
+        encodeDecimalToNBit<NumBitsEncoding>(numString) |
+        (prefixIndex << NumBitsEncoding));
   }
 
-  static std::optional<Id> encode(std::string_view repr) {
-    // TODO
-    auto res = encodeSingle<0>(repr);
-    if (!res.has_value()) {
-      res = encodeSingle<1>(repr);
-    }
-    if (!res.has_value()) {
-      res = encodeSingle<2>(repr);
-    }
-    if (!res.has_value()) {
-      res = encodeSingle<3>(repr);
-    }
-    if (!res.has_value()) {
-      res = encodeSingle<4>(repr);
-    }
-    if (!res.has_value()) {
-      res = encodeSingle<5>(repr);
-    }
-    if (!res.has_value()) {
-      res = encodeSingle<6>(repr);
-    }
-    return res;
-  }
-  template <size_t I>
-  static auto toLiteralOrIriSingle(uint64_t idx) {
+  std::string toString(Id id) const {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
+    static constexpr auto mask =
+        ad_utility::bitMaskForLowerBits(NumBitsEncoding);
+    auto idx = id.getEncodedVal() & mask;
+    auto encoderIdx = id.getEncodedVal() >> NumBitsEncoding;
     std::string repr;
-    const auto& prefix = std::get<I>(prefixesRt);
+    const auto& prefix = prefixes.at(encoderIdx);
     // TODO<joka921> Magic constant.
     repr.reserve(prefix.size() + 13);
     repr = prefix;
     decodeDecimalFrom64Bit<48>(repr, idx);
     repr.push_back('>');
-    return LiteralOrIri::fromStringRepresentation(std::move(repr));
+    return repr;
   }
 
-  static auto toLiteralOrIri(Id id) {
-    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
-    static constexpr auto mask = ad_utility::bitMaskForLowerBits(50);
-    auto idx = id.getEncodedVal() & mask;
-    auto encoderIdx = id.getEncodedVal() >> 50;
-
-    if (encoderIdx == 0) {
-      return toLiteralOrIriSingle<0>(idx);
-    } else if (encoderIdx == 1) {
-      return toLiteralOrIriSingle<1>(idx);
-    } else if (encoderIdx == 2) {
-      return toLiteralOrIriSingle<2>(idx);
-    } else if (encoderIdx == 3) {
-      return toLiteralOrIriSingle<3>(idx);
-    } else if (encoderIdx == 4) {
-      return toLiteralOrIriSingle<4>(idx);
-    } else if (encoderIdx == 5) {
-      return toLiteralOrIriSingle<5>(idx);
-    } else if (encoderIdx == 6) {
-      return toLiteralOrIriSingle<6>(idx);
-    }
-    AD_FAIL();
+  LiteralOrIri toLiteralOrIri(Id id) const {
+    return LiteralOrIri::fromStringRepresentation(toString(id));
   }
 };
+
+using EncodedValues = EncodedValuesImpl<Id::numDataBits, 10>;
 
 #endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H

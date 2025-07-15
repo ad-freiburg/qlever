@@ -21,27 +21,26 @@ std::vector<size_t> getRandomIndices(size_t min, size_t max, size_t num) {
 }
 
 TEST(EncodedValues, SimpleExample) {
-  std::string Q42{"<http://www.wikidata.org/entity/Q42>"};
-  auto id = EncodedValues::encode(Q42);
+  EncodedValues ev;
+  std::string Q42{"<http://www.wikidata.org/entity/Q423>"};
+  auto id = ev.encode(Q42);
+  AD_LOG_WARN << std::hex << id->getBits() << '\n';
   ASSERT_TRUE(id.has_value());
-  EXPECT_EQ(EncodedValues::toLiteralOrIri(id.value()).toStringRepresentation(),
-            Q42);
+  EXPECT_EQ(ev.toString(id.value()), Q42);
 }
 
 TEST(EncodedValues, EnAndDecoding) {
   // TODO<joka921> For some reason the upper bounds seem to be off when using
   // `10^12` here, investigate.
-  // auto indices = getRandomIndices(0, static_cast<size_t>(std::pow(10ull,
-  // 10ull)) - 1, 10'000);
-  auto indices = getRandomIndices(0, 1000, 10'000);
+  auto indices = getRandomIndices(
+      0, static_cast<size_t>(std::pow(10ull, 12ull) - 1), 10'000);
+  EncodedValues ev;
   for (auto index : indices) {
     std::string wdq =
         absl::StrCat("<http://www.wikidata.org/entity/Q", index, ">");
-    auto id = EncodedValues::encode(wdq);
+    auto id = ev.encode(wdq);
     ASSERT_TRUE(id.has_value()) << index;
-    EXPECT_EQ(
-        EncodedValues::toLiteralOrIri(id.value()).toStringRepresentation(), wdq)
-        << std::hex << id.value().getBits();
+    EXPECT_EQ(ev.toString(id.value()), wdq) << std::hex << id.value().getBits();
   }
 }
 
