@@ -126,6 +126,14 @@ struct TextResult {
     return h::getScoreFromResultTable(qec_, result_, row, isPrefixSearch_,
                                       scoreIsInt_);
   }
+
+  void checkListOfWords(const std::vector<std::string>& expectedWords,
+                        size_t& startingIndex) const {
+    for (const auto& word : expectedWords) {
+      ASSERT_EQ(word, getWord(startingIndex));
+      ++startingIndex;
+    }
+  }
 };
 
 // Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
@@ -304,6 +312,75 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
   ASSERT_EQ(withSecond("astronomer"), tr.getRow(7));
   ASSERT_EQ(withSecond("although"), tr.getRow(8));
   ASSERT_EQ(withSecond("astronomer"), tr.getRow(9));
+}
+
+TEST(TextIndexScanForWord, WordScanStarPrefix) {
+  auto qec = getQecWithTextIndex();
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "*"};
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  auto tr = TextResult{qec, result};
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 50);
+
+  // Things to look out for: Documents come before Literals. Literals are
+  // Sorted wrt. the StringSortComparator. The both of them are classified as
+  // contexts. In one context the words are ordered wrt. the
+  // StringSortComparator.
+  std::vector<std::string> words = {"astronomer",
+                                    "astronomy",
+                                    "field",
+                                    "scientist",
+                                    ":s:firstsentence",
+                                    "astronomer",
+                                    "astronomy",
+                                    "field",
+                                    "scientist",
+                                    "astronomy",
+                                    "concentrates",
+                                    "earth",
+                                    "outside",
+                                    "question",
+                                    "scope",
+                                    "specific",
+                                    "studies",
+                                    "astronomy",
+                                    "concentrates",
+                                    "earth",
+                                    "field",
+                                    "outside",
+                                    "scope",
+                                    "studies",
+                                    "although",
+                                    "astronomer",
+                                    "rockets",
+                                    "tester",
+                                    "although",
+                                    "astronomer",
+                                    "space",
+                                    "earth",
+                                    "space",
+                                    "failed",
+                                    "he",
+                                    "test",
+                                    "the",
+                                    "other",
+                                    "sentence",
+                                    "some",
+                                    "can",
+                                    "help",
+                                    "testing",
+                                    "friday",
+                                    "hard",
+                                    "on",
+                                    "really",
+                                    "test",
+                                    "the",
+                                    "was"};
+  size_t startingIndex = 0;
+  tr.checkListOfWords(words, startingIndex);
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
