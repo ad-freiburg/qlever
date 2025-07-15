@@ -8,12 +8,15 @@
 
 using AntlrParser = SparqlAutomaticParser;
 
+using BnodeMgr = ad_utility::BlankNodeManager*;
+
 namespace {
 // _____________________________________________________________________________
 // Parse the given string as the given clause. If the datasets are not empty,
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
-auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
+auto parseOperation(BnodeMgr bnodeMgr,
+                    ContextType* (SparqlAutomaticParser::*f)(void),
                     std::string operation,
                     const std::vector<DatasetClause>& datasets) {
   using S = std::string;
@@ -21,12 +24,13 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
   // The third argument are the datasets from outside the query, which override
   // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
+      bnodeMgr,
       std::move(operation),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
           ? std::nullopt
           : std::optional(parsedQuery::DatasetClauses::fromClauses(datasets))};
-  auto resultOfParseAndRemainingText = p.parseTypesafe(F);
+  auto resultOfParseAndRemainingText = p.parseTypesafe(f);
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.
@@ -38,11 +42,19 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(&AntlrParser::query, std::move(query), datasets);
+  ad_utility::BlankNodeManager bnodeMgr;
+  auto res = parseOperation(&bnodeMgr, &AntlrParser::query, std::move(query),
+                            datasets);
+  // Queries never contain blank nodes in the body since they are always turned
+  // into internal variables.
+  AD_CORRECTNESS_CHECK(bnodeMgr.numBlocksUsed() == 0);
+  return res;
 }
 
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
-    std::string update, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(&AntlrParser::update, std::move(update), datasets);
+    BnodeMgr bnodeMgr, std::string update,
+    const std::vector<DatasetClause>& datasets) {
+  return parseOperation(bnodeMgr, &AntlrParser::update, std::move(update),
+                        datasets);
 }
