@@ -98,7 +98,7 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
     const auto id = idTable->at(row, column);
     if (id.getDatatype() == Datatype::VocabIndex) {
       // If we have a prefilter box, check if we also have a precomputed
-      // bounding box for the geometry this `VocabIndex` is refering to.
+      // bounding box for the geometry this `VocabIndex` is referring to.
       if (prefilterGeoByBoundingBox(prefilterLatLngBox, id.getVocabIndex())) {
         prefilterCounter++;
         continue;

@@ -186,7 +186,7 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
 TEST(SpatialJoinTest, BoundingBoxPrefilter) {
   // Create a `QueryExecutionContext` on a `GeoVocabulary` which holds various
   // literals. In particular, prefiltering can be applied using the Germany
-  // bouding box.
+  // bounding box.
 
   auto kg = buildLibSJTestDataset();
   auto qec = buildQec(kg, true);

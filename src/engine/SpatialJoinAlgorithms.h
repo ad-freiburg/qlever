@@ -167,7 +167,7 @@ class SpatialJoinAlgorithms {
       std::optional<util::geo::I32Box> prefilterBox);
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
-  // avaliable from a `GeoVocabulary`) of a given vocabulary entry against the
+  // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
   // by the bounding box.
   bool prefilterGeoByBoundingBox(
