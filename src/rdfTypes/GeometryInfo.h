@@ -165,7 +165,8 @@ class GeometryInfo {
   MetricLength getMetricLength() const;
 
   // Parse an arbitrary WKT literal and compute only the length in meters.
-  static MetricLength getMetricLength(const std::string_view& wkt);
+  static std::optional<MetricLength> getMetricLength(
+      const std::string_view& wkt);
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>

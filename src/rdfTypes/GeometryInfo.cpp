@@ -131,9 +131,12 @@ std::string BoundingBox::asWkt() const {
 MetricLength GeometryInfo::getMetricLength() const { return {metricLength_}; };
 
 // ____________________________________________________________________________
-MetricLength GeometryInfo::getMetricLength(const std::string_view& wkt) {
+std::optional<MetricLength> GeometryInfo::getMetricLength(
+    const std::string_view& wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
   return {detail::computeMetricLength(parsed.value())};
 };
 
