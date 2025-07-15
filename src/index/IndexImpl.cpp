@@ -22,14 +22,19 @@
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
+
+// namespace
 
 // During the index building we typically have two permutations present at the
 // same time, as we directly push the triples from the first sorting to the
@@ -80,9 +85,31 @@ static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
   };
-  return ad_utility::inPlaceTransformView(
+
+  using Range = decltype(ad_utility::OwningView{
+      sorterPtr->template getSortedBlocks<0>()});
+  using Transformer = decltype(setSubset);
+
+  struct generator : public ad_utility::InputRangeFromGet<IdTableStatic<0>> {
+    Range r_;
+    decltype(r_.begin()) rIter_;
+    Transformer t_;
+    generator(Range r, Transformer t)
+        : r_{std::move(r)}, rIter_{r_.begin()}, t_{t} {}
+    std::optional<IdTableStatic<0>> get() override {
+      if (rIter_ != r_.end()) {
+        auto retVal{*rIter_};
+        t_(retVal);
+        rIter_++;
+        return retVal;
+      }
+      return std::nullopt;
+    }
+  };
+
+  return ad_utility::InputRangeTypeErased{std::move(generator{
       ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset);
+      setSubset})};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
