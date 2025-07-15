@@ -14,7 +14,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
@@ -53,15 +54,15 @@ CPP_concept ValueAsNumericId =
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
-// from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
-// values will become `Id::makeUndefined()`.
-CPP_template(bool NanToUndef = false,
+// from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
+// point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
+CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanToUndef) {
-    return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+    return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
+  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
@@ -138,12 +139,13 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
-  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
@@ -270,10 +272,10 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
 // the input of which the `STR()` function was not used in a query.
 struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   using Mixin<LiteralFromIdGetter>::operator();
-  std::optional<string> operator()(ValueId id,
-                                   const EvaluationContext* context) const;
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(ValueId id,
+                                        const EvaluationContext* context) const;
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     if (s.isIri()) {
       return std::nullopt;
     }
@@ -357,6 +359,13 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
                                const EvaluationContext*) const;
+
+  // The actual implementation for a given `LiteralOrIri` which is guaranteed
+  // not to use the `EvaluationContext`. This method can be used to convert
+  // `LiteralOrIri` objects holding a unit of measurement, even when no
+  // `EvaluationContext` is available. Currently used for `geof:distance` filter
+  // substitution during query planning.
+  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
@@ -391,6 +400,28 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
   IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
                               const EvaluationContext* context) const;
+};
+
+// Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
+// holding a `VocabIndex` is given and QLever's index is built using the
+// `GeoVocabulary`, the `GeometryInfo` is fetched from the precomputed file
+// and the `RequestedInfo` is extracted from it. If no precomputed
+// `GeometryInfo` is available, the WKT literal is parsed and only the
+// `RequestedInfo` is computed ad hoc (for example the bounding box is not
+// calculated, when requesting the centroid).
+template <typename RequestedInfo = ad_utility::GeometryInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
+  std::optional<RequestedInfo> operator()(
+      ValueId id, const EvaluationContext* context) const;
+  std::optional<RequestedInfo> operator()(
+      const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
+
+  // Helper: This function returns a `GeometryInfo` object if it can be fetched
+  // from a precomputation result. Otherwise `std::nullopt` is returned.
+  static std::optional<ad_utility::GeometryInfo> getPrecomputedGeometryInfo(
+      ValueId id, const EvaluationContext* context);
 };
 
 // Defines the return type for value-getter `StringOrDateGetter`.

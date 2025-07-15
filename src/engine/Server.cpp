@@ -9,8 +9,9 @@
 #include "engine/Server.h"
 
 #include <absl/functional/bind_front.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
-#include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -69,7 +70,7 @@ Server::Server(unsigned short port, size_t numThreads,
 }
 
 // __________________________________________________________________________
-void Server::initialize(const string& indexBaseName, bool useText,
+void Server::initialize(const std::string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations,
                         bool persistUpdates) {
   LOG(INFO) << "Initializing server ..." << std::endl;
@@ -92,8 +93,9 @@ void Server::initialize(const string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
-                 bool loadAllPermutations, bool persistUpdates) {
+void Server::run(const std::string& indexBaseName, bool useText,
+                 bool usePatterns, bool loadAllPermutations,
+                 bool persistUpdates) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -583,7 +585,7 @@ Server::PlannedQuery Server::planQuery(
 
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
-    const string& query, const std::string& errorMsg,
+    const std::string& query, const std::string& errorMsg,
     const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
@@ -713,7 +715,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    MediaType Server::determineMediaType(
+    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
         const ad_utility::url_parser::ParamValueMap& params,
         const RequestT& request) {
   using namespace ad_utility::url_parser;
@@ -741,12 +743,11 @@ CPP_template_def(typename RequestT)(
 
   std::string_view acceptHeader = request.base()[http::field::accept];
 
-  if (!mediaType.has_value()) {
-    mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  if (mediaType.has_value()) {
+    return {mediaType.value()};
+  } else {
+    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
   }
-  AD_CORRECTNESS_CHECK(mediaType.has_value());
-
-  return mediaType.value();
 }
 
 // ____________________________________________________________________________
@@ -762,6 +763,38 @@ CPP_template_def(typename RequestT)(
   return messageSender;
 }
 
+// _____________________________________________________________________________
+ad_utility::MediaType Server::chooseBestFittingMediaType(
+    const std::vector<ad_utility::MediaType>& candidates,
+    const ParsedQuery& parsedQuery) {
+  if (!candidates.empty()) {
+    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
+                                                  MediaType mediaType) {
+      if (parsedQuery.hasAskClause()) {
+        std::array supportedMediaTypes{
+            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      if (parsedQuery.hasSelectClause()) {
+        std::array supportedMediaTypes{
+            MediaType::octetStream, MediaType::csv,
+            MediaType::tsv,         MediaType::qleverJson,
+            MediaType::sparqlXml,   MediaType::sparqlJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
+                                     MediaType::qleverJson, MediaType::turtle};
+      return ad_utility::contains(supportedMediaTypes, mediaType);
+    });
+    if (it != candidates.end()) {
+      return *it;
+    }
+  }
+
+  return parsedQuery.hasConstructClause() ? MediaType::turtle
+                                          : MediaType::sparqlJson;
+}
+
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -773,9 +806,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
-  MediaType mediaType = determineMediaType(params, request);
-  LOG(INFO) << "Requested media type of result is \""
-            << ad_utility::toString(mediaType) << "\"" << std::endl;
+  auto mediaTypes = determineMediaTypes(params, request);
+  AD_LOG_INFO << "Requested media types of the result are: "
+              << absl::StrJoin(
+                     mediaTypes | ql::views::transform([](MediaType mediaType) {
+                       return absl::StrCat(
+                           "\"", ad_utility::toString(mediaType), "\"");
+                     }),
+                     ", ")
+              << std::endl;
 
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -794,6 +833,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree_;
+
+  MediaType mediaType =
+      chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
@@ -936,15 +978,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate]() {
         json results = json::array();
+        // TODO<qup42> We currently create a new snapshot after each update in
+        // the chain, which is expensive. Instead, the updates could operate
+        // directly on the `DeltaTriples` (we have an exclusive lock on them
+        // anyway).
         for (ParsedQuery& update : updates) {
+          // Make the snapshot before the query planning. Otherwise, it could
+          // happen that the query planner "knows" that a result is empty, when
+          // actually it is not due to a preceding update in the chain. Also,
+          // this improves the size estimates and hence the query plan.
+          qec.updateLocatedTriplesSnapshot();
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
-          // TODO<qup42>: optimize the case of chained updates
-          // As we have an exclusive lock on the DeltaTriples we the
-          // execution could happen directly against the DeltaTriples
-          // instead of the snapshot that has to be refreshed after each
-          // step.
-          qec.updateLocatedTriplesSnapshot();
           // Update the delta triples.
           results.push_back(index_.deltaTriplesManager().modify<nlohmann::json>(
               [this, &requestTimer, &cancellationHandle,

@@ -124,9 +124,9 @@ class TurtleParser : public RdfParserBase {
 
  private:
   // Impl of the method above, also used in rdfLiteral parsing.
-  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+  TripleComponent literalAndDatatypeToTripleComponentImpl(
       std::string_view normalizedLiteralContent,
-      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
+      const TripleComponent::Iri& typeIri);
 
   static constexpr std::array<const char*, 12> integerDatatypes_ = {
       XSD_INT_TYPE,
@@ -439,12 +439,12 @@ CPP_template(typename Parser)(
     return std::move(parser.triples_[0].object_);
   }
 
-  string_view getUnparsedRemainder() const { return this->tok_.view(); }
+  std::string_view getUnparsedRemainder() const { return this->tok_.view(); }
 
   // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
-  void raiseManually(string_view message) { this->raise(message); }
+  void raiseManually(std::string_view message) { this->raise(message); }
 
   void setPositionOffset(size_t offset) { positionOffset_ = offset; }
 

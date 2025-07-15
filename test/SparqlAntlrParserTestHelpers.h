@@ -25,9 +25,10 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
@@ -157,7 +158,8 @@ void expectCompleteParse(
  */
 template <typename Result, typename Matcher>
 void expectIncompleteParse(
-    const Result& resultOfParseAndText, const string& rest, Matcher&& matcher,
+    const Result& resultOfParseAndText, const std::string& rest,
+    Matcher&& matcher,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
@@ -271,7 +273,7 @@ inline auto Iri = [](const std::string& value) {
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
-inline auto Predicate = [](const std::string& value) {
+inline auto Predicate = [](const ad_utility::triple_component::Iri& value) {
   return MultiVariantWith<ad_utility::sparql_types::VarOrPath, ::PropertyPath>(
       AD_PROPERTY(::PropertyPath, getIri, testing::Eq(value)));
 };
@@ -360,13 +362,12 @@ auto GraphPatternOperation =
 }  // namespace detail
 
 inline auto BindExpression =
-    [](const string& expression) -> Matcher<const p::Bind&> {
+    [](const std::string& expression) -> Matcher<const p::Bind&> {
   return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
-inline auto Bind =
-    [](const ::Variable& variable,
-       const string& expression) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Bind = [](const ::Variable& variable, const std::string& expression)
+    -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
       testing::AllOf(BindExpression(expression),
                      AD_FIELD(p::Bind, _target, testing::Eq(variable))));
@@ -404,7 +405,7 @@ inline auto VariableOrderKeys =
   return testing::ElementsAreArray(matchers);
 };
 
-inline auto ExpressionOrderKey = [](const string& expr,
+inline auto ExpressionOrderKey = [](const std::string& expr,
                                     bool desc) -> Matcher<const OrderKey&> {
   return testing::VariantWith<::ExpressionOrderKey>(testing::AllOf(
       AD_FIELD(::ExpressionOrderKey, expression_, detail::Expression(expr)),
@@ -437,19 +438,19 @@ inline auto OrderKeys =
 };
 
 inline auto VariableGroupKey =
-    [](const string& key) -> Matcher<const GroupKey&> {
+    [](const std::string& key) -> Matcher<const GroupKey&> {
   return testing::VariantWith<::Variable>(
       AD_PROPERTY(Variable, name, testing::Eq(key)));
 };
 
 inline auto ExpressionGroupKey =
-    [](const string& expr) -> Matcher<const GroupKey&> {
+    [](const std::string& expr) -> Matcher<const GroupKey&> {
   return testing::VariantWith<sparqlExpression::SparqlExpressionPimpl>(
       detail::Expression(expr));
 };
 
 inline auto AliasGroupKey =
-    [](const string& expr,
+    [](const std::string& expr,
        const ::Variable& variable) -> Matcher<const GroupKey&> {
   return testing::VariantWith<Alias>(
       testing::AllOf(AD_FIELD(Alias, _target, testing::Eq(variable)),
@@ -553,7 +554,7 @@ inline auto AsteriskSelect = [](bool distinct = false,
 };
 
 inline auto VariablesSelect =
-    [](const vector<string>& variables, bool distinct = false,
+    [](const vector<std::string>& variables, bool distinct = false,
        bool reduced = false) -> Matcher<const p::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
@@ -583,7 +584,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
         return false;
       }
     } else {
-      auto pair = get<std::pair<string, ::Variable>>(selection[i]);
+      auto pair = get<std::pair<std::string, ::Variable>>(selection[i]);
       if (alias_counter >= arg.getAliases().size()) {
         *result_listener << "where selected Variables contain less Aliases ("
                          << testing::PrintToString(alias_counter)
@@ -632,10 +633,10 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
 }  // namespace detail
 
 inline auto Select =
-    [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
+    [](std::vector<std::variant<::Variable, std::pair<std::string, ::Variable>>>
            selection,
        bool distinct = false, bool reduced = false,
-       std::vector<std::pair<string, ::Variable>> hiddenAliases = {})
+       std::vector<std::pair<std::string, ::Variable>> hiddenAliases = {})
     -> Matcher<const p::SelectClause&> {
   return testing::SafeMatcherCast<const p::SelectClause&>(detail::Select(
       distinct, reduced, std::move(selection), std::move(hiddenAliases)));
@@ -714,6 +715,13 @@ inline auto Minus =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Minus>(
       AD_FIELD(p::Minus, _child, subMatcher));
+};
+
+inline auto Load = [](const TripleComponent::Iri& iri,
+                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Load>(
+      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
+                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
 };
 
 inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
@@ -821,13 +829,14 @@ inline auto SubSelect =
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs activeDefaultGraphs =
+        std::nullopt,
     ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
-               Field(&DS::namedGraphs_, Eq(namedGraphs)));
+  return AllOf(AD_PROPERTY(DS, activeDefaultGraphs, Eq(activeDefaultGraphs)),
+               AD_PROPERTY(DS, namedGraphs, Eq(namedGraphs)));
 }
 
 inline auto SelectQuery =
@@ -936,89 +945,26 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto Load = [](bool silent,
-                      const ad_utility::triple_component::Iri& source,
-                      const std::optional<GraphRef>& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Load>(
-      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
-                     AD_FIELD(Load, source_, testing::Eq(source)),
-                     AD_FIELD(Load, target_, testing::Eq(target))));
-};
-
-inline auto Clear =
-    [](bool silent,
-       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Clear>(
-      testing::AllOf(AD_FIELD(Clear, silent_, testing::Eq(silent)),
-                     AD_FIELD(Clear, target_, testing::Eq(target))));
-};
-
-inline auto Drop =
-    [](bool silent,
-       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Drop>(
-      testing::AllOf(AD_FIELD(Drop, silent_, testing::Eq(silent)),
-                     AD_FIELD(Drop, target_, testing::Eq(target))));
-};
-
-inline auto Create =
-    [](bool silent,
-       const GraphRef& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Create>(
-      testing::AllOf(AD_FIELD(Create, silent_, testing::Eq(silent)),
-                     AD_FIELD(Create, target_, testing::Eq(target))));
-};
-
-inline auto Add = [](bool silent, const GraphOrDefault& source,
-                     const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Add>(
-      testing::AllOf(AD_FIELD(Add, silent_, testing::Eq(silent)),
-                     AD_FIELD(Add, source_, testing::Eq(source)),
-                     AD_FIELD(Add, target_, testing::Eq(target))));
-};
-
-inline auto Move = [](bool silent, const GraphOrDefault& source,
-                      const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Move>(
-      testing::AllOf(AD_FIELD(Move, silent_, testing::Eq(silent)),
-                     AD_FIELD(Move, source_, testing::Eq(source)),
-                     AD_FIELD(Move, target_, testing::Eq(target))));
-};
-
-inline auto Copy = [](bool silent, const GraphOrDefault& source,
-                      const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Copy>(
-      testing::AllOf(AD_FIELD(Copy, silent_, testing::Eq(silent)),
-                     AD_FIELD(Copy, source_, testing::Eq(source)),
-                     AD_FIELD(Copy, target_, testing::Eq(target))));
-};
-
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
-       const std::optional<ad_utility::triple_component::Iri>& with)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+    -> Matcher<const updateClause::GraphUpdate&> {
+  return testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)));
 };
 
 inline auto EmptyDatasets = [] {
-  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
-                        testing::Eq(std::nullopt)),
-               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
-                        testing::Eq(std::nullopt)));
+  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
+                           testing::Eq(std::nullopt)),
+               AD_PROPERTY(ParsedQuery::DatasetClauses, namedGraphs,
+                           testing::Eq(std::nullopt)));
 };
 
 using Graphs = ad_utility::HashSet<TripleComponent>;
 
 inline auto UpdateClause =
-    [](const Matcher<const updateClause::Operation&>& opMatcher,
+    [](const Matcher<const updateClause::GraphUpdate&>& opMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher,
        const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
            EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {
@@ -1033,7 +979,7 @@ inline auto UpdateClause =
 template <typename T>
 auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
 
-auto inline GraphRefIri = [](const string& iri) {
+auto inline GraphRefIri = [](const std::string& iri) {
   return testing::VariantWith<GraphRef>(AD_PROPERTY(
       TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
@@ -1188,6 +1134,179 @@ inline auto ExistsFilter =
                                                  defaultGraphs, namedGraphs))));
 };
 
+// A helper matcher for a graph pattern that targets all triples in `graph`.
+inline auto SelectAllPattern =
+    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
+       std::optional<std::string>&& filter =
+           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
+  return GraphPattern(
+      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
+      Group(GraphPattern(Triples(
+                {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
+            std::move(graph)));
+};
+
+// Matcher for a `ParsedQuery` with a clear of `graph`.
+inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
+                       std::optional<std::string>&& filter = std::nullopt) {
+  // The `GraphSpec` type is the same variant as
+  // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
+  return UpdateClause(
+      GraphUpdate(
+          {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
+          {}),
+      SelectAllPattern(graph, AD_FWD(filter)));
+};
+
+// Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
+inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
+                        const SparqlTripleSimpleWithGraph::Graph& to) {
+  return UpdateClause(GraphUpdate({}, {SparqlTripleSimpleWithGraph(
+                                          ::Variable("?s"), ::Variable("?p"),
+                                          ::Variable("?o"), to)}),
+                      SelectAllPattern(from));
+};
+
 }  // namespace matchers
+
+namespace sparqlParserTestHelpers {
+
+using namespace sparqlParserHelpers;
+namespace m = matchers;
+using Parser = SparqlAutomaticParser;
+using namespace std::literals;
+using Var = Variable;
+
+const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
+    {std::string{QLEVER_INTERNAL_PREFIX_NAME},
+     std::string{QLEVER_INTERNAL_PREFIX_IRI}}};
+
+template <auto F, bool testInsideConstructTemplate = false>
+auto parse =
+    [](const std::string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+       std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
+       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
+                         disableSomeChecks};
+      if (testInsideConstructTemplate) {
+        p.visitor_.setParseModeToInsideConstructTemplateForTesting();
+      }
+      return p.parseTypesafe(F);
+    };
+
+const auto parseBlankNode = parse<&Parser::blankNode>;
+const auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
+const auto parseCollection = parse<&Parser::collection>;
+const auto parseCollectionConstruct = parse<&Parser::collection, true>;
+const auto parseConstructTriples = parse<&Parser::constructTriples>;
+const auto parseGraphNode = parse<&Parser::graphNode>;
+const auto parseGraphNodeConstruct = parse<&Parser::graphNode, true>;
+const auto parseObjectList = parse<&Parser::objectList>;
+const auto parsePropertyList = parse<&Parser::propertyList>;
+const auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
+const auto parseSelectClause = parse<&Parser::selectClause>;
+const auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
+const auto parseTriplesSameSubjectConstruct =
+    parse<&Parser::triplesSameSubject, true>;
+const auto parseVariable = parse<&Parser::var>;
+const auto parseVarOrTerm = parse<&Parser::varOrTerm>;
+const auto parseVerb = parse<&Parser::verb>;
+
+template <auto Clause, bool parseInsideConstructTemplate = false,
+          typename Value = decltype(parse<Clause>("").resultOfParse_)>
+struct ExpectCompleteParse {
+  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
+
+  auto operator()(const std::string& input, const Value& value,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, value, prefixMap_, l);
+  }
+
+  auto operator()(const std::string& input,
+                  const testing::Matcher<const Value&>& matcher,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, matcher, prefixMap_, l);
+  }
+
+  auto operator()(const std::string& input, const Value& value,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, testing::Eq(value), std::move(prefixMap), l);
+  }
+
+  auto operator()(const std::string& input,
+                  const testing::Matcher<const Value&>& matcher,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, std::move(prefixMap), std::nullopt, disableSomeChecks),
+          matcher, l);
+    });
+  }
+
+  auto operator()(const std::string& input,
+                  const testing::Matcher<const Value&>& matcher,
+                  ParsedQuery::DatasetClauses activeDatasetClauses,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
+          matcher, l);
+    });
+  }
+};
+
+template <auto Clause>
+struct ExpectParseFails {
+  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
+
+  auto operator()(
+      const std::string& input,
+      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
+    return operator()(input, prefixMap_, messageMatcher, l);
+  }
+
+  auto operator()(
+      const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),
+        messageMatcher);
+  }
+};
+
+// TODO: make function that creates both the complete and fails parser. and use
+// them with structured binding.
+
+const auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+const auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+const auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+const auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+
+using ::testing::ElementsAre;
+using ::testing::Eq;
+using ::testing::IsEmpty;
+using ::testing::Pair;
+using ::testing::SizeIs;
+using ::testing::StrEq;
+}  // namespace sparqlParserTestHelpers
 
 #endif  // QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H

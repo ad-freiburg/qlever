@@ -12,77 +12,9 @@
 #include <variant>
 
 #include "engine/Operation.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
-#include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
-
-// The supported spatial join types (geometry predicates).
-enum class SpatialJoinType {
-  INTERSECTS,
-  CONTAINS,
-  COVERS,
-  CROSSES,
-  TOUCHES,
-  EQUALS,
-  OVERLAPS,
-  WITHIN_DIST
-};
-
-// A nearest neighbor search with optionally a maximum distance.
-struct NearestNeighborsConfig {
-  size_t maxResults_;
-  std::optional<double> maxDist_ = std::nullopt;
-};
-
-// A spatial search limited only by a maximum distance.
-struct MaxDistanceConfig {
-  double maxDist_;
-};
-
-// Spatial join using one of the join types above. The maximal distance is
-// relevant only for the `WITHIN_DIST` join type.
-struct SpatialJoinConfig {
-  SpatialJoinType joinType_;
-  std::optional<double> maxDist_ = std::nullopt;
-};
-
-// Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask =
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
-
-// Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm {
-  BASELINE,
-  S2_GEOMETRY,
-  BOUNDING_BOX,
-  LIBSPATIALJOIN
-};
-const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
-    SpatialJoinAlgorithm::S2_GEOMETRY;
-
-// The configuration object that will be provided by the special SERVICE.
-struct SpatialJoinConfiguration {
-  // The task defines search parameters
-  SpatialJoinTask task_;
-
-  // The variables for the two tables to be joined
-  Variable left_;
-  Variable right_;
-
-  // If given, the distance will be added to the result and be bound to this
-  // variable.
-  std::optional<Variable> distanceVariable_ = std::nullopt;
-
-  // If given a vector of variables, the selected variables will be part of the
-  // result table - the join column will automatically be part of the result.
-  // You may use PayloadAllVariables to select all columns of the right table.
-  PayloadVariables payloadVariables_ = PayloadVariables::all();
-
-  // Choice of algorithm.
-  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
-
-  std::optional<SpatialJoinType> joinType_ = std::nullopt;
-};
+#include "rdfTypes/Variable.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
@@ -99,30 +31,25 @@ struct PreparedSpatialJoinParams {
   std::optional<SpatialJoinType> joinType_;
 };
 
-// The spatial join operation without a limit on the maximum number of results
-// can, in the worst case have a square number of results, but usually this is
-// not the case. 1 divided by this constant is the damping factor for the
-// estimated number of results.
-static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
-
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
 // search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
-  // creates a SpatialJoin operation. The triple is needed, to get the
-  // variable names. Those are the names of the children, which get added
-  // later. In addition to that, the SpatialJoin operation needs a maximum
-  // distance, which two objects can be apart, which will still be accepted
-  // as a match and therefore be part of the result table. The distance is
-  // parsed from the triple.
+  // creates a SpatialJoin operation: the required configuration object
+  // can for example be obtained from the SpatialQuery class. Children are
+  // optional, because they may be added later using the addChild method.
+  // The substitutesFilterOp parameter indicates whether the spatial join
+  // was explicitly requested by the user (false) or has been created to
+  // implicitly rewrite a cartesian product with a geo filter (true).
   SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
+              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
+              std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+              bool substitutesFilterOp = false);
 
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -138,7 +65,7 @@ class SpatialJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different
@@ -178,6 +105,15 @@ class SpatialJoin : public Operation {
   std::optional<SpatialJoinType> getJoinType() const {
     return config_.joinType_;
   }
+
+  // retrieve the variables the spatial join is joining on
+  std::pair<Variable, Variable> getSpatialJoinVariables() const {
+    return {config_.left_, config_.right_};
+  }
+
+  // get the boolean flag if this spatial join operation is used to substitute a
+  // GeoSPARQL filter operation
+  bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
 
   // Helper functions for unit tests
   std::pair<double, size_t> onlyForTestingGetTask() const {
@@ -231,6 +167,8 @@ class SpatialJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
   SpatialJoinConfiguration config_;
+
+  bool substitutesFilterOp_ = false;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H
