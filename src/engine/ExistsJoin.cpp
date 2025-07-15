@@ -346,20 +346,14 @@ struct LazyExistsJoinImpl
         rightJoinColumn_{rightJoinColumn} {}
 
   // Get the next non-empty result from the given range.
-  template <typename T>
-  static std::optional<T> getNextNonEmptyResult(
-      ad_utility::InputRangeTypeErased<T>& range) {
-    auto accessor = [](const T& object) -> const IdTable& {
-      if constexpr (ad_utility::isSimilar<T, Result::IdTableVocabPair>) {
-        return object.idTable_;
-      } else {
-        return object;
-      }
-    };
-    std::optional<T> current;
+  static std::optional<std::reference_wrapper<const IdTable>>
+  getNextNonEmptyResult(
+      ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>&
+          range) {
+    std::optional<std::reference_wrapper<const IdTable>> current;
     do {
       current = range.get();
-    } while (current.has_value() && accessor(current.value()).empty());
+    } while (current.has_value() && current.value().get().empty());
     return current;
   }
 
@@ -409,28 +403,25 @@ struct LazyExistsJoinImpl
         allRowsFromLeftExist_ = FastForwardState::No;
       }
     }
-    if (allRowsFromLeftExist_ != FastForwardState::Unknown) {
-      auto result = leftRange_.get();
-      if (result.has_value()) {
-        auto& idTable = result.value().idTable_;
-        idTable.addEmptyColumn();
-        ql::ranges::fill(
-            idTable.getColumn(idTable.numColumns() - 1),
-            Id::makeFromBool(allRowsFromLeftExist_ == FastForwardState::Yes));
-      }
-      return result;
-    }
 
-    auto result = getNextNonEmptyResult(leftRange_);
+    auto result = leftRange_.get();
+
     if (result.has_value()) {
       auto& idTable = result.value().idTable_;
       idTable.addEmptyColumn();
-      auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
       auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-      for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size(); rowIndex++) {
-        outputColumn[rowIndex] =
-            Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+      if (allRowsFromLeftExist_ != FastForwardState::Unknown) {
+        ql::ranges::fill(outputColumn, Id::makeFromBool(allRowsFromLeftExist_ ==
+                                                        FastForwardState::Yes));
+      } else {
+        auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
+
+        for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size();
+             rowIndex++) {
+          outputColumn[rowIndex] =
+              Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+        }
       }
     }
     return result;
