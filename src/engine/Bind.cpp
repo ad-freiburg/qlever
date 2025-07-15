@@ -124,26 +124,21 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      return {Result::LazyResult(ad_utility::InputRangeFromLoopControlGet(
+      return {Result::LazyResult(ad_utility::CachingTransformInputRange(
+                  ::ranges::views::chunk(
+                      ::ranges::views::iota(0ULL, subRes->idTable().size()),
+                      CHUNK_SIZE),
                   [this, applyBind = std::move(applyBind),
-                   size = subRes->idTable().size(), offset = size_t{0},
-                   CHUNK_SIZE = Bind::CHUNK_SIZE,
-                   subRes = std::move(subRes)]() mutable {
-                    if (offset >= size) {
-                      return Result::IdTableLoopControl::makeBreak();
-                    }
-
+                   subRes = std::move(subRes)](auto& chunk) {
                     LocalVocab outVocab = subRes->getCopyOfLocalVocab();
+                    auto start = chunk.front();
+                    auto end = start + (chunk.end() - chunk.begin());
                     IdTable idTable = applyBind(
-                        this->cloneSubView(
-                            subRes->idTable(),
-                            {offset, std::min(size, offset + CHUNK_SIZE)}),
+                        this->cloneSubView(subRes->idTable(), {start, end}),
                         &outVocab);
 
-                    offset += CHUNK_SIZE;
-                    return Result::IdTableLoopControl::yieldValue(
-                        Result::IdTableVocabPair{std::move(idTable),
-                                                 std::move(outVocab)});
+                    return Result::IdTableVocabPair{std::move(idTable),
+                                                    std::move(outVocab)};
                   })),
               resultSortedOn()};
     }
