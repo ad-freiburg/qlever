@@ -82,6 +82,8 @@ void testMinus(std::vector<IdTable> leftTables,
   }
 }
 }  // namespace
+
+// _____________________________________________________________________________
 TEST(Minus, computeMinus) {
   IdTable a = makeIdTableFromVector(
       {{1, 2, 1}, {2, 1, 4}, {5, 4, 1}, {8, 1, 2}, {8, 2, 3}});
