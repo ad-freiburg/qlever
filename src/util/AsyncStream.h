@@ -20,7 +20,6 @@
 
 namespace ad_utility::streams {
 namespace detail {
-using ad_utility::data_structures::ThreadSafeQueue;
 
 // The actual implementation of  `runStreamAsync` below.
 template <typename Range, bool logTime>
@@ -28,7 +27,7 @@ struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
   using value_type = typename Range::value_type;
 
-  ThreadSafeQueue<value_type> queue_;
+  ad_utility::data_structures::ThreadSafeQueue<value_type> queue_;
   ad_utility::JThread thread_;
   std::optional<ad_utility::Timer> t_;
 
@@ -78,8 +77,6 @@ struct AsyncStreamGenerator
 
 }  // namespace detail
 
-using ad_utility::data_structures::ThreadSafeQueue;
-
 /**
  * Yield all the elements of the range. A background thread iterates over the
  * range and adds the element to a queue with size `bufferLimit`, the elements
@@ -88,8 +85,8 @@ using ad_utility::data_structures::ThreadSafeQueue;
  * elements is cheap because of the synchronization overhead.
  */
 template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
-ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsync(
-    Range range, size_t bufferLimit) {
+ad_utility::InputRangeTypeErased<ql::ranges::range_value_t<Range>>
+runStreamAsync(Range range, size_t bufferLimit) {
   return ad_utility::InputRangeTypeErased{
       std::make_unique<detail::AsyncStreamGenerator<Range, logTime>>(
           std::move(range), bufferLimit)};
