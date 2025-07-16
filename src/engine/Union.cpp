@@ -342,12 +342,11 @@ Result::LazyResult Union::computeResultLazily(
                           std::vector<ColumnIndex> permutation) {
     using namespace ad_utility;
     if (result->isFullyMaterialized()) {
-      return InputRangeTypeErased(InputRangeFromLoopControlGet(
+      return InputRangeTypeErased(lazySingleValueRange(
           [transform = std::move(transform),
            permutation = std::move(permutation), result = std::move(result)]() {
-            return LoopControl<Result::IdTableVocabPair>::breakWithValue(
-                transform(result->idTable().clone(),
-                          result->getCopyOfLocalVocab(), permutation));
+            return transform(result->idTable().clone(),
+                             result->getCopyOfLocalVocab(), permutation);
           }));
     }
     return InputRangeTypeErased(CachingTransformInputRange(
