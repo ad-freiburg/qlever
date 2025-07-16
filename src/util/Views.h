@@ -28,7 +28,7 @@ CPP_template(typename Range, typename ElementType)(
   ElementType separator_;
 
   ReChunkAtSeparatorFromGet(Range generator, ElementType separator)
-      : buffer_{ql::ranges::to<std::vector<ElementType>>(
+      : buffer_{ranges::to<std::vector<ElementType>>(
             ql::views::join(generator))},
         iter_{buffer_.begin()},
         separator_{separator} {}

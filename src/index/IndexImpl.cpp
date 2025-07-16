@@ -34,8 +34,6 @@
 using std::array;
 using namespace ad_utility::memory_literals;
 
-// namespace
-
 // During the index building we typically have two permutations present at the
 // same time, as we directly push the triples from the first sorting to the
 // second sorting. We therefore have to adjust the amount of memory per external
