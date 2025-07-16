@@ -35,7 +35,8 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 // _____________________________________________________________________________
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
-    const Index::Vocab& vocab, const VariableToColumnMap& variableColumns,
+    const EncodedValues& encodedValuesManager, const Index::Vocab& vocab,
+    const VariableToColumnMap& variableColumns,
     std::vector<SparqlTripleSimpleWithGraph>&& triples) {
   // This LocalVocab only contains IDs that are related to the
   // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
@@ -44,13 +45,14 @@ ExecuteUpdate::transformTriplesTemplate(
   LocalVocab localVocab{};
 
   auto transformSparqlTripleComponent =
-      [&vocab, &localVocab,
+      [&vocab, &localVocab, &encodedValuesManager,
        &variableColumns](TripleComponent component) -> IdOrVariableIndex {
     if (component.isVariable()) {
       AD_CORRECTNESS_CHECK(variableColumns.contains(component.getVariable()));
       return variableColumns.at(component.getVariable()).columnIndex_;
     } else {
-      return std::move(component).toValueId(vocab, localVocab);
+      return std::move(component).toValueId(vocab, localVocab,
+                                            encodedValuesManager);
     }
   };
   Id defaultGraphIri = [&transformSparqlTripleComponent] {
@@ -59,24 +61,26 @@ ExecuteUpdate::transformTriplesTemplate(
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
-  auto transformGraph = [&vocab, &localVocab, &defaultGraphIri,
-                         &variableColumns](
-                            SparqlTripleSimpleWithGraph::Graph graph) {
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
-              return defaultGraphIri;
-            },
-            [&vocab, &localVocab](const ad_utility::triple_component::Iri& iri)
-                -> IdOrVariableIndex {
-              return TripleComponent(iri).toValueId(vocab, localVocab);
-            },
-            [&variableColumns](const Variable& var) -> IdOrVariableIndex {
-              AD_CORRECTNESS_CHECK(variableColumns.contains(var));
-              return variableColumns.at(var).columnIndex_;
-            }},
-        graph);
-  };
+  auto transformGraph =
+      [&vocab, &localVocab, &defaultGraphIri, &variableColumns,
+       &encodedValuesManager](SparqlTripleSimpleWithGraph::Graph graph) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{
+                [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
+                  return defaultGraphIri;
+                },
+                [&vocab, &localVocab, &encodedValuesManager](
+                    const ad_utility::triple_component::Iri& iri)
+                    -> IdOrVariableIndex {
+                  return TripleComponent(iri).toValueId(vocab, localVocab,
+                                                        encodedValuesManager);
+                },
+                [&variableColumns](const Variable& var) -> IdOrVariableIndex {
+                  AD_CORRECTNESS_CHECK(variableColumns.contains(var));
+                  return variableColumns.at(var).columnIndex_;
+                }},
+            graph);
+      };
   auto transformSparqlTripleSimple =
       [&transformSparqlTripleComponent,
        &transformGraph](SparqlTripleSimpleWithGraph triple) {
@@ -139,12 +143,14 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // Start the timer once the where clause has been evaluated.
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
+  const auto& encodedValuesManager = index.encodedValuesManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns,
+      [&vocab, &variableColumns, &encodedValuesManager,
        &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(vocab, variableColumns,
+            transformTriplesTemplate(encodedValuesManager, vocab,
+                                     variableColumns,
                                      std::move(tripleTemplates));
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.

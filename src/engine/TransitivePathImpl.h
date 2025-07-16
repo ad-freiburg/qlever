@@ -232,11 +232,12 @@ class TransitivePathImpl : public TransitivePathBase {
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
+    const auto& index = getIndex();
     std::optional<Id> targetId =
-        target.isVariable()
-            ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  _executionContext->getIndex().getVocab(), targetHelper)};
+        target.isVariable() ? std::nullopt
+                            : std::optional{std::move(target).toValueId(
+                                  index.getVocab(), targetHelper,
+                                  index.encodedValuesManager())};
     bool sameVariableOnBothSides =
         !targetId.has_value() && lhs_.value_ == rhs_.value_;
     for (auto&& tableColumn : startNodes) {
@@ -289,7 +290,8 @@ class TransitivePathImpl : public TransitivePathBase {
                            "call the overload for a bound transitive path.");
       LocalVocab helperVocab;
       Id startId = TripleComponent{startSide.value_}.toValueId(
-          _executionContext->getIndex().getVocab(), helperVocab);
+          getIndex().getVocab(), helperVocab,
+          getIndex().encodedValuesManager());
       // Make sure we retrieve the Id from an IndexScan, so we don't have to
       // pass this LocalVocab around. If it's not present then no result needs
       // to be returned anyways.

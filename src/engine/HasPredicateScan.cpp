@@ -274,7 +274,8 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
                     locatedTriplesSnapshot());
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id = tc.toValueId(getIndex().getVocab());
+    std::optional<Id> id =
+        tc.toValueId(getIndex().getVocab(), getIndex().encodedValuesManager());
     if (!id.has_value()) {
       AD_THROW("The entity '" + tc.toRdfLiteral() +
                "' required by `ql:has-predicate` is not in the vocabulary.");

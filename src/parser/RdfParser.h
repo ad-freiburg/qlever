@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/EncodedValues.h"
 #include "index/InputFileSpecification.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
@@ -401,7 +402,7 @@ CPP_template(typename Parser)(
  public:
   using Parser::getLine;
   using Parser::prefixMap_;
-  RdfStringParser() = default;
+  RdfStringParser(const EncodedValues* encodedValues) : Parser{encodedValues} {}
   explicit RdfStringParser(const EncodedValues* encodedValues,
                            TripleComponent defaultGraph)
       : Parser{encodedValues, std::move(defaultGraph)} {}
@@ -443,7 +444,9 @@ CPP_template(typename Parser)(
 
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
-    RdfStringParser parser;
+    // TODO<joka921> Make it possible to use an optional here.
+    EncodedValues encodedValuesManager;
+    RdfStringParser parser{&encodedValuesManager};
     parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);

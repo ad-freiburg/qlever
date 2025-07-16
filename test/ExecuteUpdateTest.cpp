@@ -439,8 +439,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
           const std::vector<std::array<TripleComponentT, 4>>&
               expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples));
+            ExecuteUpdate::transformTriplesTemplate(
+                <#initializer #>, vocab, variableColumns, std::move(triples));
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -458,8 +458,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
                const Matcher<const std::string&>& messageMatcher) {
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(
+                <#initializer #>, vocab, variableColumns, std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
