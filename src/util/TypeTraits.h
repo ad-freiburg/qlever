@@ -29,7 +29,7 @@ This also works with aliases, that were created using `using`.
 For example:
 For
 ```
-template <typenanme... Ts>
+template <typename... Ts>
 using A = B<Ts...>;
 ```
 the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
@@ -92,6 +92,13 @@ template <typename T, template <typename...> typename TemplatedType>
 CPP_concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
+/// The concept is fulfilled iff any of the `...Ts` is an instantiation of `T`.
+///
+/// anyIsInstantiationOf<std::vector, std::tuple<bool, int>, std::vector<int>,
+/// std::pair<bool, bool>> == true;
+template <template <typename...> typename T, typename... Ts>
+CPP_concept anyIsInstantiationOf = (... || isInstantiation<Ts, T>);
+
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
 /// instantiation of `TemplatedType`. Examples:
 ///
@@ -104,8 +111,8 @@ CPP_concept similarToInstantiation =
 /// @brief The concept is fulfilled if `T` is an instantiation of any
 /// of the types passed in ...Ts
 ///
-/// similarToAnyInstantiationOf<std::vector, std::vector<int>,
-/// std::vector<char>> == true
+/// similarToAnyInstantiationOf<std::vector<int>, std::vector,
+/// std::tuple, std::pair> == true
 template <typename T, template <typename...> typename... Ts>
 CPP_concept similarToAnyInstantiationOf =
     (... || similarToInstantiation<T, Ts>);

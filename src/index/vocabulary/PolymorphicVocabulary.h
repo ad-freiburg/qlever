@@ -159,6 +159,21 @@ class PolymorphicVocabulary {
         vocab_);
   };
 
+  // Check if `getGeoInfo` can return results because there is a
+  // `GeoVocabulary`.
+  bool isGeoInfoAvailable() const {
+    return std::visit(
+        [](const auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return vocab.isGeoInfoAvailable();
+          } else {
+            return false;
+          }
+        },
+        vocab_);
+  }
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
