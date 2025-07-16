@@ -95,7 +95,8 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
 
   if (countInvalidGeometries_) {
     LOG(WARN) << "Geometry preprocessing skipped " << countInvalidGeometries_
-              << " invalid WKT literal(s)." << std::endl;
+              << " invalid WKT literal"
+              << (countInvalidGeometries_ == 1 ? "" : "s") << std::endl;
   }
 }
 
