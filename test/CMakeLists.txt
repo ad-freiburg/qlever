@@ -466,3 +466,5 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 addLinkAndDiscoverTest(GeometryInfoTest util)
 
 addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
+
+addLinkAndDiscoverTestSerial(HttpErrorTest engine)
