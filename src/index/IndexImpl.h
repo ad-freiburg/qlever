@@ -41,10 +41,6 @@
 #include "util/MmapVector.h"
 #include "util/json.h"
 
-using ad_utility::BufferedVector;
-using ad_utility::MmapVector;
-using ad_utility::MmapVectorView;
-
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
