@@ -15,7 +15,7 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using Loc = source_location;
 
-// Helpers that asserts (approx.) equality of two GeometryInfo objects or for
+// Helpers that assert (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
 
 // ____________________________________________________________________________

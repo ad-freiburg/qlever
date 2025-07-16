@@ -70,7 +70,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   if (info.has_value()) {
     ptr = &info.value();
   } else {
-    countInvalidGeometries_++;
+    ++numInvalidGeometries_;
   }
   geoInfoFile_.write(ptr, geoInfoOffset);
 
@@ -85,10 +85,10 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
 
-  if (countInvalidGeometries_) {
-    LOG(WARN) << "Geometry preprocessing skipped " << countInvalidGeometries_
+  if (numInvalidGeometries_ > 0) {
+    LOG(WARN) << "Geometry preprocessing skipped " << numInvalidGeometries_
               << " invalid WKT literal"
-              << (countInvalidGeometries_ == 1 ? "" : "s") << std::endl;
+              << (numInvalidGeometries_ == 1 ? "" : "s") << std::endl;
   }
 }
 
