@@ -475,9 +475,8 @@ TEST(SPARQLProtocolTest, parsePOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseHttpRequest) {
-  auto parse =
-      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
-          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+  auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
 

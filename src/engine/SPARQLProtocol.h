@@ -46,10 +46,17 @@ class SPARQLProtocol {
   static ad_utility::url_parser::ParsedRequest parsePOST(
       const RequestType& request);
 
+  // Parse a Graph Store Protocol request with direct or indirect graph
+  // identification.
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolIndirect(
+      const RequestType& request);
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolDirect(
+      const RequestType& request);
+
  public:
   // Parse a HTTP request.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const RequestType& request);
+      RequestType& request);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

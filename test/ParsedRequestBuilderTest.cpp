@@ -130,7 +130,7 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperation) {
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     const auto builder = ParsedRequestBuilder(request);
-    return builder.isGraphStoreOperation();
+    return builder.isGraphStoreOperationIndirect();
   };
   EXPECT_THAT(isGraphStoreOperation(makeGetRequest("/")), testing::IsFalse());
   EXPECT_THAT(
@@ -155,7 +155,7 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
                 testing::VariantWith<None>(None{}));
-    builder.extractGraphStoreOperation();
+    builder.extractGraphStoreOperationIndirect();
     EXPECT_THAT(builder.parsedRequest_.operation_,
                 testing::VariantWith<GraphStoreOperation>(
                     AD_FIELD(GraphStoreOperation, graph_, testing::Eq(graph))));
@@ -167,14 +167,14 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/?default&graph=foo"));
     AD_EXPECT_THROW_WITH_MESSAGE(
-        builder.extractGraphStoreOperation(),
+        builder.extractGraphStoreOperationIndirect(),
         testing::HasSubstr(
             R"(Parameters "graph" and "default" must not be set at the same time.)"));
   }
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/default"));
     builder.parsedRequest_.operation_ = Query{"foo", {}};
-    AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperation(),
+    AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperationIndirect(),
                                  testing::HasSubstr(""));
   }
 }
