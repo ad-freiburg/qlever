@@ -7,7 +7,6 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
-#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -47,7 +46,6 @@
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
-using std::array;
 using std::shared_ptr;
 using std::tuple;
 
