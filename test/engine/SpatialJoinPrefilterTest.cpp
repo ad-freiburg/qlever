@@ -236,6 +236,7 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
   if (countLeft && countRight) {
     sweeper.sweep();
   }
+  // TODO check countleft countright
 
   ASSERT_EQ(results.size(), 1);
   ASSERT_EQ(resultDists.size(), 1);
