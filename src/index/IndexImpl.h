@@ -46,7 +46,6 @@
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
-using std::shared_ptr;
 using std::tuple;
 
 using json = nlohmann::json;
