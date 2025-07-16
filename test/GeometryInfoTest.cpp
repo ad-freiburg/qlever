@@ -38,6 +38,9 @@ constexpr std::string_view litCollection =
 
 constexpr std::string_view litInvalid =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litCoordOutOfRange =
+    "\"LINESTRING(2 -500, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -216,19 +219,16 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  ASSERT_FALSE(GeometryInfo::fromWktLiteral(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getWktType(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getCentroid(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getBoundingBox(litInvalid).has_value());
+  checkInvalidLiteral(litInvalid);
+}
 
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<GeometryInfo>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<GeometryType>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<Centroid>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<BoundingBox>(litInvalid).has_value());
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
+  checkInvalidLiteral(litCoordOutOfRange, true);
+  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
+                    {2});
+  checkGeometryType(
+      GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
 }
 
 }  // namespace
