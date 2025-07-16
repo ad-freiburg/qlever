@@ -325,19 +325,16 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     if (startSideResult->isFullyMaterialized()) {
-      auto getter = [toView = std::move(toView), getStartNodes,
-                     startSideResult = std::move(startSideResult)]() {
-        const IdTable& idTable = startSideResult->idTable();
-        return LoopControl<TableColumnWithVocab>::breakWithValue(
-            TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
-                                 startSideResult->getCopyOfLocalVocab()});
-      };
-
-      return InputRangeTypeErased{
-          InputRangeFromLoopControlGet(std::move(getter))};
+      return InputRangeTypeErased(lazySingleValueRange(
+          [toView = std::move(toView), getStartNodes = std::move(getStartNodes),
+           startSideResult = std::move(startSideResult)]() {
+            const IdTable& idTable = startSideResult->idTable();
+            return TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
+                                        startSideResult->getCopyOfLocalVocab()};
+          }));
     }
 
-    auto r = CachingTransformInputRange(
+    return InputRangeTypeErased(CachingTransformInputRange(
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
@@ -348,9 +345,7 @@ class TransitivePathImpl : public TransitivePathBase {
           auto& [idTable, localVocab] = buf.value();
           return TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
                                       std::move(localVocab)};
-        });
-
-    return InputRangeTypeErased{std::move(r)};
+        }));
   }
 
   virtual T setupEdgesMap(const IdTable& dynSub,

@@ -61,7 +61,7 @@ Union::Union(QueryExecutionContext* qec,
 
   if (!targetOrder_.empty()) {
     auto computeSortOrder = [this](bool left) {
-      vector<ColumnIndex> specificSortOrder;
+      std::vector<ColumnIndex> specificSortOrder;
       for (ColumnIndex index : targetOrder_) {
         ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
         if (realIndex != NO_COLUMN) {
@@ -115,7 +115,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -365,7 +365,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
       _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);

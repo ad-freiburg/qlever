@@ -18,7 +18,7 @@ class MultiColumnJoin : public Operation {
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
   size_t _sizeEstimate;
   bool _multiplicitiesComputed = false;
 
@@ -37,7 +37,7 @@ class MultiColumnJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
@@ -51,7 +51,7 @@ class MultiColumnJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 

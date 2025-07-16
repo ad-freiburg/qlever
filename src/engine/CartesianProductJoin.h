@@ -86,7 +86,7 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

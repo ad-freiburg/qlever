@@ -4,10 +4,10 @@
 
 #include <gmock/gmock.h>
 
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "SparqlAntlrParserTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
 #include "parser/SparqlParserHelpers.h"
 

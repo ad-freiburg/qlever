@@ -118,6 +118,8 @@ class GeoVocabulary {
     // Finish the writing on the underlying writer and close the `geoInfoFile_`
     // file handle. After this no more calls to `operator()` are allowed.
     void finishImpl() override;
+
+    ~WordWriter() override;
   };
 
   // ___________________________________________________________________________

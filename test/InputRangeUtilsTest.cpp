@@ -62,6 +62,29 @@ void testTransformView(const TransformViewTestHelpers<T>& inAndOutputs,
   }
 }
 
+// Tests for ad_utility::lazySingleValueRange
+TEST(lazySingleValueRange, ReturnLazySingleValueRange) {
+  int variable = 0;
+  auto transformation = [&variable]() {
+    variable++;
+    return variable + 1;
+  };
+
+  auto range = ad_utility::lazySingleValueRange(std::move(transformation));
+  // initial variable should be unchanged
+  EXPECT_EQ(variable, 0);
+  std::optional<int> element = range.get();
+
+  // The first call to `get()` should return a value.
+  EXPECT_TRUE(element.has_value());
+  EXPECT_EQ(element.value(), 2);
+  EXPECT_EQ(variable, 1);
+
+  // No more values after the first.
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_EQ(variable, 1);
+}
+
 // Tests for ad_utility::CachingTransformInputRange
 TEST(CachingTransformInputRange, BasicTests) {
   // This function will move the `vec` if possible (i.e. if it is not const)
