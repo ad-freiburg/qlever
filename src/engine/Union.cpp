@@ -330,38 +330,38 @@ IdTable Union::transformToCorrectColumnFormat(
 Result::LazyResult Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
-  auto transform = [this](IdTable&& idTable, LocalVocab&& vocab,
-                          const std::vector<ColumnIndex>& permutation) {
-    return Result::IdTableVocabPair{
-        this->transformToCorrectColumnFormat(idTable, permutation),
-        std::move(vocab)};
+  auto transformFactory = [this](const std::vector<ColumnIndex>& permutation) {
+    return [this, permutation](IdTable&& idTable, LocalVocab&& vocab) {
+      return Result::IdTableVocabPair{
+          this->transformToCorrectColumnFormat(std::move(idTable), permutation),
+          std::move(vocab)};
+    };
   };
 
-  auto rangeBuilder = [transform = std::move(transform)](
+  auto rangeFactory = [transformFactory = std::move(transformFactory)](
                           std::shared_ptr<const Result> result,
                           std::vector<ColumnIndex> permutation) {
     using namespace ad_utility;
     if (result->isFullyMaterialized()) {
       return InputRangeTypeErased(lazySingleValueRange(
-          [transform = std::move(transform),
-           permutation = std::move(permutation), result = std::move(result)]() {
+          [transform = std::move(transformFactory(permutation)),
+           result = std::move(result)]() {
             return transform(result->idTable().clone(),
-                             result->getCopyOfLocalVocab(), permutation);
+                             result->getCopyOfLocalVocab());
           }));
     }
     return InputRangeTypeErased(CachingTransformInputRange(
         std::move(result->idTables()),
-        [transform = std::move(transform),
-         permutation = std::move(permutation)](
+        [transform = std::move(transformFactory(permutation))](
             Result::IdTableVocabPair& idTableAndVocab) {
           return transform(std::move(idTableAndVocab.idTable_),
-                           std::move(idTableAndVocab.localVocab_), permutation);
+                           std::move(idTableAndVocab.localVocab_));
         }));
   };
 
   return Result::LazyResult{::ranges::concat_view(
-      rangeBuilder(std::move(result1), computePermutation<true>()),
-      rangeBuilder(std::move(result2), computePermutation<false>()))};
+      rangeFactory(std::move(result1), computePermutation<true>()),
+      rangeFactory(std::move(result2), computePermutation<false>()))};
 }
 
 // _____________________________________________________________________________
