@@ -10,6 +10,9 @@
 // This class contains all the code that is only required when building the
 // fulltext index
 class TextIndexBuilder : public IndexImpl {
+  using WordMap = ad_utility::HashMap<WordIndex, Score>;
+  using EntityMap = ad_utility::HashMap<VocabIndex, Score>;
+
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
                             const std::string& onDiskBase)
@@ -49,21 +52,19 @@ class TextIndexBuilder : public IndexImpl {
       std::string contextFile, bool addWordsFromLiterals) const;
 
   void processEntityCaseDuringInvertedListProcessing(
-      const WordsFileLine& line,
-      ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,
-      size_t& entityNotFoundErrorMsgCount) const;
+      const WordsFileLine& line, EntityMap& entitiesInContxt,
+      size_t& nofLiterals, size_t& entityNotFoundErrorMsgCount) const;
 
-  void processWordCaseDuringInvertedListProcessing(
-      const WordsFileLine& line,
-      ad_utility::HashMap<WordIndex, Score>& wordsInContext,
-      ScoreData& scoreData) const;
+  void processWordCaseDuringInvertedListProcessing(const WordsFileLine& line,
+                                                   WordMap& wordsInContext,
+                                                   ScoreData& scoreData) const;
 
   static void logEntityNotFound(const std::string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
   void addContextToVector(TextVec& vec, TextRecordIndex context,
-                          const ad_utility::HashMap<WordIndex, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities) const;
+                          const WordMap& words,
+                          const EntityMap& entities) const;
 
   void createTextIndex(const std::string& filename, TextVec& vec);
 

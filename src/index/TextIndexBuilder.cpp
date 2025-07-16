@@ -4,6 +4,7 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
@@ -85,8 +86,8 @@ size_t TextIndexBuilder::processWordsForVocabulary(
 void TextIndexBuilder::processWordsForInvertedLists(
     const std::string& contextFile, bool addWordsFromLiterals, TextVec& vec) {
   LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
-  ad_utility::HashMap<WordIndex, Score> wordsInContext;
-  ad_utility::HashMap<Id, Score> entitiesInContext;
+  WordMap wordsInContext;
+  EntityMap entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
   // The nofContexts can be misleading since it also counts empty contexts
   size_t nofContexts = 0;
@@ -181,16 +182,15 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
 
 // _____________________________________________________________________________
 void TextIndexBuilder::processEntityCaseDuringInvertedListProcessing(
-    const WordsFileLine& line,
-    ad_utility::HashMap<Id, Score>& entitiesInContext, size_t& nofLiterals,
-    size_t& entityNotFoundErrorMsgCount) const {
+    const WordsFileLine& line, EntityMap& entitiesInContext,
+    size_t& nofLiterals, size_t& entityNotFoundErrorMsgCount) const {
   VocabIndex eid;
   // TODO<joka921> Currently only IRIs and strings from the vocabulary can
   // be tagged entities in the text index (no doubles, ints, etc).
   if (getVocab().getId(line.word_, &eid)) {
     // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
     // to be contiguous.
-    entitiesInContext[Id::makeFromVocabIndex(eid)] += line.score_;
+    entitiesInContext[eid] += line.score_;
     if (line.isLiteralEntity_) {
       ++nofLiterals;
     }
@@ -201,8 +201,7 @@ void TextIndexBuilder::processEntityCaseDuringInvertedListProcessing(
 
 // _____________________________________________________________________________
 void TextIndexBuilder::processWordCaseDuringInvertedListProcessing(
-    const WordsFileLine& line,
-    ad_utility::HashMap<WordIndex, Score>& wordsInContext,
+    const WordsFileLine& line, WordMap& wordsInContext,
     ScoreData& scoreData) const {
   // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
   WordVocabIndex vid;
@@ -235,10 +234,9 @@ void TextIndexBuilder::logEntityNotFound(const std::string& word,
 }
 
 // _____________________________________________________________________________
-void TextIndexBuilder::addContextToVector(
-    TextVec& vec, TextRecordIndex context,
-    const ad_utility::HashMap<WordIndex, Score>& words,
-    const ad_utility::HashMap<Id, Score>& entities) const {
+void TextIndexBuilder::addContextToVector(TextVec& vec, TextRecordIndex context,
+                                          const WordMap& words,
+                                          const EntityMap& entities) const {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<TextBlockIndex> touchedBlocks;
@@ -258,10 +256,9 @@ void TextIndexBuilder::addContextToVector(
   // written to a comp* block once.
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
-      AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
                           Id::makeFromInt(context.get()),
-                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromInt(it->first.get()),
                           Id::makeFromDouble(it->second)});
     }
   }
