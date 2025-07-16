@@ -75,22 +75,25 @@ void Variable::appendEscapedWord(std::string_view word,
   const char* end = word.data() + word.size();
 
   while (ptr < end) {
-    // Use ICU to properly handle Unicode.
-    // Note: this function is not performance critical, so there is no benefit
-    // in a shortcut for ASCII characters.
+    // We are currently very conservative here (most unicode characters are
+    // escaped, although many of them would be valid in a variable name.
+    auto isValidAscii = [](char c) {
+      return static_cast<unsigned char>(c) < 128u && std::isalpha(c) &&
+             c != '_';
+    };
+    auto next = std::find_if_not(ptr, end, isValidAscii);
+    target.append(ptr, next);
+    ptr = next;
+    if (ptr == end) {
+      break;
+    }
+    // Convert all other characters based on their unicode codepoint.
     UChar32 codePoint;
     int64_t i = 0;
     U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(ptr), i,
                     static_cast<int64_t>(word.size()), codePoint);
     AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8");
-
-    if (u_isalpha(codePoint)) {
-      // Keep Unicode letters as-is
-      target.append(ptr, i);
-    } else {
-      // Convert non-letters to numeric representation
-      absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
-    }
+    absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
     ptr += i;
   }
 }

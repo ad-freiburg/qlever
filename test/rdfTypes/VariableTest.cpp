@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <unicode/uchar.h>
 
 #include "../util/GTestHelpers.h"
 #include "rdfTypes/Variable.h"
@@ -47,10 +48,53 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
   EXPECT_NO_THROW(f(Variable("?x").getMatchingWordVariable("äpfel")));
   EXPECT_NO_THROW(f(Variable("?x").getMatchingWordVariable("\U0001F600")));
 
+  // Examples of characters that are alphabetic according to Unicode, but are
+  // not valid in SPARQL variables.
+  EXPECT_NO_THROW(f(Variable("?x").getMatchingWordVariable("\U000000AA")));
+  EXPECT_NO_THROW(f(Variable("?x").getMatchingWordVariable("\U000000B5")));
+  EXPECT_NO_THROW(f(Variable("?x").getMatchingWordVariable("\U000000BA")));
+
   // Expect that all the created variables are unique.
-  EXPECT_EQ(vars.size(), 7);
+  EXPECT_EQ(vars.size(), 10);
 
   // Invalid UTF-8 will throw an exception.
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x").getMatchingWordVariable("\255"),
                                ::testing::HasSubstr("Invalid UTF-8"));
+}
+
+// _____________________________________________________________________________
+TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
+#ifndef QLEVER_RUN_EXPENSIVE_TESTS
+  GTEST_SKIP();
+#endif
+  size_t numErrors = 0;
+  size_t numSuccesful = 0;
+  auto testChar = [&](UChar32 cp) {
+    std::string s;
+    s.resize(U8_MAX_LENGTH);
+    UBool isError = false;
+    int32_t offset = 0;
+    U8_APPEND(s.data(), offset, U8_MAX_LENGTH, cp, isError);
+    if (isError) {
+      throw std::runtime_error("Invalid UChar32 code point.");
+    }
+    s.resize(offset);
+    try {
+      Variable("?x").getMatchingWordVariable(s);
+      numSuccesful++;
+    } catch (...) {
+      ++numErrors;
+    }
+  };
+
+  for (UChar32 cp = 0; cp <= 0x10FFFF; ++cp) {
+    if (cp >= 0xD800 && cp <= 0xDFFF) {
+      continue;  // Skip surrogate pairs
+    }
+
+    if (u_isalnum(cp)) {
+      testChar(cp);
+    }
+  }
+  EXPECT_EQ(numErrors, 0) << numErrors << ' ' << numSuccesful;
 }
