@@ -232,7 +232,7 @@ void GroupByImpl::processGroup(
                            "An expression returned a vector expression result "
                            "that contained an unexpected amount of entries.");
       return sparqlExpression::detail::constantExpressionResultToId(
-          std::move(AD_FWD(singleResult).at(0)), *localVocab);
+          std::move(singleResult.at(0)), *localVocab);
     } else {
       // This should never happen since aggregates always return constants or
       // vectors.
