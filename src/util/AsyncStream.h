@@ -10,17 +10,13 @@
 #include <exception>
 #include <memory>
 #include <optional>
-#include <thread>
 
-#include "Generator.h"
-#include "Iterators.h"
-#include "jthread.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
+#include "util/jthread.h"
 
 namespace ad_utility::streams {
 namespace detail {
@@ -32,41 +28,41 @@ struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
   using value_type = typename Range::value_type;
 
-  ThreadSafeQueue<value_type> queue;
-  ad_utility::JThread thread;
-  std::optional<ad_utility::Timer> t;
+  ThreadSafeQueue<value_type> queue_;
+  ad_utility::JThread thread_;
+  std::optional<ad_utility::Timer> t_;
 
   AsyncStreamGenerator(Range range, const size_t bufferLimit)
-      : queue{bufferLimit} {
-    ifTiming([this] { t.emplace(ad_utility::Timer::Started); });
+      : queue_{bufferLimit} {
+    ifTiming([this] { t_.emplace(ad_utility::Timer::Started); });
 
-    thread = ad_utility::JThread{[this, range = std::move(range)]() mutable {
+    thread_ = ad_utility::JThread{[this, range = std::move(range)]() mutable {
       try {
         for (auto& value : range) {
-          if (!queue.push(std::move(value))) {
+          if (!queue_.push(std::move(value))) {
             return;
           }
         }
       } catch (...) {
-        queue.pushException(std::current_exception());
+        queue_.pushException(std::current_exception());
       }
-      queue.finish();
+      queue_.finish();
     }};
   }
 
   // Inform the thread that the queue has finished s.t. it can join.
-  ~AsyncStreamGenerator() { queue.finish(); }
+  ~AsyncStreamGenerator() { queue_.finish(); }
 
   std::optional<value_type> get() override {
-    ifTiming([this] { t->cont(); });
-    auto value{queue.pop()};
-    ifTiming([this] { t->stop(); });
+    ifTiming([this] { t_->cont(); });
+    auto value{queue_.pop()};
+    ifTiming([this] { t_->stop(); });
 
     if (!value) {
       ifTiming([this] {
-        t->stop();
-        LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
-                   << "ms" << std::endl;
+        t_->stop();
+        LOG(TRACE) << "Waiting time for async stream was "
+                   << t_->msecs().count() << "ms" << std::endl;
       });
     }
     return value;
