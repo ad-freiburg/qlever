@@ -45,8 +45,6 @@ using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
 
-using json = nlohmann::json;
-
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -123,7 +121,7 @@ class IndexImpl {
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
-  json configurationJson_;
+  nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
