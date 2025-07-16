@@ -46,16 +46,18 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  try {
-    return GeometryInfo{type, boundingBoxAsGeoPoints(parsed.value()),
-                        centroidAsGeoPoint(parsed.value())};
-  } catch (const CoordinateOutOfRangeException& ex) {
+
+  auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value());
+  if (!boundingBox.has_value() || !centroid.has_value()) {
     LOG(DEBUG) << "The WKT string `" << wkt
                << "` would lead to an invalid centroid or bounding box. It "
-                  "will thus be treated as an invalid WKT literal. Error: "
-               << ex.what() << std::endl;
+                  "will thus be treated as an invalid WKT literal."
+               << std::endl;
     return std::nullopt;
   }
+
+  return GeometryInfo{type, boundingBox.value(), centroid.value()};
 }
 
 // ____________________________________________________________________________
@@ -97,13 +99,7 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  try {
-    return detail::centroidAsGeoPoint(parsed.value());
-  } catch (const CoordinateOutOfRangeException& ex) {
-    LOG(DEBUG) << "Cannot compute centroid due to invalid coordinates. Error: "
-               << ex.what() << std::endl;
-    return std::nullopt;
-  }
+  return detail::centroidAsGeoPoint(parsed.value());
 }
 
 // ____________________________________________________________________________
@@ -118,14 +114,7 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  try {
-    return detail::boundingBoxAsGeoPoints(parsed.value());
-  } catch (const CoordinateOutOfRangeException& ex) {
-    LOG(DEBUG)
-        << "Cannot compute bounding box due to invalid coordinates. Error: "
-        << ex.what() << std::endl;
-    return std::nullopt;
-  }
+  return detail::boundingBoxAsGeoPoints(parsed.value());
 }
 
 // ____________________________________________________________________________
