@@ -15,6 +15,7 @@
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
 #include "index/TextIndexConfig.h"
+#include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -156,12 +157,8 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  [[nodiscard]] size_t getSizeOfTextBlockForWord(const std::string& word) const;
-
-  [[nodiscard]] size_t getSizeOfTextBlockForEntities(
-      const std::string& word) const;
-
-  [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
+  [[nodiscard]] size_t getSizeOfTextBlocksSum(const std::string& word,
+                                              TextScanMode textScanMode) const;
 
   IdTable getWordPostingsForTerm(
       const std::string& term,

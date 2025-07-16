@@ -1626,9 +1626,11 @@ IdTable IndexImpl::scan(
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
-  return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, locatedTriplesSnapshot,
-                                limitOffset);
+  const auto& perm = getPermutation(p);
+  return perm.scan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
+      limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -1636,8 +1638,10 @@ size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
+  const auto& perm = getPermutation(permutation);
+  return perm.getResultSizeOfScan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________

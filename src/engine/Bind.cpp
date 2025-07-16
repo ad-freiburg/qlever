@@ -1,6 +1,8 @@
 //  Copyright 2020, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "Bind.h"
 
@@ -122,24 +124,26 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      return {
-          [](auto applyBind,
-             std::shared_ptr<const Result> result) -> Result::Generator {
-            size_t size = result->idTable().size();
-            for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
-              LocalVocab outVocab = result->getCopyOfLocalVocab();
-              IdTable idTable = applyBind(
-                  cloneSubView(result->idTable(),
-                               {offset, std::min(size, offset + CHUNK_SIZE)}),
-                  &outVocab);
-              co_yield {std::move(idTable), std::move(outVocab)};
-            }
-          }(std::move(applyBind), std::move(subRes)),
-          resultSortedOn()};
+      auto chunks = ad_utility::allView(::ranges::views::chunk(
+          ::ranges::views::iota(size_t{0}, subRes->idTable().size()),
+          CHUNK_SIZE));
+      auto f = [applyBind = std::move(applyBind),
+                subRes = std::move(subRes)](const auto& chunk) {
+        // Make a deep copy of the local vocab from `subRes` and then add to it
+        // (in case BIND adds a new word or words).
+        LocalVocab outVocab = subRes->getCopyOfLocalVocab();
+        auto start = chunk.front();
+        auto end = start + ::ranges::size(chunk);
+        IdTable idTable = applyBind(
+            Bind::cloneSubView(subRes->idTable(), {start, end}), &outVocab);
+
+        return Result::IdTableVocabPair{std::move(idTable),
+                                        std::move(outVocab)};
+      };
+      return {Result::LazyResult(ad_utility::CachingTransformInputRange(
+                  std::move(chunks), std::move(f))),
+              resultSortedOn()};
     }
-    // Make a deep copy of the local vocab from `subRes` and then add to it (in
-    // case BIND adds a new word or words).
-    //
     // Make a copy of the local vocab from`subRes`and then add to it (in case
     // BIND adds new words). Note: The copy of the local vocab is shallow
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
@@ -149,19 +153,21 @@ Result Bind::computeResult(bool requestLaziness) {
     LOG(DEBUG) << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
-  auto generator =
-      [](auto applyBind,
-         std::shared_ptr<const Result> result) -> Result::Generator {
-    for (auto& [idTable, localVocab] : result->idTables()) {
-      // The `LocalVocab` disallows inserts if it doesn't own its
-      // `primaryWordSet` exclusively. We clone the local vocab to enforce this
-      // invariant in all cases
-      localVocab = localVocab.clone();
-      IdTable resultTable = applyBind(std::move(idTable), &localVocab);
-      co_yield {std::move(resultTable), std::move(localVocab)};
-    }
-  }(std::move(applyBind), std::move(subRes));
-  return {std::move(generator), resultSortedOn()};
+
+  return {
+      Result::LazyResult(ad_utility::CachingTransformInputRange(
+          subRes->idTables(),
+          [applyBind = std::move(applyBind)](auto& idTableAndVocab) mutable {
+            // The `LocalVocab` disallows inserts if it doesn't own its
+            // `primaryWordSet` exclusively. We clone the local vocab to enforce
+            // this invariant in all cases
+            LocalVocab localVocab = idTableAndVocab.localVocab_.clone();
+            IdTable resultTable =
+                applyBind(std::move(idTableAndVocab.idTable_), &localVocab);
+            return Result::IdTableVocabPair(std::move(resultTable),
+                                            std::move(localVocab));
+          })),
+      resultSortedOn()};
 }
 
 // _____________________________________________________________________________

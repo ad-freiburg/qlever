@@ -16,6 +16,8 @@
 #include <typeindex>
 #include <vector>
 
+#include "../util/GTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -26,9 +28,7 @@
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
-#include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
-#include "util/TripleComponentTestHelpers.h"
 #include "util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
@@ -679,11 +679,20 @@ inline auto SolutionModifier =
       AD_FIELD(SolutionModifiers, limitOffset_, testing::Eq(limitOffset)));
 };
 
-inline auto Triples = [](const vector<SparqlTriple>& triples)
+inline auto Triples = [](const std::vector<SparqlTriple>& triples)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::BasicGraphPattern>(
       AD_FIELD(p::BasicGraphPattern, _triples,
                testing::UnorderedElementsAreArray(triples)));
+};
+
+// Same as above, but the triples have to be in the same order as specified.
+// In particular, this also makes the GTest output more readable in case of a
+// test failure.
+inline auto OrderedTriples = [](const std::vector<SparqlTriple>& triples)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::BasicGraphPattern>(AD_FIELD(
+      p::BasicGraphPattern, _triples, testing::ElementsAreArray(triples)));
 };
 
 namespace detail {
@@ -945,14 +954,30 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto GraphUpdate =
-    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+// Match a `updateClause::GraphUpdate` clause.
+inline auto MatchGraphUpdate(
+    const Matcher<const updateClause::GraphUpdate::Triples&>& toDelete,
+    const Matcher<const updateClause::GraphUpdate::Triples&>& toInsert)
     -> Matcher<const updateClause::GraphUpdate&> {
-  return testing::AllOf(
-      AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)));
-};
+  using namespace testing;
+  return AllOf(AD_FIELD(GraphUpdate, toInsert_, toInsert),
+               AD_FIELD(GraphUpdate, toDelete_, toDelete));
+}
+
+// Same as above, but only match the triples exactly (without checking for blank
+// nodes, local vocab, etc.)
+inline auto GraphUpdate(
+    const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
+    const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+    -> Matcher<const updateClause::GraphUpdate&> {
+  auto getVec = [](const GraphUpdate::Triples& tr) -> decltype(auto) {
+    return tr.triples_;
+  };
+  using namespace testing;
+  return matchers::MatchGraphUpdate(
+      ResultOf(getVec, ElementsAreArray(toDelete)),
+      ResultOf(getVec, ElementsAreArray(toInsert)));
+}
 
 inline auto EmptyDatasets = [] {
   return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
@@ -1187,8 +1212,11 @@ auto parse =
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
-                         disableSomeChecks};
+      // We might parse updates here, should we move the blank node manager out
+      // to make it testable/accessible?
+      static ad_utility::BlankNodeManager blankNodeManager;
+      ParserAndVisitor p{&blankNodeManager, input, std::move(prefixes),
+                         std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
