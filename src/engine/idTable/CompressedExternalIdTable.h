@@ -679,8 +679,6 @@ class CompressedExternalIdTableSorter
         AD_CORRECTNESS_CHECK(b.first != b.second);
       }
       ql::ranges::make_heap(priorityQueue_, comp_);
-      result_.clear();
-      result_.reserve(blockSizeOutput_);
     }
 
     bool isFinished() {
@@ -698,6 +696,7 @@ class CompressedExternalIdTableSorter
 
     void next() {
       result_.clear();
+      result_.reserve(blockSizeOutput_);
       while (!priorityQueue_.empty() && result_.size() < blockSizeOutput_) {
         ql::ranges::pop_heap(priorityQueue_, comp_);
         auto& min = priorityQueue_.back();
@@ -747,7 +746,6 @@ class CompressedExternalIdTableSorter
             auto chunkSize = ::ranges::size(chunk);
             auto curBlock = IdTableStatic<NumStaticCols>(
                 this->numColumns_, this->writer_.allocator());
-            curBlock.reserve(chunkSize);
             curBlock.insertAtEnd(block, chunkStart, chunkStart + chunkSize);
             return IdTableStatic<N>(std::move(curBlock).template toStatic<N>());
           });
