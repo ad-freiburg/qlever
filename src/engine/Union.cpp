@@ -350,14 +350,13 @@ Result::LazyResult Union::computeResultLazily(
                           result->getCopyOfLocalVocab(), permutation));
           }));
     }
-    return InputRangeTypeErased(CachingContinuableTransformInputRange(
+    return InputRangeTypeErased(CachingTransformInputRange(
         std::move(result->idTables()),
         [transform = std::move(transform),
          permutation = std::move(permutation)](
             Result::IdTableVocabPair& idTableAndVocab) {
-          return LoopControl<Result::IdTableVocabPair>::yieldValue(
-              transform(std::move(idTableAndVocab.idTable_),
-                        std::move(idTableAndVocab.localVocab_), permutation));
+          return transform(std::move(idTableAndVocab.idTable_),
+                           std::move(idTableAndVocab.localVocab_), permutation);
         }));
   };
 
