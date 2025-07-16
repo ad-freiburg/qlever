@@ -16,7 +16,6 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
-#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -312,7 +311,7 @@ class CompressedRelationWriter {
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
@@ -584,7 +583,7 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
-  using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+  using IdTableGenerator = ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
  private:
   // The allocator used to allocate intermediate buffers.

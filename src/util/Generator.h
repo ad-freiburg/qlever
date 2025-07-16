@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "util/Iterators.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -295,6 +296,15 @@ T getSingleElement(generator<T, Details> g) {
   T t = std::move(*it);
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
+}
+
+// helper function to convert ad_utility::InputRangeTypeErased<T> to
+// cppcoro::generator<T> with no details
+template <typename T>
+generator<T> formInputRange(ad_utility::InputRangeTypeErased<T> range) {
+  for (auto value : range) {
+    co_yield value;
+  }
 }
 }  // namespace cppcoro
 

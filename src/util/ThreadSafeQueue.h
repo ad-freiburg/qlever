@@ -16,11 +16,38 @@
 
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/jthread.h"
 
-namespace ad_utility::data_structures {
+namespace {
 
+template <typename Queue, typename Producer, typename MakeQueueTask>
+struct QueueGenerator
+    : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
+  QueueGenerator(const size_t queueSize, const size_t numThreads,
+                 Producer producer, MakeQueueTask makeQueueTask)
+      : queue{queueSize},
+        numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
+    for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
+      threads.emplace_back(
+          makeQueueTask(queue, producer, numUnfinishedThreads));
+    }
+  }
+
+  ~QueueGenerator() { queue.finish(); }
+
+  std::optional<typename Queue::value_type> get() override {
+    return queue.pop();
+  }
+
+  Queue queue;
+  std::vector<ad_utility::JThread> threads;
+  std::atomic<int64_t> numUnfinishedThreads;
+  MakeQueueTask makeQueueTask;
+};
+
+}  // namespace
+namespace ad_utility::data_structures {
 /// A thread safe, multi-consumer, multi-producer queue.
 template <typename T>
 class ThreadSafeQueue {
@@ -50,6 +77,7 @@ class ThreadSafeQueue {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
         lock, [this] { return queue_.size() < maxSize_ || finish_; });
+
     if (finish_) {
       return false;
     }
@@ -268,22 +296,17 @@ CPP_template(typename Queue, typename Producer)(
 // generator. The resulting generator yields all the values that have been
 // pushed to the queue.
 template <typename Queue, typename Producer>
-cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
-                                                            size_t numThreads,
-                                                            Producer producer) {
-  Queue queue{queueSize};
+ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
+    size_t queueSize, size_t numThreads, Producer producer) {
   AD_CONTRACT_CHECK(numThreads > 0u);
-  std::vector<ad_utility::JThread> threads;
-  std::atomic<int64_t> numUnfinishedThreads{static_cast<int64_t>(numThreads)};
-  absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
-  for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
-    threads.emplace_back(
-        detail::makeQueueTask(queue, producer, numUnfinishedThreads));
-  }
 
-  while (auto opt = queue.pop()) {
-    co_yield (opt.value());
-  }
+  auto makeQueueTask{detail::makeQueueTask<Queue, Producer>};
+  auto generator{std::make_unique<
+      QueueGenerator<Queue, Producer, decltype(makeQueueTask)>>(
+      queueSize, numThreads, std::move(producer), std::move(makeQueueTask))};
+
+  return ad_utility::InputRangeTypeErased<typename Queue::value_type>{
+      std::move(generator)};
 }
 
 }  // namespace ad_utility::data_structures

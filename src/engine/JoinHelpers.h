@@ -80,7 +80,7 @@ using GeneratorWithDetails =
 // efficient access in the join columns below.
 inline GeneratorWithDetails convertGenerator(
     Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
+  // co_await cppcoro::getDetails = gen.details();
   gen.setDetailsPointer(&co_await cppcoro::getDetails);
   for (auto& table : gen) {
     // IndexScans don't have a local vocabulary, so we can just use an empty one
