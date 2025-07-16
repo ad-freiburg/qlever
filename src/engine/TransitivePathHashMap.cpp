@@ -25,13 +25,14 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  Map edges{allocator()};
+  HashMapWrapper::Map edges{allocator()};
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
   for (size_t i = 0; i < sub.size(); i++) {
     checkCancellation();
-    insertIntoMap(edges, startCol[i], targetCol[i]);
+    auto [it, _] = edges.try_emplace(startCol[i], allocator());
+    it->second.insert(targetCol[i]);
   }
   return HashMapWrapper{std::move(edges), allocator()};
 }

@@ -19,6 +19,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "util/BlankNodeManager.h"
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -55,7 +56,7 @@ class SparqlQleverVisitor {
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
-  using PrefixMap = ad_utility::HashMap<string, string>;
+  using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
@@ -66,7 +67,14 @@ class SparqlQleverVisitor {
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
 
+  // The blank node manager is needed to handle blank nodes in the templates of
+  // UPDATE requests.
+  ad_utility::BlankNodeManager* blankNodeManager_;
+
   size_t _blankNodeCounter = 0;
+  // Counter that increments for every variable generated using
+  // `getNewInternalVariable` to ensure distinctness.
+  int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
@@ -99,10 +107,29 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
-  // This is set to true if and only if we are only inside the template of a
-  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
-  // meaning of blank and anonymous nodes is different.
-  bool isInsideConstructTriples_ = false;
+  // In most contexts, blank node labels in a SPARQL query are actually
+  // variables. But sometimes they are in fact blank node labels (e.g. in
+  // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by
+  // the standard (e.g. in DELETE clauses). The following enum keeps track of
+  // which of these modes is currently active.
+  enum struct TreatBlankNodesAs { InternalVariables, BlankNodes, Illegal };
+  TreatBlankNodesAs treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+
+  // Set the blank node treatment (see above) the `newValue` and return a
+  // cleanup object that in its destructor restores the original blank node
+  // treatment. If blank nodes were already illegal before calling this
+  // function, then they remain illegal (because "blank nodes forbidden" from an
+  // outer scope is more important than a local rule). This behavior is used
+  // when parsing DELETE requests, which don't support updates, but recursively
+  // use the same parser rules as INSERT requests which do support updates, but
+  // under some circumstances require them to be treated as blank nodes instead
+  // of internal variables.
+  [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
+    bool wasIllegal = treatBlankNodesAs_ == TreatBlankNodesAs::Illegal;
+    auto previous = wasIllegal ? treatBlankNodesAs_
+                               : std::exchange(treatBlankNodesAs_, newValue);
+    return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
+  }
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -118,28 +145,29 @@ class SparqlQleverVisitor {
                              Func iriStringToPredicate);
 
  public:
-  SparqlQleverVisitor() = default;
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : blankNodeManager_{bnodeManager},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
       activeDatasetClauses_ = std::move(*datasetOverride);
       datasetsAreFixed_ = true;
     }
+    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
   }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
-    isInsideConstructTriples_ = true;
+    treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
   }
 
   // ___________________________________________________________________________
@@ -214,21 +242,23 @@ class SparqlQleverVisitor {
 
   std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
-  ParsedQuery visit(Parser::Update1Context* ctx);
+  std::vector<ParsedQuery> visit(Parser::Update1Context* ctx);
 
-  updateClause::Load visit(Parser::LoadContext* ctx);
+  ParsedQuery visit(Parser::LoadContext* ctx);
 
-  updateClause::Clear visit(Parser::ClearContext* ctx);
+  ParsedQuery visit(Parser::ClearContext* ctx);
 
-  updateClause::Drop visit(Parser::DropContext* ctx);
+  ParsedQuery visit(Parser::DropContext* ctx);
 
-  updateClause::Create visit(Parser::CreateContext* ctx);
+  static std::vector<ParsedQuery> visit(const Parser::CreateContext* ctx);
 
-  updateClause::Add visit(Parser::AddContext* ctx);
+  // Although only 0 or 1 ParsedQuery are ever returned, the vector makes the
+  // interface much simpler.
+  std::vector<ParsedQuery> visit(Parser::AddContext* ctx);
 
-  updateClause::Move visit(Parser::MoveContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::MoveContext* ctx);
 
-  updateClause::Copy visit(Parser::CopyContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::CopyContext* ctx);
 
   updateClause::GraphUpdate visit(Parser::InsertDataContext* ctx);
 
@@ -373,12 +403,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an exception
-  // because the corresponding feature is not (yet) supported by QLever. Most
-  // of them have a return type of `void`. Some of the don't, in order to make
-  // the usage of abstractions like `visitAlternative` easier.
-
-  [[noreturn]] static void visit(Parser::PathModContext* ctx);
+  // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
+  // lower and upper bounds of the path length.
+  static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
@@ -498,15 +525,15 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  string visit(Parser::IrirefContext* ctx) const;
+  std::string visit(Parser::IrirefContext* ctx) const;
 
-  string visit(Parser::PrefixedNameContext* ctx);
+  std::string visit(Parser::PrefixedNameContext* ctx);
 
   GraphTerm visit(Parser::BlankNodeContext* ctx);
 
-  string visit(Parser::PnameLnContext* ctx);
+  std::string visit(Parser::PnameLnContext* ctx);
 
-  string visit(Parser::PnameNsContext* ctx);
+  std::string visit(Parser::PnameNsContext* ctx);
 
   DatasetClause visit(Parser::UsingClauseContext* ctx);
 
@@ -524,6 +551,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
+  // Return the next internal variable.
+  Variable getNewInternalVariable();
+
+  // Return a callable (not threadsafe) that when being called creates a new
+  // internal variable by calling `getNewInternalVariable()` above.
+  auto makeInternalVariableGenerator();
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 
@@ -531,6 +565,12 @@ class SparqlQleverVisitor {
   // this inside of a CONSTRUCT block, and a new variable otherwise, which is
   // required for graph pattern matching inside `WHERE` clauses.
   GraphTerm newBlankNodeOrVariable();
+
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
@@ -641,6 +681,27 @@ class SparqlQleverVisitor {
   // inside the query or update. Then returns the currently active datasets.
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
+
+  // Construct a `ParsedQuery` that clears the given graph equivalent to
+  // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
+  ParsedQuery makeClear(const GraphRefAll& graph);
+  ParsedQuery makeClear(SparqlTripleSimpleWithGraph::Graph graph);
+
+  // Construct a `ParsedQuery` that adds all triples from the source graph to
+  // the target graph equivalent to `INSERT { GRAPH target { ?s ?p ?o } } WHERE
+  // { GRAPH source { ?s ?p ?o } }`.
+  ParsedQuery makeAdd(const GraphOrDefault& source,
+                      const GraphOrDefault& target);
+
+  // Construct `ParsedQuery`s that clear the target graph and then copy all
+  // triples from the source graph to the target graph.
+  std::vector<ParsedQuery> makeCopy(const GraphOrDefault& from,
+                                    const GraphOrDefault& to);
+
+  // Check that there are exactly 2 sub-clauses and returned the result from
+  // visiting them.
+  std::pair<GraphOrDefault, GraphOrDefault> visitFromTo(
+      std::vector<Parser::GraphOrDefaultContext*> ctxs);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };

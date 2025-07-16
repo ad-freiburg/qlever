@@ -21,6 +21,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -306,6 +307,11 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
+  // Within should be replaced by contains on swapped tables.
+  auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
+  if (swapBack) {
+    joinTypeVal = SpatialJoinType::CONTAINS;
+  }
 
   // Add number of threads to runtime information.
   spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
@@ -405,8 +411,11 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
       }
-      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist));
+      addResultTableEntry(&result, swapBack ? idTableRight : idTableLeft,
+                          swapBack ? idTableLeft : idTableRight,
+                          swapBack ? res.second : res.first,
+                          swapBack ? res.first : res.second,
+                          Id::makeFromDouble(dist));
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(

@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -135,6 +136,36 @@ TEST(OperationTest, getResultOnlyCached) {
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  absl::Cleanup restorePinResult{[qec]() { qec->_pinResult = false; }};
+  qec->_pinResult = true;
+  ValuesForTesting operation{qec, makeIdTableFromVector({{1}}), {std::nullopt}};
+
+  {
+    auto result = operation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
+
+  {
+    auto result =
+        operation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
 }
 
 // _____________________________________________________________________________
@@ -417,7 +448,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   EXPECT_GE(rti.originalOperationTime_, timeout);
 
   expectAtEachStageOfGenerator(
-      std::move(result.idTables()),
+      result.idTables(),
       {[&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 1);
@@ -493,7 +524,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 
   EXPECT_EQ(updateCallCounter, 1);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
@@ -525,7 +556,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
         operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
 
     EXPECT_EQ(updateCallCounter, 1);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
     // Only consume partially
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
@@ -558,7 +589,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   expectRtiHasDimensions(rti, 0, 0);
   expectRtiHasDimensions(childRti, 0, 0);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {[&]() {
                                   expectRtiHasDimensions(rti, 2, 0);
                                   expectRtiHasDimensions(childRti, 2, 1);
@@ -769,23 +800,4 @@ TEST(OperationTest, disableCaching) {
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
   valuesForTesting.getResult(false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
-}
-
-// _____________________________________________________________________________
-TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction) {
-  auto qec = getQec();
-
-  auto parent = ShallowParentOperation::of<NeutralElementOperation>(qec);
-
-  auto child = parent.getChildren().at(0)->getRootOperation();
-  child->applyLimitOffset({10, 1});
-
-  {
-    auto cleanup = parent.resetChildLimitsAndOffsetOnDestruction();
-    EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(10, 1));
-
-    child->applyLimitOffset({9, 1});
-    EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(9, 2));
-  }
-  EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(10, 1));
 }

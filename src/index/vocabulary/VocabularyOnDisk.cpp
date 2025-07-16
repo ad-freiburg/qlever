@@ -23,7 +23,7 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   AD_CONTRACT_CHECK(idx < size());
   auto offsetAndSize = getOffsetAndSize(idx);
-  string result(offsetAndSize.size_, '\0');
+  std::string result(offsetAndSize.size_, '\0');
   file_.read(result.data(), offsetAndSize.size_, offsetAndSize.offset_);
   return result;
 }
@@ -31,7 +31,7 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 // _____________________________________________________________________________
 template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
-                                         const string& fileName) {
+                                         const std::string& fileName) {
   {
     file_.open(fileName.c_str(), "w");
     ad_utility::MmapVector<Offset> offsets(fileName + offsetSuffix_,

@@ -17,8 +17,8 @@
 #include "global/Id.h"
 #include "global/SpecialIds.h"
 #include "parser/LiteralOrIri.h"
-#include "parser/RdfEscaping.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/RdfEscaping.h"
+#include "rdfTypes/Variable.h"
 #include "util/Date.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -193,6 +193,9 @@ class TripleComponent {
   bool isId() const { return std::holds_alternative<Id>(_variant); }
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
+
+  // Access the underlying variant (mostly used for testing)
+  const auto& getVariant() const { return _variant; }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is

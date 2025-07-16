@@ -7,6 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 // _____________________________________________________________________________
-string SparqlFilter::asString() const {
+std::string SparqlFilter::asString() const {
   return absl::StrCat("FILTER(", expression_.getDescriptor(), ")");
 }

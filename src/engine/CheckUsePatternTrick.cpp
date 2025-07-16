@@ -69,7 +69,7 @@ bool isVariableContainedInGraphPatternOperation(
     } else {
       static_assert(
           ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
-                                p::SpatialQuery, p::TextSearchQuery>);
+                                p::SpatialQuery, p::TextSearchQuery, p::Load>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
@@ -118,9 +118,10 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   } else {
     // We could not find a suitable triple to append the additional column, we
     // therefore add an explicit triple `?s ql:has_pattern ?p`
-    triples.emplace_back(subAndPred.subject_,
-                         std::string{HAS_PATTERN_PREDICATE},
-                         subAndPred.predicate_);
+    triples.emplace_back(
+        subAndPred.subject_,
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+        subAndPred.predicate_);
   }
 }
 
