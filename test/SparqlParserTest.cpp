@@ -9,8 +9,8 @@
 #include <utility>
 #include <variant>
 
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
-#include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/Conversions.h"
@@ -262,9 +262,9 @@ TEST(ParserTest, testParse) {
     const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
     const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
-    vector<Variable> vvars = {Var{"?a"}};
+    std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
+    std::vector<std::vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
@@ -287,9 +287,10 @@ TEST(ParserTest, testParse) {
     const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
     const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
-    vector<Variable> vvars = {Var{"?a"}};
+    std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{iri("<Albert_Einstein>")}};
+    std::vector<std::vector<TripleComponent>> vvals = {
+        {iri("<Albert_Einstein>")}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
@@ -320,9 +321,9 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(c._triples[0].o_, Var{"?citytype"});
 
     const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
-    vector<Variable> vvars = {Var{"?citytype"}};
+    std::vector<Variable> vvars = {Var{"?citytype"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {
+    std::vector<std::vector<TripleComponent>> vvals = {
         {iri("<http://www.wikidata.org/entity/Q515>")},
         {iri("<http://www.wikidata.org/entity/Q262166>")}};
     ASSERT_EQ(vvals, values1._values);
@@ -436,7 +437,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<std::string> vvars = {"?movie", "?director"};
+    std::vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -466,7 +467,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<std::string> vvars = {"?movie", "?director"};
+    std::vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -506,7 +507,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<std::string> vvars = {"?movie", "?director", "?year"};
+    std::vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery
@@ -538,7 +539,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
+    std::vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
   }
 
@@ -583,7 +584,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<std::string> vvars = {"?movie", "?director", "?year"};
+    std::vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 1)
@@ -611,7 +612,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
+    std::vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
@@ -636,7 +637,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
-    vector<std::string> vvars_sub_subquery = {"?year"};
+    std::vector<std::string> vvars_sub_subquery = {"?year"};
     ASSERT_EQ(vvars_sub_subquery,
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
@@ -1459,17 +1460,21 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
 
+  ad_utility::BlankNodeManager bnm;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+      SparqlParser::parseUpdate(&bnm,
+                                "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate("WITH <g> DELETE { ?x <b> <c> } WHERE { ?x ?y "
-                                "?z FILTER EXISTS {?a ?b ?c} }",
+      SparqlParser::parseUpdate(&bnm,
+                                "WITH <g> DELETE { ?x <b> <c> } WHERE { "
+                                "?x ?y ?z "
+                                "FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
       ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
@@ -1482,8 +1487,8 @@ TEST(ParserTest, parseWithDatasets) {
                   "ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
                   {{{Iri("<h>"), false}}}),
               m::AskQuery(filterGraphPattern, datasets, noGraphs));
-  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { ?x "
-                                       "?y ?z FILTER EXISTS {?a ?b?c}}",
+  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { "
+                                       "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
                                        {{{Iri("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
                                     ::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
@@ -1506,17 +1511,18 @@ TEST(ParserTest, parseWithDatasets) {
   auto insertDataOp = m::GraphUpdate(
       {}, {SparqlTripleSimpleWithGraph{Iri("<a>"), Iri("<b>"), Iri("<c>"),
                                        std::monostate{}}});
-  EXPECT_THAT(SparqlParser::parseUpdate(
-                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-                  {DatasetClause{Iri("<foo>"), false},
-                   DatasetClause{Iri("<bar>"), true}}),
-              testing::ElementsAre(
-                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
-                                  m::datasetClausesMatcher({{Iri("<foo>")}},
-                                                           {{Iri("<bar>")}})),
-                  m::UpdateClause(insertDataOp, m::GraphPattern(),
-                                  m::datasetClausesMatcher({{Iri("<foo>")}},
-                                                           {{Iri("<bar>")}}))));
+  EXPECT_THAT(
+      SparqlParser::parseUpdate(
+          &bnm, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+          {DatasetClause{Iri("<foo>"), false},
+           DatasetClause{Iri("<bar>"), true}}),
+      testing::ElementsAre(
+          m::UpdateClause(
+              deleteWhereOp, deleteWherePattern,
+              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}})),
+          m::UpdateClause(
+              insertDataOp, m::GraphPattern(),
+              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}}))));
 }
 
 // _____________________________________________________________________________
