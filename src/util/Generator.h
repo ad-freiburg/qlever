@@ -301,8 +301,8 @@ T getSingleElement(generator<T, Details> g) {
 // helper function to convert ad_utility::InputRangeTypeErased<T> to
 // cppcoro::generator<T> with no details
 template <typename T>
-generator<T> formInputRange(ad_utility::InputRangeTypeErased<T> range) {
-  for (auto value : range) {
+generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
+  for (auto& value : range) {
     co_yield value;
   }
 }
