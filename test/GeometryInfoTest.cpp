@@ -207,7 +207,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   BoundingBox bbExp1{{4, 3}, {4, 3}};
   checkBoundingBox(bb1, bbExp1);
 
-  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
+  auto bb1Wkt =
+      boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
