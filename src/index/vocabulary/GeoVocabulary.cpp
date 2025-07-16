@@ -9,6 +9,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
@@ -65,7 +66,15 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // zero buffer of the same size (indicating an invalid geometry). This is
   // required to ensure direct access by index is still possible on the file.
   const void* ptr = &invalidGeoInfoBuffer;
-  auto info = GeometryInfo::fromWktLiteral(word);
+  std::optional<GeometryInfo> info;
+  try {
+    info = GeometryInfo::fromWktLiteral(word);
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG) << "The WKT string `" << word
+               << "` would lead to an invalid centroid or bounding box. It "
+                  "will thus be treated as an invalid WKT literal."
+               << std::endl;
+  }
   if (info.has_value()) {
     ptr = &info.value();
   }
