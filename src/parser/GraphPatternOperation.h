@@ -19,7 +19,7 @@
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 #include "util/http/HttpUtils.h"
@@ -188,7 +188,7 @@ struct Bind {
            ql::views::transform(ad_utility::dereference);
   }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`

@@ -199,6 +199,13 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   const auto& svConstRef = sv;
   EXPECT_ANY_THROW(svConstRef.getUnderlyingVocabulary(2));
 
+  // There is not GeoInfo because none of the underlying vocabularies is a
+  // `GeoVocabulary`
+  ASSERT_FALSE(sv.getGeoInfo(0).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1ULL << 59).has_value());
+  ASSERT_FALSE(sv.getGeoInfo((1ULL << 59) | 1).has_value());
+
   sv.close();
 }
 
@@ -263,7 +270,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyItemAt) {
-  HashSet<string> s;
+  HashSet<std::string> s;
   s.insert("a");
   s.insert("ab");
   s.insert(
@@ -406,6 +413,28 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   auto [l7, u7] = vocabulary.getPositionOfWord("\"POLYGON((1 2, 3 4))");
   ASSERT_EQ(l7, VocabIndex::make(4));
   ASSERT_EQ(u7, VocabIndex::make(4));
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
+  // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
+  // `finish()`.
+  TwoSplitVocabulary sv1;
+  auto wordWriter1 =
+      sv1.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor1.dat");
+  (*wordWriter1)("\"abc\"", true);
+  ASSERT_FALSE(wordWriter1->finishWasCalled());
+  wordWriter1.reset();
+
+  // Create a `SplitVocabulary::WordWriter` and destruct it after an explicit
+  // call to `finish()`.
+  TwoSplitVocabulary sv2;
+  auto wordWriter2 =
+      sv2.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor2.dat");
+  (*wordWriter2)("\"abc\"", true);
+  wordWriter2->finish();
+  ASSERT_TRUE(wordWriter2->finishWasCalled());
+  wordWriter2.reset();
 }
 
 }  // namespace

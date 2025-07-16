@@ -32,6 +32,11 @@ void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
                              const ad_utility::File& textIndexFile,
                              vector<uint64_t>& frequencyEncodedVector,
                              std::vector<From>& codebook) {
+  if (nofBytes == 0) {
+    // This might happen for empty blocks.
+    frequencyEncodedVector.clear();
+    return;
+  }
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -84,6 +89,11 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
+  if (nofBytes == 0) {
+    // This might happen for empty blocks.
+    gapEncodedVector.clear();
+    return;
+  }
 
   // Create vector that is simple8b and gap encoded, read encoded vector from
   // file
@@ -140,18 +150,12 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
  *        file.
  * @param out The file to write to.
  * @param postings The vector of postings to write.
- * @param skipWordlistIfAllTheSame If true, the wordlist is not written to file.
- *                                 This can be done because the WordIndex for
- *                                 the first and last word in a block are saved
- *                                 in the TextBlockMetaData. Always should be
- *                                 false for the entity postings.
  * @param currentOffset The current offset in the file which gets passed by
  *                      reference because it gets updated.
  *
  */
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
-                                  bool skipWordlistIfAllTheSame,
                                   off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>

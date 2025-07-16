@@ -2,27 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./PrefixHeuristic.h"
+#include "index/PrefixHeuristic.h"
 
-#include <fstream>
-
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "backports/algorithm.h"
+#include "util/Exception.h"
+#include "util/StringUtils.h"
 
 using std::string;
 
 namespace ad_utility {
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(string_view value) { return _root->insert(value); }
+TreeNode* Tree::insert(std::string_view value) { return _root->insert(value); }
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
+TreeNode* Tree::insert(std::string_view value, TreeNode* startPoint) {
   if (!startPoint) {
     startPoint = _root.get();
   }
@@ -30,7 +23,7 @@ TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
 }
 
 // ______________________________________________________________
-TreeNode* TreeNode::insertAfter(string_view value) {
+TreeNode* TreeNode::insertAfter(std::string_view value) {
   // exact match of the  value
   if (value == _value) {
     _ownCount++;
@@ -71,7 +64,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 }
 
 // ______________________________________________________________________
-TreeNode* TreeNode::insert(string_view value) {
+TreeNode* TreeNode::insert(std::string_view value) {
   if (value.starts_with(_value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);

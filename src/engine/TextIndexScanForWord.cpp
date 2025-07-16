@@ -14,7 +14,8 @@ TextIndexScanForWord::TextIndexScanForWord(
 
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
-                                           Variable textRecordVar, string word)
+                                           Variable textRecordVar,
+                                           std::string word)
     : Operation(qec),
       config_(TextIndexScanForWordConfiguration{std::move(textRecordVar),
                                                 std::move(word)}) {
@@ -88,14 +89,14 @@ size_t TextIndexScanForWord::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
@@ -104,13 +105,13 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForWord::getDescriptor() const {
+std::string TextIndexScanForWord::getDescriptor() const {
   return absl::StrCat("TextIndexScanForWord on ",
                       config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForWord::getCacheKeyImpl() const {
+std::string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "WORD INDEX SCAN: "
      << " with word: \"" << config_.word_ << "\"";
