@@ -9,6 +9,7 @@
 
 #include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
+#include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
@@ -84,21 +85,23 @@ class GraphStoreProtocol {
 
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
   // and sets the correct graph.
-  static std::vector<SparqlTripleSimpleWithGraph> convertTriples(
-      const GraphOrDefault& graph, std::vector<TurtleTriple> triples);
+  static updateClause::GraphUpdate::Triples convertTriples(
+      const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+      Quads::BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
+      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
+                    const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    auto convertedTriples = convertTriples(graph, std::move(triples));
-    updateClause::GraphUpdate up{{std::move(convertedTriples), LocalVocab{}},
-                                 {}};
+    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
+    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
@@ -110,11 +113,13 @@ class GraphStoreProtocol {
   // extension to the Graph Store Protocol.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph) {
+      transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
+                    const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    auto convertedTriples = convertTriples(graph, std::move(triples));
+    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
@@ -132,7 +137,8 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
       vector<ParsedQuery> transformPut(const RequestT& rawRequest,
-                                       const GraphOrDefault& graph) {
+                                       const GraphOrDefault& graph,
+                                       const Index& index) {
     // TODO: The response codes are not conform to the specs. "If new RDF graph
     //  content is created", then the status must be `201 Created`. "If
     //  existing graph content is modified", then the status must be `200 OK`
@@ -152,8 +158,9 @@ class GraphStoreProtocol {
         return "DROP SILENT DEFAULT";
       }
     }();
-    ParsedQuery drop = [&dropUpdate]() {
-      auto drops = SparqlParser::parseUpdate(dropUpdate);
+    ParsedQuery drop = [&dropUpdate, &index]() {
+      auto drops =
+          SparqlParser::parseUpdate(index.getBlankNodeManager(), dropUpdate);
       AD_CORRECTNESS_CHECK(drops.size() == 1);
       return drops.at(0);
     }();
@@ -161,7 +168,8 @@ class GraphStoreProtocol {
 
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    auto convertedTriples = convertTriples(graph, std::move(triples));
+    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
@@ -172,7 +180,8 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol DELETE to equivalent ParsedQueries
   // which are SPARQL Updates.
-  static ParsedQuery transformDelete(const GraphOrDefault& graph);
+  static ParsedQuery transformDelete(const GraphOrDefault& graph,
+                                     const Index& index);
   FRIEND_TEST(GraphStoreProtocolTest, transformDelete);
 
  public:
@@ -184,7 +193,7 @@ class GraphStoreProtocol {
       vector<ParsedQuery> transformGraphStoreProtocol(
           ad_utility::url_parser::sparqlOperation::GraphStoreOperation
               operation,
-          const RequestT& rawRequest) {
+          const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
@@ -192,15 +201,15 @@ class GraphStoreProtocol {
     if (method == "GET") {
       return {transformGet(operation.graph_)};
     } else if (method == "PUT") {
-      return transformPut(rawRequest, operation.graph_);
+      return transformPut(rawRequest, operation.graph_, index);
     } else if (method == "DELETE") {
-      return {transformDelete(operation.graph_)};
+      return {transformDelete(operation.graph_, index)};
     } else if (method == "POST") {
-      return {transformPost(rawRequest, operation.graph_)};
+      return {transformPost(rawRequest, operation.graph_, index)};
     } else if (method == "TSOP") {
       // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
       // DATA` of the payload.
-      return {transformTsop(rawRequest, operation.graph_)};
+      return {transformTsop(rawRequest, operation.graph_, index)};
     } else if (method == "HEAD") {
       throwNotYetImplementedHTTPMethod("HEAD");
     } else if (method == "PATCH") {

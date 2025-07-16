@@ -47,22 +47,36 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 }
 
 // ____________________________________________________________________________
-std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
-    const GraphOrDefault& graph, std::vector<TurtleTriple> triples) {
+updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
+    const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+    Quads::BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
   }
-  auto transformTurtleTriple = [&tripleGraph](TurtleTriple&& triple) {
+  auto transformTc =
+      [&blankNodeAdder](const TripleComponent& tc) -> TripleComponent {
+    if (tc.isString()) {
+      AD_CORRECTNESS_CHECK(tc.getString().starts_with("_"));
+      return blankNodeAdder.getBlankNodeIndex(tc.toString());
+    } else {
+      return tc;
+    }
+  };
+  auto transformTurtleTriple =
+      [&tripleGraph,
+       &transformTc](TurtleTriple&& triple) -> SparqlTripleSimpleWithGraph {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
                          triple.graphIri_.getId() ==
                              qlever::specialIds().at(DEFAULT_GRAPH_IRI));
 
-    return SparqlTripleSimpleWithGraph(std::move(triple.subject_),
-                                       std::move(triple.predicate_),
-                                       std::move(triple.object_), tripleGraph);
+    return SparqlTripleSimpleWithGraph(
+        transformTc(std::move(triple.subject_)),
+        transformTc(std::move(triple.predicate_)),
+        transformTc(std::move(triple.object_)), tripleGraph);
   };
-  return ad_utility::transform(std::move(triples), transformTurtleTriple);
+  return {ad_utility::transform(std::move(triples), transformTurtleTriple),
+          blankNodeAdder.localVocab_.clone()};
 }
 
 // ____________________________________________________________________________
@@ -82,7 +96,8 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
 }
 
 // ____________________________________________________________________________
-ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph) {
+ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
+                                                const Index& index) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
   auto update = [&graph]() -> std::string {
@@ -93,7 +108,7 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph) {
       return "DROP DEFAULT";
     }
   }();
-  auto updates = SparqlParser::parseUpdate(update);
+  auto updates = SparqlParser::parseUpdate(index.getBlankNodeManager(), update);
   AD_CORRECTNESS_CHECK(updates.size() == 1);
   return std::move(updates.at(0));
 }
