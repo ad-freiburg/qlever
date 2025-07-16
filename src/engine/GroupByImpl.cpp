@@ -212,29 +212,38 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
-
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
-      requires sparqlExpression::SingleExpressionResult<T>) {
+  auto visitor =
+      CPP_template_lambda_mut(localVocab)(typename T)(T && singleResult)(
+          requires sparqlExpression::SingleExpressionResult<T>)
+          ->Id {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
-    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
-      resultEntry = singleResult;
+      return singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
-      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
+      return sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
+    } else if constexpr (sparqlExpression::isVectorResult<T>) {
+      AD_CORRECTNESS_CHECK(singleResult.size() == 1,
+                           "An expression returned a vector expression result "
+                           "that contained an unexpected amount of entries.");
+      return sparqlExpression::detail::constantExpressionResultToId(
+          std::move(AD_FWD(singleResult).at(0)), *localVocab);
     } else {
-      // This should never happen since aggregates always return constants.
-      AD_FAIL();
+      // This should never happen since aggregates always return constants or
+      // vectors.
+      AD_THROW(absl::StrCat("An expression returned an invalid type ",
+                            typeid(T).name(),
+                            " as the result of an aggregation step."));
     }
   };
 
-  std::visit(visitor, std::move(expressionResult));
+  (*result)(resultRow, resultColumn) =
+      std::visit(visitor, std::move(expressionResult));
 }
 
 // _____________________________________________________________________________
