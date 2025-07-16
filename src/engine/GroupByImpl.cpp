@@ -212,26 +212,26 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
+  auto& resultEntry = result->operator()(resultRow, resultColumn);
+
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor =
-      CPP_template_lambda_mut(localVocab)(typename T)(T && singleResult)(
-          requires sparqlExpression::SingleExpressionResult<T>)
-          ->Id {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isStrongId) {
-      return singleResult;
+      resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
-      return sparqlExpression::detail::constantExpressionResultToId(
+      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
     } else if constexpr (sparqlExpression::isVectorResult<T>) {
       AD_CORRECTNESS_CHECK(singleResult.size() == 1,
                            "An expression returned a vector expression result "
                            "that contained an unexpected amount of entries.");
-      return sparqlExpression::detail::constantExpressionResultToId(
+      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           std::move(singleResult.at(0)), *localVocab);
     } else {
       // This should never happen since aggregates always return constants or
@@ -242,8 +242,7 @@ void GroupByImpl::processGroup(
     }
   };
 
-  (*result)(resultRow, resultColumn) =
-      std::visit(visitor, std::move(expressionResult));
+  std::visit(visitor, std::move(expressionResult));
 }
 
 // _____________________________________________________________________________
