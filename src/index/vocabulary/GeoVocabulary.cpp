@@ -72,8 +72,8 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   } catch (const CoordinateOutOfRangeException& ex) {
     LOG(DEBUG) << "The WKT string `" << word
                << "` would lead to an invalid centroid or bounding box. It "
-                  "will thus be treated as an invalid WKT literal."
-               << std::endl;
+                  "will thus be treated as an invalid WKT literal. Error: "
+               << ex.what() << std::endl;
   }
   if (info.has_value()) {
     ptr = &info.value();
