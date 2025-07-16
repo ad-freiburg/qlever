@@ -237,6 +237,30 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
 };
 
 // _____________________________________________________________________________
+template <typename S, typename C, typename I>
+constexpr bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
+  using OnDiskCompressedGeoSplit =
+      SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
+  if constexpr (std::is_same_v<S, OnDiskCompressedGeoSplit>) {
+    return true;
+  } else if constexpr (std::is_same_v<S, PolymorphicVocabulary>) {
+    // `PolymorphicVocabulary`: check underlying vocabulary
+    return std::visit(
+        [](const auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (std::is_same_v<T, OnDiskCompressedGeoSplit>) {
+            return true;
+          } else {
+            return false;
+          }
+        },
+        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary());
+  } else {
+    return false;
+  }
+};
+
+// _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
