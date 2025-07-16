@@ -68,32 +68,39 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
   return Variable{std::move(s)};
 }
 
+namespace {
+// Returns true for a  subset of characters that are valid in variable names.
+// This roughly corresponds to `PN_CHARS_BASE` from the SPARQL 1.1 grammar with
+// the characters 0-9 also being allowed.
+constexpr bool codePointSuitableForVariableName(UChar32 cp) {
+  return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z') ||
+         (cp >= '0' && cp <= '9') || (cp >= 0x00C0 && cp <= 0x00D6) ||
+         (cp >= 0x00D8 && cp <= 0x00F6) || (cp >= 0x00F8 && cp <= 0x02FF) ||
+         (cp >= 0x0370 && cp <= 0x037D) || (cp >= 0x037F && cp <= 0x1FFF) ||
+         (cp >= 0x200C && cp <= 0x200D) || (cp >= 0x2070 && cp <= 0x218F) ||
+         (cp >= 0x2C00 && cp <= 0x2FEF) || (cp >= 0x3001 && cp <= 0xD7FF) ||
+         (cp >= 0xF900 && cp <= 0xFDCF) || (cp >= 0xFDF0 && cp <= 0xFFFD) ||
+         (cp >= 0x10000 && cp <= 0xEFFFF);
+}
+}  // namespace
+
 // _____________________________________________________________________________
-void Variable::appendEscapedWord(std::string_view word,
-                                 std::string& target) const {
+void Variable::appendEscapedWord(std::string_view word, std::string& target) {
   const char* ptr = word.data();
   const char* end = word.data() + word.size();
 
   while (ptr < end) {
-    // We are currently very conservative here (most unicode characters are
-    // escaped, although many of them would be valid in a variable name.
-    auto isValidAscii = [](char c) {
-      return static_cast<unsigned char>(c) < 128u && std::isalpha(c) &&
-             c != '_';
-    };
-    auto next = std::find_if_not(ptr, end, isValidAscii);
-    target.append(ptr, next);
-    ptr = next;
-    if (ptr == end) {
-      break;
-    }
     // Convert all other characters based on their unicode codepoint.
     UChar32 codePoint;
     int64_t i = 0;
     U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(ptr), i,
                     static_cast<int64_t>(word.size()), codePoint);
     AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8");
-    absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
+    if (codePointSuitableForVariableName(codePoint)) {
+      target.append(ptr, i);
+    } else {
+      absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
+    }
     ptr += i;
   }
 }

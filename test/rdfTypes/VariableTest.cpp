@@ -36,7 +36,10 @@ TEST(Variable, DollarToQuestionMark) {
 // _____________________________________________________________________________
 TEST(Variable, ScoreAndMatchVariablesUnicode) {
   ad_utility::HashSet<Variable> vars;
-  auto f = [&](Variable var) { vars.insert(std::move(var)); };
+  auto f = [&](Variable var) {
+    std::cout << var.name() << std::endl;
+    vars.insert(std::move(var));
+  };
 
   // Test that the following variables all have valid names (otherwise the
   // constructor of `Variable` would throw), and that they are all unique.
