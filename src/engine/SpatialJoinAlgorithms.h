@@ -152,11 +152,11 @@ class SpatialJoinAlgorithms {
   // is multithreaded, using up to `numThreads` threads. If a `prefilterBox` is
   // given, geometries not intersecting this box will neither be parsed nor
   // added to `sweeper`. The function returns the aggregated bounding box of all
-  // added geometries, which may be used as a prefilter at next call. This
-  // function is only `public` for testing purposes and should otherwise not be
-  // used outside of this class.
+  // added geometries, which may be used as a prefilter at next call and the
+  // number of geometries added. This function is only `public` for testing
+  // purposes and should otherwise not be used outside of this class.
   using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
-  util::geo::I32Box libspatialjoinParse(
+  std::pair<util::geo::I32Box, size_t> libspatialjoinParse(
       bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
@@ -169,7 +169,8 @@ class SpatialJoinAlgorithms {
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
-  // by the bounding box.
+  // by the bounding box. Should only be applied if the index is known to be
+  // built on a `GeoVocabulary`.
   bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
       VocabIndex vocabIndex) const;
