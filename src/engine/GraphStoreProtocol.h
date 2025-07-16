@@ -7,24 +7,11 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/RdfParser.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
-
-// The mediatype of a request could not be determined.
-class UnknownMediatypeError : public std::runtime_error {
- public:
-  explicit UnknownMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
-// The mediatype of a request is not supported.
-class UnsupportedMediatypeError : public std::runtime_error {
- public:
-  explicit UnsupportedMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
 
 // Transform SPARQL Graph Store Protocol requests to their equivalent
 // ParsedQuery (SPARQL Query or Update).
@@ -44,18 +31,24 @@ class GraphStoreProtocol {
       // If the mediatype is not given, return an error.
       // Note: The specs also allow to try to determine the media type from the
       // content.
-      throw UnknownMediatypeError("Mediatype empty or not set.");
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      "Mediatype empty or not set.");
     }
-    auto mediaTypes =
-        ad_utility::getMediaTypesFromAcceptHeader(contentTypeString);
+    std::optional<std::vector<ad_utility::MediaType>> mediaTypes;
+    try {
+      mediaTypes = ad_utility::getMediaTypesFromAcceptHeader(contentTypeString);
+    } catch (const std::exception& e) {
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      e.what());
+    }
 
     // A media type is set but not one of the supported ones as per the QLever
     // MediaType code. Content-Type is only allowed to return a single value, so
     // wildcards are also correctly discarded here.
-    if (mediaTypes.size() != 1) {
+    if (mediaTypes->size() != 1) {
       throwUnsupportedMediatype(rawRequest.at(field::content_type));
     }
-    return mediaTypes.front();
+    return mediaTypes->front();
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 
@@ -66,6 +59,15 @@ class GraphStoreProtocol {
   // Throws the error if an HTTP method is not supported.
   [[noreturn]] static void throwUnsupportedHTTPMethod(
       const std::string_view& method);
+
+  // Aborts the request with an HTTP 204 No Content if the request body is
+  // empty.
+  static void throwIfRequestBodyEmpty(const auto& request) {
+    if (request.body().empty()) {
+      throw HttpError(boost::beast::http::status::no_content,
+                      "Request body is empty.");
+    }
+  }
 
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
@@ -83,6 +85,7 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
+    throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
