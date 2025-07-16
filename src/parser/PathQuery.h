@@ -60,7 +60,8 @@ struct PathQuery : MagicServiceQuery {
    *              The Vocab is only used if the given vector contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+      std::vector<TripleComponent> side, const Index::Vocab& vocab,
+      const EncodedValues& encodedValuesManager) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
@@ -74,7 +75,8 @@ struct PathQuery : MagicServiceQuery {
    * @return A valid PathSearchConfiguration
    */
   PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
+      const Index::Vocab& vocab,
+      const EncodedValues& encodedValuesManager) const;
 };
 
 }  // namespace parsedQuery

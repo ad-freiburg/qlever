@@ -67,7 +67,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(files, &encodedValueManager(),
+                                              parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -1192,8 +1193,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
-  resultTriple[0] = std::move(triple.subject_);
-  resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
@@ -1206,11 +1205,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // directly. These currently are the object and the graph ID of the triple.
   // The `index` is the index of the element within the triple. For example if
   // the `getter` is `subject_` then the index has to be `0`.
-  auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
+  auto handleStringOrId = [this, &triple, &resultTriple](auto getter,
+                                                         size_t index) {
     // If the object of the triple can be directly folded into an ID, do so.
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
-    std::optional<Id> idIfNotString = el.toValueIdIfNotString();
+    std::optional<Id> idIfNotString =
+        el.toValueIdIfNotString(&encodedValueManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1221,6 +1222,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       resultTriple[index] = std::move(el);
     }
   };
+  handleStringOrId(&TurtleTriple::subject_, 0);
+  handleStringOrId(&TurtleTriple::predicate_, 1);
   handleStringOrId(&TurtleTriple::object_, 2);
   handleStringOrId(&TurtleTriple::graphIri_, 3);
   // If we ever add additional elements to the triples then we have to change
@@ -1555,7 +1558,9 @@ size_t IndexImpl::getCardinality(
   if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
+  if (std::optional<Id> relId =
+          comp.toValueId(getVocab(), encodedValueManager());
+      relId.has_value()) {
     return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
@@ -1583,7 +1588,8 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
+  if (auto keyId = key.toValueId(getVocab(), encodedValueManager());
+      keyId.has_value()) {
     auto meta = getPermutation(permutation)
                     .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {

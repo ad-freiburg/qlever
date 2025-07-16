@@ -35,7 +35,11 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
   switch (contentType) {
     case ad_utility::MediaType::turtle:
     case ad_utility::MediaType::ntriples: {
-      auto parser = Re2Parser();
+      // TODO<joka921> We could pass in the actual manager here,
+      // then the resulting triples could (possibly) be already much
+      // smaller.
+      EncodedValues encodedValuesManager;
+      auto parser = Re2Parser(&encodedValuesManager);
       parser.setInputStream(body);
       return parser.parseAndReturnAllTriples();
     }

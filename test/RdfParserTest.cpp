@@ -80,8 +80,8 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.predicate_.toStringRepresentation()
-     << " " << tr.object_ << " " << tr.graphIri_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_ << " " << tr.object_ << " "
+     << tr.graphIri_ << ")";
   return os;
 }
 TEST(RdfParserTest, prefixedName) {
