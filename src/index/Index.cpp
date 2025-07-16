@@ -121,7 +121,7 @@ IdTable Index::getEntityMentionsForWord(
 
 // ____________________________________________________________________________
 size_t Index::getIndexOfBestSuitedElTerm(
-    const vector<std::string>& terms) const {
+    const std::vector<std::string>& terms) const {
   return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 
@@ -257,12 +257,12 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(Permutation::Enum p) const {
+std::vector<float> Index::getMultiplicities(Permutation::Enum p) const {
   return pimpl_->getMultiplicities(p);
 }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(
+std::vector<float> Index::getMultiplicities(
     const TripleComponent& key, Permutation::Enum p,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);

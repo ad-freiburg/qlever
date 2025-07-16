@@ -133,12 +133,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -153,14 +153,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -3717,8 +3717,8 @@ TEST(QueryPlanner, TextLimit) {
       h::TextLimit(10,
                    h::Join(wordScan(Var{"?text"}, "test*"),
                            entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
@@ -3730,8 +3730,8 @@ TEST(QueryPlanner, TextLimit) {
           10,
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{
+          Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
@@ -3745,8 +3745,8 @@ TEST(QueryPlanner, TextLimit) {
                        wordScan(Var{"?text"}, "test*"),
                        entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
                        entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
@@ -3762,8 +3762,9 @@ TEST(QueryPlanner, TextLimit) {
               wordScan(Var{"?text"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          vector<Variable>{
+          Var{"?text"},
+          std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
@@ -3780,8 +3781,8 @@ TEST(QueryPlanner, TextLimit) {
               5,
               h::Join(wordScan(Var{"?text1"}, "test*"),
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
-              Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
-              vector<Variable>{
+              Var{"?text1"}, std::vector<Variable>{Var{"?scientist1"}},
+              std::vector<Variable>{
                   Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
           h::TextLimit(
               5,
@@ -3789,8 +3790,9 @@ TEST(QueryPlanner, TextLimit) {
                   wordScan(Var{"?text2"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-              Var{"?text2"}, vector<Variable>{Var{"?author1"}, Var{"?author2"}},
-              vector<Variable>{
+              Var{"?text2"},
+              std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              std::vector<Variable>{
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);

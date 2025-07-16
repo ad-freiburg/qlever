@@ -606,7 +606,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
-    TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+    TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
@@ -1580,7 +1580,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
@@ -1595,7 +1595,7 @@ vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);

@@ -67,8 +67,8 @@ void Operation::forAllDescendants(F f) const {
 }
 
 // _____________________________________________________________________________
-vector<std::string> Operation::collectWarnings() const {
-  vector<std::string> res{*getWarnings().rlock()};
+std::vector<std::string> Operation::collectWarnings() const {
+  std::vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -626,7 +626,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};
@@ -707,7 +707,7 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-bool Operation::isSortedBy(const vector<ColumnIndex>& sortColumns) const {
+bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
     return false;
@@ -722,7 +722,7 @@ bool Operation::isSortedBy(const vector<ColumnIndex>& sortColumns) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
 }

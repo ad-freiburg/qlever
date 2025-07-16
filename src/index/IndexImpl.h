@@ -28,7 +28,6 @@
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
-#include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/Vocabulary.h"
@@ -51,7 +50,6 @@ using ad_utility::MmapVectorView;
 using std::array;
 using std::shared_ptr;
 using std::tuple;
-using std::vector;
 
 using json = nlohmann::json;
 
@@ -138,7 +136,7 @@ class IndexImpl {
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
-  vector<WordIndex> blockBoundaries_;
+  std::vector<WordIndex> blockBoundaries_;
   off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
@@ -423,7 +421,8 @@ class IndexImpl {
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  size_t getIndexOfBestSuitedElTerm(const vector<std::string>& terms) const;
+  size_t getIndexOfBestSuitedElTerm(
+      const std::vector<std::string>& terms) const;
 
   std::string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
@@ -488,12 +487,12 @@ class IndexImpl {
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(
+  std::vector<float> getMultiplicities(
       const TripleComponent& key, Permutation::Enum permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutation::Enum permutation) const;
+  std::vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
@@ -559,7 +558,7 @@ class IndexImpl {
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+      TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
@@ -626,7 +625,7 @@ class IndexImpl {
   // Same as public getSizeOfTextBlocksSum method but works on metadata objects
   // instead of word or prefix. The public method uses this method internally.
   static size_t getSizeOfTextBlocksSum(
-      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+      const std::vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
       TextScanMode textScanMode);
 
   /**

@@ -102,7 +102,7 @@ TEST(QuadTest, getOperations) {
     return {t, t.getIri(), t};
   };
   auto GraphTriples =
-      [](const vector<::SparqlTriple>& triples,
+      [](const std::vector<::SparqlTriple>& triples,
          const parsedQuery::GroupGraphPattern::GraphSpec& graph) {
         return matchers::GroupGraphPatternWithGraph({}, graph,
                                                     matchers::Triples(triples));

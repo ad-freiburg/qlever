@@ -43,7 +43,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 
@@ -64,7 +64,7 @@ class Union : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
@@ -74,7 +74,7 @@ class Union : public Operation {
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const vector<ColumnIndex>& sortColumns) const override;
+      const std::vector<ColumnIndex>& sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {

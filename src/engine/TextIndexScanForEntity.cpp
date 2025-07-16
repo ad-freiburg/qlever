@@ -123,7 +123,7 @@ bool TextIndexScanForEntity::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 

@@ -81,7 +81,7 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
