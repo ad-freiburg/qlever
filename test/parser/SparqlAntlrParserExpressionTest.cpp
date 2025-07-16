@@ -5,8 +5,10 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include "../SparqlExpressionTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "./SparqlAntlrParserTestHelpers.h"
-#include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -18,8 +20,6 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "util/RuntimeParametersTestHelpers.h"
-#include "util/TripleComponentTestHelpers.h"
 
 namespace {
 using namespace sparqlParserHelpers;

@@ -289,9 +289,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, true, currenttOffset_, scoreIsInt);
+          out, classicPostings, currenttOffset_, scoreIsInt);
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, false, currenttOffset_, scoreIsInt);
+          out, entityPostings, currenttOffset_, scoreIsInt);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -317,9 +317,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
   AD_CONTRACT_CHECK(!classicPostings.empty());
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, true, currenttOffset_, scoreIsInt);
+      out, classicPostings, currenttOffset_, scoreIsInt);
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, false, currenttOffset_, scoreIsInt);
+      out, entityPostings, currenttOffset_, scoreIsInt);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();

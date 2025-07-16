@@ -485,13 +485,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
-  auto visitUpdate = [&visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
-    auto parsedUpdates =
-        SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
+    auto parsedUpdates = SparqlParser::parseUpdate(
+        index().getBlankNodeManager(), update.update_, update.datasetClauses_);
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,

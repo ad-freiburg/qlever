@@ -51,8 +51,6 @@ class ContextListMetaData {
     return static_cast<size_t>(_lastByte + 1 - _startScorelist);
   }
 
-  bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
-
   static constexpr size_t sizeOnDisk() {
     return sizeof(size_t) + 4 * sizeof(off_t);
   }
@@ -87,10 +85,11 @@ ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
 
 class TextMetaData {
  public:
-  //! Get the corresponding block meta data for some word or entity Id range.
-  //! Currently assumes that the range lies in a single block.
-  const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
-                                                   const uint64_t upper) const;
+  // Get the corresponding block meta data for some word or entity Id range.
+  // Can be multiple blocks. Note: the range is [lower, upper], NOT [lower,
+  // upper)
+  vector<std::reference_wrapper<const TextBlockMetaData>>
+  getBlockInfoByWordRange(const uint64_t lower, const uint64_t upper) const;
 
   size_t getBlockCount() const;
 
