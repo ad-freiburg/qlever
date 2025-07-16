@@ -14,6 +14,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "rdfTypes/Literal.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
@@ -50,17 +51,17 @@ using TestGeometry = std::tuple<std::string, std::string, bool>;
 
 const std::vector<TestGeometry> geometries{
     {"uni", areaUniFreiburg, true},
-    {"uni-p", pointUniFreiburg, true},
+    // {"uni-p", pointUniFreiburg, true},
     {"minster", areaMuenster, true},
-    {"minster-p", pointMinster, true},
+    // {"minster-p", pointMinster, true},
     {"gk-allee", lineSegmentGeorgesKoehlerAllee, true},
     {"london", areaLondonEye, false},
     {"lib", areaStatueOfLiberty, false},
     {"eiffel", areaEiffelTower, false},
-    {"eiffel-p", pointEiffelTower, false},
+    // {"eiffel-p", pointEiffelTower, false},
     // Special
     {"approx-de", approximatedAreaGermany, true},
-    {"uni-separate", areaUniFreiburg, true},
+    {"uni-separate", areaTFCampus, true},
 };
 
 // Helpers for testing the `LibspatialjoinAlgorithm`
@@ -70,16 +71,13 @@ std::string buildLibSJTestDataset(bool addApproxGermany = false,
                                   bool addSeparateUni = false) {
   std::string kg;
   for (const auto& [name, wkt, isInGermany] : geometries) {
-    if (addApproxGermany) {
-      if (name == "approx-de") {
-        kg = absl::StrCat(kg, "<approx-de> <wkt-approx-de> ", wkt, " .\n");
-      }
-    } else if (addSeparateUni) {
-      if (name == "uni-separate") {
-        kg =
-            absl::StrCat(kg, "<uni-separate> <wkt-uni-separate> ", wkt, " .\n");
-      }
-    } else {
+    if (addApproxGermany && name == "approx-de") {
+      kg = absl::StrCat(kg, "<approx-de> <wkt-approx-de> ", wkt, " .\n");
+    }
+    if (addSeparateUni && name == "uni-separate") {
+      kg = absl::StrCat(kg, "<uni-separate> <wkt-uni-separate> ", wkt, " .\n");
+    }
+    if (name != "uni-separate" && name != "approx-de") {
       kg = absl::StrCat(
           kg, "<", name, "> <wkt-",
           (isInGermany && germanyDifferentPredicate ? "de" : "other"), "> ",
@@ -101,8 +99,26 @@ std::pair<ValIdToGeomName, GeomNameToValId> resolveValIdTable(
       continue;
     }
     auto vId = ValueId::makeFromVocabIndex(idx);
-    vMap[vId] = name;
-    nMap[name] = vId;
+    // Make explicit copy of strings otherwise we get
+    vMap[ValueId{vId}] = std::string{name};
+    nMap[std::string{name}] = ValueId{vId};
+  }
+  for (const auto& [name, wkt, isInGermany] : geometries) {
+    auto p = GeoPoint::parseFromLiteral(
+        ad_utility::triple_component::Literal::literalWithoutQuotes(wkt));
+    if (!p.has_value()) {
+      continue;
+    }
+    auto b = ValueId::makeFromGeoPoint(p.value());
+    vMap[b] = name;
+    nMap[name] = b;
+  }
+  // TODO add geo points
+  for (const auto& [a, b] : vMap) {
+    std::cout << " VMAP " << a << " " << b << std::endl;
+  }
+  for (const auto& [a, b] : nMap) {
+    std::cout << " NMAP " << a << " " << b << std::endl;
   }
   return {vMap, nMap};
 }
@@ -135,17 +151,28 @@ sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
   cfg.withinDist = withinDist;
-  cfg.writeRelCb = [&results, &resultDists, withinDist, &libSJConfig](
+  auto joinTypeVal = libSJConfig.joinType_;
+  cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                        size_t t, const char* a, const char* b,
                        const char* pred) {
-    if (pred[0] == static_cast<char>(libSJConfig.joinType_)) {
-      // TODO ??
-    }
-    results[t].push_back(
-        {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
-    if (withinDist >= 0) {
+    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+      results[t].push_back(
+          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
+    } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+      results[t].push_back(
+          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
     }
+    // if (pred[0] == static_cast<char>(libSJConfig.joinType_) ||
+    //     withinDist >= 0) {
+    //   // TODO ??
+    //   results[t].push_back(
+    //       {static_cast<SpatialJoinType>(pred[0]), std::atoi(a),
+    //       std::atoi(b)});
+    // }
+    // if (withinDist >= 0) {
+    //   resultDists[t].push_back(atof(pred));
+    // }
   };
   cfg.logCb = {};
   cfg.statsCb = {};
@@ -164,6 +191,7 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
   auto l = generateLocationTrace(loc);
 
   SpatialJoinConfiguration config{libSJConfig, V{"?geom1"}, V{"?geom2"}};
+  config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
@@ -187,7 +215,7 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
   auto [box, countLeft] = sjAlgo.libspatialjoinParse(
       false, {prepared.idTableLeft_, prepared.leftJoinCol_}, sweeper, 1,
       std::nullopt);
-  sweeper.setFilterBox(box);
+  // sweeper.setFilterBox(box);
   std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
   if (usePrefilter) {
     prefilterBox = sweeper.getPaddedBoundingBox(box);
@@ -258,28 +286,51 @@ void checkPrefilterBox(const util::geo::I32Box& actual,
 }
 
 //
-void checkSweeperTestResult(QueryExecutionContext* qec,
-                            const SweeperTestResult& actual,
-                            const SweeperTestResult& expected,
-                            bool checkPrefilterBoxes = false,
-                            Loc loc = Loc::current()) {
+void checkSweeperTestResult(
+    const ValIdToGeomName& vMap, const SweeperTestResult& actual,
+    const SweeperTestResult& expected,
+    std::optional<SpatialJoinType> checkOnlySjType = std::nullopt,
+    bool checkPrefilterBoxes = false, Loc loc = Loc::current()) {
   auto l = generateLocationTrace(loc);
 
-  ASSERT_EQ(actual.results_.size(), expected.results_.size());
-  auto [vMap, nMap] = resolveValIdTable(qec);
-  ad_utility::HashMap<GeoRelationWithIds, double> map;
+  ad_utility::HashMap<GeoRelationWithIds, double> expectedResultsAndDist;
+
   for (const auto& [sjType, valIdLeft, valIdRight, dist] : expected.results_) {
+    if (checkOnlySjType.has_value() && sjType != checkOnlySjType.value()) {
+      continue;
+    }
+    ASSERT_THAT(valIdLeft.getDatatype(),
+                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
+                                 ::testing::Eq(Datatype::GeoPoint)));
+    ASSERT_THAT(valIdRight.getDatatype(),
+                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
+                                 ::testing::Eq(Datatype::GeoPoint)));
+
     std::cout << " EXPECTED " << (int)(sjType) << " " << vMap.at(valIdLeft)
-              << " " << vMap.at(valIdRight) << " " << dist << std::endl;
-    map[{sjType, valIdLeft, valIdRight}] = dist;
+              << " " << (valIdRight) << " " << dist << std::endl;
+    expectedResultsAndDist[{sjType, valIdLeft, valIdRight}] = dist;
   }
+  size_t countActual = 0;
   for (const auto& [sjType, valIdLeft, valIdRight, dist] : actual.results_) {
+    if (checkOnlySjType.has_value() && sjType != checkOnlySjType.value()) {
+      continue;
+    }
+    ASSERT_THAT(valIdLeft.getDatatype(),
+                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
+                                 ::testing::Eq(Datatype::GeoPoint)));
+    ASSERT_THAT(valIdRight.getDatatype(),
+                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
+                                 ::testing::Eq(Datatype::GeoPoint)));
+
     std::cout << " ACTUAL " << (int)(sjType) << " " << vMap.at(valIdLeft) << " "
               << vMap.at(valIdRight) << " " << dist << std::endl;
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
-    ASSERT_TRUE(map.contains(key));
-    ASSERT_NEAR(map[key], dist, 0.01);
+    ASSERT_TRUE(expectedResultsAndDist.contains(key));
+    ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
+    ++countActual;
   }
+  ASSERT_EQ(countActual, expectedResultsAndDist.size());
+
   if (checkPrefilterBoxes) {
     checkPrefilterBox(actual.boxAfterAddingLeft_, expected.boxAfterAddingLeft_);
     checkPrefilterBox(actual.boxAfterAddingRight_,
@@ -315,20 +366,51 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
   // bounding box.
   using enum SpatialJoinType;
 
+  // No intersections
   auto kg = buildLibSJTestDataset();
+  // std::cout << kg << std::endl;
   auto qec = buildQec(kg, true);
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<wkt-de>"}, "?geom1"});
+  auto kgWithOnlyUni = buildLibSJTestDataset(false, true, true);
+  auto qecWithOnlyUni = buildQec(kgWithOnlyUni, true);
+  auto leftChildOnlyUni = buildIndexScan(
+      qecWithOnlyUni, {"?obj1", std::string{"<wkt-uni-separate>"}, "?geom1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<wkt-other>"}, "?geom2"});
+  auto rightChildDEForOnlyUni = buildIndexScan(
+      qecWithOnlyUni, {"?obj2", std::string{"<wkt-de>"}, "?geom2"});
   auto [vMap, nMap] = resolveValIdTable(qec);
   SweeperTestResult testResult;
   runParsingAndSweeper(qec, leftChild, rightChild, {INTERSECTS}, testResult,
                        true);
+  SweeperTestResult expected{{}, {}, {}, 3, 3};
+  checkSweeperTestResult(vMap, testResult, expected);
 
-  SweeperTestResult expected{{}, {}, {}, 7, 4};
+  // Repeat without prefilter
+  runParsingAndSweeper(qec, leftChild, rightChild, {INTERSECTS}, testResult,
+                       false);
+  expected = {{}, {}, {}, 6, 0};
+  checkSweeperTestResult(vMap, testResult, expected);
+
+  // Intersects de
+  std::cout << "***********************************\n"
+            // << kgWithOnlyUni
+            << std::endl;
+  auto [vMapOnlyU, nMapOnlyU] = resolveValIdTable(qecWithOnlyUni);
+  ASSERT_EQ(vMapOnlyU.size(), nMapOnlyU.size());
+  runParsingAndSweeper(qecWithOnlyUni, leftChildOnlyUni, rightChildDEForOnlyUni,
+                       {INTERSECTS}, testResult, true);
+
+  auto x = nMapOnlyU["uni-separate"];
+  auto y = nMapOnlyU["gk-allee"];
+  ASSERT_TRUE(y.getDatatype() == Datatype::VocabIndex);
+  auto y2 = nMapOnlyU["uni"];
+
+  expected = {{{INTERSECTS, x, y, 0}, {INTERSECTS, x, y2, 0}}, {}, {}, 3, 1};
+  checkSweeperTestResult(vMapOnlyU, testResult, expected);
+
   // {{{INTERSECTS, nMap["uni"], nMap["gk-allee"], 0}}, {}, {}, 5, 4};
-  checkSweeperTestResult(qec, testResult, expected);
 
   // Now check results / resultDists
 
