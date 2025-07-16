@@ -59,7 +59,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
       };
 
   if (yieldOnce) {
-    return Result::LazyResult{lazySingleValueRange(
+    return {lazySingleValueRange(
         [getDistinctResult,
          aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
          aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
@@ -75,7 +75,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
         })};
   }
 
-  return Result::LazyResult{CachingContinuableTransformInputRange(
+  return {CachingContinuableTransformInputRange(
       std::move(input), [getDistinctResult](auto& idTableAndVocab) mutable {
         IdTable result = getDistinctResult(std::move(idTableAndVocab.idTable_));
         return result.empty()
