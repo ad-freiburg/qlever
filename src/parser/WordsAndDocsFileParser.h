@@ -102,56 +102,38 @@ struct DocsFileLine {
 // `pos` or an empty substring if there is no next delimiter.
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
-  absl::string_view Find(absl::string_view text, size_t pos) const {
-    auto isWordChar = [](const char* ptr, const char* end) -> bool {
-      if (ptr >= end) return false;
-      
-      // For ASCII characters, use fast path
-      if (static_cast<unsigned char>(*ptr) < 128) {
-        return std::isalnum(*ptr);
-      }
-      
-      // For non-ASCII characters, use ICU to properly handle Unicode
-      UChar32 codePoint;
-      int32_t i = 0;
-      U8_NEXT_UNSAFE(reinterpret_cast<const uint8_t*>(ptr), i, codePoint);
-      
-      // Check if we have enough bytes for this character
-      if (ptr + i > end) return false;
-      
-      return u_isalnum(codePoint);
+  absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
+    auto isAscii = [](char c) { return static_cast<unsigned char>(c) < 128; };
+    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
+    auto isAsciiWordChar = [isAscii, isWordChar](char c) {
+      return isAscii(c) && isWordChar(c);
     };
-    
-    const char* current = text.data() + pos;
-    const char* textEnd = text.data() + text.size();
-    
-    // Find the first non-word character
-    while (current < textEnd && isWordChar(current, textEnd)) {
-      // Skip to next character (UTF-8 aware)
-      if (static_cast<unsigned char>(*current) < 128) {
-        current++;
-      } else {
-        int32_t i = 0;
-        U8_FWD_1_UNSAFE(reinterpret_cast<const uint8_t*>(current), i);
-        current += i;
+    // Found non ascii characters.
+    auto pos = static_cast<int64_t>(unsignedPos);
+    auto size = static_cast<int64_t>(text.size());
+    while (pos < size) {
+      // First a fast path for ascii characters.
+      auto found =
+          std::find_if_not(text.begin() + pos, text.end(), isAsciiWordChar);
+      if (found == text.end()) {
+        return {text.end(), text.end()};
+      }
+      if (isAscii(*found)) {
+        return {found, found + 1};
+      }
+      pos = found - text.begin();
+      // Note: `pos` now points to a non-ascii character that is still within
+      // bounds.
+      size_t oldPos = pos;
+      UChar32 codePoint;
+      U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
+                      codePoint);
+      AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8 in input");
+      if (!u_isalnum(codePoint)) {
+        return text.substr(oldPos, pos - oldPos);
       }
     }
-    
-    if (current >= textEnd) {
-      return text.substr(text.size());
-    }
-    
-    // Return one character (which might be multi-byte for Unicode)
-    const char* delimiterStart = current;
-    if (static_cast<unsigned char>(*current) < 128) {
-      current++;
-    } else {
-      int32_t i = 0;
-      U8_FWD_1_UNSAFE(reinterpret_cast<const uint8_t*>(current), i);
-      current += i;
-    }
-    
-    return absl::string_view(delimiterStart, current - delimiterStart);
+    return {text.end(), text.end()};
   }
 };
 

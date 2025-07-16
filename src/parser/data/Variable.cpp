@@ -4,8 +4,9 @@
 
 #include "parser/data/Variable.h"
 
-#include <ctre-unicode.hpp>
 #include <unicode/uchar.h>
+
+#include <ctre-unicode.hpp>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
@@ -92,8 +93,9 @@ Variable Variable::getWordScoreVariable(std::string_view word,
 
 // _____________________________________________________________________________
 Variable Variable::getMatchingWordVariable(std::string_view term) const {
-  return Variable{
-      absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
+  auto s = absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_");
+  appendEscapedWord(term, s);
+  return Variable{std::move(s)};
 }
 
 // _____________________________________________________________________________
@@ -113,30 +115,24 @@ void Variable::appendEscapedWord(std::string_view word,
                                  std::string& target) const {
   const char* ptr = word.data();
   const char* end = word.data() + word.size();
-  
+
   while (ptr < end) {
-    // For ASCII characters, use fast path
-    if (static_cast<unsigned char>(*ptr) < 128) {
-      if (isalpha(static_cast<unsigned char>(*ptr))) {
-        target += *ptr;
-      } else {
-        absl::StrAppend(&target, "_", std::to_string(*ptr), "_");
-      }
-      ptr++;
+    // Use ICU to properly handle Unicode.
+    // Note: this function is not performance critical, so there is no benefit
+    // in a shortcut for ASCII characters.
+    UChar32 codePoint;
+    int64_t i = 0;
+    U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(ptr), i,
+                    static_cast<int64_t>(word.size()), codePoint);
+    AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8");
+
+    if (u_isalpha(codePoint)) {
+      // Keep Unicode letters as-is
+      target.append(ptr, i);
     } else {
-      // For non-ASCII characters, use ICU to properly handle Unicode
-      UChar32 codePoint;
-      int32_t i = 0;
-      U8_NEXT_UNSAFE(reinterpret_cast<const uint8_t*>(ptr), i, codePoint);
-      
-      if (u_isalpha(codePoint)) {
-        // Keep Unicode letters as-is
-        target.append(ptr, i);
-      } else {
-        // Convert non-letters to numeric representation
-        absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
-      }
-      ptr += i;
+      // Convert non-letters to numeric representation
+      absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
     }
+    ptr += i;
   }
 }
