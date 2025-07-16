@@ -43,13 +43,18 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         // Invalid literal
         "\"BLABLIBLU\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Out of range literal
+        "\"POLYGON((1 1, 2 2, 3 450))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
         "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
         "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         "\"LINESTRING(1 1, 2 2, 3 "
         "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         "\"POLYGON((1 1, 2 2, 3 "
-        "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+        "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    };
+    std::sort(testLiterals.begin(), testLiterals.end());
 
     for (size_t i = 0; i < testLiterals.size(); i++) {
       auto lit = testLiterals[i];
