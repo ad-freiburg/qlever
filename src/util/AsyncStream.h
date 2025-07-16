@@ -22,19 +22,38 @@
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 
-namespace {
+namespace details {
 using ad_utility::data_structures::ThreadSafeQueue;
 
 template <typename Range, bool logTime>
 struct AsyncStreamGenerator
-    : public ad_utility::InputRangeFromGet<typename Range::value_type> {
+    : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
   using value_type = typename Range::value_type;
+
+  ThreadSafeQueue<value_type> queue;
+  std::exception_ptr exception;
+  ad_utility::JThread thread;
+  std::optional<ad_utility::Timer> t;
+  Range range_;
+
   AsyncStreamGenerator(Range range, const size_t bufferLimit)
-      : queue{bufferLimit},
-        exception{nullptr},
-        thread{&AsyncStreamGenerator::thread_function, std::move(range),
-               std::ref(queue), std::ref(exception)} {
+      : queue{bufferLimit}, exception{nullptr}, range_{std::move(range)} {
     ifTiming([this] { t.emplace(ad_utility::Timer::Started); });
+
+    auto make_thread = [this]() mutable {
+      try {
+        for (auto& value : range_) {
+          if (!queue.push(std::move(value))) {
+            return;
+          }
+        }
+      } catch (...) {
+        exception = std::current_exception();
+      }
+      queue.finish();
+    };
+
+    thread = ad_utility::JThread{make_thread};
   }
 
   std::optional<value_type> get() override {
@@ -43,10 +62,11 @@ struct AsyncStreamGenerator
     ifTiming([this] { t->stop(); });
 
     if (!value) {
+      // Only rethrow an exception from the `thread` if no exception occurred in
+      // this thread to avoid crashes because of multiple active exceptions.
       auto cleanup =
           ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this] {
             queue.finish();
-            thread.join();
             // This exception will only be thrown once all the values that were
             // pushed to the queue before the exception occurred.
             if (exception) {
@@ -63,33 +83,15 @@ struct AsyncStreamGenerator
     return value;
   }
 
-  static void thread_function(Range range, ThreadSafeQueue<value_type>& queue,
-                              std::exception_ptr& exception_ptr) {
-    try {
-      for (auto& value : range) {
-        if (!queue.push(std::move(value))) {
-          return;
-        }
-      }
-    } catch (...) {
-      exception_ptr = std::current_exception();
-    }
-    queue.finish();
-  }
-
-  void ifTiming(std::function<void()> function) {
+  template <typename F>
+  void ifTiming(F function) {
     if constexpr (logTime) {
       std::invoke(function);
     }
   };
-
-  ThreadSafeQueue<value_type> queue;
-  std::exception_ptr exception;
-  ad_utility::JThread thread;
-  std::optional<ad_utility::Timer> t;
 };
 
-}  // namespace
+}  // namespace details
 namespace ad_utility::streams {
 
 using ad_utility::data_structures::ThreadSafeQueue;
@@ -104,11 +106,9 @@ using ad_utility::data_structures::ThreadSafeQueue;
 template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
 ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsync(
     Range range, size_t bufferLimit) {
-  using value_type = typename Range::value_type;
-
-  auto generator{std::make_unique<AsyncStreamGenerator<Range, logTime>>(
-      std::move(range), bufferLimit)};
-  return ad_utility::InputRangeTypeErased<value_type>{std::move(generator)};
+  return ad_utility::InputRangeTypeErased{
+      std::make_unique<details::AsyncStreamGenerator<Range, logTime>>(
+          std::move(range), bufferLimit)};
 }
 
 }  // namespace ad_utility::streams
