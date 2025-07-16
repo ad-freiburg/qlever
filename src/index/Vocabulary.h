@@ -232,7 +232,7 @@ class Vocabulary {
   // Determines if `getGeoInfo` can return results for this vocabulary: returns
   // true, if the `UnderlyingVocabulary` is a `SplitGeoVocabulary` or a
   // `PolymorphicVocabulary` holding a `SplitGeoVocabulary`.
-  constexpr bool isGeoInfoAvailable() const;
+  bool isGeoInfoAvailable() const;
 };
 
 namespace detail {

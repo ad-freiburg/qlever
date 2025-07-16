@@ -271,7 +271,7 @@ class SplitVocabulary {
       uint64_t indexWithMarker) const;
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
-  constexpr bool isGeoInfoAvailable() const;
+  bool isGeoInfoAvailable() const;
 };
 
 // Concrete implementations of split function and split filename function
