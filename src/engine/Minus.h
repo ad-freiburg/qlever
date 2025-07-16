@@ -77,7 +77,13 @@ class Minus : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  // Lazily compute the minus join of two results when at least one of the
+  // results is computed lazily.
+  Result lazyMinusJoin(std::shared_ptr<const Result> left,
+                       std::shared_ptr<const Result> right,
+                       bool requestLaziness);
+
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
