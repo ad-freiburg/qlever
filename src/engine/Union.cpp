@@ -343,17 +343,16 @@ Result::LazyResult Union::computeResultLazily(
                           std::vector<ColumnIndex> permutation) {
     using namespace ad_utility;
     if (result->isFullyMaterialized()) {
-      return InputRangeTypeErased(lazySingleValueRange(
-          [transform = std::move(transformFactory(permutation)),
-           result = std::move(result)]() {
+      return InputRangeTypeErased(
+          lazySingleValueRange([transform = transformFactory(permutation),
+                                result = std::move(result)]() {
             return transform(result->idTable().clone(),
                              result->getCopyOfLocalVocab());
           }));
     }
     return InputRangeTypeErased(CachingTransformInputRange(
-        std::move(result->idTables()),
-        [transform = std::move(transformFactory(permutation))](
-            Result::IdTableVocabPair& idTableAndVocab) {
+        result->idTables(), [transform = transformFactory(permutation)](
+                                Result::IdTableVocabPair& idTableAndVocab) {
           return transform(std::move(idTableAndVocab.idTable_),
                            std::move(idTableAndVocab.localVocab_));
         }));
