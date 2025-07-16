@@ -59,7 +59,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
       };
 
   if (yieldOnce) {
-    return Result::LazyResult{InputRangeFromLoopControlGet(
+    return Result::LazyResult{lazySingleValueRange(
         [getDistinctResult,
          aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
          aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
@@ -70,9 +70,8 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
               aggregateTable.insertAtEnd(result);
             }
           }
-          return Result::IdTableLoopControl::breakWithValue(
-              Result::IdTableVocabPair{std::move(aggregateTable),
-                                       std::move(aggregateVocab)});
+          return Result::IdTableVocabPair{std::move(aggregateTable),
+                                          std::move(aggregateVocab)};
         })};
   }
 
