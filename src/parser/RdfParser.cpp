@@ -15,10 +15,10 @@
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedValues.h"
-#include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -268,7 +268,7 @@ bool TurtleParser<T>::blankNodePropertyList() {
   auto savedSubject = activeSubject_;
   auto savedPredicate = activePredicate_;
   // new triple with blank node as object
-  string blank = createAnonNode();
+  std::string blank = createAnonNode();
   // the following triples have the blank node as subject
   activeSubject_ = blank;
   check(predicateObjectList());
@@ -651,7 +651,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  std::array<std::string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
@@ -661,7 +661,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
         return false;
       }
       endPos = view.find(q, startPos);
-      while (endPos != string::npos) {
+      while (endPos != std::string::npos) {
         if (view[endPos - 1] == '\\') {
           size_t numBackslash = 1;
           auto slashPos = endPos - 2;
@@ -686,7 +686,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   if (!foundString) {
     return false;
   }
-  if (endPos == string::npos) {
+  if (endPos == std::string::npos) {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
@@ -841,14 +841,14 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
   auto pos = view.find(':');
-  if (pos == string::npos) {
+  if (pos == std::string::npos) {
     return false;
   }
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
   auto posEnd = view.find_first_of(" \t\r\n,;", pos);
-  if (posEnd == string::npos) {
+  if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
   }
@@ -873,7 +873,7 @@ bool TurtleParser<T>::iriref() {
     return false;
   }
   auto endPos = view.find_first_of("<>\"\n", 1);
-  if (endPos == string::npos || view[endPos] != '>') {
+  if (endPos == std::string::npos || view[endPos] != '>') {
     raise(
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
@@ -955,7 +955,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const string& filename,
+void RdfStreamParser<T>::initialize(const std::string& filename,
                                     ad_utility::MemorySize bufferSize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
@@ -1165,26 +1165,31 @@ void RdfParallelParser<T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::initialize(const string& filename,
+void RdfParallelParser<T>::initialize(const std::string& filename,
                                       ad_utility::MemorySize bufferSize) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_->open(filename);
-  if (auto batch = fileBuffer_->getNextBlock(); !batch) {
-    LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
-              << std::endl;
-  } else {
-    RdfStringParser<T> declarationParser{&this->encodedValuesManager()};
-    declarationParser.setInputStream(std::move(batch.value()));
-    while (declarationParser.parseDirectiveManually()) {
+  RdfStringParser<T> declarationParser{&this->encodedValuesManager()};
+  std::string_view remainder;
+  while (remainder.empty()) {
+    if (auto batch = fileBuffer_->getNextBlock()) {
+      declarationParser.setInputStream(std::move(batch.value()));
+      while (declarationParser.parseDirectiveManually()) {
+      }
+      remainder = declarationParser.getUnparsedRemainder();
+    } else {
+      AD_LOG_WARN
+          << "Empty input to the TURTLE parser, is this what you intended?"
+          << std::endl;
+      break;
     }
-    this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-    auto remainder = declarationParser.getUnparsedRemainder();
-    remainingBatchFromInitialization.reserve(remainder.size());
-    ql::ranges::copy(remainder,
-                     std::back_inserter(remainingBatchFromInitialization));
   }
+  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+  remainingBatchFromInitialization.reserve(remainder.size());
+  ql::ranges::copy(remainder,
+                   std::back_inserter(remainingBatchFromInitialization));
 
   auto feedBatches = [this, firstBatch = std::move(
                                 remainingBatchFromInitialization)]() mutable {
@@ -1257,7 +1262,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
       [this] {
         parallelParser_.finish();
         tripleCollector_.finish();
-        parseFuture_.get();
+        parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
 }

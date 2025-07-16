@@ -8,8 +8,10 @@
 
 #include <vector>
 
+#include "engine/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
+#include "parser/UpdateTriples.h"
 #include "parser/data/Types.h"
 
 // A class for the intermediate parsing results of `quads`. Provides utilities
@@ -34,12 +36,28 @@ struct Quads {
   // twice for the same variable.
   void forAllVariables(absl::FunctionRef<void(const Variable&)> f);
 
+  // This struct is used inside `toTriplesWithGraph` to consistently map blank
+  // node labels to IDs.
+  struct BlankNodeAdder {
+    // The used blank node IDs are store in the `LocalVocab` via the
+    // `LocalBlankNodeManager`.
+    LocalVocab localVocab_;
+    // Store the mapping from labelds to IDs.
+    ad_utility::HashMap<std::string, Id> map_;
+    // The (global) blank node manager used to obtain new unique blank node IDs.
+    ad_utility::BlankNodeManager* bnodeManager_;
+
+    // Get an `Id` for the `label`. If the same `label` was previously passed to
+    // the same `BlankNodeAdder`, this will result in the same `Id`.
+    Id getBlankNodeIndex(const std::string& label);
+  };
   // Return the quads in a format for use as an update template.
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set
   // when using a `WITH` clause. It can also be `std::monostate{}`, in which
   // case the global default graph will be used later on.
-  std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
-      const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const;
+  updateClause::UpdateTriples toTriplesWithGraph(
+      const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
+      BlankNodeAdder& blankNodeAdder) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;

@@ -16,7 +16,7 @@
 
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"

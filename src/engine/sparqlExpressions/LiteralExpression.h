@@ -89,7 +89,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // ___________________________________________________________________________
-  vector<Variable> getUnaggregatedVariables() const override {
+  std::vector<Variable> getUnaggregatedVariables() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {_value};
     } else {
@@ -98,14 +98,14 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // ___________________________________________________________________________
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
         return "Unbound Variable";
       }
       return {"#column_" + std::to_string(varColMap.at(_value).columnIndex_) +
               "#"};
-    } else if constexpr (std::is_same_v<T, string>) {
+    } else if constexpr (std::is_same_v<T, std::string>) {
       return _value;
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
@@ -204,12 +204,12 @@ struct SingleUseExpression : public SparqlExpression {
     return std::move(result_);
   }
 
-  vector<Variable> getUnaggregatedVariables() const override {
+  std::vector<Variable> getUnaggregatedVariables() const override {
     // This class should only be used as an implementation of other expressions,
     // not as a "normal" part of an expression tree.
     AD_FAIL();
   }
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     // This class should only be used as an implementation of other expressions,
     // not as a "normal" part of an expression tree.

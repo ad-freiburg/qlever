@@ -19,6 +19,12 @@
  *
  */
 struct HashMapWrapper {
+  // We deliberately use the `std::` variants of a hash map because `absl`s
+  // types are not exception safe.
+  using Map = std::unordered_map<
+      Id, Set, absl::Hash<Id>, std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+
   Map map_;
   Set emptySet_;
 

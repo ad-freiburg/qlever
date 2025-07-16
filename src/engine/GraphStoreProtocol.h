@@ -86,7 +86,8 @@ class GraphStoreProtocol {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
-    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
+    updateClause::GraphUpdate up{{std::move(convertedTriples), LocalVocab{}},
+                                 {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
     // Graph store protocol POST requests might have a very large body. Limit

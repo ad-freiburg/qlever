@@ -29,7 +29,7 @@ TEST(UrlParserTest, getParameterCheckAtMostOnce) {
 
 TEST(UrlParserTest, paramsToMap) {
   auto parseParams =
-      [](const string& queryString) -> url_parser::ParamValueMap {
+      [](const std::string& queryString) -> url_parser::ParamValueMap {
     const boost::urls::url_view url(queryString);
     return url_parser::paramsToMap(url.params());
   };
@@ -73,7 +73,7 @@ TEST(UrlParserTest, paramsToMap) {
 TEST(UrlParserTest, parseRequestTarget) {
   using namespace ad_utility::url_parser;
 
-  auto IsParsedUrl = [](const string& path,
+  auto IsParsedUrl = [](const std::string& path,
                         const url_parser::ParamValueMap& parameters)
       -> ::testing::Matcher<const ParsedUrl&> {
     return ::testing::AllOf(

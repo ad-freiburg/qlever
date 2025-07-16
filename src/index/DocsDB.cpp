@@ -8,7 +8,7 @@
 #include "backports/algorithm.h"
 
 // _____________________________________________________________________________
-void DocsDB::init(const string& fileName) {
+void DocsDB::init(const std::string& fileName) {
   _dbFile.open(fileName.c_str(), "r");
   if (_dbFile.empty()) {
     _size = 0;
@@ -19,7 +19,7 @@ void DocsDB::init(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
+std::string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
   // If no DocsDB available, we cannot return a text excerpt for the given ID.
   if (_size == 0) {
     AD_THROW(
@@ -38,7 +38,7 @@ string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
   }
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
-  string line(nofBytes, '\0');
+  std::string line(nofBytes, '\0');
   _dbFile.read(line.data(), nofBytes, from);
   return line;
 }

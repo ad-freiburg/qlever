@@ -23,13 +23,13 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
 }
 
 // ____________________________________________________________________________
-string Values::getCacheKeyImpl() const {
+std::string Values::getCacheKeyImpl() const {
   return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
                       parsedValues_.valuesToString(), " }");
 }
 
 // ____________________________________________________________________________
-string Values::getDescriptor() const {
+std::string Values::getDescriptor() const {
   return absl::StrCat("Values with variables ",
                       parsedValues_.variablesToString());
 }
@@ -40,7 +40,7 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {

@@ -241,7 +241,7 @@ class Result {
   void logResultSize() const;
 
   // The first rows of the result and its total size (for debugging).
-  string asDebugString() const;
+  std::string asDebugString() const;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
   // This also applies if `data_` holds a generator yielding `IdTable`s, where
