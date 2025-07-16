@@ -66,7 +66,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // zero buffer of the same size (indicating an invalid geometry). This is
   // required to ensure direct access by index is still possible on the file.
   const void* ptr = &invalidGeoInfoBuffer;
-  auto info= GeometryInfo::fromWktLiteral(word);
+  auto info = GeometryInfo::fromWktLiteral(word);
   if (info.has_value()) {
     ptr = &info.value();
   } else {
