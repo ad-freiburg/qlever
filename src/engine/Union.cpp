@@ -361,7 +361,7 @@ Result::LazyResult Union::computeResultLazily(
         }));
   };
 
-  return Result::LazyResult{ql::ranges::concat_view(
+  return Result::LazyResult{::ranges::concat_view(
       rangeBuilder(std::move(result1), computePermutation<true>()),
       rangeBuilder(std::move(result2), computePermutation<false>()))};
 }
