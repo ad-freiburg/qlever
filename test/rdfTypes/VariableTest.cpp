@@ -60,6 +60,11 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
   // Expect that all the created variables are unique.
   EXPECT_EQ(vars.size(), 10);
 
+  // Ensure that underscores which are used to escape unsupported code points
+  // are themselves escaped to ensure unique variable names.
+  EXPECT_EQ(Variable("?x").getMatchingWordVariable("_").name(),
+            "?ql_matchingword_x__95_");
+
   // Invalid UTF-8 will throw an exception.
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x").getMatchingWordVariable("\255"),
                                ::testing::HasSubstr("Invalid UTF-8"));
