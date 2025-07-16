@@ -22,39 +22,40 @@
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 
-namespace details {
+namespace ad_utility::streams {
+namespace detail {
 using ad_utility::data_structures::ThreadSafeQueue;
 
+// The actual implementation of  `runStreamAsync` below.
 template <typename Range, bool logTime>
 struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
   using value_type = typename Range::value_type;
 
   ThreadSafeQueue<value_type> queue;
-  std::exception_ptr exception;
   ad_utility::JThread thread;
   std::optional<ad_utility::Timer> t;
-  Range range_;
 
   AsyncStreamGenerator(Range range, const size_t bufferLimit)
-      : queue{bufferLimit}, exception{nullptr}, range_{std::move(range)} {
+      : queue{bufferLimit} {
     ifTiming([this] { t.emplace(ad_utility::Timer::Started); });
 
-    auto make_thread = [this]() mutable {
+    thread = ad_utility::JThread{[this, range = std::move(range)]() mutable {
       try {
-        for (auto& value : range_) {
+        for (auto& value : range) {
           if (!queue.push(std::move(value))) {
             return;
           }
         }
       } catch (...) {
-        exception = std::current_exception();
+        queue.pushException(std::current_exception());
       }
       queue.finish();
-    };
-
-    thread = ad_utility::JThread{make_thread};
+    }};
   }
+
+  // Inform the thread that the queue has finished s.t. it can join.
+  ~AsyncStreamGenerator() { queue.finish(); }
 
   std::optional<value_type> get() override {
     ifTiming([this] { t->cont(); });
@@ -62,24 +63,12 @@ struct AsyncStreamGenerator
     ifTiming([this] { t->stop(); });
 
     if (!value) {
-      // Only rethrow an exception from the `thread` if no exception occurred in
-      // this thread to avoid crashes because of multiple active exceptions.
-      auto cleanup =
-          ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this] {
-            queue.finish();
-            // This exception will only be thrown once all the values that were
-            // pushed to the queue before the exception occurred.
-            if (exception) {
-              std::rethrow_exception(exception);
-            }
-          });
       ifTiming([this] {
         t->stop();
         LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
                    << "ms" << std::endl;
       });
     }
-
     return value;
   }
 
@@ -91,8 +80,7 @@ struct AsyncStreamGenerator
   };
 };
 
-}  // namespace details
-namespace ad_utility::streams {
+}  // namespace detail
 
 using ad_utility::data_structures::ThreadSafeQueue;
 
@@ -107,7 +95,7 @@ template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
 ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsync(
     Range range, size_t bufferLimit) {
   return ad_utility::InputRangeTypeErased{
-      std::make_unique<details::AsyncStreamGenerator<Range, logTime>>(
+      std::make_unique<detail::AsyncStreamGenerator<Range, logTime>>(
           std::move(range), bufferLimit)};
 }
 
