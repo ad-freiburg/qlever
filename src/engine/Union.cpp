@@ -3,6 +3,8 @@
 // Author:
 //   2018     Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #include "Union.h"
 
 #include "backports/span.h"
