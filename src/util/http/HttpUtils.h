@@ -146,7 +146,6 @@ CPP_template(typename RequestType)(
                                       request, mediaType);
 }
 
-
 /// Assign the generator to the body of the response. If a supported
 /// compression is specified in the request, this method is applied to the
 /// body and the corresponding response headers are set.
@@ -163,7 +162,7 @@ CPP_template(typename RequestType)(
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
 
   auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
-  auto coroAsyncGenerator = cppcoro::formInputRange(std::move(asyncGenerator));
+  auto coroAsyncGenerator = cppcoro::fromInputRange(std::move(asyncGenerator));
 
   if (method != CompressionMethod::NONE) {
     response.body() =
