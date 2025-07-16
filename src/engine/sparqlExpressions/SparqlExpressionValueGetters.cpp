@@ -9,11 +9,11 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 using namespace sparqlExpression::detail;
 
@@ -217,7 +217,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // _____________________________________________________________________________
-std::optional<string> LiteralFromIdGetter::operator()(
+std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
@@ -358,8 +358,13 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
 
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s,
-    [[maybe_unused]] const EvaluationContext* context) const {
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return litOrIriToUnit(s);
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
   // of measurement. Because this is a rather obscure requirement, we support
   // IRIs also.
@@ -449,18 +454,12 @@ template <typename RequestedInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 std::optional<ad_utility::GeometryInfo>
 GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
-    ValueId id, const EvaluationContext*) {
+    ValueId id, const EvaluationContext* context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
-    // TODO<ullingerc> After merge of GeoVocabulary this can be activated
-    // TODO<ullingerc> Retrieve via getGeoInfo only if we have a GeoVocab as
-    // underlying vocabulary of the PolymorphicVocabulary, otherwise return
-    // nullopt
-
     // All geometry strings encountered during index build have a precomputed
     // geometry info object.
-    // return
-    // context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
+    return context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
   }
   return std::nullopt;
 }

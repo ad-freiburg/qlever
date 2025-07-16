@@ -43,7 +43,8 @@ TEST(ParsedRequestBuilderTest, Constructor) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractAccessToken) {
-  auto expect = [](const auto& request, const std::optional<string>& expected,
+  auto expect = [](const auto& request,
+                   const std::optional<std::string>& expected,
                    const ad_utility::source_location l =
                        ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);

@@ -19,7 +19,7 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
           RuntimeParameters().get<"cache-load-results">()) {}
 
 // _____________________________________________________________________________
-string Load::getCacheKeyImpl() const {
+std::string Load::getCacheKeyImpl() const {
   if (RuntimeParameters().get<"cache-load-results">()) {
     return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
                         loadClause_.silent_ ? " SILENT" : "");
@@ -28,7 +28,7 @@ string Load::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string Load::getDescriptor() const {
+std::string Load::getDescriptor() const {
   return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation());
 }
 
@@ -65,7 +65,7 @@ std::unique_ptr<Operation> Load::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {

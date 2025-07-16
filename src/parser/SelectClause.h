@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "parser/Alias.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace parsedQuery {
 

@@ -2,16 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 #include <unicode/uchar.h>
 
-#include <ctre-unicode.hpp>
-
-#include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
-#include "index/Index.h"
-#include "parser/SparqlParserHelpers.h"
+#include "parser/ParserAndVisitorBase.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // ___________________________________________________________________________
@@ -29,33 +25,7 @@ Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
 [[nodiscard]] std::optional<std::string> Variable::evaluate(
     const ConstructQueryExportContext& context,
     [[maybe_unused]] PositionInTriple positionInTriple) const {
-  // TODO<joka921> This whole function should be much further up in the
-  // Call stack. Most notably the check which columns belongs to this variable
-  // should be much further up in the call stack.
-  size_t row = context._row;
-  const auto& variableColumns = context._variableColumns;
-  const Index& qecIndex = context._qecIndex;
-  const auto& idTable = context.idTable_;
-  if (variableColumns.contains(*this)) {
-    size_t index = variableColumns.at(*this).columnIndex_;
-    auto id = idTable(row, index);
-    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, context.localVocab_);
-    if (!optionalStringAndType.has_value()) {
-      return std::nullopt;
-    }
-    auto& [literal, type] = optionalStringAndType.value();
-    const char* i = XSD_INT_TYPE;
-    const char* d = XSD_DECIMAL_TYPE;
-    const char* b = XSD_BOOLEAN_TYPE;
-    if (type == nullptr || type == i || type == d ||
-        (type == b && literal.length() > 1)) {
-      return std::move(literal);
-    } else {
-      return absl::StrCat("\"", literal, "\"^^<", type, ">");
-    }
-  }
-  return std::nullopt;
+  return decoupledEvaluateFuncPtr()(*this, context, positionInTriple);
 }
 
 // _____________________________________________________________________________
@@ -99,18 +69,6 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 }
 
 // _____________________________________________________________________________
-bool Variable::isValidVariableName(std::string_view var) {
-  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
-  try {
-    auto [result, remaining] =
-        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
-    return remaining.empty();
-  } catch (...) {
-    return false;
-  }
-}
-
-// _____________________________________________________________________________
 void Variable::appendEscapedWord(std::string_view word,
                                  std::string& target) const {
   const char* ptr = word.data();
@@ -135,4 +93,41 @@ void Variable::appendEscapedWord(std::string_view word,
     }
     ptr += i;
   }
+}
+
+namespace {
+struct IsVariableVisitor {
+  using VarContext = SparqlAutomaticParser::VarContext*;
+  bool visit(VarContext) { return true; }
+  CPP_template(typename T)(
+      requires(!ad_utility::SimilarTo<T, VarContext>)) bool visit(T) {
+    return false;
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+bool Variable::isValidVariableName(std::string_view var) {
+  sparqlParserHelpers::ParserAndVisitorBase<IsVariableVisitor> parserAndVisitor{
+      std::string{var}};
+  try {
+    auto [result, remaining] =
+        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
+    return result && remaining.empty();
+  } catch (...) {
+    return false;
+  }
+}
+
+// Implement the indirection for the evaluation of variables (see the header for
+// details).
+Variable::EvaluateFuncPtr& Variable::decoupledEvaluateFuncPtr() {
+  static constexpr auto dummy =
+      [](const Variable&, const ConstructQueryExportContext&,
+         PositionInTriple) -> std::optional<std::string> {
+    throw std::runtime_error(
+        "Variable::decoupledEvaluateFuncPtr() not yet set");
+  };
+  static EvaluateFuncPtr ptr = dummy;
+  return ptr;
 }

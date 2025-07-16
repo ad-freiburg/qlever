@@ -29,10 +29,10 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();

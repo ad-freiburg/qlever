@@ -18,8 +18,6 @@
 #include "util/Iterators.h"
 #include "util/Views.h"
 
-using std::string;
-
 /**
  * @brief Represents a line in the words file.
  *
@@ -64,7 +62,7 @@ using std::string;
  *                          the method getTextRecordFromResultTable
  */
 struct WordsFileLine {
-  string word_;
+  std::string word_;
   bool isEntity_;
   TextRecordIndex contextId_;
   Score score_;
@@ -94,7 +92,7 @@ struct WordsFileLine {
  */
 struct DocsFileLine {
   DocumentIndex docId_;
-  string docContent_;
+  std::string docContent_;
 };
 
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
@@ -165,7 +163,7 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
  */
 class WordsAndDocsFileParser {
  public:
-  explicit WordsAndDocsFileParser(const string& wordsOrDocsFile,
+  explicit WordsAndDocsFileParser(const std::string& wordsOrDocsFile,
                                   const LocaleManager& localeManager);
   explicit WordsAndDocsFileParser(const WordsAndDocsFileParser& other) = delete;
   WordsAndDocsFileParser& operator=(const WordsAndDocsFileParser& other) =

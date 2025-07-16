@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "global/Id.h"
-#include "index/CompressedString.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
+#include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -56,17 +56,17 @@ class Index {
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
     // Stores the index of the TextRecord of each result.
-    vector<TextRecordIndex> cids_;
+    std::vector<TextRecordIndex> cids_;
     // For every instance should wids_.size() never be < 1.
     // For prefix-queries stores for each term and result the index of
     // the Word the prefixed-word was completed to.
-    vector<vector<WordIndex>> wids_ = {{}};
+    std::vector<std::vector<WordIndex>> wids_ = {{}};
     // Stores the index of the entity of each result.
-    vector<Id> eids_;
+    std::vector<Id> eids_;
     // Stores for each result how often an entity
     // appears in its associated TextRecord. [[OLD DEFINITION]]
     // Now scores BM25 scores for all words that are in the voacabulary
-    vector<Score> scores_;
+    std::vector<Score> scores_;
   };
 
   using Filetype = qlever::Filetype;
@@ -156,22 +156,19 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  [[nodiscard]] size_t getSizeOfTextBlockForWord(const std::string& word) const;
-
-  [[nodiscard]] size_t getSizeOfTextBlockForEntities(
-      const std::string& word) const;
-
-  [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
+  [[nodiscard]] size_t getSizeOfTextBlocksSum(const std::string& word,
+                                              TextScanMode textScanMode) const;
 
   IdTable getWordPostingsForTerm(
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   IdTable getEntityMentionsForWord(
-      const string& term,
+      const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+  size_t getIndexOfBestSuitedElTerm(
+      const std::vector<std::string>& terms) const;
 
   [[nodiscard]] std::string getTextExcerpt(TextRecordIndex cid) const;
 
@@ -221,12 +218,12 @@ class Index {
   bool hasAllPermutations() const;
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(
+  std::vector<float> getMultiplicities(
       const TripleComponent& key, Permutation::Enum permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutation::Enum p) const;
+  std::vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
    * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ

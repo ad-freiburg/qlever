@@ -5,20 +5,24 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 
+#include <type_traits>
+
 #include "concepts/concepts.hpp"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
-  auto readSingle = [](auto& vocab, const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
+  auto readSingle = [](auto& vocab, const std::string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
     vocab.close();
@@ -48,7 +52,7 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::open(const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
   auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
@@ -98,10 +102,40 @@ void SplitVocabulary<SF, SFN, S...>::WordWriter::finishImpl() {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`SplitVocabulary`");
+  }
+}
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 void SplitVocabulary<SF, SFN, S...>::close() {
   for (auto& vocab : underlying_) {
     std::visit([&](auto& v) { v.close(); }, vocab);
   }
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+std::optional<ad_utility::GeometryInfo>
+SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
+  // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
+  // if it is a `GeoVocabulary`.
+  const auto& vocab = underlying_[getMarker(indexWithMarker)];
+  return std::visit(
+      [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+          return v.getGeoInfo(getVocabIndex(indexWithMarker));
+        } else {
+          return std::nullopt;
+        }
+      },
+      vocab);
 }
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

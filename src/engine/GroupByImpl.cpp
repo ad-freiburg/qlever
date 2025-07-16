@@ -67,7 +67,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
-string GroupByImpl::getCacheKeyImpl() const {
+std::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -99,7 +99,7 @@ string GroupByImpl::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-string GroupByImpl::getDescriptor() const {
+std::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
     return "GroupBy (implicit)";
   }
@@ -111,7 +111,7 @@ size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
@@ -121,7 +121,7 @@ vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<ColumnIndex> GroupByImpl::computeSortColumns(
+std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
   // If we have an implicit GROUP BY, where the entire input is a single group,

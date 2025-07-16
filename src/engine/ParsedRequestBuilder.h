@@ -40,7 +40,7 @@ struct ParsedRequestBuilder {
   // is already set is an error. Note: processed parameters are removed from the
   // parameter map.
   template <typename Operation>
-  void extractOperationIfSpecified(string_view paramName);
+  void extractOperationIfSpecified(std::string_view paramName);
 
   // Returns whether the request is a Graph Store operation.
   bool isGraphStoreOperation() const;

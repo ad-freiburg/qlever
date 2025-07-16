@@ -33,7 +33,7 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string ExistsJoin::getCacheKeyImpl() const {
+std::string ExistsJoin::getCacheKeyImpl() const {
   return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
                       " right: ", right_->getCacheKey(), " join columns: [",
                       absl::StrJoin(joinColumns_, " ",
@@ -45,7 +45,7 @@ string ExistsJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string ExistsJoin::getDescriptor() const { return "Exists Join"; }
+std::string ExistsJoin::getDescriptor() const { return "Exists Join"; }
 
 // ____________________________________________________________________________
 VariableToColumnMap ExistsJoin::computeVariableToColumnMap() const {
@@ -64,7 +64,7 @@ size_t ExistsJoin::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }
