@@ -158,6 +158,9 @@ Result Bind::computeResult(bool requestLaziness) {
       Result::LazyResult(ad_utility::CachingTransformInputRange(
           subRes->idTables(),
           [applyBind = std::move(applyBind)](auto& idTableAndVocab) mutable {
+            // The `LocalVocab` disallows inserts if it doesn't own its
+            // `primaryWordSet` exclusively. We clone the local vocab to enforce
+            // this invariant in all cases
             LocalVocab localVocab = idTableAndVocab.localVocab_.clone();
             IdTable resultTable =
                 applyBind(std::move(idTableAndVocab.idTable_), &localVocab);
