@@ -218,10 +218,10 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
-    size_t lastBlock_{index + 1 < startOfSingleIdTables_.size()
-                          ? startOfSingleIdTables_.at(index + 1)
-                          : blocksPerColumn_.at(0).size()};
-    auto readBlocks = ql::views::iota(index, lastBlock_) |
+    size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
+                         ? startOfSingleIdTables_.at(index + 1)
+                         : blocksPerColumn_.at(0).size()};
+    auto readBlocks = ql::views::iota(index, lastBlock) |
                       ql::views::transform([this](auto blockIdx) {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
