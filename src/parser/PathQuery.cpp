@@ -67,7 +67,8 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
-    std::vector<TripleComponent> side, const Index::Vocab& vocab) const {
+    std::vector<TripleComponent> side, const Index::Vocab& vocab,
+    const EncodedValues& encodedValuesManager) const {
   if (side.size() == 1 && side[0].isVariable()) {
     return side[0].getVariable();
   } else {
@@ -77,11 +78,13 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
         throw PathSearchException(
             "Only one variable is allowed per search side");
       }
-      auto opt = comp.toValueId(vocab);
-      if (opt.has_value()) {
-        sideIds.push_back(opt.value());
-      } else {
+      LocalVocab lv;
+      auto opt =
+          TripleComponent{comp}.toValueId(vocab, lv, encodedValuesManager);
+      if (opt.getDatatype() == Datatype::LocalVocabIndex) {
         throw PathSearchException("No vocabulary entry for " + comp.toString());
+      } else {
+        sideIds.push_back(opt);
       }
     }
     return sideIds;
@@ -90,9 +93,10 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
 
 // ____________________________________________________________________________
 PathSearchConfiguration PathQuery::toPathSearchConfiguration(
-    const Index::Vocab& vocab) const {
-  auto sources = toSearchSide(sources_, vocab);
-  auto targets = toSearchSide(targets_, vocab);
+    const Index::Vocab& vocab,
+    const EncodedValues& encodedValuesManager) const {
+  auto sources = toSearchSide(sources_, vocab, encodedValuesManager);
+  auto targets = toSearchSide(targets_, vocab, encodedValuesManager);
 
   if (!start_.has_value()) {
     throw PathSearchException("Missing parameter <start> in path search.");

@@ -2888,8 +2888,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& vocab = planner_._qec->getIndex().getVocab();
-  auto config = pathQuery.toPathSearchConfiguration(vocab);
+  const auto& index = planner_._qec->getIndex();
+  const auto& vocab = index.getVocab();
+  auto config =
+      pathQuery.toPathSearchConfiguration(vocab, index.encodedValuesManager());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());

@@ -622,8 +622,9 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri) {
-  RdfStringParser<TurtleParser<T>> parser;
+    const TripleComponent::Iri& typeIri,
+    const EncodedValues& encodedValuesManager) {
+  RdfStringParser<TurtleParser<T>> parser{&encodedValuesManager};
 
   return parser.literalAndDatatypeToTripleComponentImpl(
       normalizedLiteralContent, typeIri);
@@ -705,7 +706,7 @@ bool TurtleParser<T>::iri() {
     return res;
   }
   const auto& s = lastParseResult_.getIri().toStringRepresentation();
-  auto optId = EncodedValues::encode(s);
+  auto optId = encodedValuesManager().encode(s);
   if (optId.has_value()) {
     lastParseResult_ = optId.value();
   }
@@ -1095,7 +1096,7 @@ template <typename T>
 template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
-    RdfStringParser<T> parser{defaultGraphIri_};
+    RdfStringParser<T> parser{&this->encodedValuesManager(), defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
     parser.disablePrefixParsing();
     parser.setPositionOffset(parsePosition);
@@ -1174,7 +1175,7 @@ void RdfParallelParser<T>::initialize(const string& filename,
     LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
               << std::endl;
   } else {
-    RdfStringParser<T> declarationParser{};
+    RdfStringParser<T> declarationParser{&this->encodedValuesManager()};
     declarationParser.setInputStream(std::move(batch.value()));
     while (declarationParser.parseDirectiveManually()) {
     }
@@ -1266,7 +1267,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const Index::InputFileSpecification& file,
+    const Index::InputFileSpecification& file, const EncodedValues* ev,
     ad_utility::MemorySize bufferSize) {
   auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
@@ -1277,7 +1278,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     }
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
-      [&filename = file.filename_, &bufferSize, &graph](
+      [&filename = file.filename_, &bufferSize, &graph, ev](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
@@ -1286,7 +1287,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(filename, bufferSize, graph());
+        return std::make_unique<Parser>(filename, ev, bufferSize, graph());
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
@@ -1319,14 +1320,18 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files,
-    ad_utility::MemorySize bufferSize) {
+    const EncodedValues* encodedValuesManager,
+    ad_utility::MemorySize bufferSize)
+    : RdfParserBase(encodedValuesManager) {
   using namespace qlever;
   // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this](const InputFileSpecification& file,
-                          ad_utility::MemorySize bufferSize) {
+  auto parseFile = [this, encodedValuesManager](
+                       const InputFileSpecification& file,
+                       ad_utility::MemorySize bufferSize) {
     try {
-      auto parser = makeSingleRdfParser<Tokenizer>(file, bufferSize);
+      auto parser = makeSingleRdfParser<Tokenizer>(file, encodedValuesManager,
+                                                   bufferSize);
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {

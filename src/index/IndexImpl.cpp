@@ -67,7 +67,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(files, &encodedValueManager(),
+                                              parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.

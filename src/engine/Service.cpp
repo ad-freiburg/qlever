@@ -406,8 +406,10 @@ TripleComponent Service::bindingToTripleComponent(
   if (type == "literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     binding["datatype"].get<std::string_view>()));
+          value,
+          TripleComponent::Iri::fromIrirefWithoutBrackets(
+              binding["datatype"].get<std::string_view>()),
+          getIndex().encodedValuesManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
