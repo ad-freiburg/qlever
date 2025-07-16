@@ -18,6 +18,8 @@
 #include "util/AsyncStream.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
@@ -212,6 +214,7 @@ class CompressedExternalIdTableWriter {
         ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
 
+  // Get the block generator for a single IdTable, specified by the `index`.
   template <size_t NumCols = 0>
   InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
@@ -222,13 +225,11 @@ class CompressedExternalIdTableWriter {
                       ql::views::transform([this](auto blockIdx) {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
-    auto async = ad_utility::bufferedAsyncView(std::move(readBlocks), 1);
     ++numActiveGenerators_;
     auto callback = [this]() { --numActiveGenerators_; };
-    auto callbackView =
-        ad_utility::CallbackOnEndView(std::move(async), callback);
-    return InputRangeTypeErased<IdTableStatic<NumCols>>{
-        std::move(callbackView)};
+    using namespace ad_utility;
+    return InputRangeTypeErased{CallbackOnEndView(
+        bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
   // Decompresses the block at the given `blockIdx`. The
@@ -456,27 +457,21 @@ class CompressedExternalIdTable
   // exactly once.
   auto getRows() {
     if (!this->transformAndPushLastBlock()) {
-      auto blockGenerator =
-          ad_utility::InputRangeTypeErased<IdTableStatic<NumStaticCols>>{
-              ad_utility::InputRangeFromGetCallable(
-                  [block = std::move(this->currentBlock_)]() mutable
-                  -> std::optional<IdTableStatic<NumStaticCols>> {
-                    if (!block.empty()) {
-                      auto result = std::move(block);
-                      block.clear();
-                      return result;
-                    }
-                    return std::nullopt;
-                  })};
+      // For the case of only a single block we have to mimic the exact same
+      // return type as that of `writer_.getGeneratorForAllRows()`, that's why
+      // there are the seemingly redundant multiple calls to
+      // join(OwningView(vector(...))).
+      using namespace ad_utility;
+      auto blockGenerator = InputRangeTypeErased{lazySingleValueRange(
+          [this]() { return std::move(this->currentBlock_); })};
 
-      auto singleRowGenerator =
+      auto rowView =
           ql::views::join(ad_utility::OwningView{std::move(blockGenerator)});
 
-      std::vector<decltype(singleRowGenerator)> generators;
-      generators.push_back(std::move(singleRowGenerator));
+      std::vector<decltype(rowView)> vec;
+      vec.push_back(std::move(rowView));
 
-      return ql::views::join(
-          ad_utility::OwningViewNoConst{std::move(generators)});
+      return ql::views::join(OwningViewNoConst{std::move(vec)});
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -650,60 +645,60 @@ class CompressedExternalIdTableSorter
   }
 
  private:
-  struct SortState {
-    using RowGenType =
-        decltype(std::declval<CompressedExternalIdTableWriter>()
-                     .template getAllRowGenerators<NumStaticCols>()[0]);
-    using RowGenVectorType =
-        decltype(std::declval<CompressedExternalIdTableWriter>()
-                     .template getAllRowGenerators<NumStaticCols>());
-    using RowIteratorPair =
-        std::pair<decltype(std::declval<RowGenType>().begin()),
-                  decltype(std::declval<RowGenType>().end())>;
-    using CompType =
-        std::function<bool(const RowIteratorPair&, const RowIteratorPair&)>;
+  template <typename RowGenVectorType, typename CompType>
+  struct SortState
+      : ad_utility::InputRangeMixin<SortState<RowGenVectorType, CompType>> {
+    using RowGenType = ql::ranges::range_value_t<RowGenVectorType>;
+    using RowIteratorPair = std::pair<ql::ranges::iterator_t<RowGenType>,
+                                      ql::ranges::sentinel_t<RowGenType>>;
 
     std::vector<RowIteratorPair> priorityQueue_;
+    bool isFinished_ = false;
     IdTableStatic<NumStaticCols> result_;
     CompressedExternalIdTableSorter* sorter_;
     CompType comp_;
     RowGenVectorType rowGenerators_;
     size_t numPopped_{0};
     bool initialized_{false};
-    size_t blockSizeOutput_{0};
+    size_t blockSizeOutput_;
 
     SortState(size_t numCols,
-              const ad_utility::AllocatorWithLimit<Id>& allocator)
-        : result_{numCols, allocator} {}
+              const ad_utility::AllocatorWithLimit<Id>& allocator,
+              CompType comp, RowGenVectorType rowGenerators, size_t blockSize,
+              CompressedExternalIdTableSorter* sorter)
+        : result_{numCols, allocator},
+          sorter_{sorter},
+          comp_{std::move(comp)},
+          rowGenerators_{std::move(rowGenerators)},
+          blockSizeOutput_{blockSize} {}
 
-    void setParameters(const CompType& comp, RowGenVectorType rowGenerators,
-                       size_t blockSize,
-                       CompressedExternalIdTableSorter* sorter) {
-      blockSizeOutput_ = blockSize;
-      comp_ = comp;
-      sorter_ = sorter;
-      rowGenerators_ = std::move(rowGenerators);
+    void start() {
+      for (auto& gen : rowGenerators_) {
+        priorityQueue_.emplace_back(gen.begin(), gen.end());
+        const auto& b = priorityQueue_.back();
+        AD_CORRECTNESS_CHECK(b.first != b.second);
+      }
+      ql::ranges::make_heap(priorityQueue_, comp_);
+      result_.clear();
+      result_.reserve(blockSizeOutput_);
     }
 
-    template <size_t N>
-    std::optional<IdTableStatic<N>> generateBlocks() {
-      auto extractResultBlock = [&, this]() {
-        numPopped_ += result_.numRows();
-        auto resultBlock = std::move(result_).template toStatic<N>();
-        result_.clear();
-        return resultBlock;
-      };
-
-      if (!initialized_) {
-        initialized_ = true;
-        for (auto& gen : rowGenerators_) {
-          priorityQueue_.emplace_back(gen.begin(), gen.end());
-        }
-        ql::ranges::make_heap(priorityQueue_, comp_);
-        result_.clear();
-        result_.reserve(blockSizeOutput_);
+    bool isFinished() {
+      if (isFinished_) {
+        AD_CORRECTNESS_CHECK(numPopped_ == sorter_->numElementsPushed_, [this] {
+          return absl::StrCat("numPopped: ", numPopped_, "num elements pushed:",
+                              sorter_->numElementsPushed_);
+        });
+        return true;
+      } else {
+        return false;
       }
-      while (!priorityQueue_.empty()) {
+    }
+    auto& get() { return result_; }
+
+    void next() {
+      result_.clear();
+      while (!priorityQueue_.empty() && result_.size() < blockSizeOutput_) {
         ql::ranges::pop_heap(priorityQueue_, comp_);
         auto& min = priorityQueue_.back();
         result_.push_back(*min.first);
@@ -713,17 +708,9 @@ class CompressedExternalIdTableSorter
         } else {
           ql::ranges::push_heap(priorityQueue_, comp_);
         }
-        if (result_.size() >= blockSizeOutput_) {
-          auto resultBlock = extractResultBlock();
-          result_.reserve(blockSizeOutput_);
-          return resultBlock;
-        }
       }
-
-      if (!result_.empty()) {
-        return extractResultBlock();
-      }
-      return std::nullopt;
+      numPopped_ += result_.numRows();
+      isFinished_ = result_.empty();
     }
   };
 
@@ -736,35 +723,35 @@ class CompressedExternalIdTableSorter
   ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
+      // There was only one block, return it. If a blocksize was explicitly
+      // requested for the output, and the single block is larger than this
+      // blocksize, we manually have to split it into chunks.
       auto& block = this->currentBlock_;
+      const auto blocksizeOutput = blocksize.value_or(block.numRows());
+      if (block.numRows() <= blocksizeOutput) {
+        using namespace ad_utility;
+        return InputRangeTypeErased{
+            lazySingleValueRange([this]() -> IdTableStatic<N> {
+              if (this->moveResultOnMerge_) {
+                return std::move(this->currentBlock_).template toStatic<N>();
+              } else {
+                return this->currentBlock_.clone().template toStatic<N>();
+              }
+            })};
+      }
+      namespace rv = ::ranges::views;
       auto chunked =
-          ::ranges::views::chunk(
-              ::ranges::views::iota(size_t{0}, block.numRows()),
-              blocksize.value_or(block.numRows())) |
-          ::ranges::views::transform([&](const auto& chunk) {
-            auto beg = chunk.begin();
-            auto end = chunk.end();
-            auto dist = static_cast<size_t>(::ranges::distance(beg, end));
+          rv::chunk(rv::iota(size_t{0}, block.numRows()), blocksizeOutput) |
+          rv::transform([&](const auto& chunk) {
+            auto chunkStart = *chunk.begin();
+            auto chunkSize = ::ranges::size(chunk);
             auto curBlock = IdTableStatic<NumStaticCols>(
                 this->numColumns_, this->writer_.allocator());
-            curBlock.reserve(dist);
-            curBlock.insertAtEnd(block, *beg, *beg + (dist));
+            curBlock.reserve(chunkSize);
+            curBlock.insertAtEnd(block, chunkStart, chunkStart + chunkSize);
             return IdTableStatic<N>(std::move(curBlock).template toStatic<N>());
           });
-      using R = decltype(chunked);
-      static_assert(::ranges::range<R>);
-      static_assert(ql::ranges::range<R>);
-      static_assert(
-          std::same_as<ql::ranges::range_value_t<R>, IdTableStatic<N>>);
-      return ad_utility::InputRangeTypeErased<IdTableStatic<N>>(
-          std::move(chunked));
-      /*
-      return ad_utility::InputRangeTypeErased<IdTableStatic<N>>(
-          ad_utility::InputRangeFromGetCallable(
-              [chunker = CurrentBlockChunker<N>(this), blocksize]() mutable {
-                return chunker.next(blocksize);
-              }));
-              */
+      return ad_utility::InputRangeTypeErased(std::move(chunked));
     }
 
     auto rowGenerators =
@@ -776,21 +763,22 @@ class CompressedExternalIdTableSorter
     auto projection = [](const auto& el) -> decltype(auto) {
       return *el.first;
     };
+    auto directComp = ad_utility::makeAssignableLambda(
+        [projection, comparator = this->comparator_](const auto& a,
+                                                     const auto& b) {
+          return comparator(projection(b), projection(a));
+        });
 
-    auto state = std::make_shared<SortState>(this->writer_.numColumns(),
-                                             this->writer_.allocator());
-
-    auto directComp = [projection, comparator = this->comparator_](
-                          const auto& a, const auto& b) {
-      return comparator(projection(b), projection(a));
+    auto toStatic = [](auto& table) -> IdTableStatic<N> {
+      return std::move(table).template toStatic<N>();
     };
-
-    state->setParameters(directComp, std::move(rowGenerators), blockSizeOutput,
-                         this);
-
-    return ad_utility::InputRangeTypeErased<IdTableStatic<N>>(
-        ad_utility::InputRangeFromGetCallable(
-            [state]() mutable { return state->template generateBlocks<N>(); }));
+    using namespace ad_utility;
+    return InputRangeTypeErased{CachingTransformInputRange{
+        SortState<decltype(rowGenerators), decltype(directComp)>{
+            this->writer_.numColumns(), this->writer_.allocator(),
+            std::move(directComp), std::move(rowGenerators), blockSizeOutput,
+            this},
+        toStatic}};
   }
 
   // _____________________________________________________________
@@ -841,46 +829,6 @@ class CompressedExternalIdTableSorter
         throwInsufficientMemory();
       }
       return blockSizeForOutput;
-    }
-  };
-
-  template <size_t N>
-  struct CurrentBlockChunker {
-    CompressedExternalIdTableSorter* sorter_;
-    bool emptyYielded_ = false;
-    size_t currentPos_ = 0;
-
-    CurrentBlockChunker(CompressedExternalIdTableSorter* sorter)
-        : sorter_(sorter) {}
-
-    std::optional<IdTableStatic<N>> next(std::optional<size_t> blocksize) {
-      auto& block = sorter_->currentBlock_;
-      if (block.empty()) {
-        return std::nullopt;
-      }
-      const auto chunkSize = blocksize.value_or(block.numRows());
-      if (block.numRows() <= chunkSize) {
-        if (std::exchange(emptyYielded_, true)) {
-          return std::nullopt;
-        }
-        if (sorter_->moveResultOnMerge_) {
-          return std::move(sorter_->currentBlock_).template toStatic<N>();
-        } else {
-          return IdTableStatic<N>(
-              sorter_->currentBlock_.clone().template toStatic<N>());
-        }
-      } else {
-        if (currentPos_ >= block.numRows()) {
-          return std::nullopt;
-        }
-        size_t upper = std::min(currentPos_ + chunkSize, block.numRows());
-        auto curBlock = IdTableStatic<NumStaticCols>(
-            sorter_->numColumns_, sorter_->writer_.allocator());
-        curBlock.reserve(upper - currentPos_);
-        curBlock.insertAtEnd(block, currentPos_, upper);
-        currentPos_ = upper;
-        return std::move(curBlock).template toStatic<N>();
-      }
     }
   };
 };
