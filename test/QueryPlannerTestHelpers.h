@@ -168,10 +168,10 @@ constexpr auto TextIndexScanForWordConf =
 };
 
 // Matcher for the `TextLimit` Operation.
-constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
-                              const Variable& textRecVar,
-                              const vector<Variable>& entityVars,
-                              const vector<Variable>& scoreVars) -> QetMatcher {
+constexpr auto TextLimit =
+    [](const size_t n, const QetMatcher& childMatcher,
+       const Variable& textRecVar, const std::vector<Variable>& entityVars,
+       const std::vector<Variable>& scoreVars) -> QetMatcher {
   return RootOperation<::TextLimit>(AllOf(
       AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)), children(childMatcher),
       AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),

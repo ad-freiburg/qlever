@@ -8,7 +8,7 @@
 #include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
-vector<std::reference_wrapper<const TextBlockMetaData>>
+std::vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
                                       const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
@@ -41,7 +41,7 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
       std::distance(_blockUpperBoundWordIds.begin(), upperIt));
 
   // Collect all blocks
-  vector<std::reference_wrapper<const TextBlockMetaData>> output;
+  std::vector<std::reference_wrapper<const TextBlockMetaData>> output;
   ql::ranges::copy(ql::ranges::subrange(_blocks.begin() + startIndex,
                                         _blocks.begin() + endIndex + 1),
                    std::back_inserter(output));

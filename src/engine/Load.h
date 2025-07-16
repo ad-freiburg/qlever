@@ -68,7 +68,7 @@ class Load final : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   // Error handling around `computeResultImpl`.

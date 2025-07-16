@@ -1115,8 +1115,8 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
 Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
-  vector<GraphPatternOperation> ops;
-  vector<SparqlFilter> filters;
+  std::vector<GraphPatternOperation> ops;
+  std::vector<SparqlFilter> filters;
 
   auto filter = [&filters](SparqlFilter filter) {
     filters.emplace_back(std::move(filter));
@@ -1392,7 +1392,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
+std::vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
   return visitVector(ctx->havingCondition());
 }
 
@@ -1422,7 +1422,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
+std::vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
   return visitVector(ctx->groupCondition());
 }
 
@@ -1665,7 +1665,8 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
+std::vector<TripleComponent> Visitor::visit(
+    Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL()) {
     return {};
   }
@@ -1774,7 +1775,8 @@ ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
+std::vector<Visitor::ExpressionPtr> Visitor::visit(
+    Parser::ArgListContext* ctx) {
   // If no arguments, return empty expression vector.
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
@@ -1945,7 +1947,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
 }
 
 // ___________________________________________________________________________
-vector<TripleWithPropertyPath> Visitor::visit(
+std::vector<TripleWithPropertyPath> Visitor::visit(
     Parser::TriplesSameSubjectPathContext* ctx) {
   /*
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
@@ -2035,7 +2037,7 @@ PathObjectPairsAndTriples Visitor::visit(
     Parser::PropertyListPathNotEmptyContext* ctx) {
   PathObjectPairsAndTriples result = visit(ctx->tupleWithPath());
   auto& [pairs, triples] = result;
-  vector<PathObjectPairsAndTriples> pairsAndTriples =
+  std::vector<PathObjectPairsAndTriples> pairsAndTriples =
       visitVector(ctx->tupleWithoutPath());
   for (auto& [newPairs, newTriples] : pairsAndTriples) {
     ql::ranges::move(newPairs, std::back_inserter(pairs));
@@ -3033,7 +3035,7 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 // ____________________________________________________________________________________
 CPP_template_def(typename Ctx)(
     requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
-    visitVector(const vector<Ctx*>& childContexts) {
+    visitVector(const std::vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
