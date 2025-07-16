@@ -9,6 +9,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -45,8 +46,16 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return GeometryInfo{type, boundingBoxAsGeoPoints(parsed.value()),
-                      centroidAsGeoPoint(parsed.value())};
+  try {
+    return GeometryInfo{type, boundingBoxAsGeoPoints(parsed.value()),
+                        centroidAsGeoPoint(parsed.value())};
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG) << "The WKT string `" << wkt
+               << "` would lead to an invalid centroid or bounding box. It "
+                  "will thus be treated as an invalid WKT literal. Error: "
+               << ex.what() << std::endl;
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________
@@ -88,7 +97,13 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parsed.value());
+  try {
+    return detail::centroidAsGeoPoint(parsed.value());
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG) << "Cannot compute centroid due to invalid coordinates. Error: "
+               << ex.what() << std::endl;
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________
@@ -103,7 +118,14 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return detail::boundingBoxAsGeoPoints(parsed.value());
+  try {
+    return detail::boundingBoxAsGeoPoints(parsed.value());
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG)
+        << "Cannot compute bounding box due to invalid coordinates. Error: "
+        << ex.what() << std::endl;
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________

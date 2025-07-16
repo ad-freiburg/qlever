@@ -67,14 +67,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // required to ensure direct access by index is still possible on the file.
   const void* ptr = &invalidGeoInfoBuffer;
   std::optional<GeometryInfo> info;
-  try {
-    info = GeometryInfo::fromWktLiteral(word);
-  } catch (const CoordinateOutOfRangeException& ex) {
-    LOG(DEBUG) << "The WKT string `" << word
-               << "` would lead to an invalid centroid or bounding box. It "
-                  "will thus be treated as an invalid WKT literal. Error: "
-               << ex.what() << std::endl;
-  }
+  info = GeometryInfo::fromWktLiteral(word);
   if (info.has_value()) {
     ptr = &info.value();
   } else {
