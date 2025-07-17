@@ -444,7 +444,7 @@ InputRangeTypeErased(Range)
 
 template <typename Range>
 InputRangeTypeErased(std::unique_ptr<Range>)
-    ->InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
+    -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
 
 // A view that takes an iterator and a sentinel (similar to
 // `ql::ranges::subrange`, but yields the iterators instead of the values when
