@@ -276,37 +276,26 @@ template <typename Queue, typename Producer>
 ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
     size_t queueSize, size_t numThreads, Producer producer) {
   AD_CONTRACT_CHECK(numThreads > 0u);
-
-  using MakeQueueTask = decltype(&detail::makeQueueTask<Queue, Producer>);
-
-  struct QueueGenerator
-      : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
-    std::vector<ad_utility::JThread> threads;
-    Queue queue;
-    std::atomic<int64_t> numUnfinishedThreads;
-    MakeQueueTask makeQueueTask;
+  using V = typename Queue::value_type;
+  struct QueueGenerator : public ad_utility::InputRangeFromGet<V> {
+    std::vector<ad_utility::JThread> threads_;
+    Queue queue_;
+    std::atomic<int64_t> numUnfinishedThreads_;
 
     QueueGenerator(const size_t queueSize, const size_t numThreads,
-                   Producer producer, MakeQueueTask makeQueueTask)
-        : queue{queueSize},
-          numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
-      std::cout << "GeneratorCore starting threads " << numThreads << "\n";
+                   Producer producer)
+        : queue_{queueSize},
+          numUnfinishedThreads_{static_cast<int64_t>(numThreads)} {
       for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
-        threads.emplace_back(
-            makeQueueTask(queue, producer, numUnfinishedThreads));
+        threads_.emplace_back(
+            detail::makeQueueTask(queue_, producer, numUnfinishedThreads_));
       }
     }
-
-    std::optional<typename Queue::value_type> get() override {
-      return queue.pop();
-    }
+    std::optional<V> get() override { return queue_.pop(); }
   };
 
-  auto makeQueueTask{detail::makeQueueTask<Queue, Producer>};
-  auto generator{std::make_unique<QueueGenerator>(
-      queueSize, numThreads, std::move(producer), std::move(makeQueueTask))};
-
-  return ad_utility::InputRangeTypeErased{std::move(generator)};
+  return ad_utility::InputRangeTypeErased{std::make_unique<QueueGenerator>(
+      queueSize, numThreads, std::move(producer))};
 }
 
 }  // namespace ad_utility::data_structures
