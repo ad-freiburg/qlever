@@ -5,7 +5,7 @@
 
 #include "parser/SpatialQuery.h"
 
-#include "engine/LibSpatialJoinConfig.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
 
