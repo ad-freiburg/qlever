@@ -10,6 +10,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/Exception.h"
 #include "util/Log.h"
 
 // This file contains functions used for parsing and processing WKT geometries
@@ -85,8 +86,9 @@ inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   try {
     return utilPointToGeoPoint(uPoint);
   } catch (const CoordinateOutOfRangeException& ex) {
-    LOG(DEBUG) << "Cannot compute centroid due to invalid coordinates. Error: "
-               << ex.what() << std::endl;
+    AD_LOG(DEBUG) << "Cannot compute centroid due to invalid "
+                     "coordinates. Error: "
+                  << ex.what() << std::endl;
     return std::nullopt;
   }
 }
@@ -100,9 +102,9 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
     auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
     return BoundingBox{lowerLeft, upperRight};
   } catch (const CoordinateOutOfRangeException& ex) {
-    LOG(DEBUG)
-        << "Cannot compute bounding box due to invalid coordinates. Error: "
-        << ex.what() << std::endl;
+    AD_LOG(DEBUG) << "Cannot compute bounding box due to "
+                     "invalid coordinates. Error: "
+                  << ex.what() << std::endl;
     return std::nullopt;
   }
 }
