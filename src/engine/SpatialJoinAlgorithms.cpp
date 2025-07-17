@@ -461,10 +461,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     auto [boxSmall, countSmall] = libspatialjoinParse(
         smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     sweeper.setFilterBox(boxSmall);
-    // TODO Problem/Bug of sweeper: if it filters out everything on the right
-    // side, it thinks this is a one-sided/self-join and returns invalid ids
-    // because of it. Should take an explicit cfg option to enforce two sided
-    // join.
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
@@ -474,7 +470,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
-    return countSmall && countLarge;
+    return countSmall > 0 && countLarge > 0;
   };
   bool nonEmptyChildren;
   if (idTableLeft->size() < idTableRight->size()) {
