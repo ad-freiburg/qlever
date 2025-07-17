@@ -44,7 +44,7 @@ std::string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
 }

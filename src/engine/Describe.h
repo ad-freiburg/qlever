@@ -49,7 +49,7 @@ class Describe : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 

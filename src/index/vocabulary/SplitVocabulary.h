@@ -255,6 +255,8 @@ class SplitVocabulary {
     // Finish the writing on all underlying word writers. After this no more
     // calls to `operator()` are allowed.
     void finishImpl() override;
+
+    ~WordWriter() override;
   };
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all

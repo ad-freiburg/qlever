@@ -43,7 +43,7 @@ class TextIndexScanForWord : public Operation {
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -56,7 +56,7 @@ class TextIndexScanForWord : public Operation {
   // the text variable and the completed word (if it was prefixed)
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   void setVariableToColumnMap();
 };

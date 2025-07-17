@@ -102,6 +102,16 @@ void SplitVocabulary<SF, SFN, S...>::WordWriter::finishImpl() {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`SplitVocabulary`");
+  }
+}
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 void SplitVocabulary<SF, SFN, S...>::close() {
   for (auto& vocab : underlying_) {
     std::visit([&](auto& v) { v.close(); }, vocab);

@@ -64,7 +64,7 @@ size_t ExistsJoin::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }

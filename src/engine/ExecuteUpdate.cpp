@@ -158,9 +158,11 @@ ExecuteUpdate::computeGraphUpdateQuads(
       };
 
   auto [toInsertTemplates, toInsert, localVocabInsert] =
-      prepareTemplateAndResultContainer(std::move(graphUpdate.toInsert_));
+      prepareTemplateAndResultContainer(
+          std::move(graphUpdate.toInsert_.triples_));
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
-      prepareTemplateAndResultContainer(std::move(graphUpdate.toDelete_));
+      prepareTemplateAndResultContainer(
+          std::move(graphUpdate.toDelete_.triples_));
 
   uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(

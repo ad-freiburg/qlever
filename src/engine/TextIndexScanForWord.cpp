@@ -89,18 +89,18 @@ size_t TextIndexScanForWord::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForWord(
-      config_.word_);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 

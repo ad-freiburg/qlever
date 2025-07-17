@@ -10,6 +10,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/Log.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -79,17 +80,31 @@ inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
 }
 
 // ____________________________________________________________________________
-inline Centroid centroidAsGeoPoint(const ParsedWkt& geometry) {
+inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
-  return utilPointToGeoPoint(uPoint);
+  try {
+    return utilPointToGeoPoint(uPoint);
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG) << "Cannot compute centroid due to invalid coordinates. Error: "
+               << ex.what() << std::endl;
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________
-inline BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
+inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
+    const ParsedWkt& geometry) {
   auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
-  auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
-  auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
-  return {lowerLeft, upperRight};
+  try {
+    auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
+    auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
+    return BoundingBox{lowerLeft, upperRight};
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG)
+        << "Cannot compute bounding box due to invalid coordinates. Error: "
+        << ex.what() << std::endl;
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________
