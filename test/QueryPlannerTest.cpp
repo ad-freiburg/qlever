@@ -3155,81 +3155,6 @@ auto getQecWithTextIndex = [](size_t textBlockSize = 2) {
   config.createTextIndex = true;
   config.textBlockSize = textBlockSize;
   return ad_utility::testing::getQec(std::move(config));
-  // The blocks look like the following
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | WordId | Word     | Entities | BlockId |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 0      | a        | \"picking the right text can be a hard test\" | 0 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 1      | and      | \"testing and picking\" | 0       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 0       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 2      | be       | \"picking the right text can be a hard test\" | 1 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 3      | can      | \"picking the right text can be a hard test\" | 1 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 4      | contains | \"only this text contains the word opti \" | 2 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 2       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 5      | hard     | \"picking the right text can be a hard test\" | 2 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 6      | is       | \"this text contains some words and is part of the
-  // test\" | 3       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 7      | of       | \"this text contains some words and is part of the
-  // test\" | 3       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 8      | only     | \"only this text contains the word opti \" | 4 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 9      | opti     | \"only this text contains the word opti \" | 4 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 10     | part     | \"this text contains some words and is part of the
-  // test\" | 5       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 11     | picking  | \"picking the right text can be a hard test\" | 5 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"testing and picking\" | 5       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 12     | right    | \"picking the right text can be a hard test\" | 6 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 13     | some     | \"this text contains some words and is part of the
-  // test\" | 6       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 14     | test     | \"picking the right text can be a hard test\" | 7 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 7       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 15     | testing  | \"testing and picking\" | 7       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 16     | text     | \"only this text contains the word opti \" | 8 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"picking the right text can be a hard test\" | 8 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 8       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 17     | the      | \"only this text contains the word opti \" | 8 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"picking the right text can be a hard test\" | 8 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 8       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 18     | this     | \"only this text contains the word opti \" | 9 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // |        |          | \"this text contains some words and is part of the
-  // test\" | 9       |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 19     | word     | \"only this text contains the word opti \" | 9 |
-  // +--------+----------+-----------------------------------------------------------+---------+
-  // | 20     | words    | \"this text contains some words and is part of the
-  // test\" | 10      |
-  // +--------+----------+-----------------------------------------------------------+---------+
 };
 }  // namespace
 
@@ -3292,13 +3217,13 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
   // all entity lists of all textblocks returned by the words from the WordScans
   // is the smallest for the term "opti".
   h::expect(
-      "SELECT * WHERE { ?text ql:contains-word \"picking*\" . ?text "
+      "SELECT * WHERE { ?text ql:contains-word \"p*\" . ?text "
       "ql:contains-entity <testEntity> . ?text ql:contains-word "
-      "\"opti\" . ?text ql:contains-word \"testi*\"}",
+      "\"opti\" . ?text ql:contains-word \"test*\"}",
       h::UnorderedJoins(entityScan(Var{"?text"}, "<testEntity>", "opti"),
-                        wordScan(Var{"?text"}, "testi*"),
+                        wordScan(Var{"?text"}, "test*"),
                         wordScan(Var{"?text"}, "opti"),
-                        wordScan(Var{"?text"}, "picking*")),
+                        wordScan(Var{"?text"}, "p*")),
       qec);
 
   ParsedQuery pq = SparqlParser::parseQuery(
@@ -3596,7 +3521,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = getQecWithTextIndex();
+  auto qec = getQecWithTextIndex(3);
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3719,10 +3644,10 @@ TEST(QueryPlanner, TextSearchService) {
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:contains [qlts:word \"picking*\" ] ."
+      "?t qlts:contains [qlts:word \"p*\" ] ."
       "?t qlts:contains [qlts:entity <a> ] ."
       "?t qlts:contains [qlts:word \"opti\" ] ."
-      "?t qlts:contains [qlts:word \"testi*\" ] ."
+      "?t qlts:contains [qlts:word \"test*\" ] ."
       "}"
       "}",
       h::UnorderedJoins(
@@ -3734,13 +3659,12 @@ TEST(QueryPlanner, TextSearchService) {
               {},
               VarOrFixedEntity(qec, "<a>")}),
           wordScanConf(TextIndexScanForWordConfiguration{
-              Var{"?t"}, "testi*", Var{"?t"}.getMatchingWordVariable("testi"),
+              Var{"?t"}, "test*", Var{"?t"}.getMatchingWordVariable("test"),
               std::nullopt, true}),
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "opti"}),
           wordScanConf(TextIndexScanForWordConfiguration{
-              Var{"?t"}, "picking*",
-              Var{"?t"}.getMatchingWordVariable("picking"), std::nullopt,
-              true})),
+              Var{"?t"}, "p*", Var{"?t"}.getMatchingWordVariable("p"),
+              std::nullopt, true})),
       qec);
 
   // Check full word config

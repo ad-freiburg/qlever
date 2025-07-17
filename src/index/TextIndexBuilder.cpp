@@ -272,10 +272,8 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
   std::vector<Posting> entityPostings;
   WordIndex lastWordIndex = 0;
 
-  LOG(INFO) << "Sort wordTextVec and entityTextVec ..." << std::endl;
   auto wordTextVecView = wordTextVec.sortedView();
   auto entityTextVecView = entityTextVec.sortedView();
-  LOG(INFO) << "Done sorting wordTextVec and entityTextVec ..." << std::endl;
 
   auto entityIterator = entityTextVecView.begin();
   // Since entityTextVecView is also sorted by WordIndex this iterator always
