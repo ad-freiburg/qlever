@@ -460,7 +460,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     // Parse and add all geometries of the smaller side
     auto [boxSmall, countSmall] = libspatialjoinParse(
         smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
-    sweeper.setFilterBox(boxSmall);
+
+    // Filtering by bounding box *after* parsing is only necessary if
+    // precomputed bounding boxes for filtering *before* parsing are not
+    // available.
+    if (!qec_->getIndex().getVocab().isGeoInfoAvailable()) {
+      sweeper.setFilterBox(boxSmall);
+    }
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
