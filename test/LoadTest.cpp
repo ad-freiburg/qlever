@@ -222,10 +222,6 @@ TEST_F(LoadTest, computeResult) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto Literal =
       ad_utility::triple_component::Literal::fromStringRepresentation;
-  // In the syntax test mode, all exceptions when computing a LOAD are converted
-  // to a silent result.
-  { auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true); }
-
   expectLoad("<x> <b> <c>", "text/turtle",
              {{Iri("<x>"), Iri("<b>"), Iri("<c>")}});
   expectLoad("<x> <b> <c> ; <d> <y>", "text/turtle",
