@@ -271,6 +271,9 @@ class SplitVocabulary {
   // GeoVocabulary.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(
       uint64_t indexWithMarker) const;
+
+  // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
+  static bool isGeoInfoAvailable();
 };
 
 // Concrete implementations of split function and split filename function

@@ -138,4 +138,15 @@ SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
       vocab);
 }
 
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
+  if constexpr (ad_utility::anyIsInstantiationOf<GeoVocabulary, S...>) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

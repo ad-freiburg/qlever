@@ -241,6 +241,18 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
 };
 
 // _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
+  if constexpr (ad_utility::isInstantiation<S, SplitVocabulary> ||
+                std::is_same_v<S, PolymorphicVocabulary>) {
+    return vocabulary_.getUnderlyingVocabulary().isGeoInfoAvailable();
+
+  } else {
+    return false;
+  }
+};
+
+// _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
