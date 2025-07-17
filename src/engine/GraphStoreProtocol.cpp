@@ -83,7 +83,7 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   // Construct the parsed query from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
-  auto query = [&graph]() -> std::string {
+  auto getQuery = [&graph]() -> std::string {
     if (const auto* iri =
             std::get_if<ad_utility::triple_component::Iri>(&graph)) {
       return absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
@@ -91,8 +91,8 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
     } else {
       return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
     }
-  }();
-  return SparqlParser::parseQuery(query);
+  };
+  return SparqlParser::parseQuery(getQuery());
 }
 
 // ____________________________________________________________________________
@@ -100,15 +100,14 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
                                                 const Index& index) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
-  auto update = [&graph]() -> std::string {
+  auto getUpdate = [&graph]() -> std::string {
     if (const auto* iri =
             std::get_if<ad_utility::triple_component::Iri>(&graph)) {
       return absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
     } else {
       return "DROP DEFAULT";
     }
-  }();
-  auto updates = SparqlParser::parseUpdate(index.getBlankNodeManager(), update);
-  AD_CORRECTNESS_CHECK(updates.size() == 1);
-  return std::move(updates.at(0));
+  };
+  return ad_utility::getSingleElement(
+      SparqlParser::parseUpdate(index.getBlankNodeManager(), getUpdate()));
 }

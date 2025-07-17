@@ -149,7 +149,7 @@ class GraphStoreProtocol {
     // The request is transformed in the following equivalent SPARQL:
     // `DROP SILENT GRAPH <graph> ; INSERT DATA { GRAPH <graph> { ...body... }
     // }`
-    auto dropUpdate = [&graph]() -> std::string {
+    auto getDrop = [&graph]() -> std::string {
       if (const auto* iri =
               std::get_if<ad_utility::triple_component::Iri>(&graph)) {
         return absl::StrCat("DROP SILENT GRAPH ",
@@ -157,13 +157,10 @@ class GraphStoreProtocol {
       } else {
         return "DROP SILENT DEFAULT";
       }
-    }();
-    ParsedQuery drop = [&dropUpdate, &index]() {
-      auto drops =
-          SparqlParser::parseUpdate(index.getBlankNodeManager(), dropUpdate);
-      AD_CORRECTNESS_CHECK(drops.size() == 1);
-      return drops.at(0);
-    }();
+    };
+
+    ParsedQuery drop = ad_utility::getSingleElement(
+        SparqlParser::parseUpdate(index.getBlankNodeManager(), getDrop()));
     drop._originalString = stringRepresentation;
 
     auto triples =
