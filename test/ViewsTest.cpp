@@ -276,6 +276,7 @@ TEST(Views, CallbackOnEndView) {
 
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
+  // TODO<joka921> Use `ResetWhenMoved`.
   // A simple struct that knows if it has been moved from.
   struct MoveTracker {
     bool wasMoved_ = false;

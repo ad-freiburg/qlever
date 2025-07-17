@@ -47,18 +47,20 @@ CPP_template(typename Sent)(
     return sent_;
   }
 
-  // TODO<joka921> This could have constraints and tests.
-  template <typename It>
-  friend bool operator==(const std::move_iterator<It> it, move_sentinel sent) {
+  CPP_template_2(typename It)(
+      requires ql::concepts::sentinel_for<Sent, It>) friend bool
+  operator==(const std::move_iterator<It> it, move_sentinel sent) {
     return it.base() == sent.base();
   }
-  template <typename It>
-  friend bool operator!=(const std::move_iterator<It> it, move_sentinel sent) {
+
+  CPP_template_2(typename It)(
+      requires ql::concepts::sentinel_for<Sent, It>) friend bool
+  operator!=(const std::move_iterator<It> it, move_sentinel sent) {
     return it.base() != sent.base();
   }
 
  private:
-  Sent sent_;
+  [[no_unique_address]] Sent sent_;
 };
 }  // namespace ql
 
