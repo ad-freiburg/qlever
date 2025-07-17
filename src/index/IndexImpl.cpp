@@ -82,32 +82,12 @@ template <typename T1, typename T2>
 static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
+    return std::move(idTable);
   };
 
-  using Range = decltype(ad_utility::OwningView{
-      sorterPtr->template getSortedBlocks<0>()});
-  using Transformer = decltype(setSubset);
-
-  struct generator : public ad_utility::InputRangeFromGet<IdTableStatic<0>> {
-    Range r_;
-    decltype(r_.begin()) rIter_;
-    Transformer t_;
-    generator(Range r, Transformer t)
-        : r_{std::move(r)}, rIter_{r_.begin()}, t_{t} {}
-    std::optional<IdTableStatic<0>> get() override {
-      if (rIter_ != r_.end()) {
-        auto retVal{*rIter_};
-        t_(retVal);
-        rIter_++;
-        return retVal;
-      }
-      return std::nullopt;
-    }
-  };
-
-  return ad_utility::InputRangeTypeErased{std::move(generator{
+  return ad_utility::CachingTransformInputRange{
       ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset})};
+      setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
