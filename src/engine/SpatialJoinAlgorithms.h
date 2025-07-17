@@ -171,9 +171,9 @@ class SpatialJoinAlgorithms {
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
   // by the bounding box. Should only be applied if the index is known to be
   // built on a `GeoVocabulary`.
-  bool prefilterGeoByBoundingBox(
+  static bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
-      VocabIndex vocabIndex) const;
+      const Index& index, VocabIndex vocabIndex);
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table

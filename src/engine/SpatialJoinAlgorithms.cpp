@@ -59,9 +59,9 @@ std::optional<util::geo::DBox> SpatialJoinAlgorithms::prefilterBoxToLatLng(
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<util::geo::DBox>& prefilterLatLngBox,
-    VocabIndex vocabIndex) const {
+    const Index& index, VocabIndex vocabIndex) {
   if (prefilterLatLngBox.has_value()) {
-    auto geoInfo = qec_->getIndex().getVocab().getGeoInfo(vocabIndex);
+    auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
     if (geoInfo.has_value()) {
       // We have a bounding box: Check intersection with prefilter box.
       auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
@@ -105,7 +105,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       // If we have a prefilter box, check if we also have a precomputed
       // bounding box for the geometry this `VocabIndex` is referring to.
       if (precomputedBoundingBoxesAvailable &&
-          prefilterGeoByBoundingBox(prefilterLatLngBox, id.getVocabIndex())) {
+          prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
+                                    id.getVocabIndex())) {
         prefilterCounter++;
         continue;
       }

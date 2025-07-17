@@ -25,7 +25,7 @@
 #include "util/geo/Geo.h"
 
 // _____________________________________________________________________________
-namespace libSJPrefilterTestHelpers {
+namespace SpatialJoinPrefilterTestHelpers {
 
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
@@ -92,8 +92,8 @@ const std::vector<TestGeometry> testGeometries{
     {"approx-de", approximatedAreaGermany, true},
     {"uni-separate", areaTFCampus, true},
 };
-const Variable VAR_LEFT{"?geom1"};
-const Variable VAR_RIGHT{"?geom2"};
+constexpr std::string_view VAR_LEFT{"?geom1"};
+constexpr std::string_view VAR_RIGHT{"?geom2"};
 
 // Helpers to convert points and bounding boxes from double lat/lng to web
 // mercator int32 representation used by libspatialjoin
@@ -154,7 +154,9 @@ ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
 
 // Helper to create a `ValIdTable` struct which maps `ValueId`s to names and
 // names to `ValueId`s for the geometries in `testGeometries`.
-ValIdTable resolveValIdTable(QueryExecutionContext* qec) {
+ValIdTable resolveValIdTable(QueryExecutionContext* qec, size_t expectedSize,
+                             Loc loc = Loc::current()) {
+  auto l = generateLocationTrace(loc);
   ValIdToGeomName vMap;
   GeomNameToValId nMap;
 
@@ -170,6 +172,8 @@ ValIdTable resolveValIdTable(QueryExecutionContext* qec) {
     nMap[name] = vId;
   }
 
+  EXPECT_EQ(vMap.size(), expectedSize);
+  EXPECT_EQ(nMap.size(), expectedSize);
   return {std::move(vMap), std::move(nMap)};
 }
 
@@ -224,11 +228,11 @@ sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
 // Helpers to build index scans for `runParsingAndSweeper`
 QET makeLeftChild(QEC qec, std::string_view pred) {
   return buildIndexScan(
-      qec, {"?obj1", absl::StrCat("<wkt-", pred, ">"), VAR_LEFT.name()});
+      qec, {"?a", absl::StrCat("<wkt-", pred, ">"), std::string{VAR_LEFT}});
 }
 QET makeRightChild(QEC qec, std::string_view pred) {
   return buildIndexScan(
-      qec, {"?obj2", absl::StrCat("<wkt-", pred, ">"), VAR_RIGHT.name()});
+      qec, {"?b", absl::StrCat("<wkt-", pred, ">"), std::string{VAR_RIGHT}});
 }
 
 // Run a complete spatial join and record information into a `SweeperTestResult`
@@ -246,7 +250,8 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
   auto rightChild = makeRightChild(qec, rightPred);
 
   // Build spatial join operation
-  SpatialJoinConfiguration config{sjTask, VAR_LEFT, VAR_RIGHT};
+  SpatialJoinConfiguration config{sjTask, V{std::string{VAR_LEFT}},
+                                  V{std::string{VAR_RIGHT}}};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
@@ -437,149 +442,227 @@ util::geo::DBox makeAggregatedBoundingBox(
   return ad_utility::detail::boundingBoxToUtilBox(boundingBox.value());
 }
 
-}  // namespace libSJPrefilterTestHelpers
+const auto boundingBoxGermanPlaces = makeAggregatedBoundingBox(
+    {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee});
+const auto boundingBoxOtherPlaces = makeAggregatedBoundingBox(
+    {areaLondonEye, areaEiffelTower, areaStatueOfLiberty});
+const auto boundingBoxAllPlaces = makeAggregatedBoundingBox(
+    {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee,
+     areaLondonEye, areaStatueOfLiberty, areaEiffelTower});
+const auto boundingBoxGermany =
+    makeAggregatedBoundingBox({approximatedAreaGermany});
+const auto boundingBoxUniAndLondon =
+    makeAggregatedBoundingBox({areaUniFreiburg, areaLondonEye});
+
+}  // namespace SpatialJoinPrefilterTestHelpers
 
 // _____________________________________________________________________________
 namespace {
 
-using namespace libSJPrefilterTestHelpers;
+using namespace SpatialJoinPrefilterTestHelpers;
+using enum SpatialJoinType;
+
+// Each of the following tests creates a `QueryExecutionContext` on a
+// `GeoVocabulary` which holds various literals carefully selected literals. It
+// then performs a spatial join and examines the result as well as the
+// prefiltering during the geometry parsing.
+
+// _____________________________________________________________________________
+TEST(SpatialJoinTest, BoundingBoxPrefilterNoIntersections) {
+  // Case 1: No intersections
+  // Left: Three geometries in Germany (3x Freiburg)
+  // Right: Three geometries outside of Germany (London, Paris, New York)
+  auto kg = buildLibSJTestDataset();
+  auto qec = buildQec(kg, true);
+  auto [vMap, nMap] = resolveValIdTable(qec, 6);
+
+  // With prefilter: No results but one entire side gets filtered out by
+  // bounding box
+  SweeperTestResult testResult;
+  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResult, true);
+  checkSweeperTestResult(vMap, testResult,
+                         {{}, boundingBoxGermanPlaces, {}, 3, 3, 3, 0},
+                         INTERSECTS, true);
+
+  // Without prefilter: No results but everything has to be checked
+  SweeperTestResult testResultNoFilter;
+  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResultNoFilter,
+                       false);
+  checkSweeperTestResult(
+      vMap, testResultNoFilter,
+      {{}, boundingBoxGermanPlaces, boundingBoxOtherPlaces, 6, 0, 3, 3},
+      INTERSECTS, true);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
+  // Case 2: Intersections, coverage and non-intersection
+  // Left: University Freiburg, Campus Faculty of Engineering
+  // Right: Three geometries in Freiburg: Road through the campus (intersection,
+  // but not contained), main building on campus (contained) and Freiburg
+  // Minster (no intersection)
+  auto kg = buildLibSJTestDataset(false, true, true);
+  auto qec = buildQec(kg, true);
+
+  auto [vMap, nMap] = resolveValIdTable(qec, 7);
+
+  auto vIdCampus = getValId(nMap, "uni-separate");
+  auto vIdGkAllee = getValId(nMap, "gk-allee");
+  auto vIdUni = getValId(nMap, "uni");
+  auto vIdMinster = getValId(nMap, "minster");
+
+  // Intersects: Campus intersects road and main building
+  SweeperTestResult testResultIntersects;
+  runParsingAndSweeper(qec, "uni-separate", "de", {INTERSECTS},
+                       testResultIntersects, true);
+  checkSweeperTestResult(vMap, testResultIntersects,
+                         {{{INTERSECTS, vIdCampus, vIdGkAllee, 0},
+                           {INTERSECTS, vIdCampus, vIdUni, 0}},
+                          {},
+                          {},
+                          3,
+                          1,
+                          1,
+                          2},
+                         INTERSECTS);
+
+  // Contains: Campus contains main building
+  SweeperTestResult testResultContains;
+  runParsingAndSweeper(qec, "uni-separate", "de", {CONTAINS},
+                       testResultContains, true);
+  checkSweeperTestResult(vMap, testResultContains,
+                         {{
+                              {CONTAINS, vIdCampus, vIdUni, 0},
+                          },
+                          {},
+                          {},
+                          3,
+                          1,
+                          1,
+                          2},
+                         CONTAINS);
+
+  // Within distance 5km: Minster statisfies this, s.t. all three geometries
+  // from the right are expected to be returned.
+  SweeperTestResult testResultWithinDist;
+  runParsingAndSweeper(qec, "uni-separate", "de", {WITHIN_DIST, 5000},
+                       testResultWithinDist, true);
+  checkSweeperTestResult(vMap, testResultWithinDist,
+                         {{{WITHIN_DIST, vIdCampus, vIdGkAllee, 0},
+                           {WITHIN_DIST, vIdCampus, vIdUni, 0},
+                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.01}},
+                          {},
+                          {},
+                          4,
+                          0,
+                          1,
+                          3},
+                         WITHIN_DIST);
+}
+
+TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
+  // Case 3: Large bounding box which contains half of the geometries
+  // Left: Approximate boundary of Germany
+  // Right: All other test geometries (3x in Freiburg, 1x in London, Paris and
+  // New York)
+  auto kg = buildLibSJTestDataset(true, false, false);
+  auto qec = buildQec(kg, true);
+
+  auto [vMap, nMap] = resolveValIdTable(qec, 7);
+
+  auto vIdGermany = getValId(nMap, "approx-de");
+  auto vIdMinster = getValId(nMap, "minster");
+  auto vIdUni = getValId(nMap, "uni");
+  auto vIdGkAllee = getValId(nMap, "gk-allee");
+  auto vIdLondon = getValId(nMap, "london");
+  auto vIdParis = getValId(nMap, "eiffel");
+
+  // Intersects with prefiltering: Three geometries in Germany intersect, the
+  // other three don't and can be excluded by prefiltering
+  SweeperTestResult testResultIntersects;
+  runParsingAndSweeper(qec, "approx-de", "other", {INTERSECTS},
+                       testResultIntersects, true);
+  const SweeperResultWithIds expectedResultIntersects{
+      {INTERSECTS, vIdGermany, vIdMinster, 0},
+      {INTERSECTS, vIdGermany, vIdUni, 0},
+      {INTERSECTS, vIdGermany, vIdGkAllee, 0}};
+  checkSweeperTestResult(vMap, testResultIntersects,
+                         {expectedResultIntersects, boundingBoxGermany,
+                          boundingBoxGermanPlaces, 4, 3, 1, 3},
+                         INTERSECTS, true);
+
+  // Intersects without prefiltering: Same result but all geometries are checked
+  SweeperTestResult testResultNoFilter;
+  runParsingAndSweeper(qec, "approx-de", "other", {INTERSECTS},
+                       testResultNoFilter, false);
+  checkSweeperTestResult(vMap, testResultNoFilter,
+                         {expectedResultIntersects, boundingBoxGermany,
+                          boundingBoxAllPlaces, 7, 0, 1, 6},
+                         INTERSECTS, true);
+
+  // Within distance of 1 000 km: London and Paris are outside of the bounding
+  // box of the left side (Germany) but within the distance range, New York is
+  // outside
+  SweeperTestResult testResultWithinDist;
+  runParsingAndSweeper(qec, "approx-de", "other", {WITHIN_DIST, 1'000'000},
+                       testResultWithinDist, true);
+  checkSweeperTestResult(vMap, testResultWithinDist,
+                         {{{WITHIN_DIST, vIdGermany, vIdUni, 0},
+                           {WITHIN_DIST, vIdGermany, vIdMinster, 0},
+                           {WITHIN_DIST, vIdGermany, vIdGkAllee, 0},
+                           {WITHIN_DIST, vIdGermany, vIdLondon, 426521.1497},
+                           {WITHIN_DIST, vIdGermany, vIdParis, 314975.6311}},
+                          {},
+                          {},
+                          6,
+                          1,
+                          1,
+                          5},
+                         WITHIN_DIST);
+}
+
+// Test for other utility functions related to geometry prefiltering
 
 // _____________________________________________________________________________
 TEST(SpatialJoinTest, prefilterBoxToLatLng) {
-  // TODO SpatialJoinAlgorithms::prefilterBoxToLatLng;
+  util::geo::DBox b1{{1, 2}, {3, 4}};
+  auto b1WebMerc = boxToWebMerc(b1);
+  auto result1 = SpatialJoinAlgorithms::prefilterBoxToLatLng(b1WebMerc);
+  ASSERT_TRUE(result1.has_value());
+  checkPrefilterBox(result1.value(), b1);
+
+  ASSERT_FALSE(
+      SpatialJoinAlgorithms::prefilterBoxToLatLng(std::nullopt).has_value());
 }
 
 // _____________________________________________________________________________
 TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
-  // TODO SpatialJoinAlgorithms::prefilterGeoByBoundingBox;
-}
-
-// _____________________________________________________________________________
-TEST(SpatialJoinTest, BoundingBoxPrefilter) {
-  // Create a `QueryExecutionContext` on a `GeoVocabulary` which holds various
-  // literals. In particular, prefiltering can be applied using the Germany
-  // bounding box.
-  using enum SpatialJoinType;
-
-  // No intersections
-  auto kg = buildLibSJTestDataset();
+  auto kg = buildLibSJTestDataset(true, false, false);
   auto qec = buildQec(kg, true);
+  const auto& index = qec->getIndex();
 
-  auto boundingBoxOnlyGermany = makeAggregatedBoundingBox(
-      {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee});
+  auto [vMap, nMap] = resolveValIdTable(qec, 7);
 
-  auto [vMap, nMap] = resolveValIdTable(qec);
-  ASSERT_EQ(vMap.size(), 6);
-  ASSERT_EQ(nMap.size(), 6);
-  SweeperTestResult testResult;
-  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResult, true);
-  SweeperTestResult expected{{}, boundingBoxOnlyGermany, {}, 3, 3, 3, 0};
-  checkSweeperTestResult(vMap, testResult, expected, INTERSECTS, true);
+  auto idxUni = getValId(nMap, "uni").getVocabIndex();
+  auto idxLondon = getValId(nMap, "london").getVocabIndex();
+  auto idxNewYork = getValId(nMap, "lib").getVocabIndex();
 
-  // Repeat without prefilter
-  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResult, false);
-  expected = {{}, {}, {}, 6, 0, 3, 3};
-  checkSweeperTestResult(vMap, testResult, expected, INTERSECTS);
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxUni));
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxLondon));
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxNewYork));
 
-  // Intersects de
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxUniAndLondon, index, idxUni));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxUniAndLondon, index, idxLondon));
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxUniAndLondon, index, idxNewYork));
 
-  auto kgWithOnlyUni = buildLibSJTestDataset(false, true, true);
-  auto qecWithOnlyUni = buildQec(kgWithOnlyUni, true);
-
-  auto [vMapOnlyU, nMapOnlyU] = resolveValIdTable(qecWithOnlyUni);
-  ASSERT_EQ(vMapOnlyU.size(), nMapOnlyU.size());
-  runParsingAndSweeper(qecWithOnlyUni, "uni-separate", "de", {INTERSECTS},
-                       testResult, true);
-
-  auto x = nMapOnlyU["uni-separate"];
-  auto y = nMapOnlyU["gk-allee"];
-  auto y2 = nMapOnlyU["uni"];
-  ASSERT_EQ(x.getDatatype(), Datatype::VocabIndex);
-  ASSERT_EQ(y.getDatatype(), Datatype::VocabIndex);
-  ASSERT_EQ(y2.getDatatype(), Datatype::VocabIndex);
-
-  expected = {
-      {{INTERSECTS, x, y, 0}, {INTERSECTS, x, y2, 0}}, {}, {}, 3, 1, 1, 2};
-  checkSweeperTestResult(vMapOnlyU, testResult, expected, INTERSECTS);
-
-  runParsingAndSweeper(qecWithOnlyUni, "uni-separate", "de",
-                       {WITHIN_DIST, 5000}, testResult, true);
-  auto y3 = nMapOnlyU["minster"];
-  expected = {{{WITHIN_DIST, x, y, 0},
-               {WITHIN_DIST, x, y2, 0},
-               {WITHIN_DIST, x, y3, 2225.01}},
-              {},
-              {},
-              4,
-              0,
-              1,
-              3};
-  checkSweeperTestResult(vMapOnlyU, testResult, expected, WITHIN_DIST);
-
-  //
-
-  auto kgAll = buildLibSJTestDataset(true, false, false);
-  auto qecAll = buildQec(kgAll, true);
-
-  auto [vMapA, nMapA] = resolveValIdTable(qecAll);
-  runParsingAndSweeper(qecAll, "approx-de", "other", {INTERSECTS}, testResult,
-                       true);
-  auto xA = getValId(nMapA, "approx-de");
-  auto yA = nMapA["minster"];
-  auto yA2 = nMapA["uni"];
-  auto yA3 = nMapA["gk-allee"];
-  auto bb = ad_utility::GeometryInfo::getBoundingBox(approximatedAreaGermany);
-  ASSERT_TRUE(bb.has_value());
-  auto bbU = ad_utility::detail::boundingBoxToUtilBox(bb.value());
-
-  expected = {{{INTERSECTS, xA, yA, 0},
-               {INTERSECTS, xA, yA2, 0},
-               {INTERSECTS, xA, yA3, 0}},
-              bbU,
-              boundingBoxOnlyGermany,
-              4,
-              3,
-              1,
-              3};
-  checkSweeperTestResult(vMapA, testResult, expected, INTERSECTS, true);
-  runParsingAndSweeper(qecAll, "approx-de", "other", {INTERSECTS}, testResult,
-                       false);
-  expected.numElementsInSweeper_ = 7;
-  expected.numElementsSkippedByPrefilter_ = 0;
-  expected.numElementsAddedLeft_ = 1;
-  expected.numElementsAddedRight_ = 6;
-  auto expectedBoundingBoxRightNoFilter = makeAggregatedBoundingBox(
-      {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee,
-       areaLondonEye, areaStatueOfLiberty, areaEiffelTower});
-  expected.boxAfterAddingRight_ = expectedBoundingBoxRightNoFilter;
-  checkSweeperTestResult(vMapA, testResult, expected, INTERSECTS, true);
-
-  //
-  auto yA4 = nMapA["london"];
-  auto yA5 = nMapA["eiffel"];
-  runParsingAndSweeper(qecAll, "approx-de", "other", {WITHIN_DIST, 1'000'000},
-                       testResult, true);
-  // TODO project
-  expected = {{{WITHIN_DIST, xA, yA, 0},
-               {WITHIN_DIST, xA, yA2, 0},
-               {WITHIN_DIST, xA, yA3, 0},
-               {WITHIN_DIST, xA, yA4, 426521.1497},
-               {WITHIN_DIST, xA, yA5, 314975.6311}},
-              {},
-              {},
-              6,
-              1,
-              1,
-              5};
-  checkSweeperTestResult(vMapA, testResult, expected, WITHIN_DIST);
-
-  // TODO check boxes
-
-  // also test maxdist because of extension of bounding box (e.g. uni-tf in
-  // first run, minster in second, maxdist 50km)
-
-  // all of them also without prefiltering , should be more to parse but same
-  // result
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxOtherPlaces, index, idxUni));
 }
 
 }  // namespace
