@@ -1,6 +1,7 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Authors: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
@@ -10,6 +11,7 @@
 #define QLEVER_SRC_UTIL_TYPETRAITS_H
 
 #include <concepts>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -214,9 +216,9 @@ CPP_template(typename Tuple,
         std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 // Examples:
 static_assert(
-    std::is_same_v<
-        LiftedTuple<std::tuple<int, bool, char>, std::vector>,
-        std::tuple<std::vector<int>, std::vector<bool>, std::vector<char>>>);
+    std::is_same_v<LiftedTuple<std::tuple<int, bool, char>, std::optional>,
+                   std::tuple<std::optional<int>, std::optional<bool>,
+                              std::optional<char>>>);
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
@@ -226,9 +228,9 @@ CPP_template(typename Variant, template <typename> typename TypeLifter)(
         std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
 // Examples:
 static_assert(
-    std::is_same_v<
-        LiftedVariant<std::variant<int, bool, char>, std::vector>,
-        std::variant<std::vector<int>, std::vector<bool>, std::vector<char>>>);
+    std::is_same_v<LiftedVariant<std::variant<int, bool, char>, std::optional>,
+                   std::variant<std::optional<int>, std::optional<bool>,
+                                std::optional<char>>>);
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
 CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
