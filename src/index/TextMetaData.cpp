@@ -15,21 +15,23 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   assert(_blocks.size() > 0);
   assert(_blocks.size() == _blockUpperBoundWordIds.size());
 
-  // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
-                             _blockUpperBoundWordIds.end(), lower);
+  // Binary search in the sorted _blockUpperBoundWordIds vector. This points to
+  // the first element _blockUpperBoundWordIds that is >= lower.
+  auto it = ql::ranges::lower_bound(_blockUpperBoundWordIds.begin(),
+                                    _blockUpperBoundWordIds.end(), lower);
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
-    --it;
+    return {_blocks.back()};
   }
 
-  // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
-                                  _blockUpperBoundWordIds.end(), upper);
-  // Same as for normal it. This has to be done since the range is [lower,
-  // upper] as opposed to `[lower, upper)`.
+  // Binary search in the sorted _blockUpperBoundWordIds vector. This points to
+  // the first element of _blockUpperBoundWordIds that is > upper. We want this
+  // element since this block potentially contains elements of the range.
+  // Since the range is [lower, upper] as opposed to `[lower, upper)`.
   // TODO<joka921, flixtastic> fix this inconsistency with the usual C++
   // conventions.
+  auto upperIt = ql::ranges::upper_bound(_blockUpperBoundWordIds.begin(),
+                                         _blockUpperBoundWordIds.end(), upper);
   if (upperIt == _blockUpperBoundWordIds.end()) {
     --upperIt;
   }

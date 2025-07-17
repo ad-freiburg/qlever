@@ -25,7 +25,7 @@ constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 constexpr inline uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
-constexpr inline size_t MIN_WORD_PREFIX_SIZE = 4;
+constexpr inline size_t NOF_WORD_POSTINGS_IN_TEXT_BLOCK = 50'000;
 constexpr inline char PREFIX_CHAR = '*';
 
 constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
