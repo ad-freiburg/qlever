@@ -14,10 +14,13 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
+#include "util/geo/Geo.h"
 
 // _____________________________________________________________________________
 namespace libSJPrefilterTestHelpers {
@@ -41,28 +44,38 @@ using GeoRelationWithIds = std::tuple<SpatialJoinType, ValueId, ValueId>;
 
 struct SweeperTestResult {
   SweeperResultWithIds results_;
-  util::geo::I32Box boxAfterAddingLeft_;
-  util::geo::I32Box boxAfterAddingRight_;
+  util::geo::DBox boxAfterAddingLeft_;
+  util::geo::DBox boxAfterAddingRight_;
   size_t numElementsInSweeper_;
   size_t numElementsSkippedByPrefilter_;
+  size_t numElementsAddedLeft_;
+  size_t numElementsAddedRight_;
 };
 
 using TestGeometry = std::tuple<std::string, std::string, bool>;
 
 const std::vector<TestGeometry> geometries{
     {"uni", areaUniFreiburg, true},
-    // {"uni-p", pointUniFreiburg, true},
     {"minster", areaMuenster, true},
-    // {"minster-p", pointMinster, true},
     {"gk-allee", lineSegmentGeorgesKoehlerAllee, true},
     {"london", areaLondonEye, false},
     {"lib", areaStatueOfLiberty, false},
     {"eiffel", areaEiffelTower, false},
-    // {"eiffel-p", pointEiffelTower, false},
     // Special
     {"approx-de", approximatedAreaGermany, true},
     {"uni-separate", areaTFCampus, true},
 };
+
+util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
+  auto projPoint = latLngToWebMerc(p);
+  return {static_cast<int>(projPoint.getX() * PREC),
+          static_cast<int>(projPoint.getY() * PREC)};
+}
+
+util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
+  return {webMercProjFunc(b.getLowerLeft()),
+          webMercProjFunc(b.getUpperRight())};
+}
 
 // Helpers for testing the `LibspatialjoinAlgorithm`
 // TODO configurable for different tests
@@ -92,6 +105,7 @@ std::pair<ValIdToGeomName, GeomNameToValId> resolveValIdTable(
     QueryExecutionContext* qec) {
   ValIdToGeomName vMap;
   GeomNameToValId nMap;
+  std::cout << "***********************************" << std::endl;
   for (const auto& [name, wkt, isInGermany] : geometries) {
     VocabIndex idx;
     if (!qec->getIndex().getVocab().getId(wkt, &idx)) {
@@ -155,9 +169,8 @@ sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                        size_t t, const char* a, const char* b,
                        const char* pred) {
-    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-      results[t].push_back(
-          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
+    if (joinTypeVal == WITHIN_DIST) {
+      results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else if (pred[0] == static_cast<char>(joinTypeVal)) {
       results[t].push_back(
@@ -261,27 +274,30 @@ void runParsingAndSweeper(QueryExecutionContext* qec, QET leftChild,
     resultMatched.emplace_back(sjType, valIdLeft, valIdRight, dist);
   }
 
-  testResult = {resultMatched, box, boxRight, numEl, numSkipped};
+  auto boxLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(box);
+  ASSERT_TRUE(boxLatLng.has_value());
+
+  auto boxRightLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(boxRight);
+  ASSERT_TRUE(boxRightLatLng.has_value());
+
+  testResult = {resultMatched, boxLatLng.value(), boxRightLatLng.value(),
+                numEl,         numSkipped,        countLeft,
+                countRight};
 }
 
 //
-void checkPrefilterBox(const util::geo::I32Box& actual,
-                       const util::geo::I32Box& expected,
+void checkPrefilterBox(const util::geo::DBox& actualLatLng,
+                       const util::geo::DBox& expectedLatLng,
                        Loc loc = Loc::current()) {
   auto l = generateLocationTrace(loc);
 
-  auto actualLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(actual);
-  ASSERT_TRUE(actualLatLng.has_value());
-  auto expectedLatLng = SpatialJoinAlgorithms::prefilterBoxToLatLng(expected);
-  ASSERT_TRUE(expectedLatLng.has_value());
-
-  auto lla = actualLatLng.value().getLowerLeft();
-  auto lle = expectedLatLng.value().getLowerLeft();
+  auto lla = actualLatLng.getLowerLeft();
+  auto lle = expectedLatLng.getLowerLeft();
   ASSERT_NEAR(lla.getX(), lle.getX(), 0.0001);
   ASSERT_NEAR(lla.getY(), lle.getY(), 0.0001);
 
-  auto ura = actualLatLng.value().getUpperRight();
-  auto ure = expectedLatLng.value().getUpperRight();
+  auto ura = actualLatLng.getUpperRight();
+  auto ure = expectedLatLng.getUpperRight();
   ASSERT_NEAR(ura.getX(), ure.getX(), 0.0001);
   ASSERT_NEAR(ura.getY(), ure.getY(), 0.0001);
 }
@@ -300,15 +316,14 @@ void checkSweeperTestResult(
     if (checkOnlySjType.has_value() && sjType != checkOnlySjType.value()) {
       continue;
     }
-    ASSERT_THAT(valIdLeft.getDatatype(),
-                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
-                                 ::testing::Eq(Datatype::GeoPoint)));
-    ASSERT_THAT(valIdRight.getDatatype(),
-                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
-                                 ::testing::Eq(Datatype::GeoPoint)));
+    ASSERT_EQ(valIdLeft.getDatatype(), Datatype::VocabIndex);
+    ASSERT_EQ(valIdRight.getDatatype(), Datatype::VocabIndex);
+    ASSERT_TRUE(vMap.contains(valIdLeft));
+    ASSERT_TRUE(vMap.contains(valIdRight));
 
-    std::cout << " EXPECTED " << (int)(sjType) << " " << vMap.at(valIdLeft)
-              << " " << (valIdRight) << " " << dist << std::endl;
+    std::cout << " EXPECTED " << SpatialJoinTypeString[(int)sjType] << " "
+              << vMap.at(valIdLeft) << " " << vMap.at(valIdRight) << " " << dist
+              << std::endl;
     expectedResultsAndDist[{sjType, valIdLeft, valIdRight}] = dist;
   }
   size_t countActual = 0;
@@ -316,15 +331,14 @@ void checkSweeperTestResult(
     if (checkOnlySjType.has_value() && sjType != checkOnlySjType.value()) {
       continue;
     }
-    ASSERT_THAT(valIdLeft.getDatatype(),
-                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
-                                 ::testing::Eq(Datatype::GeoPoint)));
-    ASSERT_THAT(valIdRight.getDatatype(),
-                ::testing::AnyOf(::testing::Eq(Datatype::VocabIndex),
-                                 ::testing::Eq(Datatype::GeoPoint)));
+    ASSERT_EQ(valIdLeft.getDatatype(), Datatype::VocabIndex);
+    ASSERT_EQ(valIdRight.getDatatype(), Datatype::VocabIndex);
+    ASSERT_TRUE(vMap.contains(valIdLeft));
+    ASSERT_TRUE(vMap.contains(valIdRight));
 
-    std::cout << " ACTUAL " << (int)(sjType) << " " << vMap.at(valIdLeft) << " "
-              << vMap.at(valIdRight) << " " << dist << std::endl;
+    std::cout << " ACTUAL " << SpatialJoinTypeString[(int)sjType] << " "
+              << vMap.at(valIdLeft) << " " << vMap.at(valIdRight) << " " << dist
+              << std::endl;
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
     ASSERT_TRUE(expectedResultsAndDist.contains(key));
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
@@ -341,6 +355,8 @@ void checkSweeperTestResult(
   ASSERT_EQ(actual.numElementsInSweeper_, expected.numElementsInSweeper_);
   ASSERT_EQ(actual.numElementsSkippedByPrefilter_,
             expected.numElementsSkippedByPrefilter_);
+  ASSERT_EQ(actual.numElementsAddedLeft_, expected.numElementsAddedLeft_);
+  ASSERT_EQ(actual.numElementsAddedRight_, expected.numElementsAddedRight_);
 }
 
 }  // namespace libSJPrefilterTestHelpers
@@ -381,23 +397,28 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
       buildIndexScan(qec, {"?obj2", std::string{"<wkt-other>"}, "?geom2"});
   auto rightChildDEForOnlyUni = buildIndexScan(
       qecWithOnlyUni, {"?obj2", std::string{"<wkt-de>"}, "?geom2"});
+  auto kgAll = buildLibSJTestDataset(true, false, false);
+  auto qecAll = buildQec(kgAll, true);
+  auto leftChildAll = buildIndexScan(
+      qecAll, {"?obj1", std::string{"<wkt-approx-de>"}, "?geom1"});
+  auto rightChildAll =
+      buildIndexScan(qecAll, {"?obj2", std::string{"<wkt-other>"}, "?geom2"});
+
   auto [vMap, nMap] = resolveValIdTable(qec);
   SweeperTestResult testResult;
   runParsingAndSweeper(qec, leftChild, rightChild, {INTERSECTS}, testResult,
                        true);
-  SweeperTestResult expected{{}, {}, {}, 3, 3};
+  SweeperTestResult expected{{}, {}, {}, 3, 3, 3, 0};
   checkSweeperTestResult(vMap, testResult, expected);
 
   // Repeat without prefilter
   runParsingAndSweeper(qec, leftChild, rightChild, {INTERSECTS}, testResult,
                        false);
-  expected = {{}, {}, {}, 6, 0};
+  expected = {{}, {}, {}, 6, 0, 3, 3};
   checkSweeperTestResult(vMap, testResult, expected);
 
   // Intersects de
-  std::cout << "***********************************\n"
-            // << kgWithOnlyUni
-            << std::endl;
+
   auto [vMapOnlyU, nMapOnlyU] = resolveValIdTable(qecWithOnlyUni);
   ASSERT_EQ(vMapOnlyU.size(), nMapOnlyU.size());
   runParsingAndSweeper(qecWithOnlyUni, leftChildOnlyUni, rightChildDEForOnlyUni,
@@ -405,11 +426,97 @@ TEST(SpatialJoinTest, BoundingBoxPrefilter) {
 
   auto x = nMapOnlyU["uni-separate"];
   auto y = nMapOnlyU["gk-allee"];
-  ASSERT_TRUE(y.getDatatype() == Datatype::VocabIndex);
   auto y2 = nMapOnlyU["uni"];
+  ASSERT_TRUE(x.getDatatype() == Datatype::VocabIndex);
+  ASSERT_TRUE(y.getDatatype() == Datatype::VocabIndex);
+  ASSERT_TRUE(y2.getDatatype() == Datatype::VocabIndex);
 
-  expected = {{{INTERSECTS, x, y, 0}, {INTERSECTS, x, y2, 0}}, {}, {}, 3, 1};
+  expected = {
+      {{INTERSECTS, x, y, 0}, {INTERSECTS, x, y2, 0}}, {}, {}, 3, 1, 1, 2};
   checkSweeperTestResult(vMapOnlyU, testResult, expected);
+
+  runParsingAndSweeper(qecWithOnlyUni, leftChildOnlyUni, rightChildDEForOnlyUni,
+                       {WITHIN_DIST, 5000}, testResult, true);
+  auto y3 = nMapOnlyU["minster"];
+  expected = {{{WITHIN_DIST, x, y, 0},
+               {WITHIN_DIST, x, y2, 0},
+               {WITHIN_DIST, x, y3, 2225.01}},
+              {},
+              {},
+              4,
+              0,
+              1,
+              3};
+  checkSweeperTestResult(vMapOnlyU, testResult, expected);
+
+  auto [vMapA, nMapA] = resolveValIdTable(qecAll);
+  runParsingAndSweeper(qecAll, leftChildAll, rightChildAll, {INTERSECTS},
+                       testResult, true);
+  auto xA = nMapA["approx-de"];
+  auto yA = nMapA["minster"];
+  auto yA2 = nMapA["uni"];
+  auto yA3 = nMapA["gk-allee"];
+  auto bb = ad_utility::GeometryInfo::getBoundingBox(approximatedAreaGermany);
+  ASSERT_TRUE(bb.has_value());
+  auto bbU = ad_utility::detail::boundingBoxToUtilBox(bb.value());
+
+  auto expectedBoundingBoxRight = absl::StrCat(
+      "\"GEOMETRYCOLLECTION(", areaMuenster, ", ", areaUniFreiburg, ", ",
+      lineSegmentGeorgesKoehlerAllee, ")\"^^<", GEO_WKT_LITERAL, ">");
+  auto bb2 = ad_utility::GeometryInfo::getBoundingBox(expectedBoundingBoxRight);
+  ASSERT_TRUE(bb2.has_value());
+  auto bbA = ad_utility::detail::boundingBoxToUtilBox(bb2.value());
+
+  expected = {{{INTERSECTS, xA, yA, 0},
+               {INTERSECTS, xA, yA2, 0},
+               {INTERSECTS, xA, yA3, 0}},
+              bbU,
+              bbA,
+              4,
+              3,
+              1,
+              3};
+  checkSweeperTestResult(vMapA, testResult, expected, std::nullopt, true);
+  runParsingAndSweeper(qecAll, leftChildAll, rightChildAll, {INTERSECTS},
+                       testResult, false);
+  expected.numElementsInSweeper_ = 7;
+  expected.numElementsSkippedByPrefilter_ = 0;
+  expected.numElementsAddedLeft_ = 1;
+  expected.numElementsAddedRight_ = 6;
+  auto expectedBoundingBoxRightNoFilter =
+      absl::StrCat("\"GEOMETRYCOLLECTION(", areaMuenster, ", ", areaUniFreiburg,
+                   ", ", lineSegmentGeorgesKoehlerAllee, ", ", areaLondonEye,
+                   ", ", areaStatueOfLiberty, ", ", areaEiffelTower, ")\"^^<",
+                   GEO_WKT_LITERAL, ">");
+  auto bb2NoFilter = ad_utility::GeometryInfo::getBoundingBox(
+      expectedBoundingBoxRightNoFilter);
+  ASSERT_TRUE(bb2NoFilter.has_value());
+  auto bbANoFilter =
+      ad_utility::detail::boundingBoxToUtilBox(bb2NoFilter.value());
+  // TODO also check boxes?
+  expected.boxAfterAddingRight_ = bbANoFilter;
+  checkSweeperTestResult(vMapA, testResult, expected, std::nullopt, true);
+
+  //
+  auto yA4 = nMapA["london"];
+  auto yA5 = nMapA["eiffel"];
+  runParsingAndSweeper(qecAll, leftChildAll, rightChildAll,
+                       {WITHIN_DIST, 1'000'000}, testResult, true);
+  // TODO project
+  expected = {{{WITHIN_DIST, xA, yA, 0},
+               {WITHIN_DIST, xA, yA2, 0},
+               {WITHIN_DIST, xA, yA3, 0},
+               {WITHIN_DIST, xA, yA4, 426521.1497},
+               {WITHIN_DIST, xA, yA5, 314975.6311}},
+              {},
+              {},
+              6,
+              1,
+              1,
+              5};
+  checkSweeperTestResult(vMapA, testResult, expected);
+
+  // TODO check boxes
 
   // {{{INTERSECTS, nMap["uni"], nMap["gk-allee"], 0}}, {}, {}, 5, 4};
 
