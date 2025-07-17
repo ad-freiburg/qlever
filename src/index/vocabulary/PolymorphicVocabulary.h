@@ -14,33 +14,12 @@
 
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
-
-// Forward declaration for concept
-class PolymorphicVocabulary;
-
-// Only the `SplitVocabulary` currently needs a special handling for
-// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
-// dynamically hold a `SplitVocabulary`)
-template <typename T>
-CPP_concept HasSpecialGetPositionOfWord =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary>;
-
-// As a safeguard for the future: Concept that a vocabulary does NOT require a
-// special handling for `getPositionOfWord`. Note that `CompressedVocabulary`
-// may not be checked via `isInstantiation` here because we do not know about
-// the requirements for `getPositionOfWord` of its underlying vocabulary in
-// general.
-template <typename T>
-CPP_concept HasDefaultGetPositionOfWord =
-    ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
-                          CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>>;
 
 // A vocabulary that can at runtime choose between different vocabulary
 // implementations. The only restriction is, that a vocabulary can only be read
@@ -150,9 +129,12 @@ class PolymorphicVocabulary {
     return std::visit(
         [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
           using T = std::decay_t<decltype(vocab)>;
-          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesGeometryInfo<T>) {
             return vocab.getGeoInfo(index);
           } else {
+            static_assert(NeverProvidesGeometryInfo<T>);
             return std::nullopt;
           }
         },
@@ -165,9 +147,12 @@ class PolymorphicVocabulary {
     return std::visit(
         [](const auto& vocab) {
           using T = std::decay_t<decltype(vocab)>;
-          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesGeometryInfo<T>) {
             return vocab.isGeoInfoAvailable();
           } else {
+            static_assert(NeverProvidesGeometryInfo<T>);
             return false;
           }
         },
