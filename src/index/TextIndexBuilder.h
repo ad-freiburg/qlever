@@ -13,6 +13,8 @@ class TextIndexBuilder : public IndexImpl {
   using WordMap = ad_utility::HashMap<WordIndex, Score>;
   using EntityMap = ad_utility::HashMap<VocabIndex, Score>;
 
+  size_t nofWordPostingsInTextBlock_ = NOF_WORD_POSTINGS_IN_TEXT_BLOCK;
+
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
                             const std::string& onDiskBase)
@@ -35,12 +37,18 @@ class TextIndexBuilder : public IndexImpl {
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile) const;
 
+  void setNofWordPostingsInTextBlock(size_t nofWordsInTextBlock) {
+    nofWordPostingsInTextBlock_ = nofWordsInTextBlock;
+  }
+
  private:
   size_t processWordsForVocabulary(const std::string& contextFile,
                                    bool addWordsFromLiterals);
 
   void processWordsForInvertedLists(const std::string& contextFile,
-                                    bool addWordsFromLiterals, TextVec& vec);
+                                    bool addWordsFromLiterals,
+                                    WordTextVec& wordTextVec,
+                                    EntityTextVec& entityTextVec);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -52,7 +60,7 @@ class TextIndexBuilder : public IndexImpl {
       std::string contextFile, bool addWordsFromLiterals) const;
 
   void processEntityCaseDuringInvertedListProcessing(
-      const WordsFileLine& line, EntityMap& entitiesInContxt,
+      const WordsFileLine& line, EntityMap& entitiesInContext,
       size_t& nofLiterals, size_t& entityNotFoundErrorMsgCount) const;
 
   void processWordCaseDuringInvertedListProcessing(const WordsFileLine& line,
@@ -62,26 +70,13 @@ class TextIndexBuilder : public IndexImpl {
   static void logEntityNotFound(const std::string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
-  void addContextToVector(TextVec& vec, TextRecordIndex context,
-                          const WordMap& words,
-                          const EntityMap& entities) const;
+  void addContextToVectors(WordTextVec& wordTextVec,
+                           EntityTextVec& entityTextVec,
+                           TextRecordIndex context, const WordMap& words,
+                           const EntityMap& entities) const;
 
-  void createTextIndex(const std::string& filename, TextVec& vec);
-
-  /// Calculate the block boundaries for the text index. The boundary of a
-  /// block is the index in the `textVocab_` of the last word that belongs
-  /// to this block.
-  /// This implementation takes a reference to an `IndexImpl` and a callable,
-  /// that is called once for each blockBoundary, with the `size_t`
-  /// blockBoundary as a parameter. Internally uses
-  /// `calculateBlockBoundariesImpl`.
-  template <typename I, typename BlockBoundaryAction>
-  static void calculateBlockBoundariesImpl(
-      I&& index, const BlockBoundaryAction& blockBoundaryAction);
-
-  /// Calculate the block boundaries for the text index, and store them in the
-  /// blockBoundaries_ member.
-  void calculateBlockBoundaries();
+  void createTextIndex(const std::string& filename, WordTextVec& wordTextVec,
+                       EntityTextVec& entityTextVec);
 };
 
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H

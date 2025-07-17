@@ -114,13 +114,6 @@ IdTable IndexImpl::mergeTextBlockResults(
 }
 
 // _____________________________________________________________________________
-TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
-  return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
-                          wordIndex) -
-         blockBoundaries_.begin();
-}
-
-// _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
   textIndexFile_.open(std::string(onDiskBase_ + ".text.index").c_str(), "r");

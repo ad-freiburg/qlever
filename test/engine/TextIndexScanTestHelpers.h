@@ -11,6 +11,21 @@
 #include "global/IndexTypes.h"
 
 namespace textIndexScanTestHelpers {
+constexpr std::string_view inlineSeparator = "\t";
+constexpr std::string_view lineSeparator = "\n";
+
+inline std::string createWordsFileLineAsString(std::string_view word,
+                                               bool isEntity, size_t contextId,
+                                               size_t score) {
+  return absl::StrCat(word, inlineSeparator, isEntity, inlineSeparator,
+                      contextId, inlineSeparator, score, lineSeparator);
+};
+
+inline std::string createDocsFileLineAsString(size_t docId,
+                                              std::string_view docContent) {
+  return absl::StrCat(docId, inlineSeparator, docContent, lineSeparator);
+};
+
 // NOTE: this function exploits a "lucky accident" that allows us to
 // obtain the textRecord using indexToString.
 // TODO: Implement a more elegant/stable version
@@ -98,6 +113,48 @@ inline std::string combineToString(const std::string& text,
   ss << "Text: " << text << ", Word: " << word << std::endl;
   return ss.str();
 }
+
+// Struct to reduce code duplication
+struct TextResult {
+  QueryExecutionContext* qec_;
+  const Result& result_;
+  bool isPrefixSearch_ = true;
+  bool scoreIsInt_ = true;
+
+  auto getRow(size_t row) const {
+    return combineToString(getTextRecordFromResultTable(qec_, result_, row),
+                           getWordFromResultTable(qec_, result_, row));
+  }
+
+  auto getId(size_t row) const {
+    return getTextRecordIdFromResultTable(qec_, result_, row);
+  }
+
+  auto getEntity(size_t row) const {
+    return getEntityFromResultTable(qec_, result_, row);
+  }
+
+  auto getTextRecord(size_t row) const {
+    return getTextRecordFromResultTable(qec_, result_, row);
+  }
+
+  auto getWord(size_t row) const {
+    return getWordFromResultTable(qec_, result_, row);
+  }
+
+  auto getScore(size_t row) const {
+    return getScoreFromResultTable(qec_, result_, row, isPrefixSearch_,
+                                   scoreIsInt_);
+  }
+
+  void checkListOfWords(const std::vector<std::string>& expectedWords,
+                        size_t& startingIndex) const {
+    for (const auto& word : expectedWords) {
+      ASSERT_EQ(word, getWord(startingIndex));
+      ++startingIndex;
+    }
+  }
+};
 }  // namespace textIndexScanTestHelpers
 
 #endif  // QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H

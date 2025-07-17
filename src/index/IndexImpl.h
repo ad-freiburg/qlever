@@ -103,8 +103,12 @@ class IndexImpl {
  public:
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // Block Id, isEntity, Context Id, Word Id, Score
-  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
+  // Word Id (uint_64t), Context Id (TextRecordIndex), Score (float)
+  using WordTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 3>;
+  // Word Id (uint_64t), Context Id (TextRecordIndex), Entity Id (VocabIndex),
+  // Score (float)
+  using EntityTextVec =
+      ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -136,6 +140,7 @@ class IndexImpl {
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
+  // A block boundary is always the last WordId in the block.
   std::vector<WordIndex> blockBoundaries_;
   off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
@@ -657,8 +662,6 @@ class IndexImpl {
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       TextScanMode textScanMode) const;
-
-  TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
