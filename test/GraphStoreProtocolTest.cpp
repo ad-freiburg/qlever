@@ -218,4 +218,20 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                 {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                              std::monostate{}}});
   expectConvert(iri("<a>"), {}, {});
+  expectConvert(
+      iri("<a>"), {{{iri("<a>")}, {iri("<b>")}, TC("_:a")}},
+      {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"),
+                                   bn.getBlankNodeIndex("a"), iri("<a>")}});
+
+  expectConvert(
+      iri("<a>"),
+      {{TC("_:b"), {iri("<b>")}, iri("<c>")},
+       {TC("_:b"), {iri("<d>")}, iri("<e>")},
+       {TC("_:c"), {iri("<f>")}, iri("<g>")}},
+      {SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("b"), iri("<b>"),
+                                   iri("<c>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("b"), iri("<d>"),
+                                   iri("<e>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("c"), iri("<f>"),
+                                   iri("<g>"), iri("<a>")}});
 }

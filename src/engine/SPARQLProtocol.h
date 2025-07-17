@@ -15,6 +15,8 @@ class SPARQLProtocol {
   FRIEND_TEST(SPARQLProtocolTest, parseQueryPOST);
   FRIEND_TEST(SPARQLProtocolTest, parseUpdatePOST);
   FRIEND_TEST(SPARQLProtocolTest, parsePOST);
+  FRIEND_TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect);
+  FRIEND_TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect);
 
   static constexpr std::string_view contentTypeUrlEncoded =
       "application/x-www-form-urlencoded";

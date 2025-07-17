@@ -57,7 +57,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
       [&blankNodeAdder](const TripleComponent& tc) -> TripleComponent {
     if (tc.isString()) {
       AD_CORRECTNESS_CHECK(tc.getString().starts_with("_"));
-      return blankNodeAdder.getBlankNodeIndex(tc.toString());
+      // Remove the `_:`.
+      return blankNodeAdder.getBlankNodeIndex(tc.toString().substr(2));
     } else {
       return tc;
     }

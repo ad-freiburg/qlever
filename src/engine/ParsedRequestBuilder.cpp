@@ -20,12 +20,9 @@ ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
 // ____________________________________________________________________________
 bool ParsedRequestBuilder::isGraphStoreOperationDirect() const {
   auto result = boost::urls::parse_path(parsedRequest_.path_);
-  if (result.has_error()) {
-    throw std::runtime_error(
-        absl::StrCat("Failed determine if operation uses direct graph "
-                     "identification for graph store protocol: \"",
-                     std::string{parsedRequest_.path_}, "\"."));
-  }
+  // The path being parsed is the path we got from parsing the request target,
+  // so it should be valid.
+  AD_CORRECTNESS_CHECK(!result.has_error());
   auto segments = result.value();
   return !segments.empty() && segments.front() == "http-graph-store";
 }
@@ -61,6 +58,7 @@ bool ParsedRequestBuilder::isGraphStoreOperationIndirect() const {
 // ____________________________________________________________________________
 void ParsedRequestBuilder::extractGraphStoreOperationIndirect() {
   // SPARQL Graph Store HTTP Protocol with indirect graph identification
+  AD_CORRECTNESS_CHECK(isGraphStoreOperationIndirect());
   if (parameterIsContainedExactlyOnce("graph") &&
       parameterIsContainedExactlyOnce("default")) {
     throw std::runtime_error(

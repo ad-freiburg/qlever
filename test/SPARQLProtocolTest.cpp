@@ -487,11 +487,25 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       parse(makePostRequest("/", URLENCODED, "access-token=foo&query=bar")),
       ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                       Query{"bar", {}}));
+  // We add the leading `/` if it is missing.
+  EXPECT_THAT(parse(makeGetRequest("?query=foo")),
+              ParsedRequestIs("/", std::nullopt, {}, Query{"foo", {}}));
   // Update
   EXPECT_THAT(parse(makePostRequest("/?access-token=foo", UPDATE,
                                     "INSERT DATA { <a> <b> <c> }")),
               ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                               Update{"INSERT DATA { <a> <b> <c> }", {}}));
+  // Graph Store Protocol (Direct Graph Identification)
+  EXPECT_THAT(
+      parse(makeRequest(http::verb::get, "/http-graph-store/foo",
+                        {{http::field::host, {"example.com"}}})),
+      ParsedRequestIs("/http-graph-store/foo", std::nullopt, {},
+                      GraphStoreOperation{
+                          Iri("<http://example.com/http-graph-store/foo>")}));
+  // Graph Store Protocol (Indirect Graph Identification)
+  EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
 
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -499,4 +513,31 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       testing::StrEq("Request method \"PATCH\" not supported (only GET and "
                      "POST are supported; PUT, DELETE, HEAD and PATCH for "
                      "graph store protocol are not yet supported)"));
+  AD_EXPECT_THROW_WITH_MESSAGE(parse(makeGetRequest(" ")),
+                               testing::StrEq("Failed to parse URL: \"/ \"."));
+}
+
+// _____________________________________________________________________________________________
+TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
+  EXPECT_THAT(SPARQLProtocol::parseGraphStoreProtocolIndirect(
+                  makeGetRequest("/?default&access-token=foo")),
+              ParsedRequestIs("/", "foo",
+                              {{"default", {""}}, {"access-token", {"foo"}}},
+                              GraphStoreOperation{DEFAULT{}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SPARQLProtocol::parseGraphStoreProtocolIndirect(
+          makeGetRequest("/http-graph-store/foo.ttol")),
+      testing::HasSubstr(
+          R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)"));
+}
+
+// _____________________________________________________________________________________________
+TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect) {
+  EXPECT_THAT(
+      SPARQLProtocol::parseGraphStoreProtocolDirect(
+          makeRequest(http::verb::get, "/http-graph-store/foo",
+                      {{http::field::host, "example.com"}})),
+      ParsedRequestIs("/http-graph-store/foo", std::nullopt, {},
+                      GraphStoreOperation{
+                          Iri("<http://example.com/http-graph-store/foo>")}));
 }
