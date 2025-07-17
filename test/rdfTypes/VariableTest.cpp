@@ -21,7 +21,7 @@ TEST(Variable, legalAndIllegalNames) {
 
   // World emoji + chinese symbol for "world" (according to ChatGPT) are also
   // valid.
-  EXPECT_NO_THROW(Variable("?hello_world_\U0001F30D\u4E16", true));
+  EXPECT_NO_THROW(Variable("?hello_world_\U0001F30D\u4E16\u754C", true));
 
   // Asian scriptures are valid
 
@@ -76,20 +76,20 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
 // _____________________________________________________________________________
 TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
 #ifndef QLEVER_RUN_EXPENSIVE_TESTS
-  GTEST_SKIP();
+  // GTEST_SKIP();
 #endif
   size_t numErrors = 0;
   size_t numSuccesful = 0;
+  std::string buffer;
+  buffer.resize(U8_MAX_LENGTH);
   auto testChar = [&](UChar32 cp) {
-    std::string s;
-    s.resize(U8_MAX_LENGTH);
     UBool isError = false;
     int32_t offset = 0;
-    U8_APPEND(s.data(), offset, U8_MAX_LENGTH, cp, isError);
+    U8_APPEND(buffer.data(), offset, U8_MAX_LENGTH, cp, isError);
     if (isError) {
       throw std::runtime_error("Invalid UChar32 code point.");
     }
-    s.resize(offset);
+    std::string_view s{buffer.data(), buffer.data() + offset};
     try {
       Variable("?x").getMatchingWordVariable(s);
       numSuccesful++;

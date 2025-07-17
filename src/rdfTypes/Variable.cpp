@@ -69,21 +69,19 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 }
 
 namespace {
-// Returns true for a  subset of characters that are valid in variable names.
+// Returns true for a subset of characters that are valid in variable names.
 // This roughly corresponds to `PN_CHARS_BASE` from the SPARQL 1.1 grammar with
 // the characters 0-9 also being allowed. Note that this deliberately does not
-// contain the (valid) character `_`, as we use that character for escaping and
+// contain the (valid) character `_`, as we use that character for escaping, and
 // it thus has to be escaped itself.
 constexpr bool codePointSuitableForVariableName(UChar32 cp) {
-  constexpr auto validRanges = []() {
-    using A = std::array<UChar32, 2>;
-    return std::array{
-        A{'A', 'Z'},       A{'a', 'z'},       A{'0', '9'},
-        A{0x00C0, 0x00D6}, A{0x00D8, 0x00F6}, A{0x00F8, 0x02FF},
-        A{0x0370, 0x037D}, A{0x037F, 0x1FFF}, A{0x200C, 0x200D},
-        A{0x2070, 0x218F}, A{0x2C00, 0x2FEF}, A{0x3001, 0xD7FF},
-        A{0xF900, 0xFDCF}, A{0xFDF0, 0xFFFD}, A{0x10000, 0xEFFFF}};
-  }();
+  using A = std::array<UChar32, 2>;
+  constexpr std::array validRanges{
+      A{'A', 'Z'},       A{'a', 'z'},       A{'0', '9'},
+      A{0x00C0, 0x00D6}, A{0x00D8, 0x00F6}, A{0x00F8, 0x02FF},
+      A{0x0370, 0x037D}, A{0x037F, 0x1FFF}, A{0x200C, 0x200D},
+      A{0x2070, 0x218F}, A{0x2C00, 0x2FEF}, A{0x3001, 0xD7FF},
+      A{0xF900, 0xFDCF}, A{0xFDF0, 0xFFFD}, A{0x10000, 0xEFFFF}};
   return ql::ranges::any_of(validRanges, [cp](const auto& arr) {
     return cp >= arr[0] && cp <= arr[1];
   });
@@ -105,7 +103,7 @@ void Variable::appendEscapedWord(std::string_view word, std::string& target) {
     if (codePointSuitableForVariableName(codePoint)) {
       target.append(ptr, i);
     } else {
-      absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
+      absl::StrAppend(&target, "_", codePoint, "_");
     }
     ptr += i;
   }
