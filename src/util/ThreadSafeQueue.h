@@ -19,36 +19,8 @@
 #include "util/Iterators.h"
 #include "util/jthread.h"
 
-namespace {
-
-template <typename Queue, typename Producer, typename MakeQueueTask>
-struct QueueGenerator
-    : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
-  QueueGenerator(const size_t queueSize, const size_t numThreads,
-                 Producer producer, MakeQueueTask makeQueueTask)
-      : queue{queueSize},
-        numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
-    std::cout << "GeneratorCore starting threads " << numThreads << "\n";
-    for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
-      threads.emplace_back(
-          makeQueueTask(queue, producer, numUnfinishedThreads));
-    }
-  }
-
-  ~QueueGenerator() { queue.finish(); }
-
-  std::optional<typename Queue::value_type> get() override {
-    return queue.pop();
-  }
-
-  Queue queue;
-  std::vector<ad_utility::JThread> threads;
-  std::atomic<int64_t> numUnfinishedThreads;
-  MakeQueueTask makeQueueTask;
-};
-
-}  // namespace
 namespace ad_utility::data_structures {
+
 /// A thread safe, multi-consumer, multi-producer queue.
 template <typename T>
 class ThreadSafeQueue {
@@ -305,9 +277,33 @@ ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
     size_t queueSize, size_t numThreads, Producer producer) {
   AD_CONTRACT_CHECK(numThreads > 0u);
 
+  using MakeQueueTask = decltype(&detail::makeQueueTask<Queue, Producer>);
+
+  struct QueueGenerator
+      : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
+    std::vector<ad_utility::JThread> threads;
+    Queue queue;
+    std::atomic<int64_t> numUnfinishedThreads;
+    MakeQueueTask makeQueueTask;
+
+    QueueGenerator(const size_t queueSize, const size_t numThreads,
+                   Producer producer, MakeQueueTask makeQueueTask)
+        : queue{queueSize},
+          numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
+      std::cout << "GeneratorCore starting threads " << numThreads << "\n";
+      for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
+        threads.emplace_back(
+            makeQueueTask(queue, producer, numUnfinishedThreads));
+      }
+    }
+
+    std::optional<typename Queue::value_type> get() override {
+      return queue.pop();
+    }
+  };
+
   auto makeQueueTask{detail::makeQueueTask<Queue, Producer>};
-  auto generator{std::make_unique<
-      QueueGenerator<Queue, Producer, decltype(makeQueueTask)>>(
+  auto generator{std::make_unique<QueueGenerator>(
       queueSize, numThreads, std::move(producer), std::move(makeQueueTask))};
 
   return ad_utility::InputRangeTypeErased<typename Queue::value_type>{
