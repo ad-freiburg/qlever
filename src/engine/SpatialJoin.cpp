@@ -93,7 +93,7 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
     using T = std::decay_t<decltype(config)>;
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
-    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
+    } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
       return std::nullopt;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
@@ -183,7 +183,7 @@ std::string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
-    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
+    } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
       return absl::StrCat(
           "Spatial Join of ", left, " and ", right, " using ",
           SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));

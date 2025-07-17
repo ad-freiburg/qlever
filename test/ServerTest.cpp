@@ -16,6 +16,8 @@
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 
+using nlohmann::json;
+
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;

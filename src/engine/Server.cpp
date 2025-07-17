@@ -20,6 +20,7 @@
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SPARQLProtocol.h"
 #include "global/RuntimeParameters.h"
@@ -134,16 +135,22 @@ void Server::run(const std::string& indexBaseName, bool useText,
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
+    std::optional<boost::beast::http::status> httpResponseStatus;
     try {
       co_await process(request, sendWithAccessControlHeaders);
+    } catch (const HttpError& e) {
+      httpResponseStatus = e.status();
+      exceptionErrorMsg = e.what();
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
-    if (exceptionErrorMsg) {
+    if (exceptionErrorMsg.has_value()) {
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-      auto badRequestResponse = createBadRequestResponse(
-          absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
-      co_await sendWithAccessControlHeaders(std::move(badRequestResponse));
+      auto status =
+          httpResponseStatus.value_or(boost::beast::http::status::bad_request);
+      auto response = createHttpResponseFromString(
+          exceptionErrorMsg.value(), status, request, MediaType::textPlain);
+      co_return co_await sendWithAccessControlHeaders(std::move(response));
     }
   };
 
@@ -588,7 +595,7 @@ Server::PlannedQuery Server::planQuery(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(
+nlohmann::json Server::composeErrorResponseJson(
     const std::string& query, const std::string& errorMsg,
     const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
@@ -615,7 +622,7 @@ json Server::composeErrorResponseJson(
 }
 
 // _____________________________________________________________________________
-json Server::composeStatsJson() const {
+nlohmann::json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
   result["git-hash-index"] = index_.getGitShortHash();
@@ -749,8 +756,12 @@ CPP_template_def(typename RequestT)(
 
   if (mediaType.has_value()) {
     return {mediaType.value()};
-  } else {
+  }
+
+  try {
     return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
+  } catch (const std::exception& e) {
+    throw HttpError(http::status::not_acceptable, e.what());
   }
 }
 
@@ -871,12 +882,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-ordered_json Server::createResponseMetadataForUpdate(
+nlohmann::ordered_json Server::createResponseMetadataForUpdate(
     const Index& index, SharedLocatedTriplesSnapshot snapshot,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
-  ordered_json response;
+  nlohmann::ordered_json response;
   response["update"] = ad_utility::truncateOperationString(
       plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
@@ -1069,15 +1080,15 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   std::optional<ExceptionMetadata> metadata;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
+  } catch (const HttpError& e) {
+    responseStatus = e.status();
+    exceptionErrorMsg = e.what();
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
-    exceptionErrorMsg = e.what();
-  } catch (const UnknownMediatypeError& e) {
-    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached

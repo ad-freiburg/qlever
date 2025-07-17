@@ -28,11 +28,6 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
-using nlohmann::json;
-using nlohmann::ordered_json;
-using std::string;
-using std::vector;
-
 template <typename Operation>
 CPP_concept QueryOrUpdate =
     ad_utility::SameAsAny<Operation,
@@ -41,6 +36,7 @@ CPP_concept QueryOrUpdate =
 
 //! The HTTP Server used.
 class Server {
+  using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
@@ -170,7 +166,7 @@ class Server {
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
-  static ordered_json createResponseMetadataForUpdate(
+  static nlohmann::ordered_json createResponseMetadataForUpdate(
       const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,

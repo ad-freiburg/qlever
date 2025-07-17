@@ -11,12 +11,14 @@
 // ____________________________________________________________________________
 void GraphStoreProtocol::throwUnsupportedMediatype(
     const std::string_view& mediatype) {
-  throw UnsupportedMediatypeError(absl::StrCat(
-      "Mediatype \"", mediatype,
-      "\" is not supported for SPARQL Graph Store HTTP Protocol in QLever. "
-      "Supported: ",
-      toString(ad_utility::MediaType::turtle), ", ",
-      toString(ad_utility::MediaType::ntriples), "."));
+  throw HttpError(
+      boost::beast::http::status::unsupported_media_type,
+      absl::StrCat(
+          "Mediatype \"", mediatype,
+          "\" is not supported for SPARQL Graph Store HTTP Protocol in QLever. "
+          "Supported: ",
+          toString(ad_utility::MediaType::turtle), ", ",
+          toString(ad_utility::MediaType::ntriples), "."));
 }
 
 // ____________________________________________________________________________
