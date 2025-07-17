@@ -80,15 +80,16 @@ Result Filter::computeResult(bool requestLaziness) {
   if (requestLaziness) {
     return {Result::LazyResult{
                 ad_utility::OwningView{subRes->idTables()} |
-                ql::views::transform([this, subRes](auto&& idTableVocabPair) {
+                ql::views::transform([this, subRes](auto& idTableVocabPair) {
                   IdTable filteredTable = this->filterIdTable(
                       subRes->sortedBy(), idTableVocabPair.idTable_,
                       idTableVocabPair.localVocab_);
-                  // Create a new IdTableVocabPair with the filtered table
-                  // Clone/copy the LocalVocab since we can't move it
-                  LocalVocab clonedVocab = idTableVocabPair.localVocab_.clone();
-                  return Result::IdTableVocabPair{std::move(filteredTable),
-                                                  std::move(clonedVocab)};
+                  // Note: the `clone` is shallow and therefore cheap, but
+                  // necessary to establish invariants in the `LocalVocab`
+                  // class.
+                  return Result::IdTableVocabPair{
+                      std::move(filteredTable),
+                      std::move(idTableVocabPair.localVocab_.clone())};
                 }) |
                 ql::views::filter(
                     [](const auto& pair) { return !pair.idTable_.empty(); })},
