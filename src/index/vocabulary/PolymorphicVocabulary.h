@@ -141,8 +141,7 @@ class PolymorphicVocabulary {
         vocab_);
   };
 
-  // Check if `getGeoInfo` can return results because there is a
-  // `GeoVocabulary`.
+  // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   bool isGeoInfoAvailable() const {
     return std::visit(
         [](const auto& vocab) {
