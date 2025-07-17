@@ -141,7 +141,7 @@ SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() const {
+bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
   if constexpr (ad_utility::anyIsInstantiationOf<GeoVocabulary, S...>) {
     return true;
   } else {
