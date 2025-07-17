@@ -101,27 +101,13 @@ struct DocsFileLine {
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
-    auto isAscii = [](char c) { return static_cast<unsigned char>(c) < 128; };
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
-    auto isAsciiWordChar = [isAscii, isWordChar](char c) {
-      return isAscii(c) && isWordChar(c);
-    };
-    // Found non ascii characters.
     auto pos = static_cast<int64_t>(unsignedPos);
     auto size = static_cast<int64_t>(text.size());
+    // Note: If the Unicode handling ever becomes a bottleneck for ASCII only
+    // words, we can integrate a fast path here that handles the ascii
+    // characters. But before tackling such microoptimizations, the text index
+    // builder should first be parallelized.
     while (pos < size) {
-      // First a fast path for ascii characters.
-      auto found =
-          std::find_if_not(text.begin() + pos, text.end(), isAsciiWordChar);
-      if (found == text.end()) {
-        return {text.end(), text.end()};
-      }
-      if (isAscii(*found)) {
-        return {found, found + 1};
-      }
-      pos = found - text.begin();
-      // Note: `pos` now points to a non-ascii character that is still within
-      // bounds.
       size_t oldPos = pos;
       UChar32 codePoint;
       U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(text.data()), pos, size,

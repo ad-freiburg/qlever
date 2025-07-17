@@ -19,6 +19,12 @@ TEST(Variable, legalAndIllegalNames) {
   EXPECT_NO_THROW(Variable("$x", true));
   EXPECT_NO_THROW(Variable("?ql_matching_word_thür", true));
 
+  // World emoji + chinese symbol for "world" (according to ChatGPT) are also
+  // valid.
+  EXPECT_NO_THROW(Variable("?hello_world_\U0001F30D\u4E16", true));
+
+  // Asian scriptures are valid
+
   // No leading ? or $
   auto matcher = ::testing::HasSubstr("not a valid SPARQL variable");
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("x", true), matcher);
