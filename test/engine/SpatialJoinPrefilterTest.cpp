@@ -542,7 +542,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
                           2},
                          CONTAINS);
 
-  // Within distance 5km: Minster statisfies this, s.t. all three geometries
+  // Within distance 5km: Minster satisfies this, s.t. all three geometries
   // from the right are expected to be returned.
   SweeperTestResult testResultWithinDist;
   runParsingAndSweeper(qec, "uni-separate", "de", {WITHIN_DIST, 5000},
