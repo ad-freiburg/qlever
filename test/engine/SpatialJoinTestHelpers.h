@@ -40,14 +40,15 @@ const std::string pointStatueOfLiberty =
     makePointLiteral("-74.04454", "40.68925");
 const std::string pointEiffelTower = makePointLiteral("2.29451", "48.85825");
 
-// Building 101
+// University of Freiburg, Faculty of Engineering, Building 101
+// (osmway:33903391)
 const std::string areaUniFreiburg = makeAreaLiteral(
     "7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
     "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
     "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
     "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612");
 
-// Uni TF Campus (osmway:4498466)
+// University of Freiburg, Faculty of Engineering (TF) Campus (osmway:4498466)
 const std::string areaTFCampus = makeAreaLiteral(
     "7.8278416 48.016703,7.8282441 48.0164402,7.8283204 48.016369,7.828855 "
     "48.0159642,7.8288834 48.0159258,7.8288818 48.0158942,7.8288738 "
