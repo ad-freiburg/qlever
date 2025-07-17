@@ -7,7 +7,7 @@
 
 #include <variant>
 
-#include "parser/Iri.h"
+#include "rdfTypes/Iri.h"
 
 using GraphRef = ad_utility::triple_component::Iri;
 // Denotes the target graph for an operation. Here the target is the default

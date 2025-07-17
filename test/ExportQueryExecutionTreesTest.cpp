@@ -9,10 +9,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
-#include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -1671,7 +1671,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       pq, qet, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
-  for (std::string& chunk : jsonStream) {
+  for (std::string_view chunk : jsonStream) {
     aggregateString += chunk;
   }
   nlohmann::json json = nlohmann::json::parse(aggregateString);

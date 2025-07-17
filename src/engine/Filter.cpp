@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/RuntimeParameters.h"
 
 using std::endl;
 using std::string;
@@ -32,7 +33,9 @@ Filter::Filter(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  setPrefilterExpressionForChildren();
+  if (RuntimeParameters().get<"enable-prefilter-on-index-scans">()) {
+    setPrefilterExpressionForChildren();
+  }
 }
 
 // _____________________________________________________________________________

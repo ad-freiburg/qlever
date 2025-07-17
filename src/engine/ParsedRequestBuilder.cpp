@@ -94,7 +94,8 @@ void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
 
 // ____________________________________________________________________________
 template <typename Operation>
-void ParsedRequestBuilder::extractOperationIfSpecified(string_view paramName) {
+void ParsedRequestBuilder::extractOperationIfSpecified(
+    std::string_view paramName) {
   auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
       parsedRequest_.parameters_, paramName);
   if (operation.has_value()) {
@@ -106,9 +107,9 @@ void ParsedRequestBuilder::extractOperationIfSpecified(string_view paramName) {
 }
 
 template void ParsedRequestBuilder::extractOperationIfSpecified<Query>(
-    string_view paramName);
+    std::string_view paramName);
 template void ParsedRequestBuilder::extractOperationIfSpecified<Update>(
-    string_view paramName);
+    std::string_view paramName);
 
 // ____________________________________________________________________________
 GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
@@ -137,7 +138,7 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   std::optional<std::string> tokenFromAuthorizationHeader;
   std::optional<std::string> tokenFromParameter;
   if (request.find(http::field::authorization) != request.end()) {
-    string_view authorization = request[http::field::authorization];
+    std::string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
     if (!authorization.starts_with(prefix)) {
       throw std::runtime_error(absl::StrCat(

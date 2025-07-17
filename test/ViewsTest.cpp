@@ -234,3 +234,41 @@ TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());
 }
+
+TEST(Views, CallbackOnEndView) {
+  using namespace ad_utility;
+  size_t numCalls{0};
+  auto callback = [&numCalls]() { ++numCalls; };
+
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    for (auto it = view.begin(); it != view.end(); ++it) {
+      EXPECT_EQ(numCalls, 0u);
+    }
+    // Callback invoked because of the end of the range.
+    EXPECT_EQ(numCalls, 1);
+  }
+  // Callback not invoked again during destruction.
+  EXPECT_EQ(numCalls, 1);
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    for ([[maybe_unused]] size_t i : integerRange(5ul)) {
+      EXPECT_EQ(numCalls, 1u);
+    }
+    // Callback not invoked, because because end was not reached yet.
+    EXPECT_EQ(numCalls, 1);
+  }
+  EXPECT_EQ(numCalls, 2);
+
+  {
+    auto viewA = CallbackOnEndView{ad_utility::integerRange(10u), callback};
+    auto view = std::move(viewA);
+    for (auto it = view.begin(); it != view.end(); ++it) {
+      EXPECT_EQ(numCalls, 2u);
+    }
+    // Callback invoked because of the end of the range.
+    EXPECT_EQ(numCalls, 3);
+  }
+  // Callback not invoked for the destructor of the moved-from `viewA`.
+  EXPECT_EQ(numCalls, 3);
+}

@@ -53,12 +53,14 @@ class CartesianProductJoin : public Operation {
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
-  string getDescriptor() const override { return "Cartesian Product Join"; }
+  std::string getDescriptor() const override {
+    return "Cartesian Product Join";
+  }
   size_t getResultWidth() const override;
 
   size_t getCostEstimate() override;
@@ -84,7 +86,7 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
