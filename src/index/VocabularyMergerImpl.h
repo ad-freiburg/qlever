@@ -290,7 +290,7 @@ inline void writeMappedIdsToExtVec(
 
 // _________________________________________________________________________________________________________
 inline void writePartialVocabularyToFile(const ItemVec& els,
-                                         const string& fileName) {
+                                         const std::string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(1'000'000'000);
@@ -366,7 +366,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const string& mmapFilename) {
+    const std::string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto& [partialId, globalId] : vec) {

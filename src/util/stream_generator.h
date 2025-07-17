@@ -5,37 +5,26 @@
 #ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 #define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
-// For some include orders the EOF constant is not defined although `<cstdio>`
-// was included, so we define it manually.
-// TODO<joka921> Find out where this happens.
-#ifndef EOF
-#define EOF std::char_traits<char>::eof()
-#endif
-
-#include <boost/iostreams/device/back_inserter.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
 #include <coroutine>
 #include <exception>
 #include <sstream>
 
-#include "util/Concepts.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility::streams {
 
-template <size_t MIN_BUFFER_SIZE>
+template <size_t BUFFER_SIZE>
 class basic_stream_generator;
 
 namespace detail {
-namespace io = boost::iostreams;
-/**
- * A Promise for a generator type needs to indicate if a coroutine should
- * actually get suspended on co_yield or co_await or if there's a shortcut
- * that allows to continue execution without interruption. The standard library
- * provides std::suspend_always and std::suspend_never for the most common
- * cases, but this class allows to chose between one of the two options
- * dynamically using a simple bool.
- */
+// A Promise for a generator type needs to indicate if a coroutine should
+// actually get suspended on co_yield or co_await or if there's a shortcut
+// that allows to continue execution without interruption. The standard library
+// provides std::suspend_always and std::suspend_never for the most common
+// cases, but this class allows to chose between one of the two options
+// dynamically using a simple bool.
 class suspend_sometimes {
   const bool _suspend;
 
@@ -46,93 +35,126 @@ class suspend_sometimes {
   constexpr void await_resume() const noexcept {}
 };
 
-/**
- * The promise type that backs the generator type and handles storage and
- * suspension-related decisions.
- */
-template <size_t MIN_BUFFER_SIZE>
+// The promise type that backs the generator type and handles storage and
+// suspension-related decisions.
+template <size_t BUFFER_SIZE>
 class stream_generator_promise {
-  std::ostringstream _stream;
-  std::exception_ptr _exception;
+  std::array<char, BUFFER_SIZE> data_;
+  size_t currentIndex_ = 0;
+  static_assert(BUFFER_SIZE > 0, "Buffer size must be greater than zero");
+  // Temporarily store data that didn't fit into the buffer so far.
+  std::string_view overflow_;
+  std::exception_ptr exception_;
 
  public:
-  using value_type = std::stringbuf;
-  using reference_type = value_type&;
+  using value_type = std::string_view;
+  using reference_type = std::string_view;
   using pointer_type = value_type*;
   stream_generator_promise() = default;
 
-  basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
+  basic_stream_generator<BUFFER_SIZE> get_return_object() noexcept;
 
   constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
   constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
-  /**
-   * Handles values passed using co_yield and stores their respective
-   * string representations inside a buffer.
-   *
-   * @tparam T The Type being passed
-   * @param value The value being passed via co_yield
-   * @return Whether or not the coroutine should get suspended (currently based
-   * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
-   */
-  CPP_template(typename S)(requires ad_utility::Streamable<S>) suspend_sometimes
-      yield_value(const S& value) noexcept {
-    // _stream appends its result to _value
-    _stream << value;
-    return suspend_sometimes{isBufferLargeEnough()};
+  // Handles strings passed using co_yield and copies them to the aggregated
+  // buffer until that buffer is full. If the buffer is too small to fit the
+  // value in its entirety, the coroutine is suspended (and thus the value kept
+  // alive) until the buffer has been consumed and has sufficient capacity. In
+  // this case the buffer will be filled to maximum capacity, so eventually
+  // every bit of `value` is written, then the coroutine will be resumed.
+  suspend_sometimes yield_value(std::string_view value) noexcept {
+    if (isBufferLargeEnough(value)) {
+      std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
+      currentIndex_ += value.size();
+      overflow_ = {};
+      // Only suspend if we reached the maximum capacity exactly.
+      return suspend_sometimes{currentIndex_ == BUFFER_SIZE};
+    }
+    size_t fittingSize = BUFFER_SIZE - currentIndex_;
+    std::memcpy(data_.data() + currentIndex_, value.data(), fittingSize);
+    currentIndex_ = BUFFER_SIZE;
+    overflow_ = value.substr(fittingSize);
+    return suspend_sometimes{true};
   }
 
-  void unhandled_exception() { _exception = std::current_exception(); }
+  // Overload so we can also pass char values, template such that all types that
+  // implicitly convert to char are not accepted.
+  CPP_template(typename CharT)(requires SimilarTo<CharT, char>)
+      suspend_sometimes yield_value(CharT value) {
+    std::string_view singleView{&value, 1};
+    // This is only safe to do if we can write into the buffer immediately.
+    AD_CORRECTNESS_CHECK(isBufferLargeEnough(singleView));
+    // Disable false positive warning on GCC.
+    DISABLE_OVERREAD_WARNINGS
+    return yield_value(singleView);
+    ENABLE_OVERREAD_WARNINGS
+  }
+
+  // Return true if the overflow has been completely consumed.
+  bool doneProcessing() const noexcept {
+    return overflow_.empty() && currentIndex_ == 0;
+  }
+
+  // Reset buffer and start writing the overflow in it. Return true if the
+  // buffer still has capacity after this, false otherwise.
+  bool commitOverflow() noexcept {
+    currentIndex_ = 0;
+    return yield_value(overflow_).await_ready();
+  }
+
+  void unhandled_exception() { exception_ = std::current_exception(); }
 
   constexpr void return_void() const noexcept {}
 
-  reference_type value() noexcept { return *_stream.rdbuf(); }
+  reference_type value() const noexcept {
+    return std::string_view{data_.data(), currentIndex_};
+  }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
   std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() {
-    if (_exception) {
-      std::rethrow_exception(_exception);
+    if (exception_) {
+      std::rethrow_exception(exception_);
     }
   }
 
  private:
-  bool isBufferLargeEnough() {
-    return static_cast<size_t>(_stream.tellp()) >= MIN_BUFFER_SIZE;
+  // Return true if the buffer still has enough capacity remaining to copy
+  // `value` in its entirety.
+  bool isBufferLargeEnough(std::string_view value) const {
+    return currentIndex_ + value.size() <= BUFFER_SIZE;
   }
 };
 
 struct stream_generator_sentinel {};
 
-template <size_t MIN_BUFFER_SIZE>
+template <size_t BUFFER_SIZE>
 class stream_generator_iterator {
-  using promise_type = stream_generator_promise<MIN_BUFFER_SIZE>;
+  using promise_type = stream_generator_promise<BUFFER_SIZE>;
   using coroutine_handle = std::coroutine_handle<promise_type>;
 
  public:
   using iterator_category = std::input_iterator_tag;
-  // What type should we use for counting elements of a potentially infinite
-  // sequence?
   using difference_type = std::ptrdiff_t;
-  using value_type = std::string;
-  using reference = value_type&;
+  using value_type = std::string_view;
+  using reference = std::string_view;
   using pointer = value_type*;
 
   // Iterator needs to be default-constructible to satisfy the Range concept.
-  stream_generator_iterator() noexcept : _coroutine(nullptr) {}
+  stream_generator_iterator() noexcept : coroutine_{nullptr} {}
 
   explicit stream_generator_iterator(coroutine_handle coroutine) noexcept
-      : _coroutine(coroutine),
-        _value{std::move(coroutine.promise().value()).str()} {}
+      : coroutine_{coroutine} {}
 
   friend bool operator==(const stream_generator_iterator& it,
                          stream_generator_sentinel) noexcept {
     // If the coroutine is done processing, but the aggregated string
-    // has not been read so far the iterator needs to increment its value
-    // one last time.
-    return !it._coroutine || (it._coroutine.done() && it._value.empty());
+    // has not been read so far the iterator needs to increment its value again.
+    return !it.coroutine_ ||
+           (it.coroutine_.done() && it.coroutine_.promise().doneProcessing());
   }
 
   friend bool operator!=(const stream_generator_iterator& it,
@@ -151,19 +173,16 @@ class stream_generator_iterator {
   }
 
   stream_generator_iterator& operator++() {
-    _value.clear();
-    _coroutine.promise().value().str(std::move(_value));
-    // if the coroutine is done but the remaining aggregated
-    // buffer has not been cleared yet the iterator needs to be incremented one
-    // last time
-    if (!_coroutine.done()) {
-      _coroutine.resume();
+    // Process overflow first, true means that the buffer still has capacity
+    // left.
+    if (coroutine_.promise().commitOverflow()) {
+      if (!coroutine_.done()) {
+        coroutine_.resume();
+      }
+      if (coroutine_.done()) {
+        coroutine_.promise().rethrow_if_exception();
+      }
     }
-    if (_coroutine.done()) {
-      _coroutine.promise().rethrow_if_exception();
-    }
-
-    _value = std::move(_coroutine.promise().value()).str();
 
     return *this;
   }
@@ -173,69 +192,65 @@ class stream_generator_iterator {
   // not support post-increment
   void operator++(int) { (void)operator++(); }
 
-  reference operator*() noexcept { return _value; }
+  reference operator*() noexcept { return coroutine_.promise().value(); }
 
   pointer operator->() noexcept { return std::addressof(operator*()); }
 
  private:
-  coroutine_handle _coroutine;
-  value_type _value;
+  coroutine_handle coroutine_;
 };
 
 }  // namespace detail
 
-/**
- * The implementation of the generator.
- * Use this as the return type of your coroutine.
- *
- * Example:
- * @code
- * stream_generator example() {
- *   co_yield "Hello World";
- * }
- */
-template <size_t MIN_BUFFER_SIZE>
+// The implementation of the generator.
+// Use this as the return type of your coroutine.
+//
+// Example:
+// stream_generator example() {
+//   co_yield "Hello World";
+// }
+template <size_t BUFFER_SIZE>
 class [[nodiscard]] basic_stream_generator {
  public:
-  using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
-  using iterator = detail::stream_generator_iterator<MIN_BUFFER_SIZE>;
+  using promise_type = detail::stream_generator_promise<BUFFER_SIZE>;
+  using iterator = detail::stream_generator_iterator<BUFFER_SIZE>;
   using value_type = typename iterator::value_type;
 
  private:
-  std::coroutine_handle<promise_type> _coroutine = nullptr;
+  std::coroutine_handle<promise_type> coroutine_ = nullptr;
 
   static basic_stream_generator noOpGenerator() { co_return; }
 
  public:
-  basic_stream_generator() : basic_stream_generator(noOpGenerator()){};
+  basic_stream_generator() : basic_stream_generator(noOpGenerator()) {}
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
-      : _coroutine{other._coroutine} {
-    other._coroutine = nullptr;
+      : coroutine_{other.coroutine_} {
+    other.coroutine_ = nullptr;
   }
 
   basic_stream_generator(const basic_stream_generator& other) = delete;
 
   ~basic_stream_generator() {
-    if (_coroutine) {
-      _coroutine.destroy();
+    if (coroutine_) {
+      coroutine_.destroy();
     }
   }
 
   basic_stream_generator& operator=(basic_stream_generator&& other) noexcept {
-    std::swap(_coroutine, other._coroutine);
+    std::swap(coroutine_, other.coroutine_);
     return *this;
   }
 
   iterator begin() {
-    if (_coroutine) {
-      _coroutine.resume();
-      if (_coroutine.done()) {
-        _coroutine.promise().rethrow_if_exception();
+    if (coroutine_) {
+      coroutine_.resume();
+      if (coroutine_.done()) {
+        coroutine_.promise().rethrow_if_exception();
       }
     }
 
-    return iterator{_coroutine};
+    return iterator{coroutine_};
   }
 
   detail::stream_generator_sentinel end() noexcept {
@@ -243,18 +258,18 @@ class [[nodiscard]] basic_stream_generator {
   }
 
  private:
-  friend class detail::stream_generator_promise<MIN_BUFFER_SIZE>;
+  friend class detail::stream_generator_promise<BUFFER_SIZE>;
   explicit basic_stream_generator(
       std::coroutine_handle<promise_type> coroutine) noexcept
-      : _coroutine{coroutine} {}
+      : coroutine_{coroutine} {}
 };
 
 namespace detail {
-template <size_t MIN_BUFFER_SIZE>
-inline basic_stream_generator<MIN_BUFFER_SIZE>
-stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
+template <size_t BUFFER_SIZE>
+inline basic_stream_generator<BUFFER_SIZE>
+stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
   using coroutine_handle =
-      std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
+      std::coroutine_handle<stream_generator_promise<BUFFER_SIZE>>;
   return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail

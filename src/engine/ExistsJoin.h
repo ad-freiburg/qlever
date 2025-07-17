@@ -53,14 +53,14 @@ class ExistsJoin : public Operation {
   // All following functions are inherited from `Operation`, see there for
   // comments.
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 
@@ -72,7 +72,7 @@ class ExistsJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {left_.get(), right_.get()};
   }
 

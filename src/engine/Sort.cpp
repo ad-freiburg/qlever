@@ -77,7 +77,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   AD_LOG_DEBUG
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "

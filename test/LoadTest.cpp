@@ -37,6 +37,7 @@ class LoadTest : public ::testing::Test {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
+  ad_utility::BlankNodeManager blankNodeManager_;
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
   // predefined response for testing.
@@ -83,7 +84,7 @@ TEST_F(LoadTest, basicMethods) {
 TEST_F(LoadTest, computeResult) {
   auto expectThrowOnlyIfNotSilent =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<string>& expectedError,
+             const testing::Matcher<std::string>& expectedError,
              ad_utility::source_location loc =
                  ad_utility::source_location::current()) {
         auto g = generateLocationTrace(loc);
@@ -95,21 +96,21 @@ TEST_F(LoadTest, computeResult) {
         Load silentLoad{testQec, pq, sendFunc};
         EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
       };
-  auto expectThrowAlways = [this](parsedQuery::Load pq,
-                                  SendRequestType sendFunc,
-                                  const testing::Matcher<string>& expectedError,
-                                  ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
-    auto g = generateLocationTrace(loc);
-    Load load{testQec, pq, sendFunc};
+  auto expectThrowAlways =
+      [this](parsedQuery::Load pq, SendRequestType sendFunc,
+             const testing::Matcher<std::string>& expectedError,
+             ad_utility::source_location loc =
+                 ad_utility::source_location::current()) {
+        auto g = generateLocationTrace(loc);
+        Load load{testQec, pq, sendFunc};
 
-    AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
-                                 expectedError);
-    pq.silent_ = true;
-    Load silentLoad{testQec, pq, sendFunc};
-    AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
-                                 expectedError);
-  };
+        AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
+                                     expectedError);
+        pq.silent_ = true;
+        Load silentLoad{testQec, pq, sendFunc};
+        AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
+                                     expectedError);
+      };
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
@@ -270,7 +271,8 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(&blankNodeManager_,
+                                                "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

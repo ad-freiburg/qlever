@@ -120,7 +120,8 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
             generator, numDynamicColumns);
-        ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+        ASSERT_THAT(result, ::testing::ElementsAreArray(randomTable))
+            << "k = " << k;
       } else {
         EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
             generator, numDynamicColumns)));
@@ -147,10 +148,10 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low
   // memory limit), but also the case that there is a
-  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
-  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {

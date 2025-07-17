@@ -114,7 +114,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         range-v3
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG b661537be421fee77df40bdffa8f221ead53bb8e  # branch fork-for-qlever
+        GIT_TAG 34f2567718ce085193750b543b5fe654ed4160a6  # branch fork-for-qlever
 )
 
 #################################
@@ -453,7 +453,7 @@ qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

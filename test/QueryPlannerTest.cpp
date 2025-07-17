@@ -53,20 +53,20 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0,
-                     SparqlTriple(Var{"?x"}, "<http://rdf.myprefix.com/myrel>",
-                                  Var{"?y"})),
+                     0, SparqlTriple(Var{"?x"},
+                                     iri("<http://rdf.myprefix.com/myrel>"),
+                                     Var{"?y"})),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      1, SparqlTriple(Var{"?y"},
-                                     "<http://rdf.myprefix.com/ns/myrel>",
+                                     iri("<http://rdf.myprefix.com/ns/myrel>"),
                                      Var{"?z"})),
                  {0, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(Var{"?y"},
-                                     "<http://rdf.myprefix.com/xxx/rel2>",
+                                     iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
                  {0, 1})}));
 
@@ -106,11 +106,11 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    0, SparqlTriple(Var{"?x"}, "<is-a>", iri("<Book>"))),
+                    0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
                 {1}),
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    1, SparqlTriple(Var{"?x"}, "<Author>",
+                    1, SparqlTriple(Var{"?x"}, iri("<Author>"),
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
         }));
@@ -133,12 +133,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -153,14 +153,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -1816,6 +1816,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:within ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:equals ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -2764,7 +2779,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
           {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
           {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
           {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
-          {"sfOverlaps", OVERLAPS}};
+          {"sfOverlaps", OVERLAPS},     {"sfWithin", WITHIN}};
 
   // Run basic query planner test for each of the geo relation functions
   for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
@@ -3043,12 +3058,13 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     TripleComponent object{Variable{"?object"}};
     if (shouldThrow) {
       ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
-                            SparqlTriple{subject, distanceIRI, object}})
+                            SparqlTriple{subject, iri(distanceIRI), object}})
                            .toSpatialJoinConfiguration());
     } else {
-      auto config =
-          parsedQuery::SpatialQuery{SparqlTriple{subject, distanceIRI, object}}
-              .toSpatialJoinConfiguration();
+      auto config = parsedQuery::SpatialQuery{
+          SparqlTriple{
+              subject, iri(distanceIRI),
+              object}}.toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);
@@ -3701,8 +3717,8 @@ TEST(QueryPlanner, TextLimit) {
       h::TextLimit(10,
                    h::Join(wordScan(Var{"?text"}, "test*"),
                            entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
@@ -3714,8 +3730,8 @@ TEST(QueryPlanner, TextLimit) {
           10,
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{
+          Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
@@ -3729,8 +3745,8 @@ TEST(QueryPlanner, TextLimit) {
                        wordScan(Var{"?text"}, "test*"),
                        entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
                        entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
@@ -3746,8 +3762,9 @@ TEST(QueryPlanner, TextLimit) {
               wordScan(Var{"?text"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          vector<Variable>{
+          Var{"?text"},
+          std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
@@ -3764,8 +3781,8 @@ TEST(QueryPlanner, TextLimit) {
               5,
               h::Join(wordScan(Var{"?text1"}, "test*"),
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
-              Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
-              vector<Variable>{
+              Var{"?text1"}, std::vector<Variable>{Var{"?scientist1"}},
+              std::vector<Variable>{
                   Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
           h::TextLimit(
               5,
@@ -3773,8 +3790,9 @@ TEST(QueryPlanner, TextLimit) {
                   wordScan(Var{"?text2"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-              Var{"?text2"}, vector<Variable>{Var{"?author1"}, Var{"?author2"}},
-              vector<Variable>{
+              Var{"?text2"},
+              std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              std::vector<Variable>{
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
@@ -4147,6 +4165,13 @@ TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));
+
+  // Regression test for issue https://github.com/ad-freiburg/qlever/issues/2034
+  h::expect("SELECT * { ?a <a> [] . { SELECT * { ?a <a> [] }}}",
+            h::Join(h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_0"),
+                    h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_1")));
 }
 
 // _____________________________________________________________________________

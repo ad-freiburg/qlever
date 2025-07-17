@@ -128,7 +128,7 @@ class CompactVectorOfStrings {
 
   // Forward iterator for a `CompactVectorOfStrings` that reads directly from
   // disk without buffering the whole `Vector`.
-  static cppcoro::generator<vector_type> diskIterator(string filename);
+  static cppcoro::generator<vector_type> diskIterator(std::string filename);
 
   using Iterator = ad_utility::IteratorForAccessOperator<
       CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,

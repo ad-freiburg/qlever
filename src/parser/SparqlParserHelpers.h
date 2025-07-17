@@ -11,6 +11,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/ParserAndVisitorBase.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
+#include "util/BlankNodeManager.h"
 
 namespace sparqlParserHelpers {
 // The actual `ParserAndVisitor` class that can be used to fully parse SPARQL
@@ -25,13 +26,14 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
   using Base = ParserAndVisitorBase<SparqlQleverVisitor>;
 
  public:
-  explicit ParserAndVisitor(
-      string input,
+  ParserAndVisitor(
+      ad_utility::BlankNodeManager* blankNodeManager, std::string input,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
-      string input, SparqlQleverVisitor::PrefixMap prefixes,
+      ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+      SparqlQleverVisitor::PrefixMap prefixes,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
