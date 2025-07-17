@@ -5,7 +5,7 @@
 
 #include "parser/SpatialQuery.h"
 
-#include "engine/SpatialJoinConfig.h"
+#include "engine/LibSpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
 
@@ -193,8 +193,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Task specification
   SpatialJoinTask task;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    task = SpatialJoinConfig{joinType.value_or(SpatialJoinType::INTERSECTS),
-                             maxDist_};
+    task = LibSpatialJoinConfig{joinType.value_or(SpatialJoinType::INTERSECTS),
+                                maxDist_};
   } else if (maxResults_.has_value()) {
     task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
   } else {
