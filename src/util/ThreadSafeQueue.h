@@ -306,8 +306,7 @@ ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
   auto generator{std::make_unique<QueueGenerator>(
       queueSize, numThreads, std::move(producer), std::move(makeQueueTask))};
 
-  return ad_utility::InputRangeTypeErased<typename Queue::value_type>{
-      std::move(generator)};
+  return ad_utility::InputRangeTypeErased{std::move(generator)};
 }
 
 }  // namespace ad_utility::data_structures
