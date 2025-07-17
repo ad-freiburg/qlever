@@ -17,9 +17,9 @@ namespace ad_utility {
 // members, then often the defaulted move constructors and move assignment
 // operators will have the correct semantics. For example usages see
 // `MmapVector.h` and `IdTable.h`.
-template <typename T, T DefaultValue>
+template <typename T, T DefaultValue, T InitialValue = DefaultValue>
 struct ResetWhenMoved {
-  T value_ = DefaultValue;
+  T value_ = InitialValue;
   ResetWhenMoved() = default;
 
   // Implicit conversion to and from `T`.
