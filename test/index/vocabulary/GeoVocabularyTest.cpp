@@ -41,15 +41,22 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     std::vector<std::string> testLiterals{
         // Invalid literal
-        "\"BLABLIBLU\""
+        "\"Example non-geometry literal\"@en",
+        "\"BLABLIBLU(1 2, 3 4, 5 6, 7 8, 9 0)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Out of range literal
+        "\"POLYGON((1 1, 2 2, 3 450))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
-        "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
-        "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-        "\"LINESTRING(1 1, 2 2, 3 "
-        "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-        "\"POLYGON((1 1, 2 2, 3 "
-        "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+        "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), "
+        "POLYGON((2 4, 4 4, 4 2, 2 2)))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"LINESTRING(1 1, 2 2, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POLYGON((1 1, 2 2, 3 3))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    };
+    std::sort(testLiterals.begin(), testLiterals.end());
 
     for (size_t i = 0; i < testLiterals.size(); i++) {
       auto lit = testLiterals[i];
@@ -81,7 +88,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
               testLiterals.size());
 
     auto wI = geoVocab.lower_bound("\"LINE", ql::ranges::less{});
-    ASSERT_EQ(wI.index(), 2);
+    ASSERT_EQ(wI.index(), 3);
     ASSERT_EQ(wI.word(),
               "\"LINESTRING(1 1, 2 2, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
