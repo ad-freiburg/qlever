@@ -263,7 +263,7 @@ addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
-addLinkAndDiscoverTest(AsyncStreamTest)
+addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
