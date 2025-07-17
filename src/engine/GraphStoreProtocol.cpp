@@ -30,7 +30,7 @@ void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
 
 // ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
-    const std::string& body, const ad_utility::MediaType& contentType) {
+    const std::string& body, ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   switch (contentType) {
     case ad_utility::MediaType::turtle:

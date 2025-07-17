@@ -25,7 +25,7 @@ struct ParsedRequestBuilder {
  private:
   // Graph Store Protocol direct graph identification needs the host to be able
   // to determine the graph IRI.
-  std::string host_;
+  std::optional<std::string> host_ = std::nullopt;
 
  public:
   // Initialize a `ParsedRequestBuilder`, parsing the request target into the

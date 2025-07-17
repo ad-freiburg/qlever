@@ -12,7 +12,9 @@ ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
-  host_ = request[boost::beast::http::field::host];
+  if (request.find(boost::beast::http::field::host) != request.end()) {
+    host_ = request[boost::beast::http::field::host];
+  }
   parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
                     std::move(parsedUrl.parameters_), None{}};
 }

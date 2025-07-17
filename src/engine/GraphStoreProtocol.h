@@ -80,7 +80,7 @@ class GraphStoreProtocol {
 
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
-      const std::string& body, const ad_utility::MediaType& contentType);
+      const std::string& body, ad_utility::MediaType contentType);
   FRIEND_TEST(GraphStoreProtocolTest, parseTriples);
 
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
