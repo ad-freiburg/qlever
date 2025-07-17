@@ -34,21 +34,22 @@ class GraphStoreProtocol {
       throw HttpError(boost::beast::http::status::unsupported_media_type,
                       "Mediatype empty or not set.");
     }
-    std::optional<std::vector<ad_utility::MediaType>> mediaTypes;
-    try {
-      mediaTypes = ad_utility::getMediaTypesFromAcceptHeader(contentTypeString);
-    } catch (const std::exception& e) {
-      throw HttpError(boost::beast::http::status::unsupported_media_type,
-                      e.what());
-    }
+    std::vector<ad_utility::MediaType> mediaTypes = [&contentTypeString]() {
+      try {
+        return ad_utility::getMediaTypesFromAcceptHeader(contentTypeString);
+      } catch (const std::exception& e) {
+        throw HttpError(boost::beast::http::status::unsupported_media_type,
+                        e.what());
+      }
+    }();
 
     // A media type is set but not one of the supported ones as per the QLever
     // MediaType code. Content-Type is only allowed to return a single value, so
     // wildcards are also correctly discarded here.
-    if (mediaTypes->size() != 1) {
+    if (mediaTypes.size() != 1) {
       throwUnsupportedMediatype(rawRequest.at(field::content_type));
     }
-    return mediaTypes->front();
+    return mediaTypes.front();
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 

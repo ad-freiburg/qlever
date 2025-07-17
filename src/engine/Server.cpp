@@ -142,17 +142,13 @@ void Server::run(const std::string& indexBaseName, bool useText,
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
-    if (httpResponseStatus && exceptionErrorMsg) {
-      auto response = createHttpResponseFromString(
-          exceptionErrorMsg.value(), httpResponseStatus.value(), request,
-          MediaType::textPlain);
-      co_return co_await sendWithAccessControlHeaders(std::move(response));
-    }
-    if (exceptionErrorMsg) {
+    if (exceptionErrorMsg.has_value()) {
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-      auto badRequestResponse = createBadRequestResponse(
-          absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
-      co_await sendWithAccessControlHeaders(std::move(badRequestResponse));
+      auto status =
+          httpResponseStatus.value_or(boost::beast::http::status::bad_request);
+      auto response = createHttpResponseFromString(
+          exceptionErrorMsg.value(), status, request, MediaType::textPlain);
+      co_return co_await sendWithAccessControlHeaders(std::move(response));
     }
   };
 
