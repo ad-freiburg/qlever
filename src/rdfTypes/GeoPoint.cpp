@@ -2,13 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 
 #include <cmath>
 #include <optional>
 
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 

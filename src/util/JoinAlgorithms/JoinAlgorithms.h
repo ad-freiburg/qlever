@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <ranges>
 
 #include "backports/algorithm.h"
@@ -17,6 +18,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
+#include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TransparentFunctors.h"
@@ -559,12 +561,9 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
     auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
-    auto findSmallerUndefRangeLeft =
-        [leftSub,
-         endOfUndef](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
-      for (auto it = leftSub.begin(); it != endOfUndef; ++it) {
-        co_yield it;
-      }
+
+    auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
+      return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
     };
 
     // Also set up the actions for compatible rows that now work on single
@@ -996,33 +995,40 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // Main implementation for `findUndefValues`.
   template <bool left, typename T, typename B1, typename B2,
             typename UndefBlocks>
-  cppcoro::generator<T> findUndefValuesHelper(const B1& fullBlockLeft,
-                                              const B2& fullBlockRight, T& begL,
-                                              T& begR,
-                                              const UndefBlocks& undefBlocks) {
-    for (const auto& undefBlock : undefBlocks) {
-      // Select proper input table from the stored undef blocks
-      if constexpr (left) {
-        begL = undefBlock.fullBlock().begin();
-        compatibleRowAction_.setInput(undefBlock.fullBlock(),
-                                      fullBlockRight.get());
-      } else {
-        begR = undefBlock.fullBlock().begin();
-        compatibleRowAction_.setInput(fullBlockLeft.get(),
-                                      undefBlock.fullBlock());
-      }
-      const auto& subrange = undefBlock.subrange();
-      // Yield all iterators to the elements within the stored undef blocks.
-      for (auto subIt = subrange.begin(); subIt < subrange.end(); ++subIt) {
-        co_yield subIt;
-      }
-    }
-    // Reset back to original input
-    begL = fullBlockLeft.get().begin();
-    begR = fullBlockRight.get().begin();
-    compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
-    // No need for further iteration because we know we won't encounter any new
-    // undefined values at this point.
+  auto findUndefValuesHelper(const B1& fullBlockLeft, const B2& fullBlockRight,
+                             T& begL, T& begR, const UndefBlocks& undefBlocks) {
+    auto perBlockCallback =
+        ad_utility::makeAssignableLambda([&, this](const auto& undefBlock) {
+          // Select proper input table from the stored undef blocks
+          if constexpr (left) {
+            begL = undefBlock.fullBlock().begin();
+            compatibleRowAction_.setInput(undefBlock.fullBlock(),
+                                          fullBlockRight.get());
+          } else {
+            begR = undefBlock.fullBlock().begin();
+            compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                          undefBlock.fullBlock());
+          }
+          const auto& subr = undefBlock.subrange();
+          // Yield all iterators to the elements within the stored undef blocks.
+          return ad_utility::IteratorRange(subr.begin(), subr.end());
+        });
+
+    auto endCallback = [&, this]() {
+      // Reset back to original input.
+      begL = fullBlockLeft.get().begin();
+      begR = fullBlockRight.get().begin();
+      compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    };
+
+    // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
+    // without having to specify `makeAssignableLambda`.
+    // TODO<joka921> Down with `OwningView`.
+    return ad_utility::CallbackOnEndView{
+        ql::views::join(
+            ad_utility::OwningView{ad_utility::CachingTransformInputRange(
+                undefBlocks, std::move(perBlockCallback))}),
+        std::move(endCallback)};
   }
 
   // Create a generator that yields iterators to all undefined values that

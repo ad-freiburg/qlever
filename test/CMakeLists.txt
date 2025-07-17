@@ -1,7 +1,7 @@
 include(GoogleTest)
 
 # Needed for creating the `testUil`-library.
-add_subdirectory(util)
+add_subdirectory(util EXCLUDE_FROM_ALL)
 
 # Link binary ${basename} against `gmock_main`, the threading library, the
 # general test utilities and all libraries that are specified as additional
@@ -41,8 +41,10 @@ if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-            TRUE)
+    # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
+    # unit tests as a single test case and will simply run the executable (using the main function from `gtest_main`.
+    # This decreases the runtime overhead per unit tests in particular for sanitizer builds.
+    add_test(NAME QLeverAllUnitTests COMMAND $<TARGET_FILE:QLeverAllUnitTestsMain>)
 else ()
     message(STATUS "The tests are split over multiple binaries")
 
@@ -119,6 +121,7 @@ add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
 add_subdirectory(backports)
+add_subdirectory(rdfTypes)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -217,10 +220,6 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
-
-addLinkAndDiscoverTestSerial(SparqlAntlrParserExpressionTest parser sparqlExpressions engine)
-
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
 # for each test case.
@@ -245,8 +244,6 @@ addLinkAndDiscoverTest(StreamableGeneratorTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addLinkAndDiscoverTest(RdfEscapingTest parser)
-
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
@@ -258,8 +255,6 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
-addLinkAndDiscoverTest(SplitVocabularyTest index)
-
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
@@ -268,7 +263,7 @@ addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
-addLinkAndDiscoverTest(AsyncStreamTest)
+addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 

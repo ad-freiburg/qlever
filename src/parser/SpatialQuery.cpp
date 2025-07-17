@@ -5,13 +5,9 @@
 
 #include "parser/SpatialQuery.h"
 
-#include <type_traits>
-#include <variant>
-
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
 
 namespace parsedQuery {
 
@@ -72,6 +68,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       joinType_ = SpatialJoinType::OVERLAPS;
     } else if (type == "equals") {
       joinType_ = SpatialJoinType::EQUALS;
+    } else if (type == "within") {
+      joinType_ = SpatialJoinType::WITHIN;
     } else if (type == "within-dist") {
       joinType_ = SpatialJoinType::WITHIN_DIST;
     } else {
@@ -79,7 +77,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "The IRI given for the parameter `<joinType>` does not refer to a "
           "supported join type. Currently supported are `<intersects>`, "
           "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within-dist>`");
+          "`<equals>`, `<within>`, `<within-dist>`");
     }
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
@@ -210,10 +208,11 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
 // ____________________________________________________________________________
 SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
-  AD_CONTRACT_CHECK(triple.getSimplePredicate().has_value(),
+  auto predicate = triple.getSimplePredicate();
+  AD_CONTRACT_CHECK(predicate.has_value(),
                     "The config triple for SpatialJoin must have a special IRI "
                     "as predicate");
-  const std::string& input = std::get<PropertyPath>(triple.p_).iri_;
+  std::string_view input = predicate.value();
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),

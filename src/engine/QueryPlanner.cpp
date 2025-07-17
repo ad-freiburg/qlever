@@ -61,7 +61,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -306,7 +306,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getDistinctRow(
+std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
@@ -336,7 +336,7 @@ vector<SubtreePlan> QueryPlanner::getDistinctRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
+std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
@@ -367,7 +367,7 @@ vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getHavingRow(
+std::vector<SubtreePlan> QueryPlanner::getHavingRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -399,7 +399,7 @@ std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getGroupByRow(
+std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -432,7 +432,7 @@ vector<SubtreePlan> QueryPlanner::getGroupByRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getOrderByRow(
+std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -508,8 +508,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
-  ad_utility::HashMap<Variable, string> optTermForCvar;
-  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
+  ad_utility::HashMap<Variable, std::string> optTermForCvar;
+  ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
@@ -578,9 +578,15 @@ CPP_concept TriplePosition =
 SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-  return sparqlParserHelpers::ParserAndVisitor{filterString}
-      .parseTypesafe(&SparqlAutomaticParser::filterR)
-      .resultOfParse_;
+
+  ad_utility::BlankNodeManager bn;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+                    .parseTypesafe(&SparqlAutomaticParser::filterR)
+                    .resultOfParse_;
+
+  // The `filter` rule never adds blank nodes.
+  AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
+  return result;
 };
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
@@ -828,9 +834,8 @@ auto QueryPlanner::seedWithScansAndText(
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
-              AD_CORRECTNESS_CHECK(propertyPath.operation_ ==
-                                   PropertyPath::Operation::IRI);
-              return propertyPath.iri_;
+              AD_CORRECTNESS_CHECK(propertyPath.isIri());
+              return propertyPath.getIri().toStringRepresentation();
             },
             [](const Variable& var) -> const std::string& {
               return var.name();
@@ -933,44 +938,46 @@ auto QueryPlanner::seedWithScansAndText(
 ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  switch (path.operation_) {
-    case PropertyPath::Operation::ALTERNATIVE:
-      return seedFromAlternative(left, path, right);
-    case PropertyPath::Operation::INVERSE:
-      return seedFromInverse(left, path, right);
-    case PropertyPath::Operation::NEGATED:
-      return seedFromNegated(left, path, right);
-    case PropertyPath::Operation::IRI:
-      return seedFromVarOrIri(
-          left, ad_utility::triple_component::Iri::fromIriref(path.iri_),
-          right);
-    case PropertyPath::Operation::SEQUENCE:
-      return seedFromSequence(left, path, right);
-    case PropertyPath::Operation::ZERO_OR_MORE:
-      return seedFromTransitive(left, path, right, 0,
-                                std::numeric_limits<size_t>::max());
-    case PropertyPath::Operation::ONE_OR_MORE:
-      return seedFromTransitive(left, path, right, 1,
-                                std::numeric_limits<size_t>::max());
-    case PropertyPath::Operation::ZERO_OR_ONE:
-      return seedFromTransitive(left, path, right, 0, 1);
-  }
-  AD_FAIL();
+  return path.handlePath<ParsedQuery::GraphPattern>(
+      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+        return seedFromVarOrIri(left, iri, right);
+      },
+      [this, &left, &right](const std::vector<PropertyPath>& children,
+                            PropertyPath::Modifier modifier) {
+        using enum PropertyPath::Modifier;
+        switch (modifier) {
+          case ALTERNATIVE:
+            return seedFromAlternative(left, children, right);
+          case INVERSE:
+            AD_CORRECTNESS_CHECK(children.size() == 1);
+            return seedFromPropertyPath(right, children.at(0), left);
+          case NEGATED:
+            return seedFromNegated(left, children, right);
+          case SEQUENCE:
+            return seedFromSequence(left, children, right);
+          default:
+            AD_FAIL();
+        }
+      },
+      [this, &left, &right](const PropertyPath& basePath, size_t min,
+                            size_t max) {
+        return seedFromTransitive(left, basePath, right, min, max);
+      });
 }
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  AD_CORRECTNESS_CHECK(path.children_.size() > 1);
+  AD_CORRECTNESS_CHECK(paths.size() > 1);
 
   ParsedQuery::GraphPattern joinPattern{};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
-  for (size_t i = 0; i < path.children_.size(); i++) {
-    auto child = path.children_[i];
+  for (size_t i = 0; i < paths.size(); i++) {
+    const auto& child = paths[i];
 
-    if (i == path.children_.size() - 1) {
+    if (i == paths.size() - 1) {
       innerRight = right;
     }
 
@@ -987,22 +994,15 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  if (path.children_.empty()) {
-    AD_THROW(
-        "Tried processing an alternative property path node without any "
-        "children.");
-  } else if (path.children_.size() == 1) {
-    LOG(WARN)
-        << "Processing an alternative property path that has only one child."
-        << std::endl;
-    return seedFromPropertyPath(left, path, right);
-  }
+  AD_CONTRACT_CHECK(paths.size() > 1,
+                    "Tried processing an alternative property path node with 0 "
+                    "or 1 children.");
 
   std::vector<ParsedQuery::GraphPattern> childPlans;
-  childPlans.reserve(path.children_.size());
-  for (const auto& child : path.children_) {
+  childPlans.reserve(paths.size());
+  for (const auto& child : paths) {
     childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
   return uniteGraphPatterns(std::move(childPlans));
@@ -1015,7 +1015,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   Variable innerLeft = generateUniqueVarName();
   Variable innerRight = generateUniqueVarName();
   ParsedQuery::GraphPattern childPlan =
-      seedFromPropertyPath(innerLeft, path.children_[0], innerRight);
+      seedFromPropertyPath(innerLeft, path, innerRight);
   ParsedQuery::GraphPattern p{};
   p::TransPath transPath;
   transPath._left = left;
@@ -1029,29 +1029,21 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   return p;
 }
 
-// _____________________________________________________________________________
-ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  return seedFromPropertyPath(right, path.children_[0], left);
-}
-
 namespace {
 using std::string_view;
 // Split the children of a property path into forward and inverse children.
 std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
     const std::vector<PropertyPath>& children) {
-  using Operation = PropertyPath::Operation;
   std::vector<string_view> forwardIris;
   std::vector<string_view> inverseIris;
   for (const auto& child : children) {
-    if (child.operation_ == Operation::INVERSE) {
-      const auto& unwrapped = child.children_.at(0);
-      AD_CORRECTNESS_CHECK(unwrapped.operation_ == Operation::IRI);
-      inverseIris.emplace_back(unwrapped.iri_);
+    if (auto unwrapped = child.getChildOfInvertedPath()) {
+      const PropertyPath& path = unwrapped.value();
+      AD_CORRECTNESS_CHECK(path.isIri());
+      inverseIris.emplace_back(path.getIri().toStringRepresentation());
     } else {
-      AD_CORRECTNESS_CHECK(child.operation_ == Operation::IRI);
-      forwardIris.emplace_back(child.iri_);
+      AD_CORRECTNESS_CHECK(child.isIri());
+      forwardIris.emplace_back(child.getIri().toStringRepresentation());
     }
   }
   return {std::move(forwardIris), std::move(inverseIris)};
@@ -1076,10 +1068,10 @@ void appendNotEqualString(std::ostream& os, std::string_view iri,
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  AD_CORRECTNESS_CHECK(!path.children_.empty());
-  const auto& [forwardIris, inverseIris] = splitChildren(path.children_);
+  AD_CORRECTNESS_CHECK(!paths.empty());
+  const auto& [forwardIris, inverseIris] = splitChildren(paths);
   auto makeFilterPattern = [this](const TripleComponent& left,
                                   const TripleComponent& right,
                                   const std::vector<string_view>& iris) {
@@ -1127,7 +1119,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
                   -> ad_utility::sparql_types::VarOrPath { return variable; },
               [](const ad_utility::triple_component::Iri& iri)
                   -> ad_utility::sparql_types::VarOrPath {
-                return PropertyPath::fromIri(iri.toStringRepresentation());
+                return PropertyPath::fromIri(iri);
               }},
           varOrIri),
       right);
@@ -1164,7 +1156,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node,
     TextLimitMap& textLimits) const {
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
-  string word = node.wordPart_.value();
+  std::string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
@@ -1197,7 +1189,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::merge(
+std::vector<SubtreePlan> QueryPlanner::merge(
     const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
     const QueryPlanner::TripleGraph& tg) const {
   // TODO: Add the following features:
@@ -1206,7 +1198,7 @@ vector<SubtreePlan> QueryPlanner::merge(
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
-  ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
+  ad_utility::HashMap<std::string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
              << b.size() << " plans...\n";
@@ -1238,7 +1230,7 @@ vector<SubtreePlan> QueryPlanner::merge(
   };
 
   if (isInTestMode()) {
-    std::vector<std::pair<string, vector<SubtreePlan>>> sortedCandidates{
+    std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
         std::make_move_iterator(candidates.begin()),
         std::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
@@ -1253,7 +1245,7 @@ vector<SubtreePlan> QueryPlanner::merge(
 }
 
 // _____________________________________________________________________________
-string QueryPlanner::TripleGraph::asString() const {
+std::string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (!_nodeMap.find(i)->second->cvar_.has_value()) {
@@ -1329,7 +1321,7 @@ QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-string QueryPlanner::getPruningKey(
+std::string QueryPlanner::getPruningKey(
     const SubtreePlan& plan,
     const vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
@@ -1723,7 +1715,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 };
 
 // _____________________________________________________________________________
-vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
+std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children) {
   auto [initialPlans, additionalFilters] =
@@ -1831,10 +1823,11 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
+std::vector<std::pair<QueryPlanner::TripleGraph, std::vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
-    ad_utility::HashMap<string, vector<size_t>>& contextVarToTextNodes) const {
+    ad_utility::HashMap<std::string, vector<size_t>>& contextVarToTextNodes)
+    const {
   vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
@@ -1848,7 +1841,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 
     // For the next iteration / recursive call(s):
     // Leave out the first one because it has been worked on in this call.
-    ad_utility::HashMap<string, vector<size_t>> cTMapNextIteration;
+    ad_utility::HashMap<std::string, vector<size_t>> cTMapNextIteration;
     cTMapNextIteration.insert(++contextVarToTextNodes.begin(),
                               contextVarToTextNodes.end());
 
@@ -1909,7 +1902,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 }
 
 // _____________________________________________________________________________
-vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
+std::vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
     size_t startNode, ad_utility::HashSet<size_t> leaveOut) const {
   vector<size_t> res;
   ad_utility::HashSet<size_t> visited;
@@ -1932,7 +1925,7 @@ vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
 }
 
 // _____________________________________________________________________________
-vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
+std::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;

@@ -13,9 +13,27 @@
   _Pragma("GCC diagnostic push")       \
       _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
 #define ENABLE_UNINITIALIZED_WARNINGS _Pragma("GCC diagnostic pop")
+#define DISABLE_OVERREAD_WARNINGS \
+  _Pragma("GCC diagnostic push")  \
+      _Pragma("GCC diagnostic ignored \"-Wstringop-overread\"")
+#define ENABLE_OVERREAD_WARNINGS _Pragma("GCC diagnostic pop")
+
 #else
 #define DISABLE_UNINITIALIZED_WARNINGS
 #define ENABLE_UNINITIALIZED_WARNINGS
+#define DISABLE_OVERREAD_WARNINGS
+#define ENABLE_OVERREAD_WARNINGS
+#endif
+
+#ifdef __clang__
+#define DISABLE_CLANG_SELF_ASSIGN_WARNING \
+  _Pragma("clang diagnostic push")        \
+      _Pragma("clang diagnostic ignored \"-Wself-assign-overloaded\"")
+
+#define ENABLE_CLANG_WARNINGS _Pragma("clang diagnostic pop")
+#else
+#define DISABLE_CLANG_SELF_ASSIGN_WARNING
+#define ENABLE_CLANG_WARNINGS
 #endif
 
 #endif  // QLEVER_COMPILERWARNINGS_H

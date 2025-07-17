@@ -11,33 +11,32 @@
 #include <typeindex>
 #include <utility>
 
-#include "./SparqlExpressionTestHelpers.h"
-#include "./util/GTestHelpers.h"
-#include "./util/RuntimeParametersTestHelpers.h"
-#include "./util/TripleComponentTestHelpers.h"
-#include "QueryPlannerTestHelpers.h"
+#include "../QueryPlannerTestHelpers.h"
+#include "../SparqlExpressionTestHelpers.h"
+#include "../util/AllocatorTestHelpers.h"
+#include "../util/GTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "engine/sparqlExpressions/BlankNodeExpression.h"
-#include "engine/sparqlExpressions/NowDatetimeExpression.h"
-#include "engine/sparqlExpressions/RandomExpression.h"
-#include "engine/sparqlExpressions/RegexExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
-#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
-#include "parser/Iri.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "util/AllocatorTestHelpers.h"
+#include "rdfTypes/Iri.h"
 #include "util/SourceLocation.h"
 
 namespace {
 using namespace sparqlParserTestHelpers;
+using std::string;
 
 auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
+PropertyPath PathIri(std::string_view iri) {
+  return PropertyPath::fromIri(
+      ad_utility::triple_component::Iri::fromIriref(iri));
+}
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -68,7 +67,8 @@ TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
   {
-    ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
+    static ad_utility::BlankNodeManager blankNodeManager;
+    ParserAndVisitor p{&blankNodeManager, "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -622,14 +622,13 @@ TEST(SparqlParser, InlineData) {
 
 TEST(SparqlParser, propertyPaths) {
   auto expectPathOrVar = ExpectCompleteParse<&Parser::verbPathOrSimple>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
   auto Inverse = &PropertyPath::makeInverse;
   auto Negated = &PropertyPath::makeNegated;
-  auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
-  auto OneOrMore = &PropertyPath::makeOneOrMore;
-  auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
+  auto WithLength = &PropertyPath::makeWithLength;
+  size_t max = std::numeric_limits<size_t>::max();
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
@@ -675,36 +674,29 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
+  expectPathOrVar("a:a+", WithLength(Iri("<http://www.example.com/a>"), 1, max),
                   {{"a", "<http://www.example.com/>"}});
-  {
-    PropertyPath expected = ZeroOrOne({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
-  }
-  {
-    PropertyPath expected = ZeroOrMore({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
-  }
+  expectPathOrVar("a:a?", WithLength(Iri("<http://www.example.com/a>"), 0, 1),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a*", WithLength(Iri("<http://www.example.com/a>"), 0, max),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected = Alternative(
         {Sequence({
              Iri("<http://www.example.com/a/a>"),
-             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+             WithLength(Iri("<http://www.example.com/b/b>"), 0, max),
          }),
          Iri("<http://www.example.com/c/c>"),
-         OneOrMore(
-             {Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}),
+         WithLength(
+             Sequence({Iri("<http://www.example.com/a/a>"),
+                       Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
+             1, max),
          Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
          Negated(
              {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
               Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
               Inverse(Iri("<http://www.example.com/a/a>"))})});
-    expected.computeCanBeNull();
-    expected.canBeNull_ = false;
     expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
@@ -713,33 +705,10 @@ TEST(SparqlParser, propertyPaths) {
 }
 
 // _____________________________________________________________________________
-TEST(SparqlParser, propertyPathsWriteToStream) {
-  auto toString = [](const PropertyPath& path) {
-    std::ostringstream os;
-    path.writeToStream(os);
-    return std::move(os).str();
-  };
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>"))});
-    EXPECT_EQ("!(^(<a>))", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>")),
-         PropertyPath::fromIri("<b>")});
-    EXPECT_EQ("!(^(<a>)|<b>)", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated({});
-    EXPECT_EQ("!()", toString(path));
-  }
-}
-
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
       "<bar> ?foo ; <mehr> ?f",
@@ -753,7 +722,7 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto internal0 = m::InternalVariable("0");
   auto internal1 = m::InternalVariable("1");
   auto internal2 = m::InternalVariable("2");
-  auto bar = m::Predicate("<bar>");
+  auto bar = m::Predicate(iri("<bar>"));
   expectPropertyListPath(
       "?x [?y ?z; <bar> ?b, ?p, [?d ?e], [<bar> ?e]]; ?u ?v",
       Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
@@ -769,7 +738,6 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
 
 TEST(SparqlParser, triplesSameSubjectPath) {
   auto expectTriples = ExpectCompleteParse<&Parser::triplesSameSubjectPath>{};
-  auto PathIri = &PropertyPath::fromIri;
   expectTriples("?foo <bar> ?baz",
                 {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("?foo <bar> ?baz ; <mehr> ?t",
@@ -881,11 +849,11 @@ TEST(SparqlParser, GroupGraphPattern) {
                                    m::GraphPattern(m::Triples({def})))),
           m::GraphPattern(m::Triples({{Var{"?g"}, Var{"?h"}, Var{"?i"}}})))));
   expectGraphPattern("{ OPTIONAL { ?a <foo> <bar> } }",
-                     m::GraphPattern(m::OptionalGraphPattern(
-                         m::Triples({{Var{"?a"}, "<foo>", iri("<bar>")}}))));
+                     m::GraphPattern(m::OptionalGraphPattern(m::Triples(
+                         {{Var{"?a"}, iri("<foo>"), iri("<bar>")}}))));
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
-                     m::GraphPattern(m::MinusGraphPattern(
-                         m::Triples({{Var{"?a"}, "<foo>", iri("<bar>")}}))));
+                     m::GraphPattern(m::MinusGraphPattern(m::Triples(
+                         {{Var{"?a"}, iri("<foo>"), iri("<bar>")}}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
@@ -916,51 +884,51 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
       "FILTER(?y < ?x) }",
-      m::GraphPattern(false, {"(?x != ?y)", "(?y < ?x)"},
-                      m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")},
-                                  {Var{"?y"}, "<is-a>", iri("<Actor>")}})));
+      m::GraphPattern(
+          false, {"(?x != ?y)", "(?y < ?x)"},
+          m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")},
+                      {Var{"?y"}, iri("<is-a>"), iri("<Actor>")}})));
   expectGraphPattern(
       "{?x <is-a> \"Actor\" . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
       m::GraphPattern(
           false, {"(?x != ?y)"},
-          m::Triples(
-              {{Var{"?x"}, "<is-a>", lit("\"Actor\"")},
-               {Var{"?y"}, "<is-a>", iri("<Actor>")},
-               {Var{"?c"}, std::string{CONTAINS_ENTITY_PREDICATE}, Var{"?x"}},
-               {Var{"?c"}, std::string{CONTAINS_WORD_PREDICATE},
-                lit("\"coca* abuse\"")}})));
+          m::Triples({{Var{"?x"}, iri("<is-a>"), lit("\"Actor\"")},
+                      {Var{"?y"}, iri("<is-a>"), iri("<Actor>")},
+                      {Var{"?c"}, iri(CONTAINS_ENTITY_PREDICATE), Var{"?x"}},
+                      {Var{"?c"}, iri(CONTAINS_WORD_PREDICATE),
+                       lit("\"coca* abuse\"")}})));
 
   // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(
       "{?x <is-a> <Actor> . BIND(10 - ?x as ?y) }",
-      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
+      m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::Bind(Var{"?y"}, "10 - ?x")));
   expectGraphPattern(
       "{?x <is-a> <Actor> . BIND(10 - ?x as ?y) . ?a ?b ?c }",
-      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
+      m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::Bind(Var{"?y"}, "10 - ?x"),
                       m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})));
   expectGroupGraphPatternFails("{?x <is-a> <Actor> . BIND(3 as ?x)}");
   expectGraphPattern(
       "{?x <is-a> <Actor> . {BIND(3 as ?x)} }",
-      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
+      m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::GroupGraphPattern(m::Bind(Var{"?x"}, "3"))));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL {BIND(3 as ?x)} }",
-      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
+      m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::OptionalGraphPattern(m::Bind(Var{"?x"}, "3"))));
-  expectGraphPattern(
-      "{ {?x <is-a> <Actor>} UNION { BIND (3 as ?x)}}",
-      m::GraphPattern(m::Union(
-          m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}})),
-          m::GraphPattern(m::Bind(Var{"?x"}, "3")))));
+  expectGraphPattern("{ {?x <is-a> <Actor>} UNION { BIND (3 as ?x)}}",
+                     m::GraphPattern(m::Union(
+                         m::GraphPattern(m::Triples(
+                             {{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}})),
+                         m::GraphPattern(m::Bind(Var{"?x"}, "3")))));
 
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
-      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
-                      m::OptionalGraphPattern(
-                          m::Triples({{Var{"?x"}, "<foo>", iri("<bar>")}}))));
+      m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
+                      m::OptionalGraphPattern(m::Triples(
+                          {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
       m::GraphPattern(
@@ -986,14 +954,16 @@ TEST(SparqlParser, GroupGraphPattern) {
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
 
-  expectGraphPattern("{ GRAPH ?g { ?x <is-a> <Actor> }}",
-                     m::GraphPattern(m::GroupGraphPatternWithGraph(
-                         Variable("?g"),
-                         m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
+  expectGraphPattern(
+      "{ GRAPH ?g { ?x <is-a> <Actor> }}",
+      m::GraphPattern(m::GroupGraphPatternWithGraph(
+          Variable("?g"),
+          m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}))));
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          iri("<foo>"), m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
+          iri("<foo>"),
+          m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}))));
 }
 
 TEST(SparqlParser, RDFLiteral) {
@@ -1028,7 +998,7 @@ TEST(SparqlParser, SelectQuery) {
                                  Graphs namedGraphs = std::nullopt) {
     return m::SelectQuery(
         m::AsteriskSelect(),
-        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
         defaultGraphs, namedGraphs);
   };
   expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
@@ -1194,7 +1164,7 @@ TEST(SparqlParser, ConstructQuery) {
       "CONSTRUCT WHERE { ?a <foo> ?b }",
       m::ConstructQuery(
           {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
-          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?b"}}}))));
+          m::GraphPattern(m::Triples({{Var{"?a"}, iri("<foo>"), Var{"?b"}}}))));
 
   // Blank nodes turn into variables inside WHERE.
   expectConstructQuery(
@@ -1204,7 +1174,7 @@ TEST(SparqlParser, ConstructQuery) {
           m::GraphPattern(m::Triples(
               {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                  "g_0")},
-                "<foo>", Var{"?b"}}}))));
+                iri("<foo>"), Var{"?b"}}}))));
 
   // Test another variant to cover all cases.
   expectConstructQuery(
@@ -1247,7 +1217,7 @@ TEST(SparqlParser, AskQuery) {
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
     return m::AskQuery(
-        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
         defaultGraphs, namedGraphs);
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
@@ -1300,11 +1270,12 @@ TEST(SparqlParser, Query) {
   // Test that `_originalString` is correctly set.
   expectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
-                                    m::GraphPattern(m::Triples(
-                                        {{Var{"?a"}, "<bar>", Var{"?foo"}}}))),
-                     m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
-                     m::VisibleVariables({Var{"?a"}, Var{"?foo"}})));
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(),
+                         m::GraphPattern(m::Triples(
+                             {{Var{"?a"}, iri("<bar>"), Var{"?foo"}}}))),
+          m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
+          m::VisibleVariables({Var{"?a"}, Var{"?foo"}})));
   expectQuery("SELECT * WHERE { ?x ?y ?z }",
               m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }"));
   expectQuery(
@@ -1382,7 +1353,7 @@ TEST(SparqlParser, Query) {
 
     // A matcher for `?y <is-a> ?v`.
     auto graphPatternMatcher =
-        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}}));
+        m::GraphPattern(m::Triples({{Var{"?y"}, iri("<is-a>"), Var{"?v"}}}));
 
     // A matcher for the subquery `SELECT ?y { ?y <is-a> ?v }`, which we will
     // use to compute the values for `?y` that are to be described.
@@ -1456,10 +1427,10 @@ TEST(SparqlParser, Exists) {
                                  ? m::VariablesSelect(variables.value())
                                  : AllOf(m::AsteriskSelect(),
                                          m::VariablesSelect({"?a", "?foo"}));
-        return m::SelectQuery(
-            selectMatcher,
-            m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-            defaultGraphs, namedGraphs);
+        return m::SelectQuery(selectMatcher,
+                              m::GraphPattern(m::Triples(
+                                  {{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
+                              defaultGraphs, namedGraphs);
       };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
@@ -1564,269 +1535,6 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
-TEST(SparqlParser, Update) {
-  auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
-  // Automatically test all updates for their `_originalString`.
-  auto expectUpdate = [&expectUpdate_](
-                          const std::string& query, auto&& expected,
-                          ad_utility::source_location l =
-                              ad_utility::source_location::current()) {
-    expectUpdate_(query,
-                  testing::ElementsAre(
-                      testing::AllOf(expected, m::pq::OriginalString(query))),
-                  l);
-  };
-  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
-  auto Literal = [](std::string s) {
-    return TripleComponent::Literal::fromStringRepresentation(std::move(s));
-  };
-  auto noGraph = std::monostate{};
-
-  // Test the parsing of the update clause in the ParsedQuery.
-  expectUpdate(
-      "INSERT DATA { <a> <b> <c> }",
-      m::UpdateClause(
-          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
-          m::GraphPattern()));
-  expectUpdate(
-      "INSERT DATA { <a> <b> \"foo:bar\" }",
-      m::UpdateClause(m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"),
-                                           Literal("\"foo:bar\""), noGraph}}),
-                      m::GraphPattern()));
-  expectUpdate(
-      "DELETE DATA { <a> <b> <c> }",
-      m::UpdateClause(
-          m::GraphUpdate({{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
-          m::GraphPattern()));
-  expectUpdate(
-      "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
-  // Use variables that are not visible in the query body. Do this for all parts
-  // of the quad for coverage reasons.
-  expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
-  expectUpdateFails("DELETE { <c> <d> <c> . <e> ?a <f> } WHERE { <a> ?b ?c }");
-  expectUpdateFails(
-      "DELETE { GRAPH <foo> { <c> <d> <c> . <e> <f> ?a } } WHERE { <a> ?b ?c "
-      "}");
-  expectUpdateFails("DELETE { GRAPH ?a { <c> <d> <c> } } WHERE { <a> ?b ?c }");
-  expectUpdate(
-      "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}},
-                         {{Iri("<a>"), Var("?a"), Iri("<c>"), noGraph}}),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
-  expectUpdate(
-      "DELETE WHERE { ?a <foo> ?c }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), noGraph}}, {}),
-          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
-  expectUpdateFails("INSERT DATA { ?a ?b ?c }");  // Variables are not allowed
-  // inside INSERT DATA.
-  expectUpdate(
-      "WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), Iri("<foo>")}}, {}),
-          m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   std::nullopt)));
-  expectUpdate(
-      "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {}),
-          m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   m::Graphs{})));
-  expectUpdate("INSERT DATA { GRAPH <foo> { } }",
-               m::UpdateClause(m::GraphUpdate({}, {}), m::GraphPattern()));
-  expectUpdate("INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
-               m::UpdateClause(m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"),
-                                                    Iri("<c>"), Iri("<foo>")}}),
-                               m::GraphPattern()));
-  expectUpdateFails(
-      "INSERT DATA { GRAPH ?f { } }",
-      testing::HasSubstr(
-          "Invalid SPARQL query: Variables (?f) are not allowed here."));
-  expectUpdate(
-      "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
-          m::datasetClausesMatcher(m::Graphs{},
-                                   m::Graphs{TripleComponent(Iri("<foo>"))})));
-  expectUpdate(
-      "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
-                         {}),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   std::nullopt)));
-  const auto insertMatcher = m::UpdateClause(
-      m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
-      m::GraphPattern());
-  const auto fooInsertMatcher = m::UpdateClause(
-      m::GraphUpdate(
-          {}, {{Iri("<foo/a>"), Iri("<foo/b>"), Iri("<foo/c>"), noGraph}}),
-      m::GraphPattern());
-  const auto deleteWhereAllMatcher = m::UpdateClause(
-      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {}),
-      m::GraphPattern(m::Triples({{Var("?s"), Var{"?p"}, Var("?o")}})));
-  expectUpdate("INSERT DATA { <a> <b> <c> }", insertMatcher);
-  // Multiple Updates
-  expectUpdate_(
-      "INSERT DATA { <a> <b> <c> };",
-      ElementsAre(AllOf(insertMatcher,
-                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
-  expectUpdate_(
-      "INSERT DATA { <a> <b> <c> }; BASE <https://example.org> PREFIX foo: "
-      "<foo>",
-      ElementsAre(AllOf(insertMatcher,
-                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
-  expectUpdate_(
-      "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
-      ElementsAre(AllOf(insertMatcher,
-                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")),
-                  AllOf(deleteWhereAllMatcher,
-                        m::pq::OriginalString("DELETE WHERE { ?s ?p ?o }"))));
-  expectUpdate_(
-      "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
-      "foo:b foo:c }",
-      ElementsAre(
-          AllOf(insertMatcher,
-                m::pq::OriginalString(
-                    "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }")),
-          AllOf(fooInsertMatcher,
-                m::pq::OriginalString("INSERT DATA { foo:a foo:b foo:c }"))));
-  expectUpdate_(
-      "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo/> "
-      "INSERT DATA { foo:a foo:b foo:c }",
-      ElementsAre(
-          AllOf(insertMatcher,
-                m::pq::OriginalString(
-                    "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }")),
-          AllOf(fooInsertMatcher,
-                m::pq::OriginalString(
-                    "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
-  expectUpdate_("", testing::IsEmpty());
-  expectUpdate_(" ", testing::IsEmpty());
-  expectUpdate_("PREFIX ex: <http://example.org>", testing::IsEmpty());
-  expectUpdate_("INSERT DATA { <a> <b> <c> }; PREFIX ex: <http://example.org>",
-                testing::ElementsAre(insertMatcher));
-  expectUpdate_("### Some comment \n \n #someMoreComments", testing::IsEmpty());
-  expectUpdate_(
-      "INSERT DATA { <a> <b> <c> };### Some comment \n \n #someMoreComments",
-      testing::ElementsAre(insertMatcher));
-}
-
-TEST(SparqlParser, Create) {
-  auto expectCreate = ExpectCompleteParse<&Parser::create>{defaultPrefixMap};
-  auto expectCreateFails = ExpectParseFails<&Parser::create>{defaultPrefixMap};
-
-  expectCreate("CREATE GRAPH <foo>", testing::IsEmpty());
-  expectCreate("CREATE SILENT GRAPH <foo>", testing::IsEmpty());
-  expectCreateFails("CREATE <foo>");
-  expectCreateFails("CREATE ?foo");
-}
-
-TEST(SparqlParser, Add) {
-  auto expectAdd = ExpectCompleteParse<&Parser::add>{defaultPrefixMap};
-  auto expectAddFails = ExpectParseFails<&Parser::add>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
-
-  auto addMatcher = ElementsAre(m::AddAll(Iri("<foo>"), Iri("<bar>")));
-  expectAdd("ADD GRAPH <baz> to GRAPH <baz>", IsEmpty());
-  expectAdd("ADD DEFAULT TO DEFAULT", IsEmpty());
-  expectAdd("ADD GRAPH <foo> TO GRAPH <bar>", addMatcher);
-  expectAdd("ADD SILENT GRAPH <foo> TO <bar>", addMatcher);
-  expectAdd("ADD <foo> to DEFAULT",
-            ElementsAre(m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI))));
-  expectAdd("ADD GRAPH <foo> to GRAPH <foo>", testing::IsEmpty());
-  expectAddFails("ADD ALL TO NAMED");
-}
-
-TEST(SparqlParser, Clear) {
-  auto expectClear = ExpectCompleteParse<&Parser::clear>{defaultPrefixMap};
-  auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
-
-  expectClear("CLEAR ALL", m::Clear(Variable("?g")));
-  expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectClear("CLEAR NAMED", m::Clear(Variable("?g"),
-                                      "?g != "
-                                      "<http://qlever.cs.uni-freiburg.de/"
-                                      "builtin-functions/default-graph>"));
-  expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
-}
-
-TEST(SparqlParser, Drop) {
-  // TODO: deduplicate with clear which is the same in our case (implicit
-  // graph existence)
-  auto expectDrop = ExpectCompleteParse<&Parser::drop>{defaultPrefixMap};
-  auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
-
-  expectDrop("DROP ALL", m::Clear(Variable("?g")));
-  expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectDrop("DROP NAMED", m::Clear(Variable("?g"),
-                                    "?g != "
-                                    "<http://qlever.cs.uni-freiburg.de/"
-                                    "builtin-functions/default-graph>"));
-  expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
-}
-
-TEST(SparqlParser, Move) {
-  auto expectMove = ExpectCompleteParse<&Parser::move>{defaultPrefixMap};
-  auto expectMoveFails = ExpectParseFails<&Parser::move>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
-
-  // Moving a graph onto itself changes nothing
-  expectMove("MOVE SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
-  expectMove("MOVE GRAPH <foo> TO <foo>", testing::IsEmpty());
-  expectMove("MOVE GRAPH <foo> TO DEFAULT",
-             ElementsAre(m::Clear(Iri(DEFAULT_GRAPH_IRI)),
-                         m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI)),
-                         m::Clear(Iri("<foo>"))));
-}
-
-TEST(SparqlParser, Copy) {
-  auto expectCopy = ExpectCompleteParse<&Parser::copy>{defaultPrefixMap};
-  auto expectCopyFails = ExpectParseFails<&Parser::copy>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
-
-  // Copying a graph onto itself changes nothing
-  expectCopy("COPY SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
-  expectCopy("COPY GRAPH <foo> TO <foo>", testing::IsEmpty());
-  expectCopy("COPY DEFAULT TO GRAPH <foo>",
-             ElementsAre(m::Clear(Iri("<foo>")),
-                         m::AddAll(Iri(DEFAULT_GRAPH_IRI), Iri("<foo>"))));
-}
-
-TEST(SparqlParser, Load) {
-  auto expectLoad = ExpectCompleteParse<&Parser::load>{defaultPrefixMap};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
-  auto noGraph = std::monostate{};
-
-  expectLoad(
-      "LOAD <https://example.com>",
-      m::UpdateClause(
-          m::GraphUpdate({}, {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                          Var("?o"), noGraph}}),
-          m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
-  expectLoad("LOAD SILENT <http://example.com> into GRAPH <bar>",
-             m::UpdateClause(
-                 m::GraphUpdate(
-                     {}, {SparqlTripleSimpleWithGraph{
-                             Var("?s"), Var("?p"), Var("?o"), Iri("<bar>")}}),
-                 m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
-}
-
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
@@ -1895,25 +1603,25 @@ TEST(ParserTest, propertyPathInCollection) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
               {{Var{"?_QLever_internal_variable_2"},
-                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
                 Var{"?_QLever_internal_variable_1"}},
                {Var{"?_QLever_internal_variable_2"},
-                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"),
                 iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
                {Var{"?_QLever_internal_variable_1"},
-                PropertyPath::makeWithChildren(
-                    {PropertyPath::fromIri("<http://example.org/r>")},
-                    PropertyPath::Operation::INVERSE),
+                PropertyPath::makeInverse(
+                    PropertyPath::fromIri(iri("<http://example.org/r>"))),
                 lit("\"hello\"")},
                {Var{"?_QLever_internal_variable_3"},
-                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
                 Var{"?_QLever_internal_variable_0"}},
                {Var{"?_QLever_internal_variable_3"},
-                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"),
                 Var{"?_QLever_internal_variable_2"}},
                {Var{"?_QLever_internal_variable_0"},
-                PropertyPath::makeModified(
-                    PropertyPath::fromIri("<http://example.org/p>"), "*"),
+                PropertyPath::makeWithLength(
+                    PropertyPath::fromIri(iri("<http://example.org/p>")), 0,
+                    std::numeric_limits<size_t>::max()),
                 123},
                {Var{"?s"}, Var{"?p"}, Var{"?_QLever_internal_variable_3"}}}))));
 }

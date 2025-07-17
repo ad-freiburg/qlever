@@ -121,7 +121,7 @@ class QueryPlanner {
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
-    string asString() const;
+    std::string asString() const;
 
     bool isTextNode(size_t i) const;
 
@@ -135,7 +135,7 @@ class QueryPlanner {
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes)
+        ad_utility::HashMap<std::string, vector<size_t>>& contextVarTotextNodes)
         const;
 
     vector<SparqlFilter> pickFilters(const vector<SparqlFilter>& origFilters,
@@ -324,30 +324,40 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters) const;
 
-  /**
-   * @brief Returns a parsed query for the property path.
-   */
+  // TODO<RobinTF> Extract to dedicated module, this has little to do with
+  // actual query planning.
+  // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
+  // further planning.
   ParsedQuery::GraphPattern seedFromPropertyPath(const TripleComponent& left,
                                                  const PropertyPath& path,
                                                  const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromSequence(const TripleComponent& left,
-                                             const PropertyPath& path,
-                                             const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromAlternative(const TripleComponent& left,
-                                                const PropertyPath& path,
-                                                const TripleComponent& right);
+
+  // Turn a sequence of `PropertyPath`s into a `GraphPattern` that can be used
+  // for further planning. This handles the case for predicates separated by
+  // `/`, for example in `SELECT ?x { ?x <a>/<b> ?y }`.
+  ParsedQuery::GraphPattern seedFromSequence(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+
+  // Turn a union of `PropertyPath`s into a `GraphPattern` that can be used for
+  // further planning. This handles the case for predicates separated by `|`,
+  // for example in `SELECT ?x { ?x <a>|<b> ?y }`.
+  ParsedQuery::GraphPattern seedFromAlternative(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+
+  // Create `GraphPattern` for property paths of the form `<a>+`, `<a>?` or
+  // `<a>*`, where `<a>` can also be a complex `PropertyPath` (e.g. a sequence
+  // or an alternative).
   ParsedQuery::GraphPattern seedFromTransitive(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right,
                                                size_t min, size_t max);
-  ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
   // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
   // `!<a>` and similar.
-  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
+  ParsedQuery::GraphPattern seedFromNegated(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
       const ad_utility::sparql_types::VarOrIri& varOrIri,
@@ -454,8 +464,8 @@ class QueryPlanner {
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
-  string getPruningKey(const SubtreePlan& plan,
-                       const vector<ColumnIndex>& orderedOnColumns) const;
+  std::string getPruningKey(const SubtreePlan& plan,
+                            const vector<ColumnIndex>& orderedOnColumns) const;
 
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {

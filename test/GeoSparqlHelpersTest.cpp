@@ -10,8 +10,8 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
-#include "parser/Iri.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -180,6 +180,7 @@ TEST(GeoSparqlHelpers, WktGeometricRelation) {
   checkGeoRelationDummyImpl<TOUCHES>();
   checkGeoRelationDummyImpl<EQUALS>();
   checkGeoRelationDummyImpl<OVERLAPS>();
+  checkGeoRelationDummyImpl<WITHIN>();
 }
 
 }  // namespace
