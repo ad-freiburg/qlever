@@ -11,7 +11,9 @@
 #ifndef QLEVER_SRC_ENGINE_HTTPERROR_H
 #define QLEVER_SRC_ENGINE_HTTPERROR_H
 
-// An Error occurred that results in a specific HTTP status code.
+// An Error occurred that immediately results in a specific HTTP status code.
+// This can be used to prematurely end the execution of a request in the Server
+// and return a specific status code and response.
 class HttpError : public std::exception {
  public:
   explicit HttpError(boost::beast::http::status status)

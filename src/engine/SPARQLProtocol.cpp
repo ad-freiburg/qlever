@@ -210,7 +210,6 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   // Graph Store Protocol with indirect graph identification
   if (request.method() == http::verb::put ||
       request.method() == http::verb::delete_ ||
-      request.method() == http::verb::post ||
       request.method_string() == "TSOP") {
     return parseGraphStoreProtocol(request);
   }
