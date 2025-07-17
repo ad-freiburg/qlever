@@ -76,7 +76,7 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
 // _____________________________________________________________________________
 TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
 #ifndef QLEVER_RUN_EXPENSIVE_TESTS
-  // GTEST_SKIP();
+  GTEST_SKIP();
 #endif
   size_t numErrors = 0;
   size_t numSuccesful = 0;
