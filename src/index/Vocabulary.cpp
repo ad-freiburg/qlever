@@ -246,6 +246,7 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
   if constexpr (ad_utility::isInstantiation<S, SplitVocabulary> ||
                 std::is_same_v<S, PolymorphicVocabulary>) {
     return vocabulary_.getUnderlyingVocabulary().isGeoInfoAvailable();
+
   } else {
     return false;
   }
