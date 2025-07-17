@@ -82,19 +82,44 @@ TEST_F(LoadTest, basicMethods) {
 }
 
 TEST_F(LoadTest, computeResult) {
+  auto testSilentBehavior = [this](parsedQuery::Load pq,
+                                   SendRequestType sendFunc,
+                                   ad_utility::source_location loc =
+                                       ad_utility::source_location::current()) {
+    auto impl = [this, &pq,
+                 &sendFunc](ad_utility::source_location loc =
+                                ad_utility::source_location::current()) {
+      auto tr = generateLocationTrace(loc);
+      Load load{testQec, pq, sendFunc};
+      auto res = load.computeResultOnlyForTesting();
+      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.localVocab(), testing::IsEmpty());
+    };
+
+    auto tr = generateLocationTrace(loc);
+    // Not silent, but syntax test mode is activated.
+    pq.silent_ = false;
+    {
+      auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+      impl();
+    }
+    // Silent, but syntax test mode is deactivated.
+    pq.silent_ = true;
+    impl();
+  };
+
   auto expectThrowOnlyIfNotSilent =
-      [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<std::string>& expectedError,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+      [this, testSilentBehavior](
+          parsedQuery::Load pq, SendRequestType sendFunc,
+          const testing::Matcher<std::string>& expectedError,
+          ad_utility::source_location loc =
+              ad_utility::source_location::current()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
         AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
                                      expectedError);
-        pq.silent_ = true;
-        Load silentLoad{testQec, pq, sendFunc};
-        EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
+        testSilentBehavior(pq, sendFunc);
       };
   auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
@@ -197,6 +222,10 @@ TEST_F(LoadTest, computeResult) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto Literal =
       ad_utility::triple_component::Literal::fromStringRepresentation;
+  // In the syntax test mode, all exceptions when computing a LOAD are converted
+  // to a silent result.
+  { auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true); }
+
   expectLoad("<x> <b> <c>", "text/turtle",
              {{Iri("<x>"), Iri("<b>"), Iri("<c>")}});
   expectLoad("<x> <b> <c> ; <d> <y>", "text/turtle",
