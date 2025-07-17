@@ -4,6 +4,8 @@
 
 #include "engine/SPARQLProtocol.h"
 
+#include "engine/HttpError.h"
+
 using namespace ad_utility::url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 
@@ -163,8 +165,10 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   }
   std::ostringstream requestMethodName;
   requestMethodName << request.method();
-  throw std::runtime_error(absl::StrCat(
-      "Request method \"", requestMethodName.str(),
-      "\" not supported (only GET and POST are supported; PUT, DELETE, HEAD "
-      "and PATCH for graph store protocol are not yet supported)"));
+  throw HttpError(
+      boost::beast::http::status::method_not_allowed,
+      absl::StrCat(
+          "Request method \"", requestMethodName.str(),
+          "\" not supported (only GET and POST are supported; PUT, DELETE, "
+          "HEAD and PATCH for graph store protocol are not yet supported)"));
 }

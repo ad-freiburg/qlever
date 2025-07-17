@@ -339,7 +339,7 @@ CPP_template(typename F)(requires std::is_invocable_v<
                 "object type, not a reference");
   return InputRangeFromLoopControlGet(
       [singleValueGetter = std::move(singleValueGetter)]() mutable {
-        return LoopControl<T>::breakWithValue(std::move(singleValueGetter()));
+        return LoopControl<T>::breakWithValue(singleValueGetter());
       });
 }
 }  // namespace ad_utility
