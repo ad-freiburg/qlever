@@ -1,7 +1,13 @@
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller @Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
+#include <spatialjoin/Sweeper.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -9,13 +15,14 @@
 #include <variant>
 
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinConfig.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -29,10 +36,10 @@ using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
 namespace computeResultTest {
 
 // Represents from left to right: the algorithm, addLeftChildFirst,
-// bigChildLeft, a spatial join task and if areas (=true) or points (=false)
-// should be used
+// bigChildLeft, a spatial join task, if areas (=true) or points (=false)
+// should be used and if the `GeoVocabulary` should be used
 using SpatialJoinTestParam =
-    std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask, bool>;
+    std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask, bool, bool>;
 
 using Row = std::vector<std::string>;
 using Rows = std::vector<Row>;
@@ -158,7 +165,7 @@ class SpatialJoinParamTest
   void buildAndTestSmallTestSetLargeChildren(SJ task, bool addLeftChildFirst,
                                              Rows expectedOutput,
                                              Row columnNames) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(std::get<4>(GetParam()), std::get<5>(GetParam()));
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ===================== build the first child
@@ -191,7 +198,7 @@ class SpatialJoinParamTest
   void buildAndTestSmallTestSetSmallChildren(SJ task, bool addLeftChildFirst,
                                              Rows expectedOutput,
                                              Row columnNames) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(std::get<4>(GetParam()), std::get<5>(GetParam()));
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ===================================
@@ -218,7 +225,7 @@ class SpatialJoinParamTest
                                                 Rows expectedOutput,
                                                 Row columnNames,
                                                 bool bigChildLeft) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(std::get<4>(GetParam()), std::get<5>(GetParam()));
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ========================= build big child =============================
@@ -246,7 +253,7 @@ class SpatialJoinParamTest
   void testDiffSizeIdTables(SJ task, bool addLeftChildFirst,
                             Rows expectedOutput, Row columnNames,
                             bool bigChildLeft) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(std::get<4>(GetParam()), std::get<5>(GetParam()));
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build small input ==============================
@@ -282,7 +289,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    auto qec = buildQec(kg);
+    auto qec = buildQec(kg, std::get<5>(GetParam()));
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -992,9 +999,9 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
                           NearestNeighborsConfig{3, 500000}),
-        ::testing::Bool()));
+        ::testing::Bool(), ::testing::Bool()));
 
-}  // end of Namespace computeResultTest
+}  // namespace computeResultTest
 
 namespace boundingBox {
 

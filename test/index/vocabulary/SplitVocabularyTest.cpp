@@ -96,6 +96,9 @@ TEST(Vocabulary, SplitGeoVocab) {
   ASSERT_FALSE(SGV::isSpecialVocabIndex(42));
   ASSERT_FALSE(SGV::isSpecialVocabIndex((1ULL << 59) - 1));
   ASSERT_FALSE(SGV::isSpecialVocabIndex(1ULL << 58));
+
+  // Geometry info
+  ASSERT_TRUE(SGV::isGeoInfoAvailable());
 }
 
 // _____________________________________________________________________________
@@ -103,6 +106,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in two underlying vocabularies
   TwoSplitVocabulary sv;
+  ASSERT_FALSE(TwoSplitVocabulary::isGeoInfoAvailable());
+  ASSERT_FALSE(sv.isGeoInfoAvailable());
 
   ASSERT_EQ(sv.numberOfVocabs, 2);
   ASSERT_EQ(sv.markerBitMaskSize, 1);
@@ -214,6 +219,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in three underlying vocabularies (of different types)
   ThreeSplitVocabulary sv;
+  ASSERT_FALSE(ThreeSplitVocabulary::isGeoInfoAvailable());
+  ASSERT_FALSE(sv.isGeoInfoAvailable());
 
   ASSERT_EQ(sv.numberOfVocabs, 3);
   ASSERT_EQ(sv.markerBitMaskSize, 2);
@@ -315,6 +322,7 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
   auto wordCallback = vocabulary.makeWordWriterPtr("vocTest7.dat");
+  ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
 
   // Call word writer
   ASSERT_EQ((*wordCallback)("\"a\"", true), 0);

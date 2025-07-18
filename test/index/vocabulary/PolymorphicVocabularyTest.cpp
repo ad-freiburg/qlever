@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/VocabularyType.h"
 
 using ad_utility::VocabularyType;
 
@@ -47,6 +48,9 @@ void testForVocabType(VocabularyType::Enum vocabType) {
       std::visit([](const auto& u) { return static_cast<uint64_t>(u.size()); },
                  vocabConst.getUnderlyingVocabulary()),
       3);
+
+  EXPECT_EQ(vocab.isGeoInfoAvailable(),
+            vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
 }
 }  // namespace
 

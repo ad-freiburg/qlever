@@ -230,13 +230,26 @@ auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
 template <typename S, typename C, typename I>
 std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
-  // `PolymorphicVocabulary` or `SplitVocabulary` may have an underlying
-  // `GeoVocabulary`, which provides precomputed `GeometryInfo`
-  if constexpr (std::is_same_v<S, PolymorphicVocabulary> ||
-                ad_utility::isInstantiation<S, SplitVocabulary>) {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesGeometryInfo<S>) {
     return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
   } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
     return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesGeometryInfo<S>) {
+    return vocabulary_.getUnderlyingVocabulary().isGeoInfoAvailable();
+  } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
+    return false;
   }
 };
 

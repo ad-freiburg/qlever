@@ -7,14 +7,9 @@
 
 #include <type_traits>
 
-#include "concepts/concepts.hpp"
 #include "index/Vocabulary.h"
-#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
-#include "index/vocabulary/VocabularyInMemory.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
-#include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -132,10 +127,32 @@ SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
         if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
           return v.getGeoInfo(getVocabIndex(indexWithMarker));
         } else {
+          static_assert(NeverProvidesGeometryInfo<T>);
           return std::nullopt;
         }
       },
       vocab);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
+  // If any of the underlying vocabularies is a `GeoVocabulary`, then this
+  // `SplitVocabulary` is able to provide precomputed `GeometryInfo`. The other
+  // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which
+  // could potentially hold a `GeoVocabulary` are forbidden here due to the
+  // constraints of this `SplitVocabulary` for its underlying vocabularies.
+  if constexpr (ad_utility::anyIsInstantiationOf<GeoVocabulary, S...>) {
+    return true;
+  } else {
+    // This assertion guarantees that none of the underlying vocabularies are
+    // able to provide precomputed `GeometryInfo` (neither directly nor in a
+    // nested fashion). For more details and if it fails, see the definition of
+    // this concept in `VocabularyConstraints.h`.
+    static_assert(AllNeverProvideGeometryInfo<S...>);
+    return false;
+  }
 }
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
