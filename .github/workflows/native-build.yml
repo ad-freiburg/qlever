@@ -124,7 +124,7 @@ jobs:
         # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
         run: |
           sudo sysctl vm.mmap_rnd_bits
-          sudo sysctl vm.mmap_rnd_bits=2
+          sudo sysctl vm.mmap_rnd_bits=28
 
 
       - name: Configure CMake
@@ -172,7 +172,7 @@ jobs:
       - name: E2E with index in one go
         if: (matrix.compiler == 'clang') && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh
-      
+
       - name: E2E with separate text index build
         if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh -t
