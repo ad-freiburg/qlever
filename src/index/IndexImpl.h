@@ -7,7 +7,6 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
-#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -34,24 +33,13 @@
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "parser/WordsAndDocsFileParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Forward.h"
-#include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MmapVector.h"
 #include "util/json.h"
-
-using ad_utility::BufferedVector;
-using ad_utility::MmapVector;
-using ad_utility::MmapVectorView;
-using std::array;
-using std::shared_ptr;
-using std::tuple;
-
-using json = nlohmann::json;
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
@@ -129,7 +117,7 @@ class IndexImpl {
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
-  json configurationJson_;
+  nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;

@@ -104,6 +104,7 @@ class GeoVocabulary {
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
         underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
+    size_t numInvalidGeometries_ = 0;
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word

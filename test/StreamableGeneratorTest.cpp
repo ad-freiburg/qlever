@@ -40,7 +40,7 @@ TEST(StreamableGenerator, GeneratorReturnsBufferedResults) {
     // Suppress false positive on GCC 11
     DISABLE_OVERREAD_WARNINGS
     co_yield '1';
-    ENABLE_OVERREAD_WARNINGS
+    GCC_REENABLE_WARNINGS
     co_yield "Abc";
   }();
 

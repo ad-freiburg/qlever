@@ -338,8 +338,8 @@ CPP_template(typename F)(requires std::is_invocable_v<
                 "The functor of `lazySingleValueRange` must yield an "
                 "object type, not a reference");
   return InputRangeFromLoopControlGet(
-      [singleValueGetter = std::move(singleValueGetter)]() {
-        return LoopControl<T>::breakWithValue(std::move(singleValueGetter()));
+      [singleValueGetter = std::move(singleValueGetter)]() mutable {
+        return LoopControl<T>::breakWithValue(singleValueGetter());
       });
 }
 }  // namespace ad_utility
