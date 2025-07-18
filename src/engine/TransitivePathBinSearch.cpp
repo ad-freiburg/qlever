@@ -22,7 +22,7 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
 }
 
 // _____________________________________________________________________________
-ql::span<const Id> BinSearchMap::successors(const Id node) const {
+ql::span<const Id> BinSearchMap::successors(Id node) const {
   auto range = ql::ranges::equal_range(startIds_.subspan(offset_, size_), node);
 
   auto startIndex = std::distance(startIds_.begin(), range.begin());
@@ -31,8 +31,9 @@ ql::span<const Id> BinSearchMap::successors(const Id node) const {
 }
 
 // _____________________________________________________________________________
-std::vector<std::pair<Id, Id>> BinSearchMap::getEquivalentIds(Id node) const {
-  std::vector<std::pair<Id, Id>> result;
+absl::InlinedVector<std::pair<Id, Id>, 1> BinSearchMap::getEquivalentIds(
+    Id node) const {
+  absl::InlinedVector<std::pair<Id, Id>, 1> result;
   if (graphIds_.empty()) {
     if (node.isUndefined()) {
       for (Id id : startIds_) {

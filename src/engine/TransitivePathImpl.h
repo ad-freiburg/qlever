@@ -44,7 +44,7 @@ struct TableColumnWithVocab {
                    [[unlikely]] {
                  return edges.getEquivalentIds(std::get<0>(tuple));
                } else {
-                 return std::vector<std::pair<Id, Id>>{
+                 return absl::InlinedVector<std::pair<Id, Id>, 1>{
                      std::pair{std::move(std::get<0>(tuple)),
                                std::move(std::get<1>(tuple))}};
                }

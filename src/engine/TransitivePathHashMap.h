@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 
+#include <absl/container/inlined_vector.h>
+
 #include <memory>
 
 #include "engine/TransitivePathImpl.h"
@@ -55,7 +57,7 @@ class HashMapWrapper {
 
   // Return equivalent ids from the index, along with an associated graph id in
   // case these are available.
-  std::vector<std::pair<Id, Id>> getEquivalentIds(Id node) const;
+  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
 
   // Prefilter the map for values of a certain graph.
   void setGraphId(Id graphId);

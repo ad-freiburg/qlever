@@ -5,14 +5,14 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
-#include <iterator>
+#include <absl/container/inlined_vector.h>
+
 #include <memory>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
-#include "util/Exception.h"
 
 /**
  * @class BinSearchMap
@@ -55,11 +55,11 @@ class BinSearchMap {
    * @return A ql::span<Id>, which consists of all targetIds_ where
    * startIds_ == node.
    */
-  ql::span<const Id> successors(const Id node) const;
+  ql::span<const Id> successors(Id node) const;
 
   // Return equivalent ids from the index, along with an associated graph id in
   // case these are available.
-  std::vector<std::pair<Id, Id>> getEquivalentIds(Id node) const;
+  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
 
   void setGraphId(Id graphId);
 };
