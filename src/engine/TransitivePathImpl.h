@@ -31,6 +31,27 @@ struct TableColumnWithVocab {
       : payload_{std::move(payload)},
         startNodes_{std::move(startNodes)},
         vocab_{std::move(vocab)} {}
+
+  decltype(auto) expandStartNodes([[maybe_unused]] const auto& edges,
+                                  bool checkGraph) {
+    if constexpr (std::is_same_v<ColumnType, SetWithGraph>) {
+      return startNodes_;
+    } else {
+      return startNodes_ |
+             ql::views::transform([&edges, checkGraph](auto tuple) {
+               if (std::get<0>(tuple).isUndefined() ||
+                   (checkGraph && std::get<1>(tuple).isUndefined()))
+                   [[unlikely]] {
+                 return edges.getEquivalentIds(std::get<0>(tuple));
+               } else {
+                 return std::vector<std::pair<Id, Id>>{
+                     std::pair{std::move(std::get<0>(tuple)),
+                               std::move(std::get<1>(tuple))}};
+               }
+             }) |
+             ql::views::join;
+    }
+  }
 };
 };  // namespace detail
 
@@ -252,9 +273,8 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
-      for (const auto& [startNode, graphId] : tableColumn.startNodes_) {
-        // TODO<RobinTF> make sure undef matches all nodes for queries of
-        // the form SELECT * { VALUES ?a { UNDEF } ?a a+ ?b}
+      for (const auto& [startNode, graphId] :
+           tableColumn.expandStartNodes(edges, graphVariable_.has_value())) {
         // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
         // where both `?g` variables are not the same.
         if (startsWithGraphVariable && startNode != graphId) {

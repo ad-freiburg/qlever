@@ -42,9 +42,15 @@ const Set& HashMapWrapper::successors(const Id node) const {
 std::vector<std::pair<Id, Id>> HashMapWrapper::getEquivalentIds(Id node) const {
   std::vector<std::pair<Id, Id>> result;
   for (const auto& [graph, map] : graphMap_) {
-    auto iterator = map.find(node);
-    if (iterator != map.end()) {
-      result.emplace_back(iterator->first, graph);
+    if (node.isUndefined()) {
+      for (Id newId : map | ql::views::keys) {
+        result.emplace_back(newId, graph);
+      }
+    } else {
+      auto iterator = map.find(node);
+      if (iterator != map.end()) {
+        result.emplace_back(iterator->first, graph);
+      }
     }
   }
   return result;

@@ -34,15 +34,23 @@ ql::span<const Id> BinSearchMap::successors(const Id node) const {
 std::vector<std::pair<Id, Id>> BinSearchMap::getEquivalentIds(Id node) const {
   std::vector<std::pair<Id, Id>> result;
   if (graphIds_.empty()) {
-    auto range = ql::ranges::equal_range(startIds_, node);
-    if (!range.empty()) {
-      result.emplace_back(range.front(), Id::makeUndefined());
+    if (node.isUndefined()) {
+      for (Id id : startIds_) {
+        if (result.empty() || result.back().first != id) {
+          result.emplace_back(id, Id::makeUndefined());
+        }
+      }
+    } else {
+      auto range = ql::ranges::equal_range(startIds_, node);
+      if (!range.empty()) {
+        result.emplace_back(range.front(), Id::makeUndefined());
+      }
     }
   } else {
     for (auto [id, graphId] : ::ranges::views::zip(startIds_, graphIds_)) {
-      if (id == node) {
-        // Duplicates are fine, the only usage of this function deduplicates
-        // this.
+      bool isNewEntry = result.empty() || result.back().first != id ||
+                        result.back().second != graphId;
+      if ((id == node || node.isUndefined()) && isNewEntry) {
         result.emplace_back(id, graphId);
       }
     }
