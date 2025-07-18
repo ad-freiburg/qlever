@@ -278,7 +278,7 @@ TEST(Views, CallbackOnEndView) {
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
   // Initial value is `true` and when being moved from it will be `false`.
-  using MoveTracker = ad_utility::ResetWhenMoved<bool, false, true>;
+  using MoveTracker = ad_utility::ResetWhenMoved<bool, false>;
   // not moved from.
   const auto t = MoveTracker{true};
   // moved from.
@@ -292,8 +292,7 @@ TEST(Views, RvalueView) {
                            ad_utility::source_location loc =
                                ad_utility::source_location::current()) {
     auto tr = generateLocationTrace(loc);
-    std::vector<MoveTracker> vec;
-    vec.resize(10);
+    std::vector<MoveTracker> vec(10, t);
 
     std::vector<MoveTracker> target;
 
