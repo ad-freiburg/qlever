@@ -475,9 +475,8 @@ TEST(SPARQLProtocolTest, parsePOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseHttpRequest) {
-  auto parse =
-      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
-          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+  auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
 
@@ -497,7 +496,7 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
-      testing::StrEq("Request method \"PATCH\" not supported (only GET and "
-                     "POST are supported; PUT, DELETE, HEAD and PATCH for "
-                     "graph store protocol are not yet supported)"));
+      testing::StrEq("Request method \"PATCH\" not supported (GET, POST, TSOP, "
+                     "PUT and DELETE are supported; HEAD and PATCH for graph "
+                     "store protocol are not yet supported)"));
 }

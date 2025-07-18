@@ -155,20 +155,68 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
+ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
     const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  if (!parsedRequestBuilder.isGraphStoreOperation()) {
+    throw std::runtime_error(
+        R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)");
+  }
+  parsedRequestBuilder.extractGraphStoreOperation();
+  return std::move(parsedRequestBuilder).build();
+}
+
+// ____________________________________________________________________________
+ad_utility::url_parser::ParsedRequest
+SPARQLProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  parsedRequestBuilder.extractGraphStoreOperationDirect();
+  return std::move(parsedRequestBuilder).build();
+}
+
+// ____________________________________________________________________________
+ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
+    RequestType& request) {
+  // Fixup for request target missing the leading slash.
+  std::string target = request.target();
+  if (!target.starts_with("/")) {
+    target = absl::StrCat("/", target);
+  }
+  request.target(target);
+  // Graph Store Protocol with direct graph identification
+  auto urlResult = boost::urls::parse_origin_form(request.target());
+  if (urlResult.has_error()) {
+    throw std::runtime_error(absl::StrCat(
+        "Failed to parse URL: \"", std::string{request.target()}, "\"."));
+  }
+  boost::url url = urlResult.value();
+  // `http-graph-store` is the (currently fixed) prefix for the Graph Store
+  // Protocol with direct graph identification.
+  if (!url.segments().empty() && url.segments().front() == "http-graph-store") {
+    return parseGraphStoreProtocolDirect(request);
+  }
+
+  // SPARQL Query or Graph Store Protocol with indirect graph identification
   if (request.method() == http::verb::get) {
     return parseGET(request);
   }
+  // SPARQL Query, SPARQL Update or Graph Store Protocol with indirect graph
+  // identification
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
-  std::ostringstream requestMethodName;
-  requestMethodName << request.method();
+  // Graph Store Protocol with indirect graph identification
+  if (request.method() == http::verb::put ||
+      request.method() == http::verb::delete_ ||
+      request.method_string() == "TSOP") {
+    return parseGraphStoreProtocol(request);
+  }
   throw HttpError(
       boost::beast::http::status::method_not_allowed,
       absl::StrCat(
-          "Request method \"", requestMethodName.str(),
-          "\" not supported (only GET and POST are supported; PUT, DELETE, "
+          "Request method \"", std::string_view{request.method_string()},
+          "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }
