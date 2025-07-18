@@ -126,11 +126,21 @@ class Vocabulary {
   // index of the word.
   bool getId(std::string_view word, IndexType* idx) const;
 
-  // Retrieve a `GeometryInfo` object from the (possibly) underlying
-  // `GeoVocabulary`. The index parameter is expected to have the geo literal
-  // marker bit. If no `GeoVocabulary` is used or the marker bit is not set,
-  // `std::nullopt` is returned.
+  // Retrieves a precomputed `GeometryInfo` object from the (possibly)
+  // underlying `GeoVocabulary`. This function returns a `GeometryInfo` object
+  // if and only if a `GeoVocabulary` is used and the given index points to a
+  // valid geometry in this `GeoVocabulary`. In all other cases, `std::nullopt`
+  // is returned.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
+
+  // This function determines if precomputed `GeometryInfo` is available for
+  // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
+  // there is an underlying `GeoVocabulary` such that `getGeoInfo` will return a
+  // `GeometryInfo` object for all indices pointing to valid geometries in the
+  // `GeoVocabulary`. If this function returns `false`, `getGeoInfo` will return
+  // `std::nullopt` for any input, because no precomputed `GeometryInfo` is
+  // available.
+  bool isGeoInfoAvailable() const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.

@@ -117,6 +117,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   // Generate test vocabulary
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
+  ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   auto wordCallback = vocabulary.makeWordWriterPtr("geoVocabTest.dat");
   auto nonGeoIdx = (*wordCallback)("<http://example.com/abc>", true);
   auto geoIdx = (*wordCallback)(
@@ -127,6 +128,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
 
   // Load test vocabulary and try to retrieve precomputed `GeometryInfo`
   vocabulary.readFromFile("geoVocabTest.dat");
+  ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(nonGeoIdx)).has_value());
   auto gi = vocabulary.getGeoInfo(VocabIndex::make(geoIdx));
   ASSERT_TRUE(gi.has_value());
@@ -137,6 +139,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   // `GeoVocabulary`
   RdfsVocabulary nonGeoVocab;
   nonGeoVocab.resetToType(nonGeoVocabType);
+  ASSERT_FALSE(nonGeoVocab.isGeoInfoAvailable());
   auto ngWordCallback = vocabulary.makeWordWriterPtr("nonGeoVocabTest.dat");
   (*ngWordCallback)("<http://example.com/abc>", true);
   ngWordCallback->finish();

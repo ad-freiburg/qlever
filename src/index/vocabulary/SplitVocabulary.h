@@ -17,6 +17,7 @@
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/TypeTraits.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -35,6 +36,9 @@ template <typename T, uint8_t N>
 CPP_concept SplitFilenameFunctionT =
     ad_utility::InvocableWithExactReturnType<T, std::array<std::string, N>,
                                              std::string_view>;
+
+// Forward declaration of `PolymorphicVocabulary` for static assertion.
+class PolymorphicVocabulary;
 
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
@@ -56,6 +60,14 @@ class SplitVocabulary {
                 sizeof...(UnderlyingVocabularies) <= 255);
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
+
+  // Because of the marker bits, a `SplitVocabulary` should not hold another
+  // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
+  // guaranteed that it does not hold an underlying `SplitVocabulary`.
+  static_assert(!ad_utility::anyIsInstantiationOf<SplitVocabulary,
+                                                  UnderlyingVocabularies...>);
+  static_assert(
+      !ad_utility::SameAsAny<PolymorphicVocabulary, UnderlyingVocabularies...>);
 
   // Assuming we only make use of methods that all UnderlyingVocabularies
   // provide, we simplify this class by using an array over a variant instead of
@@ -271,6 +283,9 @@ class SplitVocabulary {
   // GeoVocabulary.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(
       uint64_t indexWithMarker) const;
+
+  // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
+  static bool isGeoInfoAvailable();
 };
 
 // Concrete implementations of split function and split filename function
