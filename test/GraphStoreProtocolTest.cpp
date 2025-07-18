@@ -197,6 +197,20 @@ TEST(GraphStoreProtocolTest, parseTriples) {
 }
 
 // _____________________________________________________________________________________________
+// If the `TripleComponent` is a `ValueId` which is a `BlankNodeIndex` then
+// `sub` must match on it.
+MATCHER_P(IfBlankNode, sub, "") {
+  if (arg.isId()) {
+    auto id = arg.getId();
+    if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      return testing::ExplainMatchResult(sub, id.getBlankNodeIndex(),
+                                         result_listener);
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
   auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
                                                   TestIndexConfig{});
@@ -209,10 +223,29 @@ TEST(GraphStoreProtocolTest, convertTriples) {
         auto trace = generateLocationTrace(l);
         auto convertedTriples =
             GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
-        //       convertedTriples.localVocab_.isBlankNodeIndexContained();
         EXPECT_THAT(convertedTriples,
                     AD_FIELD(updateClause::UpdateTriples, triples_,
                              testing::Eq(expectedTriples)));
+        auto AllComponents =
+            [](const testing::Matcher<const TripleComponent&>& sub)
+            -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+          return testing::AllOf(AD_FIELD(SparqlTripleSimpleWithGraph, s_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, p_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, o_, sub));
+        };
+        auto BlankNodeContained = [](const LocalVocab& lv)
+            -> testing::Matcher<const BlankNodeIndex&> {
+          return testing::ResultOf(
+              [&lv](const BlankNodeIndex& i) {
+                return lv.isBlankNodeIndexContained(i);
+              },
+              testing::IsTrue());
+        };
+        EXPECT_THAT(
+            convertedTriples,
+            AD_FIELD(updateClause::UpdateTriples, triples_,
+                     testing::Each(AllComponents(IfBlankNode(
+                         BlankNodeContained(convertedTriples.localVocab_))))));
       };
   expectConvert(DEFAULT{}, {}, {});
   expectConvert(iri("<a>"), {}, {});
