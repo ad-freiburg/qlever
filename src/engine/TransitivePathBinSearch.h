@@ -61,7 +61,7 @@ class BinSearchMap {
   // case these are available.
   std::vector<std::pair<Id, Id>> getEquivalentIds(Id node) const;
 
-  void setGraphId(const Id& graphId);
+  void setGraphId(Id graphId);
 };
 
 /**

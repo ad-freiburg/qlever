@@ -51,14 +51,14 @@ class HashMapWrapper {
    * @return A const Set&, consisting of all target ids which have an ingoing
    * edge from 'node'
    */
-  const Set& successors(const Id node) const;
+  const Set& successors(Id node) const;
 
   // Return equivalent ids from the index, along with an associated graph id in
   // case these are available.
   std::vector<std::pair<Id, Id>> getEquivalentIds(Id node) const;
 
   // Prefilter the map for values of a certain graph.
-  void setGraphId(const Id& graphId);
+  void setGraphId(Id graphId);
 };
 
 /**

@@ -51,16 +51,17 @@ std::vector<std::pair<Id, Id>> BinSearchMap::getEquivalentIds(Id node) const {
 }
 
 // _____________________________________________________________________________
-void BinSearchMap::setGraphId(const Id& graphId) {
-  if (!graphId.isUndefined()) {
+void BinSearchMap::setGraphId(Id graphId) {
+  if (graphId.isUndefined()) {
+    // If the graph id is undefined, this means that all graphs should match,
+    // which only works if we sorted by the actual values, not by graphs.
+    AD_CORRECTNESS_CHECK(graphIds_.empty());
+  } else {
     auto range = ql::ranges::equal_range(graphIds_, graphId);
     auto startIndex = std::distance(graphIds_.begin(), range.begin());
 
     offset_ = startIndex;
     size_ = range.size();
-  } else {
-    offset_ = 0;
-    size_ = startIds_.size();
   }
 }
 

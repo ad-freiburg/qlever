@@ -51,7 +51,7 @@ std::vector<std::pair<Id, Id>> HashMapWrapper::getEquivalentIds(Id node) const {
 }
 
 // _____________________________________________________________________________
-void HashMapWrapper::setGraphId(const Id& graphId) {
+void HashMapWrapper::setGraphId(Id graphId) {
   AD_CORRECTNESS_CHECK(!graphId.isUndefined() || graphMap_.size() == 1);
   if (graphMap_.contains(graphId)) {
     map_ = &graphMap_.at(graphId);
