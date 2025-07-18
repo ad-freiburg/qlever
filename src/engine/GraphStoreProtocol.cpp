@@ -10,13 +10,15 @@
 
 // ____________________________________________________________________________
 void GraphStoreProtocol::throwUnsupportedMediatype(
-    const string_view& mediatype) {
-  throw UnsupportedMediatypeError(absl::StrCat(
-      "Mediatype \"", mediatype,
-      "\" is not supported for SPARQL Graph Store HTTP Protocol in QLever. "
-      "Supported: ",
-      toString(ad_utility::MediaType::turtle), ", ",
-      toString(ad_utility::MediaType::ntriples), "."));
+    const std::string_view& mediatype) {
+  throw HttpError(
+      boost::beast::http::status::unsupported_media_type,
+      absl::StrCat(
+          "Mediatype \"", mediatype,
+          "\" is not supported for SPARQL Graph Store HTTP Protocol in QLever. "
+          "Supported: ",
+          toString(ad_utility::MediaType::turtle), ", ",
+          toString(ad_utility::MediaType::ntriples), "."));
 }
 
 // ____________________________________________________________________________
@@ -30,7 +32,7 @@ void GraphStoreProtocol::throwUnsupportedHTTPMethod(
 
 // ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
-    const string& body, const ad_utility::MediaType contentType) {
+    const std::string& body, const ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   switch (contentType) {
     case ad_utility::MediaType::turtle:

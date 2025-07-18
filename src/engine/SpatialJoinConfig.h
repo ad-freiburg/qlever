@@ -5,12 +5,14 @@
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 
+#include <array>
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
@@ -27,8 +29,14 @@ enum class SpatialJoinType {
   TOUCHES,
   EQUALS,
   OVERLAPS,
+  WITHIN,
   WITHIN_DIST
 };
+
+// String representation of the `SpatialJoinType` values.
+inline constexpr std::array<std::string_view, 9> SpatialJoinTypeString{
+    "intersects", "contains", "covers", "crosses",    "touches",
+    "equals",     "overlaps", "within", "within-dist"};
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -41,16 +49,16 @@ struct MaxDistanceConfig {
   double maxDist_;
 };
 
-// Spatial join using one of the join types above. The maximal distance is
-// relevant only for the `WITHIN_DIST` join type.
-struct SpatialJoinConfig {
+// Spatial join with libspatialjoin using one of the join types above. The
+// maximal distance is relevant only for the `WITHIN_DIST` join type.
+struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask =
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
+using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
+                                     LibSpatialJoinConfig>;
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm {

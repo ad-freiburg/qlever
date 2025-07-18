@@ -15,8 +15,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -47,10 +47,19 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<ad_utility::WktGeometryType,
+                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
+
+template <ad_utility::BoundingCoordinate RequestedCoordinate>
+NARY_EXPRESSION(BoundingCoordinateExpression, 1,
+                FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
 }  // namespace detail
 
@@ -104,12 +113,25 @@ SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryTypeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
   return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
                                                            std::move(child2));
 }
+
+// _____________________________________________________________________________
+template <ad_utility::BoundingCoordinate RequestedCoordinate>
+SparqlExpression::Ptr makeBoundingCoordinateExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
+      std::move(child));
+};
 
 namespace {
 
@@ -160,6 +182,8 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
   } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
     return res;
   } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<WITHIN>(expr))) {
     return res;
   }
   return std::nullopt;
@@ -265,3 +289,17 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(CROSSES);
 QL_INSTANTIATE_GEO_RELATION_EXPR(TOUCHES);
 QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
+
+// Explicit instantiations for the bounding coordinate expressions
+#ifdef QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR
+#error "Macro QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR already defined"
+#endif
+#define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
+  template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
+      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr);
+
+QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
+QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);
+QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MAX_X);
+QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MAX_Y);

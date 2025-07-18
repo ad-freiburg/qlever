@@ -28,7 +28,7 @@ class Join : public Operation {
   bool _sizeEstimateComputed;
   size_t _sizeEstimate;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
 
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
@@ -38,11 +38,11 @@ class Join : public Operation {
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -64,7 +64,7 @@ class Join : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
@@ -130,7 +130,7 @@ class Join : public Operation {
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

@@ -2,113 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "util/GeometryInfo.h"
-
-#include <util/geo/Geo.h>
+#include "rdfTypes/GeometryInfo.h"
 
 #include <cstdint>
 
-#include "parser/GeoPoint.h"
-#include "parser/Literal.h"
-#include "parser/NormalizedString.h"
-#include "util/BitUtils.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
-#include "util/GeoSparqlHelpers.h"
-#include "util/geo/Point.h"
+#include "util/Log.h"
 
 namespace ad_utility {
-namespace detail {
-
-// The following functions are implemented using libspatialjoin. They are
-// declared in this cpp file only to avoid including the libspatialjoin code in
-// the headers.
-
-using namespace ::util::geo;
-using CoordType = double;
-using ParsedWkt =
-    std::variant<Point<CoordType>, Line<CoordType>, Polygon<CoordType>,
-                 MultiPoint<CoordType>, MultiLine<CoordType>,
-                 MultiPolygon<CoordType>, Collection<CoordType>>;
-using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
-
-// ____________________________________________________________________________
-ParseResult parseWkt(const std::string_view& wkt) {
-  // TODO<ullingerc> Remove unnecessary string copying
-  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string(wkt));
-  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
-
-  std::optional<ParsedWkt> parsed = std::nullopt;
-  auto type = getWKTType(wktLiteral);
-  switch (type) {
-    case WKTType::POINT: {
-      parsed = pointFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::LINESTRING: {
-      parsed = lineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::POLYGON: {
-      parsed = polygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOINT: {
-      parsed = multiPointFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTILINESTRING: {
-      parsed = multiLineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOLYGON: {
-      parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::COLLECTION: {
-      parsed = collectionFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::NONE:
-      break;
-  }
-
-  return {type, parsed};
-}
-
-// ____________________________________________________________________________
-GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
-  return GeoPoint(point.getY(), point.getX());
-}
-
-// ____________________________________________________________________________
-Centroid centroidAsGeoPoint(const ParsedWkt& geometry) {
-  auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
-  return utilPointToGeoPoint(uPoint);
-};
-
-// ____________________________________________________________________________
-BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
-  auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
-  auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
-  auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
-  return {lowerLeft, upperRight};
-}
-
-// ____________________________________________________________________________
-Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
-  return {point.getLng(), point.getLat()};
-}
-
-// ____________________________________________________________________________
-std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
-                             const GeoPoint& upperRight) {
-  util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
-                                geoPointToUtilPoint(upperRight)};
-  return getWKT(box);
-}
-
-}  // namespace detail
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -121,6 +24,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // index size.
   AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1,
                        "WKT Type out of range");
+  AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.centroid_.toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
@@ -135,18 +39,36 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 };
 
 // ____________________________________________________________________________
-GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
+std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
   auto [type, parsed] = parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
-  return {type, boundingBoxAsGeoPoints(parsed.value()),
-          centroidAsGeoPoint(parsed.value())};
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+
+  auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value());
+  if (!boundingBox.has_value() || !centroid.has_value()) {
+    LOG(DEBUG) << "The WKT string `" << wkt
+               << "` would lead to an invalid centroid or bounding box. It "
+                  "will thus be treated as an invalid WKT literal."
+               << std::endl;
+    return std::nullopt;
+  }
+
+  return GeometryInfo{type, boundingBox.value(), centroid.value()};
 }
 
 // ____________________________________________________________________________
-GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
-  return static_cast<uint8_t>(detail::getWKTType(wkt.data()));
+std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
+  auto wktType =
+      static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
+  if (wktType == 0) {
+    // Type 0 represents invalid type
+    return std::nullopt;
+  }
+  return wktType;
 };
 
 // ____________________________________________________________________________
@@ -161,28 +83,37 @@ GeometryType GeometryInfo::getWktType() const {
 }
 
 // ____________________________________________________________________________
+std::optional<std::string_view> GeometryType::asIri() const {
+  return detail::wktTypeToIri(type_);
+}
+
+// ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
   return {GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
                                           bitMaskCentroid)};
 }
 
 // ____________________________________________________________________________
-Centroid GeometryInfo::getCentroid(const std::string_view& wkt) {
+std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
   return detail::centroidAsGeoPoint(parsed.value());
 }
 
 // ____________________________________________________________________________
 BoundingBox GeometryInfo::getBoundingBox() const {
-  return {GeoPoint::fromBitRepresentation(boundingBox_.first),
-          GeoPoint::fromBitRepresentation(boundingBox_.second)};
+  return {GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
+          GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
 }
 
 // ____________________________________________________________________________
-BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
+std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
   return detail::boundingBoxAsGeoPoints(parsed.value());
 }
 
@@ -190,6 +121,35 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
+
+// ____________________________________________________________________________
+template <BoundingCoordinate RequestedCoordinate>
+double BoundingBox::getBoundingCoordinate() const {
+  using enum BoundingCoordinate;
+  if constexpr (RequestedCoordinate == MIN_X) {
+    return lowerLeft_.getLng();
+  } else if constexpr (RequestedCoordinate == MIN_Y) {
+    return lowerLeft_.getLat();
+  } else if constexpr (RequestedCoordinate == MAX_X) {
+    return upperRight_.getLng();
+  } else if constexpr (RequestedCoordinate == MAX_Y) {
+    return upperRight_.getLat();
+  } else {
+    // Unfortunately, we cannot use a `static_assert` here because some compiler
+    // versions don't like it.
+    AD_FAIL();
+  }
+};
+
+// Explicit instantiations
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MIN_X>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MIN_Y>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MAX_X>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MAX_Y>()
+    const;
 
 // ____________________________________________________________________________
 template <typename RequestedInfo>
@@ -217,7 +177,8 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 // ____________________________________________________________________________
 template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
-RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+    std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -232,13 +193,13 @@ RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
 };
 
 // Explicit instantiations
-template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>(
-    const std::string_view& wkt);
-template Centroid GeometryInfo::getRequestedInfo<Centroid>(
-    const std::string_view& wkt);
-template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>(
-    const std::string_view& wkt);
-template GeometryType GeometryInfo::getRequestedInfo<GeometryType>(
-    const std::string_view& wkt);
+template std::optional<GeometryInfo>
+GeometryInfo::getRequestedInfo<GeometryInfo>(std::string_view wkt);
+template std::optional<Centroid> GeometryInfo::getRequestedInfo<Centroid>(
+    std::string_view wkt);
+template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
+    std::string_view wkt);
+template std::optional<GeometryType>
+GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
 
 }  // namespace ad_utility

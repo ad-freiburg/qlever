@@ -11,7 +11,7 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/Constants.h"
-#include "parser/Iri.h"
+#include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 

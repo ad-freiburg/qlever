@@ -17,12 +17,11 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/LocalVocabEntry.h"
-#include "parser/GeoPoint.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
-#include "util/GeometryInfo.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 
 namespace ad_utility {
 
@@ -129,6 +128,42 @@ class WktEnvelope {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{lit}};
+  }
+};
+
+// Get a single coordinate of the bounding box.
+template <BoundingCoordinate RequestedCoordinate>
+class WktBoundingCoordinate {
+ public:
+  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(
+        boundingBox.value().getBoundingCoordinate<RequestedCoordinate>());
+  }
+};
+
+// Compute the distance between two WKT points in meters.
+class WktGeometryType {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeometryType>& geometryType) const {
+    if (!geometryType.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto typeIri = geometryType.value().asIri();
+    if (!typeIri.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // The geometry type should be returned as an xsd:anyURI literal according
+    // to the GeoSPARQL standard.
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
     return {LiteralOrIri{lit}};
   }
 };

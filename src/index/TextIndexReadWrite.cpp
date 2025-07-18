@@ -78,8 +78,7 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
 
 // ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
-                                  const vector<Posting>& postings,
-                                  bool skipWordlistIfAllTheSame,
+                                  const std::vector<Posting>& postings,
                                   off_t& currentOffset, bool scoreIsInt) {
   ContextListMetaData meta;
   meta._nofElements = postings.size();
@@ -104,9 +103,7 @@ ContextListMetaData writePostings(ad_utility::File& out,
   textRecordEncoder.writeToFile(out, currentOffset);
 
   meta._startWordlist = currentOffset;
-  if (!skipWordlistIfAllTheSame || wordIndexEncoder.getCodeBook().size() > 1) {
-    wordIndexEncoder.writeToFile(out, currentOffset);
-  }
+  wordIndexEncoder.writeToFile(out, currentOffset);
 
   meta._startScorelist = currentOffset;
   if (scoreIsInt) {
@@ -131,7 +128,7 @@ ContextListMetaData writePostings(ad_utility::File& out,
 
 // ____________________________________________________________________________
 template <typename T>
-size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) {
+size_t writeCodebook(const std::vector<T>& codebook, ad_utility::File& file) {
   size_t byteSizeOfCodebook = sizeof(T) * codebook.size();
   file.write(&byteSizeOfCodebook, sizeof(byteSizeOfCodebook));
   file.write(codebook.data(), byteSizeOfCodebook);

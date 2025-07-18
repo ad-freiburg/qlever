@@ -99,20 +99,10 @@ size_t Index::getNumDistinctSubjectPredicatePairs() const {
 std::string_view Index::wordIdToString(WordIndex wordIndex) const {
   return pimpl_->wordIdToString(wordIndex);
 }
-
 // ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForWord(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForWord(word);
-}
-
-// ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForEntities(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForEntities(word);
-}
-
-// ____________________________________________________________________________
-size_t Index::getSizeEstimate(const std::string& words) const {
-  return pimpl_->getSizeEstimate(words);
+size_t Index::getSizeOfTextBlocksSum(const std::string& word,
+                                     TextScanMode textScanMode) const {
+  return pimpl_->getSizeOfTextBlocksSum(word, textScanMode);
 }
 
 // ____________________________________________________________________________
@@ -124,13 +114,14 @@ IdTable Index::getWordPostingsForTerm(
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   return pimpl_->getEntityMentionsForWord(term, allocator);
 }
 
 // ____________________________________________________________________________
-size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+size_t Index::getIndexOfBestSuitedElTerm(
+    const std::vector<std::string>& terms) const {
   return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 
@@ -266,12 +257,12 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(Permutation::Enum p) const {
+std::vector<float> Index::getMultiplicities(Permutation::Enum p) const {
   return pimpl_->getMultiplicities(p);
 }
 
 // ____________________________________________________________________________
-vector<float> Index::getMultiplicities(
+std::vector<float> Index::getMultiplicities(
     const TripleComponent& key, Permutation::Enum p,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);

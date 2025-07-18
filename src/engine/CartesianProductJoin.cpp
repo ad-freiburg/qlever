@@ -57,7 +57,7 @@ std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
 }
 
 // ____________________________________________________________________________
-string CartesianProductJoin::getCacheKeyImpl() const {
+std::string CartesianProductJoin::getCacheKeyImpl() const {
   return "CARTESIAN PRODUCT JOIN " +
          ad_utility::lazyStrJoin(
              ql::views::transform(
