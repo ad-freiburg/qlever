@@ -133,7 +133,7 @@ auto testAccessTokenCombinationsUrlEncoded =
 }  // namespace
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseGET) {
+TEST(SparqlProtocolTest, parseGET) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
@@ -208,7 +208,7 @@ TEST(SPARQLProtocolTest, parseGET) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
+TEST(SparqlProtocolTest, parseUrlencodedPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
@@ -326,7 +326,7 @@ TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseQueryPOST) {
+TEST(SparqlProtocolTest, parseQueryPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
@@ -372,7 +372,7 @@ TEST(SPARQLProtocolTest, parseQueryPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUpdatePOST) {
+TEST(SparqlProtocolTest, parseUpdatePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
@@ -416,7 +416,7 @@ TEST(SPARQLProtocolTest, parseUpdatePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parsePOST) {
+TEST(SparqlProtocolTest, parsePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
@@ -474,7 +474,7 @@ TEST(SPARQLProtocolTest, parsePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseHttpRequest) {
+TEST(SparqlProtocolTest, parseHttpRequest) {
   auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SparqlProtocol::parseHttpRequest(request);
@@ -522,7 +522,7 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
+TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect) {
   EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolIndirect(
                   makeGetRequest("/?default&access-token=foo")),
               ParsedRequestIs("/", "foo",
@@ -537,7 +537,7 @@ TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect) {
+TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect) {
   auto path = absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
   EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolDirect(makeRequest(
                   http::verb::get, path, {{http::field::host, "example.com"}})),

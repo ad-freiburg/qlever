@@ -10,13 +10,13 @@
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
 // Graph Store and internal operations) according to the SPARQL specifications.
 class SparqlProtocol {
-  FRIEND_TEST(SPARQLProtocolTest, parseGET);
-  FRIEND_TEST(SPARQLProtocolTest, parseUrlencodedPOST);
-  FRIEND_TEST(SPARQLProtocolTest, parseQueryPOST);
-  FRIEND_TEST(SPARQLProtocolTest, parseUpdatePOST);
-  FRIEND_TEST(SPARQLProtocolTest, parsePOST);
-  FRIEND_TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect);
-  FRIEND_TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect);
+  FRIEND_TEST(SparqlProtocolTest, parseGET);
+  FRIEND_TEST(SparqlProtocolTest, parseUrlencodedPOST);
+  FRIEND_TEST(SparqlProtocolTest, parseQueryPOST);
+  FRIEND_TEST(SparqlProtocolTest, parseUpdatePOST);
+  FRIEND_TEST(SparqlProtocolTest, parsePOST);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect);
 
   static constexpr std::string_view contentTypeUrlEncoded =
       "application/x-www-form-urlencoded";
