@@ -8,101 +8,24 @@
 #define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
+#include <iterator>
+#include <memory>
 #include <optional>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
+#include "range/v3/range/access.hpp"
+#include "range/v3/range/conversion.hpp"
+#include "range/v3/range/traits.hpp"
+#include "range/v3/view/subrange.hpp"
 #include "util/ExceptionHandling.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ResetWhenMoved.h"
 
-namespace {
-
-// Flattens double container and splits it at separator
-CPP_template(typename Range, typename ElementType)(
-    requires ql::ranges::input_range<Range>) struct ReChunkAtSeparatorFromGet
-    : ad_utility::InputRangeFromGet<ql::span<ElementType>> {
-  std::vector<ElementType> buffer_;
-  decltype(buffer_.begin()) iter_;
-  ElementType separator_;
-
-  ReChunkAtSeparatorFromGet(Range generator, ElementType separator)
-      : buffer_{ranges::to<std::vector<ElementType>>(
-            ql::views::join(generator))},
-        iter_{buffer_.begin()},
-        separator_{separator} {}
-
-  std::optional<ql::span<ElementType>> get() override {
-    if (iter_ == buffer_.end()) return std::nullopt;
-
-    auto found = std::find(iter_, buffer_.end(), separator_);
-    if (found == buffer_.end()) {
-      auto retVal =
-          ql::span<ElementType>{const_cast<char*>(&*iter_),
-                                static_cast<ql::span<ElementType>::index_type>(
-                                    std::distance(iter_, buffer_.end()))};
-      iter_ = buffer_.end();  // mark info that end is reached
-      return retVal;
-    }
-
-    auto retVal =
-        ql::span<ElementType>{const_cast<char*>(&*iter_),
-                              static_cast<ql::span<ElementType>::index_type>(
-                                  std::distance(iter_, found))};
-
-    iter_ = found;
-    iter_++;  // move past separator already found
-    return retVal;
-  }
-};
-
-template <typename SortedBlockView>
-struct uniqueBlockViewFromGet
-    : ad_utility::InputRangeFromGet<typename SortedBlockView::value_type> {
-  SortedBlockView view_;
-  decltype(view_.begin()) iter_;
-
-  std::optional<
-      ql::ranges::range_value_t<ql::ranges::range_value_t<SortedBlockView>>>
-      lastValueFromPreviousBlock_{std::nullopt};
-  size_t numInputs_{0};
-  size_t numUnique_{0};
-
-  uniqueBlockViewFromGet(SortedBlockView view)
-      : view_{std::move(view)}, iter_{view_.begin()} {}
-
-  std::optional<typename SortedBlockView::value_type> get() override {
-    if (iter_ == view_.end()) {
-      LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
-      LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
-      return std::nullopt;
-    }
-
-    auto block = *iter_;
-    if (block.empty()) {
-      iter_++;
-      return this->get();
-    }
-    numInputs_ += block.size();
-    auto beg = lastValueFromPreviousBlock_
-                   ? ql::ranges::find_if(
-                         block, [&p = lastValueFromPreviousBlock_.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
-    lastValueFromPreviousBlock_ = *(block.end() - 1);
-    auto it = std::unique(beg, block.end());
-    block.erase(it, block.end());
-    block.erase(block.begin(), beg);
-    numUnique_ += block.size();
-    iter_++;
-    return block;
-  }
-};
-
-}  // namespace
+namespace {}  // namespace
 
 namespace ad_utility {
 
@@ -113,18 +36,6 @@ CPP_requires(can_empty_, requires(const R& range)(ql::ranges::empty(range)));
 template <typename R>
 CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 }  // namespace detail
-
-// Takes a view of blocks and yields the elements of the same view, but removes
-// consecutive duplicates inside the blocks and across block boundaries.
-template <typename SortedBlockView,
-          typename ValueType = ql::ranges::range_value_t<
-              ql::ranges::range_value_t<SortedBlockView>>>
-cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
-    SortedBlockView view) {
-  for (auto& elem : uniqueBlockViewFromGet{std::move(view)}) {
-    co_yield elem;
-  }
-}
 
 // A view that owns its underlying storage. It is a replacement for
 // `ranges::owning_view` which is not yet supported by `GCC 11` and
@@ -204,6 +115,57 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::data(underlyingRange_);
   }
 };
+
+// Takes a view of blocks and yields the elements of the same view, but removes
+// consecutive duplicates inside the blocks and across block boundaries.
+template <typename SortedBlockView,
+          typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
+          typename ValueType = ql::ranges::range_value_t<BlockType>>
+
+auto uniqueBlockView(SortedBlockView view) {
+  struct uniqueBlockViewFromGet : ad_utility::InputRangeFromGet<BlockType> {
+    SortedBlockView view_;
+
+    decltype(ql::views::filter(view_,
+                               std::not_fn(ql::ranges::empty))) nonEmptyView_;
+    decltype(ql::ranges::begin(nonEmptyView_)) iter_;
+
+    std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
+    size_t numInputs_{0};
+    size_t numUnique_{0};
+
+    uniqueBlockViewFromGet(SortedBlockView view)
+        : view_{std::move(view)},
+          nonEmptyView_(
+              ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
+          iter_{ql::ranges::begin(nonEmptyView_)} {}
+
+    std::optional<BlockType> get() override {
+      if (iter_ == ql::ranges::end(nonEmptyView_)) {
+        LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
+        LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
+        return std::nullopt;
+      }
+
+      auto block = std::move(*iter_);
+      ql::ranges::advance(iter_, 1);
+      numInputs_ += block.size();
+      auto beg = lastValueFromPreviousBlock_
+                     ? ql::ranges::find_if(
+                           block, [&p = lastValueFromPreviousBlock_.value()](
+                                      const auto& el) { return el != p; })
+                     : block.begin();
+      lastValueFromPreviousBlock_ = block.back();
+      auto it = std::unique(beg, block.end());
+      block.erase(it, block.end());
+      block.erase(block.begin(), beg);
+      numUnique_ += block.size();
+      return block;
+    }
+  };
+  auto generator = std::make_unique<uniqueBlockViewFromGet>(std::move(view));
+  return ad_utility::InputRangeTypeErased{std::move(generator)};
+}
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
 // not exist. This is currently used in the `CompressedExternalIdTable.h`, where
@@ -395,11 +357,37 @@ CPP_template(typename Int)(
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<
-        Range>) inline ReChunkAtSeparatorFromGet<Range,
-                                                 ElementType> reChunkAtSeparator(Range
-                                                                                     generator,
-                                                                                 ElementType
-                                                                                     separator) {
+        Range>) inline auto reChunkAtSeparator(Range generator,
+                                               ElementType separator) {
+  // Flattens double container and splits it at separator
+  struct ReChunkAtSeparatorFromGet
+      : ad_utility::InputRangeFromGet<ql::span<ElementType>> {
+    Range generator_;
+    ElementType separator_;
+    std::vector<ElementType> buffer_;
+    decltype(ranges::views::split(
+        ql::views::join(generator_) | ranges::views::common,
+        separator_)) splitView_;
+    decltype(splitView_.begin()) splitIter_;
+
+    ReChunkAtSeparatorFromGet(Range generator, ElementType separator)
+        : generator_{generator},
+          separator_{separator},
+          splitView_{ranges::views::split(
+              ql::views::join(generator_) | ranges::views::common, separator)},
+          splitIter_{ql::ranges::begin(splitView_)} {}
+
+    std::optional<ql::span<ElementType>> get() override {
+      if (splitIter_ != ql::ranges::end(splitView_)) {
+        buffer_ = ql::ranges::to<std::vector<ElementType>>(*splitIter_);
+        ++splitIter_;
+        return ql::span(buffer_.begin(), buffer_.size());
+      }
+
+      return std::nullopt;
+    }
+  };
+
   return ReChunkAtSeparatorFromGet{generator, separator};
 }
 }  // namespace ad_utility
