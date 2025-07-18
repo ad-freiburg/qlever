@@ -38,7 +38,7 @@ CPP_concept HasDefaultGetPositionOfWord =
                           CompressedVocabulary<VocabularyInMemory>,
                           CompressedVocabulary<VocabularyInternalExternal>>;
 
-// This concept states that the given vocabulary implementation `T` MIGHT
+// This concept states that the given vocabulary implementation `T` might
 // provide precomputed `GeometryInfo` via a `getGeoInfo` method (for example,
 // because an underlying vocabulary might be a `GeoVocabulary`). This does not
 // guarantee that such information is actually available. However, if a class
