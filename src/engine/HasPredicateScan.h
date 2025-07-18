@@ -70,7 +70,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 
@@ -87,7 +87,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] const TripleComponent& getObject() const;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     if (subtree_) {
       return {std::addressof(subtree())};
     } else {

@@ -224,7 +224,8 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
                            TextIndexScanForEntityConfiguration>>
       output;
   // First pass to get all word searches
-  ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForTextVar;
+  ad_utility::HashMap<Variable, std::vector<std::string>>
+      potentialTermsForTextVar;
   ad_utility::HashMap<Variable, std::string> optTermForTextVar;
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (!conf.isWordSearch_.has_value()) {

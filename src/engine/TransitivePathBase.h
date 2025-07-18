@@ -235,7 +235,7 @@ class TransitivePathBase : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 
@@ -328,7 +328,7 @@ class TransitivePathBase : public Operation {
       size_t maxDist, Graphs activeGraphs = {},
       const std::optional<Variable>& graphVariable = std::nullopt);
 
-  vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*> getChildren() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

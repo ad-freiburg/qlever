@@ -49,16 +49,16 @@ struct MaxDistanceConfig {
   double maxDist_;
 };
 
-// Spatial join using one of the join types above. The maximal distance is
-// relevant only for the `WITHIN_DIST` join type.
-struct SpatialJoinConfig {
+// Spatial join with libspatialjoin using one of the join types above. The
+// maximal distance is relevant only for the `WITHIN_DIST` join type.
+struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask =
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
+using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
+                                     LibSpatialJoinConfig>;
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm {

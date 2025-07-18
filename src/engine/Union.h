@@ -43,7 +43,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 
@@ -64,7 +64,7 @@ class Union : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
@@ -74,7 +74,7 @@ class Union : public Operation {
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const vector<ColumnIndex>& sortColumns) const override;
+      const std::vector<ColumnIndex>& sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {
@@ -110,10 +110,10 @@ class Union : public Operation {
   IdTable transformToCorrectColumnFormat(
       IdTable idTable, const std::vector<ColumnIndex>& permutation) const;
 
-  // Create a generator that yields the `IdTable` for the left or right child
+  // Create a lazy result that yields the `IdTable` for the left or right child
   // one after another and apply a potential differing permutation to it. Write
   // the merged LocalVocab to the given `LocalVocab` object at the end.
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 

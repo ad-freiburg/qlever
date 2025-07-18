@@ -141,7 +141,7 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);

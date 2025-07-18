@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "SparqlAntlrParserTestHelpers.h"
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "parser/SparqlParser.h"
 #include "util/ParseException.h"
 #include "util/SourceLocation.h"
