@@ -41,7 +41,7 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
         absl::StrCat("Unsupported GeoSPARQL filter: Variable ", left.name(),
                      " on both sides. Is this what you intended?"));
   }
-  return SpatialJoinConfiguration{SpatialJoinConfig{type, maxDist},
+  return SpatialJoinConfiguration{LibSpatialJoinConfig{type, maxDist},
                                   std::move(left),
                                   std::move(right),
                                   std::nullopt,
