@@ -127,7 +127,7 @@ class Vocabulary {
   bool getId(std::string_view word, IndexType* idx) const;
 
   // Retrieves a precomputed `GeometryInfo` object from the (possibly)
-  // underlying `GeoVocabulary`. This functions returns a `GeometryInfo` object
+  // underlying `GeoVocabulary`. This function returns a `GeometryInfo` object
   // if and only if a `GeoVocabulary` is used and the given index points to a
   // valid geometry in this `GeoVocabulary`. In all other cases, `std::nullopt`
   // is returned.
