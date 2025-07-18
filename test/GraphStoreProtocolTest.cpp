@@ -49,11 +49,17 @@ TEST(GraphStoreProtocolTest, transformPost) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(
-              "/?default", "application/sparql-results+xml", ""),
+              "/?default", "application/sparql-results+xml", "f"),
           DEFAULT{}),
       testing::HasSubstr(
           "Mediatype \"application/sparql-results+xml\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPost(
+          ad_utility::testing::makePostRequest(
+              "/?default", "application/sparql-results+xml", ""),
+          DEFAULT{}),
+      testing::HasSubstr("Request body is empty."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(

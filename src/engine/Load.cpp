@@ -69,20 +69,34 @@ std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {
+  auto makeSilentResult = [this]() -> Result {
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab{}};
+  };
   try {
-    return computeResultImpl(requestLaziness);
-  } catch (const ad_utility::CancellationException&) {
-    throw;
-  } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
-    throw;
+    try {
+      return computeResultImpl(requestLaziness);
+    } catch (const ad_utility::CancellationException&) {
+      throw;
+    } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+      throw;
+    } catch (const std::exception&) {
+      // If the `SILENT` keyword is set, catch the error and return the neutral
+      // element for this operation (an empty `IdTable`). The `IdTable` is used
+      // to fill in the variables in the template triple `?s ?p ?o`. The empty
+      // `IdTable` results in no triples being updated.
+      if (loadClause_.silent_) {
+        return makeSilentResult();
+      } else {
+        throw;
+      }
+    }
   } catch (const std::exception&) {
-    // If the `SILENT` keyword is set, catch the error and return the neutral
-    // element for this operation (an empty `IdTable`). The `IdTable` is used to
-    // fill in the variables in the template triple `?s ?p ?o`. The empty
-    // `IdTable` results in no triples being updated.
-    if (loadClause_.silent_ || RuntimeParameters().get<"syntax-test-mode">()) {
-      return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-              resultSortedOn(), LocalVocab{}};
+    // Unfortunately, we cannot merge this with the `catch` clause for `SILENT`
+    // above, because in the syntax test mode of the conformance tests we
+    // sometimes also might encounter `CancellationException`s.
+    if (RuntimeParameters().get<"syntax-test-mode">()) {
+      return makeSilentResult();
     }
     throw;
   }
