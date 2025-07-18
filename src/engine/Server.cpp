@@ -593,7 +593,7 @@ Server::PlannedQuery Server::planQuery(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(
+nlohmann::json Server::composeErrorResponseJson(
     const std::string& query, const std::string& errorMsg,
     const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
@@ -620,7 +620,7 @@ json Server::composeErrorResponseJson(
 }
 
 // _____________________________________________________________________________
-json Server::composeStatsJson() const {
+nlohmann::json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
   result["git-hash-index"] = index_.getGitShortHash();
@@ -880,7 +880,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-json Server::createResponseMetadataForUpdate(
+nlohmann::json Server::createResponseMetadataForUpdate(
     const ad_utility::Timer& requestTimer, const Index& index,
     const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
@@ -941,7 +941,7 @@ json Server::createResponseMetadataForUpdate(
   return response;
 }
 // ____________________________________________________________________________
-json Server::processUpdateImpl(
+nlohmann::json Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {

@@ -48,10 +48,10 @@ class GraphStoreProtocol {
     // A media type is set but not one of the supported ones as per the QLever
     // MediaType code. Content-Type is only allowed to return a single value, so
     // wildcards are also correctly discarded here.
-    if (mediaTypes->size() != 1) {
+    if (mediaTypes.size() != 1) {
       throwUnsupportedMediatype(rawRequest.at(field::content_type));
     }
-    return mediaTypes->front();
+    return mediaTypes.front();
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 

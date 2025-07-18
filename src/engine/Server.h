@@ -28,8 +28,6 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
-using nlohmann::json;
-
 template <typename Operation>
 CPP_concept QueryOrUpdate =
     ad_utility::SameAsAny<Operation,
@@ -38,6 +36,7 @@ CPP_concept QueryOrUpdate =
 
 //! The HTTP Server used.
 class Server {
+  using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);

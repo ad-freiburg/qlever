@@ -2758,7 +2758,11 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     ql::ranges::for_each(
         candidates, [this, &newPlans](const SubtreePlan& plan) {
           auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          // Note: It is important that we do NOT copy the filter and
+          // textLimit IDs, as they originate from the inner scope of the
+          // OPTIONAL clause and have been already completely dealt with.
+          // This was the cause of
+          // https://github.com/ad-freiburg/qlever/issues/2194.
           newPlans.push_back(std::move(joinedPlan));
         });
     return true;

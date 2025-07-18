@@ -13,8 +13,6 @@
 #include "parser/RdfParser.h"
 #include "util/Log.h"
 
-using std::array;
-
 namespace ad_utility::detail {
 
 template <typename Parser>
@@ -147,25 +145,25 @@ class ParallelParseBuffer {
   // becomes false when the parser is done. In this case we still have to
   // empty our buffer
   bool _isParserValid = true;
-  std::vector<array<std::string, 3>> _buffer;
+  std::vector<std::array<std::string, 3>> _buffer;
   // this future handles the asynchronous parser calls
-  std::future<std::pair<bool, std::vector<array<std::string, 3>>>> _fut;
+  std::future<std::pair<bool, std::vector<std::array<std::string, 3>>>> _fut;
 
   // this function extracts bufferSize_ many triples from the parser.
   // If the bool argument is false, the parser is exhausted and further calls
   // to parseBatch are useless. In this case we probably still have some triples
   // that were parsed before the parser was done, so we still have to consider
   // these.
-  std::pair<bool, std::vector<array<std::string, 3>>> parseBatch() {
+  std::pair<bool, std::vector<std::array<std::string, 3>>> parseBatch() {
     LOG(TRACE) << "Parsing next batch in parallel" << std::endl;
-    std::vector<array<std::string, 3>> buf;
+    std::vector<std::array<std::string, 3>> buf;
     // for small knowledge bases on small systems that fit in one
     // batch (e.g. during tests) the reserve may fail which is not bad in this
     // case
     try {
       buf.reserve(_bufferSize);
     } catch (const std::bad_alloc&) {
-      buf = std::vector<array<std::string, 3>>();
+      buf = std::vector<std::array<std::string, 3>>();
     }
     while (buf.size() < _bufferSize) {
       buf.emplace_back();

@@ -16,7 +16,7 @@
 
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {
@@ -50,6 +50,7 @@ class ThreadSafeQueue {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
         lock, [this] { return queue_.size() < maxSize_ || finish_; });
+
     if (finish_) {
       return false;
     }
@@ -59,14 +60,14 @@ class ThreadSafeQueue {
     return true;
   }
 
-  // The semantics of pushing an exception are as follows: All subsequent calls
-  // to `pop` will throw the `exception`, and all subsequent calls to `push`
-  // will return `false`.
+  // The semantics of pushing an exception are as follows: All subsequent
+  // calls to `pop` will throw the `exception`, and all subsequent calls to
+  // `push` will return `false`.
   void pushException(std::exception_ptr exception) {
     std::unique_lock lock{mutex_};
     // It is important that we only push the first exception we encounter,
-    // otherwise there might be race conditions between rethrowing and resetting
-    // the exception.
+    // otherwise there might be race conditions between rethrowing and
+    // resetting the exception.
     if (pushedException_ != nullptr) {
       return;
     }
@@ -77,20 +78,21 @@ class ThreadSafeQueue {
     popNotification_.notify_all();
   }
 
-  // After calling this function, all calls to `push` will return `false` and no
-  // further elements will be added to the queue. Calls to `pop` will yield the
-  // elements that were already stored in the queue before the call to
-  // `finish`, after those were drained, `pop` will return `nullopt`. This
-  // function can be called from the producing/pushing threads to signal that
-  // all elements have been pushed, or from the consumers to signal that they
-  // will not pop further elements from the queue.
+  // After calling this function, all calls to `push` will return `false`
+  // and no further elements will be added to the queue. Calls to `pop` will
+  // yield the elements that were already stored in the queue before the
+  // call to `finish`, after those were drained, `pop` will return
+  // `nullopt`. This function can be called from the producing/pushing
+  // threads to signal that all elements have been pushed, or from the
+  // consumers to signal that they will not pop further elements from the
+  // queue.
   void finish() noexcept {
-    // It is crucial that this function never throws, so that we can safely call
-    // it unconditionally in destructors to prevent deadlocks. In theory,
-    // locking a mutex can throw an exception, but these are `system_errors`
-    // from the underlying operating system that should never appear in practice
-    // and are almost impossible to recover from, so we terminate the program in
-    // the unlikely case.
+    // It is crucial that this function never throws, so that we can safely
+    // call it unconditionally in destructors to prevent deadlocks. In
+    // theory, locking a mutex can throw an exception, but these are
+    // `system_errors` from the underlying operating system that should
+    // never appear in practice and are almost impossible to recover from,
+    // so we terminate the program in the unlikely case.
     ad_utility::terminateIfThrows(
         [this] {
           std::unique_lock lock{mutex_};
@@ -104,8 +106,8 @@ class ThreadSafeQueue {
 
   /// Always call `finish` on destruction. This makes sure that worker
   /// threads that pop from the queue always see std::nullopt, even if the
-  /// threads that push to the queue exit via an exception or if the explicit
-  /// call to `finish` is missing.
+  /// threads that push to the queue exit via an exception or if the
+  /// explicit call to `finish` is missing.
   ~ThreadSafeQueue() { finish(); }
 
   /// Blocks until another thread pushes an element via push() which is
@@ -130,15 +132,15 @@ class ThreadSafeQueue {
   }
 };
 
-// A thread safe queue that is similar (wrt the interface and the behavior) to
-// the `ThreadSafeQueue` above, with the following difference: Each element that
-// is pushed is associated with a unique index `n`. A call to `push(n,
-// someValue)` will block until other threads have pushed all indices in the
-// range [0, ..., n - 1]. This can be used to enforce the ordering of values
-// that are asynchronously created by multiple threads. Note that great care has
-// to be taken that all the indices will be pushed eventually by some thread,
-// and that for each thread individually the indices are increasing, otherwise
-// the queue will lead to a deadlock.
+// A thread safe queue that is similar (wrt the interface and the behavior)
+// to the `ThreadSafeQueue` above, with the following difference: Each
+// element that is pushed is associated with a unique index `n`. A call to
+// `push(n, someValue)` will block until other threads have pushed all
+// indices in the range [0, ..., n - 1]. This can be used to enforce the
+// ordering of values that are asynchronously created by multiple threads.
+// Note that great care has to be taken that all the indices will be pushed
+// eventually by some thread, and that for each thread individually the
+// indices are increasing, otherwise the queue will lead to a deadlock.
 template <typename T>
 class OrderedThreadSafeQueue {
  private:
@@ -150,7 +152,8 @@ class OrderedThreadSafeQueue {
 
  public:
   using value_type = T;
-  // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
+  // Construct from the maximal queue size (see `ThreadSafeQueue` for
+  // details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
 
   // We can neither copy nor move this class
@@ -194,9 +197,10 @@ class OrderedThreadSafeQueue {
 
   // See `ThreadSafeQueue` for details.
   void finish() noexcept {
-    // It is crucial that this function never throws, so that we can safely call
-    // it unconditionally in destructors to prevent deadlocks. Should the
-    // implementation ever change, make sure that it is still `noexcept`.
+    // It is crucial that this function never throws, so that we can safely
+    // call it unconditionally in destructors to prevent deadlocks. Should
+    // the implementation ever change, make sure that it is still
+    // `noexcept`.
     ad_utility::terminateIfThrows(
         [this] {
           queue_.finish();
@@ -205,7 +209,8 @@ class OrderedThreadSafeQueue {
           lock.unlock();
           cv_.notify_all();
         },
-        "Locking or unlocking a mutex in an OrderedThreadsafeQueue failed.");
+        "Locking or unlocking a mutex in an OrderedThreadsafeQueue "
+        "failed.");
   }
 
   // See `ThreadSafeQueue` for details.
@@ -225,11 +230,11 @@ CPP_concept IsThreadsafeQueue =
 namespace detail {
 // A helper function for setting up a producer for one of the threadsafe
 // queues above. Takes a reference to a queue and a `producer`. The producer
-// must return `std::optional<somethingThatCanBePushedToTheQueue>`. The producer
-// is called repeatedly, and the resulting values are pushed to the queue. If
-// the producer returns `nullopt`, `numThreads` is decremented, and the queue is
-// finished if `numThreads <= 0`. All exceptions that happen during the
-// execution of `producer` are propagated to the queue.
+// must return `std::optional<somethingThatCanBePushedToTheQueue>`. The
+// producer is called repeatedly, and the resulting values are pushed to the
+// queue. If the producer returns `nullopt`, `numThreads` is decremented,
+// and the queue is finished if `numThreads <= 0`. All exceptions that
+// happen during the execution of `producer` are propagated to the queue.
 CPP_template(typename Queue, typename Producer)(
     requires IsThreadsafeQueue<Queue> CPP_and std::invocable<
         Producer>) auto makeQueueTask(Queue& queue, Producer producer,
@@ -256,34 +261,41 @@ CPP_template(typename Queue, typename Producer)(
 }
 }  // namespace detail
 
-// This helper function makes the usage of the (Ordered)ThreadSafeQueue above
-// much easier. It takes the size of the queue, the number of producer threads,
-// and a `producer` (a callable that produces values). The `producer` is called
-// repeatedly in `numThreads` many concurrent threads. It needs to return
-// `std::optional<SomethingThatCanBePushedToTheQueue>` and has the following
-// semantics: If `nullopt` is returned, then the thread is finished. The queue
-// is finished, when all the producer threads have finished by yielding
-// `nullopt`, or if any call to `producer` in any thread throws an
-// exception. In that case the exception is propagated to the resulting
-// generator. The resulting generator yields all the values that have been
-// pushed to the queue.
+// This helper function makes the usage of the (Ordered)ThreadSafeQueue
+// above much easier. It takes the size of the queue, the number of producer
+// threads, and a `producer` (a callable that produces values). The
+// `producer` is called repeatedly in `numThreads` many concurrent threads.
+// It needs to return `std::optional<SomethingThatCanBePushedToTheQueue>`
+// and has the following semantics: If `nullopt` is returned, then the
+// thread is finished. The queue is finished, when all the producer threads
+// have finished by yielding `nullopt`, or if any call to `producer` in any
+// thread throws an exception. In that case the exception is propagated to
+// the resulting generator. The resulting generator yields all the values
+// that have been pushed to the queue.
 template <typename Queue, typename Producer>
-cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
-                                                            size_t numThreads,
-                                                            Producer producer) {
-  Queue queue{queueSize};
+ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
+    size_t queueSize, size_t numThreads, Producer producer) {
   AD_CONTRACT_CHECK(numThreads > 0u);
-  std::vector<ad_utility::JThread> threads;
-  std::atomic<int64_t> numUnfinishedThreads{static_cast<int64_t>(numThreads)};
-  absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
-  for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
-    threads.emplace_back(
-        detail::makeQueueTask(queue, producer, numUnfinishedThreads));
-  }
+  using V = typename Queue::value_type;
+  struct QueueGenerator : public ad_utility::InputRangeFromGet<V> {
+    std::vector<ad_utility::JThread> threads_;
+    Queue queue_;
+    std::atomic<int64_t> numUnfinishedThreads_;
 
-  while (auto opt = queue.pop()) {
-    co_yield (opt.value());
-  }
+    QueueGenerator(const size_t queueSize, const size_t numThreads,
+                   Producer producer)
+        : queue_{queueSize},
+          numUnfinishedThreads_{static_cast<int64_t>(numThreads)} {
+      for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
+        threads_.emplace_back(
+            detail::makeQueueTask(queue_, producer, numUnfinishedThreads_));
+      }
+    }
+    std::optional<V> get() override { return queue_.pop(); }
+  };
+
+  return ad_utility::InputRangeTypeErased{std::make_unique<QueueGenerator>(
+      queueSize, numThreads, std::move(producer))};
 }
 
 }  // namespace ad_utility::data_structures
