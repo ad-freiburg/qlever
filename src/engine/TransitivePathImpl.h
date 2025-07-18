@@ -32,10 +32,14 @@ struct TableColumnWithVocab {
         startNodes_{std::move(startNodes)},
         vocab_{std::move(vocab)} {}
 
+  // Return a range substituting undefined values with all corresponding values
+  // from `edges`.
   decltype(auto) expandStartNodes([[maybe_unused]] const auto& edges,
                                   bool checkGraph) {
+    // In the bound case we know that all values are defined so we can use a
+    // shortcut.
     if constexpr (std::is_same_v<ColumnType, SetWithGraph>) {
-      return startNodes_;
+      return static_cast<const ColumnType&>(startNodes_);
     } else {
       return startNodes_ |
              ql::views::transform([&edges, checkGraph](auto tuple) {
