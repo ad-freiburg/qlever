@@ -9,7 +9,7 @@
 
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
 // Graph Store and internal operations) according to the SPARQL specifications.
-class SPARQLProtocol {
+class SparqlProtocol {
   FRIEND_TEST(SPARQLProtocolTest, parseGET);
   FRIEND_TEST(SPARQLProtocolTest, parseUrlencodedPOST);
   FRIEND_TEST(SPARQLProtocolTest, parseQueryPOST);

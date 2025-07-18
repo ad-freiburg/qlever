@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 
 #include "engine/HttpError.h"
 
@@ -10,7 +10,7 @@ using namespace ad_utility::url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGET(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseGET(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
@@ -34,7 +34,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGET(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseUrlencodedPOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseUrlencodedPOST(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   // All parameters must be included in the request body for URL-encoded
@@ -82,7 +82,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseUrlencodedPOST(
 
 // ____________________________________________________________________________
 template <typename Operation>
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseSPARQLPOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseSPARQLPOST(
     const RequestType& request, std::string_view contentType) {
   using namespace ad_utility::url_parser::sparqlOperation;
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
@@ -95,7 +95,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseSPARQLPOST(
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parsePOST(
     const RequestType& request) {
   // For a POST request, the content type must be either
   // "application/x-www-form-urlencoded" (1), "application/sparql-query"
@@ -156,7 +156,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
 
 // ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest
-SPARQLProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
+SparqlProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
   if (!parsedRequestBuilder.isGraphStoreOperationIndirect()) {
@@ -169,7 +169,7 @@ SPARQLProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
 
 // ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest
-SPARQLProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
+SparqlProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
   parsedRequestBuilder.extractGraphStoreOperationDirect();
@@ -177,7 +177,7 @@ SPARQLProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
+ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
     RequestType& request) {
   // TODO<qup42>: make request const again once the conformance tests are fixed.
   // Fixup for request target missing the leading slash.

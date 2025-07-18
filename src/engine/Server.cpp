@@ -22,7 +22,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "parser/SparqlParser.h"
@@ -308,7 +308,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  auto parsedHttpRequest = SPARQLProtocol::parseHttpRequest(request);
+  auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
   // We always want to call `Server::checkParameter` with the same first

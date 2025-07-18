@@ -6,7 +6,7 @@
 
 #include <boost/beast/http.hpp>
 
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/http/HttpUtils.h"
@@ -137,7 +137,7 @@ TEST(SPARQLProtocolTest, parseGET) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseGET(request);
+    return SparqlProtocol::parseGET(request);
   };
   // No SPARQL Operation
   EXPECT_THAT(parse(makeGetRequest("/")),
@@ -212,7 +212,7 @@ TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseUrlencodedPOST(request);
+    return SparqlProtocol::parseUrlencodedPOST(request);
   };
 
   // No SPARQL Operation
@@ -330,8 +330,8 @@ TEST(SPARQLProtocolTest, parseQueryPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Query>(
-        request, SPARQLProtocol::contentTypeSparqlQuery);
+    return SparqlProtocol::parseSPARQLPOST<Query>(
+        request, SparqlProtocol::contentTypeSparqlQuery);
   };
 
   // Query
@@ -376,8 +376,8 @@ TEST(SPARQLProtocolTest, parseUpdatePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Update>(
-        request, SPARQLProtocol::contentTypeSparqlUpdate);
+    return SparqlProtocol::parseSPARQLPOST<Update>(
+        request, SparqlProtocol::contentTypeSparqlUpdate);
   };
 
   // Update
@@ -420,7 +420,7 @@ TEST(SPARQLProtocolTest, parsePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parsePOST(request);
+    return SparqlProtocol::parsePOST(request);
   };
 
   // Query
@@ -477,7 +477,7 @@ TEST(SPARQLProtocolTest, parsePOST) {
 TEST(SPARQLProtocolTest, parseHttpRequest) {
   auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseHttpRequest(request);
+    return SparqlProtocol::parseHttpRequest(request);
   };
 
   // Query
@@ -523,13 +523,13 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
-  EXPECT_THAT(SPARQLProtocol::parseGraphStoreProtocolIndirect(
+  EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolIndirect(
                   makeGetRequest("/?default&access-token=foo")),
               ParsedRequestIs("/", "foo",
                               {{"default", {""}}, {"access-token", {"foo"}}},
                               GraphStoreOperation{DEFAULT{}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SPARQLProtocol::parseGraphStoreProtocolIndirect(
+      SparqlProtocol::parseGraphStoreProtocolIndirect(
           makeGetRequest(absl::StrCat(
               "/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo.ttl"))),
       testing::HasSubstr(
@@ -539,7 +539,7 @@ TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect) {
   auto path = absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
-  EXPECT_THAT(SPARQLProtocol::parseGraphStoreProtocolDirect(makeRequest(
+  EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolDirect(makeRequest(
                   http::verb::get, path, {{http::field::host, "example.com"}})),
               ParsedRequestIs(path, std::nullopt, {},
                               GraphStoreOperation{Iri(absl::StrCat(
