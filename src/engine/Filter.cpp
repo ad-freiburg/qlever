@@ -89,7 +89,7 @@ Result Filter::computeResult(bool requestLaziness) {
                   // class.
                   return Result::IdTableVocabPair{
                       std::move(filteredTable),
-                      std::move(idTableVocabPair.localVocab_.clone())};
+                      idTableVocabPair.localVocab_.clone()};
                 }) |
                 ql::views::filter(
                     [](const auto& pair) { return !pair.idTable_.empty(); })},
