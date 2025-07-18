@@ -340,7 +340,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   class Sentinel;
   class Iterator {
    private:
-    std::ranges::iterator_t<V> current_;
+    ql::ranges::iterator_t<V> current_;
 
    public:
     using iterator_category = std::input_iterator_tag;
@@ -391,12 +391,12 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
  public:
   ForceInputView() = default;
-  // Construct from the underlying view.
 
+  // Construct from the underlying view.
   explicit ForceInputView(V base) : base_(std::move(base)) {}
 
   // `ForceInputView`s can be moved iff supported by the underlying view
-  // but we currently disallo copies.
+  // but we currently disallow copies.
   ForceInputView(ForceInputView&&) = default;
   ForceInputView& operator=(ForceInputView&&) = default;
 

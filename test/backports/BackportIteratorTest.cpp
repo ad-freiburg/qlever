@@ -28,13 +28,13 @@ template <typename T>
 struct MoveSentinelTest : public ::testing::Test {
  public:
   // Initial state, 10 unmoved elements.
-  T container = []() { return T(10, r); }();
+  T container_ = T(10, r);
 
   // Expected state after elementwise moving of the `container`.
-  T afterMove = []() { return T(10, rFalse); }();
+  T afterMove_ = T(10, rFalse);
 
   // An empty container.
-  T emptyContainer{};
+  T emptyContainer_{};
   void SetUp() override {}
 };
 
@@ -45,7 +45,7 @@ TYPED_TEST_SUITE(MoveSentinelTest, ContainerTypes);
 
 // _____________________________________________________________________________
 TYPED_TEST(MoveSentinelTest, doesInFactMove) {
-  auto& cont = this->container;
+  auto& cont = this->container_;
   auto beg = std::make_move_iterator(cont.begin());
   auto end = ql::move_sentinel{cont.end()};
 
@@ -54,14 +54,14 @@ TYPED_TEST(MoveSentinelTest, doesInFactMove) {
     // This is a move-assigment because `beg` is a move-iterator.
     target = *beg;
   }
-  EXPECT_THAT(cont, ::testing::ElementsAreArray(this->afterMove));
+  EXPECT_THAT(cont, ::testing::ElementsAreArray(this->afterMove_));
 }
 
 // Manually test `==`, `!=`, and `base()`.
 TYPED_TEST(MoveSentinelTest, basicFunctions) {
   {
     // In the empty container, `begin()` and `end()` compare equal.
-    auto& empty = this->emptyContainer;
+    auto& empty = this->emptyContainer_;
     EXPECT_EQ(empty.begin(), empty.end());
     auto emptySent = ql::move_sentinel{empty.end()};
     EXPECT_EQ(std::make_move_iterator(empty.begin()), emptySent);
@@ -71,7 +71,7 @@ TYPED_TEST(MoveSentinelTest, basicFunctions) {
 
   {
     // Non-empty container, begin() and end() are not equal.
-    auto& cont = this->container;
+    auto& cont = this->container_;
     auto sent = ql::move_sentinel{cont.end()};
     EXPECT_NE(cont.begin(), cont.end());
     EXPECT_NE(std::make_move_iterator(cont.begin()), sent);

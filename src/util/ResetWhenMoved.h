@@ -11,12 +11,13 @@ namespace ad_utility {
 // This class stores a single value of type `T` ( and is implicitly convertible
 // to and from `T`. Each time an object of type `ResetWhenMoved<T>` is moved
 // into another `ResetWhenMoved<T>` or into a plain `T`, its value changes back
-// to the `DefaultValue`. This class can be used as a simplification to
-// implement data structures that store raw integers or pointers that have to be
-// reset when the data structure is moved. When using `ResetWhenMoved` for such
-// members, then often the defaulted move constructors and move assignment
-// operators will have the correct semantics. For example usages see
-// `MmapVector.h` and `IdTable.h`.
+// to the `DefaultValue`. Optionally, an `InitialValue`, which will be assigned
+// to default-constructed objects can be specified as a template parameter. This
+// class can be used as a simplification to implement data structures that store
+// raw integers or pointers that have to be reset when the data structure is
+// moved. When using `ResetWhenMoved` for such members, then often the defaulted
+// move constructors and move assignment operators will have the correct
+// semantics. For example usages see `MmapVector.h` and `IdTable.h`.
 template <typename T, T DefaultValue, T InitialValue = DefaultValue>
 struct ResetWhenMoved {
   T value_ = InitialValue;

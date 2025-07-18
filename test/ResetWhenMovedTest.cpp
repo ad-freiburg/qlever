@@ -60,3 +60,13 @@ TEST(ResetWhenMoved, IntegerFortyTwo) {
   ASSERT_EQ(r2, 42);
   ASSERT_EQ(x, 43);
 }
+
+TEST(ResetWhenMoved, InitialValue) {
+  using R = ad_utility::ResetWhenMoved<int, 42, 13>;
+  R r;
+  EXPECT_EQ(r, 13);
+  r = 14;
+  auto r2 = std::move(r);
+  EXPECT_EQ(r, 42);
+  EXPECT_EQ(r2, 14);
+}
