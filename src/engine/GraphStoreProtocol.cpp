@@ -56,7 +56,7 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
     tripleGraph = std::get<GraphRef>(graph);
   }
   auto transformTc =
-      [&blankNodeAdder](const TripleComponent& tc) -> TripleComponent {
+      [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
     if (tc.isString()) {
       // Remove the `_:`.
       return blankNodeAdder.getBlankNodeIndex(tc.getString());
@@ -64,9 +64,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
       return tc;
     }
   };
-  auto transformTurtleTriple =
-      [&tripleGraph,
-       &transformTc](TurtleTriple&& triple) -> SparqlTripleSimpleWithGraph {
+  auto transformTurtleTriple = [&tripleGraph,
+                                &transformTc](TurtleTriple&& triple) {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
                          triple.graphIri_.getId() ==
                              qlever::specialIds().at(DEFAULT_GRAPH_IRI));
