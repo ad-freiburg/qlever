@@ -11,6 +11,56 @@
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
+HashMapWrapper::HashMapWrapper(
+    Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)
+    : graphMap_{allocator},
+      map_{nullptr},
+      emptySet_{allocator},
+      emptyMap_{allocator} {
+  graphMap_.try_emplace(Id::makeUndefined(), std::move(map));
+  map_ = &graphMap_.at(Id::makeUndefined());
+}
+
+// _____________________________________________________________________________
+HashMapWrapper::HashMapWrapper(
+    MapOfMaps graphMap, const ad_utility::AllocatorWithLimit<Id>& allocator)
+    : graphMap_{std::move(graphMap)},
+      map_{&emptyMap_},
+      emptySet_{allocator},
+      emptyMap_{allocator} {}
+
+// _____________________________________________________________________________
+const Set& HashMapWrapper::successors(const Id node) const {
+  auto iterator = map_->find(node);
+  if (iterator == map_->end()) {
+    return emptySet_;
+  }
+  return iterator->second;
+}
+
+// _____________________________________________________________________________
+std::vector<std::pair<Id, Id>> HashMapWrapper::getEquivalentIds(Id node) const {
+  std::vector<std::pair<Id, Id>> result;
+  for (const auto& [graph, map] : graphMap_) {
+    auto iterator = map.find(node);
+    if (iterator != map.end()) {
+      result.emplace_back(iterator->first, graph);
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+void HashMapWrapper::setGraphId(const Id& graphId) {
+  AD_CORRECTNESS_CHECK(!graphId.isUndefined() || graphMap_.size() == 1);
+  if (graphMap_.contains(graphId)) {
+    map_ = &graphMap_.at(graphId);
+  } else {
+    map_ = &emptyMap_;
+  }
+}
+
+// _____________________________________________________________________________
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& sub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {

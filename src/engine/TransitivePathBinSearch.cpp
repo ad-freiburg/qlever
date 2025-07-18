@@ -10,6 +10,61 @@
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
+BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
+                           ql::span<const Id> targetIds,
+                           ql::span<const Id> graphIds)
+    : startIds_{startIds},
+      targetIds_{targetIds},
+      graphIds_{graphIds},
+      size_{startIds_.size()} {
+  AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
+  AD_CORRECTNESS_CHECK(startIds.size() == graphIds.size() || graphIds.empty());
+}
+
+// _____________________________________________________________________________
+ql::span<const Id> BinSearchMap::successors(const Id node) const {
+  auto range = ql::ranges::equal_range(startIds_.subspan(offset_, size_), node);
+
+  auto startIndex = std::distance(startIds_.begin(), range.begin());
+
+  return targetIds_.subspan(startIndex, range.size());
+}
+
+// _____________________________________________________________________________
+std::vector<std::pair<Id, Id>> BinSearchMap::getEquivalentIds(Id node) const {
+  std::vector<std::pair<Id, Id>> result;
+  if (graphIds_.empty()) {
+    auto range = ql::ranges::equal_range(startIds_, node);
+    if (!range.empty()) {
+      result.emplace_back(range.front(), Id::makeUndefined());
+    }
+  } else {
+    for (auto [id, graphId] : ::ranges::views::zip(startIds_, graphIds_)) {
+      if (id == node) {
+        // Duplicates are fine, the only usage of this function deduplicates
+        // this.
+        result.emplace_back(id, graphId);
+      }
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+void BinSearchMap::setGraphId(const Id& graphId) {
+  if (!graphId.isUndefined()) {
+    auto range = ql::ranges::equal_range(graphIds_, graphId);
+    auto startIndex = std::distance(graphIds_.begin(), range.begin());
+
+    offset_ = startIndex;
+    size_ = range.size();
+  } else {
+    offset_ = 0;
+    size_ = startIds_.size();
+  }
+}
+
+// _____________________________________________________________________________
 TransitivePathBinSearch::TransitivePathBinSearch(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
