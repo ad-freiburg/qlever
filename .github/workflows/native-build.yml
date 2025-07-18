@@ -74,16 +74,16 @@ jobs:
             compiler-version: 11
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
             build-type: Release
-          # TODO<joka921> Figure out a way to enable this build only for master pushes and not for the PR.
-          #          - compiler: clang
-          #            compiler-version: 15
-          #            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
-          #            build-type: Debug
-          #            skipIfPr: true
-          #            expensive-tests: false
-          #            continue-on-error: true
-          #            use-keep-going: true
-          #            use-ignore-errors: true
+# TODO<joka921> Figure out a way to enable this build only for master pushes and not for the PR.
+#          - compiler: clang
+#            compiler-version: 15
+#            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+#            build-type: Debug
+#            skipIfPr: true
+#            expensive-tests: false
+#            continue-on-error: true
+#            use-keep-going: true
+#            use-ignore-errors: true
           - compiler: clang
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
@@ -172,7 +172,6 @@ jobs:
       - name: E2E with index in one go
         if: (matrix.compiler == 'clang') && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh
-
       - name: E2E with separate text index build
         if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh -t
