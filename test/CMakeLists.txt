@@ -383,7 +383,7 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
-addLinkAndDiscoverTest(ThreadSafeQueueTest)
+addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
@@ -466,3 +466,5 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 addLinkAndDiscoverTest(GeometryInfoTest util)
 
 addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
+
+addLinkAndDiscoverTestSerial(HttpErrorTest engine)
