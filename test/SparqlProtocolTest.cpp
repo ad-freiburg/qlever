@@ -6,7 +6,7 @@
 
 #include <boost/beast/http.hpp>
 
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/http/HttpUtils.h"
@@ -133,11 +133,11 @@ auto testAccessTokenCombinationsUrlEncoded =
 }  // namespace
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseGET) {
+TEST(SparqlProtocolTest, parseGET) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseGET(request);
+    return SparqlProtocol::parseGET(request);
   };
   // No SPARQL Operation
   EXPECT_THAT(parse(makeGetRequest("/")),
@@ -208,11 +208,11 @@ TEST(SPARQLProtocolTest, parseGET) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
+TEST(SparqlProtocolTest, parseUrlencodedPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseUrlencodedPOST(request);
+    return SparqlProtocol::parseUrlencodedPOST(request);
   };
 
   // No SPARQL Operation
@@ -326,12 +326,12 @@ TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseQueryPOST) {
+TEST(SparqlProtocolTest, parseQueryPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Query>(
-        request, SPARQLProtocol::contentTypeSparqlQuery);
+    return SparqlProtocol::parseSPARQLPOST<Query>(
+        request, SparqlProtocol::contentTypeSparqlQuery);
   };
 
   // Query
@@ -372,12 +372,12 @@ TEST(SPARQLProtocolTest, parseQueryPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUpdatePOST) {
+TEST(SparqlProtocolTest, parseUpdatePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Update>(
-        request, SPARQLProtocol::contentTypeSparqlUpdate);
+    return SparqlProtocol::parseSPARQLPOST<Update>(
+        request, SparqlProtocol::contentTypeSparqlUpdate);
   };
 
   // Update
@@ -416,11 +416,11 @@ TEST(SPARQLProtocolTest, parseUpdatePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parsePOST) {
+TEST(SparqlProtocolTest, parsePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parsePOST(request);
+    return SparqlProtocol::parsePOST(request);
   };
 
   // Query
@@ -474,10 +474,10 @@ TEST(SPARQLProtocolTest, parsePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseHttpRequest) {
+TEST(SparqlProtocolTest, parseHttpRequest) {
   auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseHttpRequest(request);
+    return SparqlProtocol::parseHttpRequest(request);
   };
 
   // Query
