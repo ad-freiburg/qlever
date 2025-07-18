@@ -583,7 +583,8 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
-  using IdTableGenerator = ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
+  using IdTableGenerator =
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
  private:
   // The allocator used to allocate intermediate buffers.
