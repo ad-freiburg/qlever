@@ -231,7 +231,7 @@ template <typename S, typename C, typename I>
 std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
   // For more information on the concepts used here, please see
-  // their definitons in `VocabularyConstraints.h`.
+  // their definitions in `VocabularyConstraints.h`.
   if constexpr (MaybeProvidesGeometryInfo<S>) {
     return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
   } else {
@@ -244,7 +244,7 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
   // For more information on the concepts used here, please see
-  // their definitons in `VocabularyConstraints.h`.
+  // their definitions in `VocabularyConstraints.h`.
   if constexpr (MaybeProvidesGeometryInfo<S>) {
     return vocabulary_.getUnderlyingVocabulary().isGeoInfoAvailable();
   } else {

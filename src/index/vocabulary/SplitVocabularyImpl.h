@@ -140,7 +140,7 @@ requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
   // If any of the underlying vocabularies is a `GeoVocabulary`, then this
   // `SplitVocabulary` is able to provide precomputed `GeometryInfo`. The other
-  // two possiblities, `SplitVocabulary` and `PolymorphicVocabulary`, which
+  // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which
   // could potentially hold a `GeoVocabulary` are forbidden here due to the
   // constraints of this `SplitVocabulary` for its underlying vocabularies.
   if constexpr (ad_utility::anyIsInstantiationOf<GeoVocabulary, S...>) {

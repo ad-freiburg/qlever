@@ -136,7 +136,7 @@ class Vocabulary {
   // This function determines if precomputed `GeometryInfo` is available for
   // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
   // there is an underlying `GeoVocabulary` such that `getGeoInfo` will return a
-  // `GeometryInfo` object for all indicies pointing to valid geometries in the
+  // `GeometryInfo` object for all indices pointing to valid geometries in the
   // `GeoVocabulary`. If this function returns `false`, `getGeoInfo` will return
   // `std::nullopt` for any input, because no precomputed `GeometryInfo` is
   // available.
