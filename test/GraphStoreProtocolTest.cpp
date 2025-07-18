@@ -202,15 +202,17 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                                                   TestIndexConfig{});
   Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
   auto expectConvert =
-      [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+      [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
             const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,
             ad_utility::source_location l =
                 ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(
-            GraphStoreProtocol::convertTriples(graph, std::move(triples), bn),
-            AD_FIELD(updateClause::UpdateTriples, triples_,
-                     testing::Eq(expectedTriples)));
+        auto convertedTriples =
+            GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
+        //       convertedTriples.localVocab_.isBlankNodeIndexContained();
+        EXPECT_THAT(convertedTriples,
+                    AD_FIELD(updateClause::UpdateTriples, triples_,
+                             testing::Eq(expectedTriples)));
       };
   expectConvert(DEFAULT{}, {}, {});
   expectConvert(iri("<a>"), {}, {});
@@ -221,17 +223,17 @@ TEST(GraphStoreProtocolTest, convertTriples) {
   expectConvert(
       iri("<a>"), {{{iri("<a>")}, {iri("<b>")}, TC("_:a")}},
       {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"),
-                                   bn.getBlankNodeIndex("a"), iri("<a>")}});
+                                   bn.getBlankNodeIndex("_:a"), iri("<a>")}});
 
   expectConvert(
       iri("<a>"),
       {{TC("_:b"), {iri("<b>")}, iri("<c>")},
        {TC("_:b"), {iri("<d>")}, iri("<e>")},
        {TC("_:c"), {iri("<f>")}, iri("<g>")}},
-      {SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("b"), iri("<b>"),
+      {SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<b>"),
                                    iri("<c>"), iri("<a>")},
-       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("b"), iri("<d>"),
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<d>"),
                                    iri("<e>"), iri("<a>")},
-       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("c"), iri("<f>"),
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:c"), iri("<f>"),
                                    iri("<g>"), iri("<a>")}});
 }

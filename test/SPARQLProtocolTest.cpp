@@ -487,6 +487,7 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       parse(makePostRequest("/", URLENCODED, "access-token=foo&query=bar")),
       ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                       Query{"bar", {}}));
+  // TODO<qup42> remove once the conformance tests are fixed
   // We add the leading `/` if it is missing.
   EXPECT_THAT(parse(makeGetRequest("?query=foo")),
               ParsedRequestIs("/", std::nullopt, {}, Query{"foo", {}}));
@@ -496,12 +497,15 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
               ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                               Update{"INSERT DATA { <a> <b> <c> }", {}}));
   // Graph Store Protocol (Direct Graph Identification)
-  EXPECT_THAT(
-      parse(makeRequest(http::verb::get, "/http-graph-store/foo",
-                        {{http::field::host, {"example.com"}}})),
-      ParsedRequestIs("/http-graph-store/foo", std::nullopt, {},
-                      GraphStoreOperation{
-                          Iri("<http://example.com/http-graph-store/foo>")}));
+  {
+    auto path =
+        absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
+    EXPECT_THAT(parse(makeRequest(http::verb::get, path,
+                                  {{http::field::host, {"example.com"}}})),
+                ParsedRequestIs(path, std::nullopt, {},
+                                GraphStoreOperation{Iri(absl::StrCat(
+                                    "<http://example.com", path, ">"))}));
+  }
   // Graph Store Protocol (Indirect Graph Identification)
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
@@ -526,18 +530,18 @@ TEST(SPARQLProtocolTest, parseGraphStoreProtocolIndirect) {
                               GraphStoreOperation{DEFAULT{}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       SPARQLProtocol::parseGraphStoreProtocolIndirect(
-          makeGetRequest("/http-graph-store/foo.ttol")),
+          makeGetRequest(absl::StrCat(
+              "/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo.ttl"))),
       testing::HasSubstr(
           R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)"));
 }
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseGraphStoreProtocolDirect) {
-  EXPECT_THAT(
-      SPARQLProtocol::parseGraphStoreProtocolDirect(
-          makeRequest(http::verb::get, "/http-graph-store/foo",
-                      {{http::field::host, "example.com"}})),
-      ParsedRequestIs("/http-graph-store/foo", std::nullopt, {},
-                      GraphStoreOperation{
-                          Iri("<http://example.com/http-graph-store/foo>")}));
+  auto path = absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
+  EXPECT_THAT(SPARQLProtocol::parseGraphStoreProtocolDirect(makeRequest(
+                  http::verb::get, path, {{http::field::host, "example.com"}})),
+              ParsedRequestIs(path, std::nullopt, {},
+                              GraphStoreOperation{Iri(absl::StrCat(
+                                  "<http://example.com", path, ">"))}));
 }

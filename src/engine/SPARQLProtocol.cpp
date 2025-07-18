@@ -191,9 +191,10 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
         "Failed to parse URL: \"", std::string{request.target()}, "\"."));
   }
   boost::url url = urlResult.value();
-  // `http-graph-store` is the (currently fixed) prefix for the Graph Store
-  // Protocol with direct graph identification.
-  if (!url.segments().empty() && url.segments().front() == "http-graph-store") {
+  // `GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX` is the (currently fixed) prefix
+  // for the Graph Store Protocol with direct graph identification.
+  if (!url.segments().empty() &&
+      url.segments().front() == GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX) {
     return parseGraphStoreProtocolDirect(request);
   }
 

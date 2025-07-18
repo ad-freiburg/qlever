@@ -26,7 +26,8 @@ bool ParsedRequestBuilder::isGraphStoreOperationDirect() const {
   // so it should be valid.
   AD_CORRECTNESS_CHECK(!result.has_error());
   auto segments = result.value();
-  return !segments.empty() && segments.front() == "http-graph-store";
+  return !segments.empty() &&
+         segments.front() == GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX;
 }
 
 // ____________________________________________________________________________
@@ -69,7 +70,8 @@ void ParsedRequestBuilder::extractGraphStoreOperationIndirect() {
   AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
   // We support passing the target graph as a query parameter (`Indirect Graph
   // Identification`). `Direct Graph Identification` (the URL is the graph) is
-  // only supported on the fixed sub path `/http-graph-store`. See also
+  // only supported on the fixed sub path
+  // `GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX`. See also
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
   parsedRequest_.operation_ =
       GraphStoreOperation{extractTargetGraph(parsedRequest_.parameters_)};
@@ -82,9 +84,14 @@ void ParsedRequestBuilder::extractGraphStoreOperationDirect() {
   // cannot deduce the used protocol (http/https) from the raw HTTP request. We
   // default to `http` for the constructed IRIs.
   AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
+  if (!host_.has_value()) {
+    throw std::runtime_error(
+        "Request for Graph Store Protocol with direct graph identification "
+        "requires the host header to be set.");
+  }
   parsedRequest_.operation_ =
       GraphStoreOperation{GraphRef::fromIrirefWithoutBrackets(
-          absl::StrCat("http://", host_, parsedRequest_.path_))};
+          absl::StrCat("http://", host_.value(), parsedRequest_.path_))};
 }
 
 // ____________________________________________________________________________

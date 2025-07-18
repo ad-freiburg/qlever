@@ -86,7 +86,7 @@ class GraphStoreProtocol {
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
   // and sets the correct graph.
   static updateClause::GraphUpdate::Triples convertTriples(
-      const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+      const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
       Quads::BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 

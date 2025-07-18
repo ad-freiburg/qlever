@@ -47,7 +47,7 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
-    const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+    const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
     Quads::BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
@@ -56,9 +56,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
   auto transformTc =
       [&blankNodeAdder](const TripleComponent& tc) -> TripleComponent {
     if (tc.isString()) {
-      AD_CORRECTNESS_CHECK(tc.getString().starts_with("_"));
       // Remove the `_:`.
-      return blankNodeAdder.getBlankNodeIndex(tc.toString().substr(2));
+      return blankNodeAdder.getBlankNodeIndex(tc.getString());
     } else {
       return tc;
     }
