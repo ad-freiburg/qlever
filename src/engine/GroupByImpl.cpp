@@ -139,9 +139,15 @@ size_t GroupByImpl::getResultWidth() const {
 std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
-  sortedOn.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var].columnIndex_);
+  const auto& correctGroupByVars =
+      getExecutionContext()->getQueryTree().getParsedQuery().groupByVariables_;
+  sortedOn.reserve(correctGroupByVars.size());
+  for (const auto& var : correctGroupByVars) {
+    // It's possible a GROUP BY variable is not actually projected (e.g.
+    // `SELECT (COUNT(?a) as ?count) GROUP BY ?b`), so we must check.
+    if (varCols.contains(var)) {
+      sortedOn.push_back(varCols.at(var).columnIndex_);
+    }
   }
   return sortedOn;
 }
@@ -372,26 +378,6 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  // no aliases = no aggregates → skip everything else
-  if (_aliases.empty()) {
-    // force the child to deliver a full, in‐memory table
-    auto childRes = _subtree->getResult(false);
-    // collect the group‐by‐column indices
-    vector<size_t> groupByCols;
-    groupByCols.reserve(_groupByVariables.size());
-    for (auto& var : _groupByVariables) {
-      groupByCols.push_back(
-          _subtree->getVariableColumns().at(var).columnIndex_);
-    }
-    auto localVocab = childRes->getCopyOfLocalVocab();
-    // doGroupBy will simply collapse duplicates (no aggregates → empty list)
-    IdTable t = CALL_FIXED_SIZE(
-        (std::array{_subtree->getResultWidth(), getResultWidth()}),
-        &GroupByImpl::doGroupBy, this, childRes->idTable(), groupByCols,
-        /*aggregates=*/std::vector<Aggregate>{}, &localVocab);
-    return {std::move(t), resultSortedOn(), std::move(localVocab)};
-  }
-
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
@@ -417,9 +403,6 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                << (useHashMapOptimization ? "enabled" : "disabled")
                << std::endl;
 
-  const auto* child = _subtree->getRootOperation()->getChildren().at(0);
-  std::shared_ptr<const Result> subresult = child->getResult(true);
-
   // Use the correct sampling-based hash-map grouping guard depending on
   // materialization
   auto shouldSkipHashMapGroupingDynamic =
@@ -430,23 +413,29 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
           return shouldSkipHashMapGroupingLazy(subresult);
         }
       };
-  // Sampling-based guard: decide whether to skip hash-map grouping based on
-  // estimated number of groups
-  if (useHashMapOptimization && !shouldSkipHashMapGroupingDynamic(subresult)) {
+
+  std::shared_ptr<const Result> subresult;
+  if (useHashMapOptimization) {
+    const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     subresult = child->getResult(true);
-    // Update runtime information
-    auto runTimeInfoChildren =
-        child->getRootOperation()->getRuntimeInfoPointer();
-    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
-  } else {
-    if (useHashMapOptimization) {
+    // Sampling-based guard: decide whether to skip hash-map grouping based on
+    // estimated number of groups
+    if (shouldSkipHashMapGroupingDynamic(subresult)) {
       // Fall back to sort-based grouping
       AD_LOG_DEBUG << "GroupBy: skipping hash-map grouping, using sort-based "
                       "fallback due to high estimated group count"
                    << std::endl;
       useHashMapOptimization = false;
+    } else {
+      subresult = child->getResult(true);
+      // Update runtime information
+      auto runTimeInfoChildren =
+          child->getRootOperation()->getRuntimeInfoPointer();
+      _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+          {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
     }
+  }
+  if (!useHashMapOptimization) {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
     metadataForUnsequentialData =
@@ -635,7 +624,7 @@ Result::Generator GroupByImpl::computeResultLazily(
 
   GroupBlock currentGroupBlock;
 
-  for (Result::IdTableVocabPair& pair : subresult->idTables()) {
+  for (Result::IdTableVocabPair& pair : tables) {
     auto& idTable = pair.idTable_;
     if (idTable.empty()) {
       continue;
@@ -1059,6 +1048,12 @@ std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::computeUnsequentialProcessingMetadata(
     std::vector<Aggregate>& aliases,
     const std::vector<Variable>& groupByVariables) {
+  // If there are no aliases, there is nothing to do, but lazy evaluation is
+  // still possible.
+  if (aliases.empty()) {
+    return HashMapOptimizationData{std::vector<HashMapAliasInformation>{}};
+  }
+
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
