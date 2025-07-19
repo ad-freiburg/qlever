@@ -73,7 +73,10 @@ class GroupByImpl : public Operation {
   virtual float getMultiplicity(size_t col) override;
 
  public:
+  // Overrides Operation::getSizeEstimateBeforeLimit()
   uint64_t getSizeEstimateBeforeLimit() override;
+  // Const overload for internal use
+  uint64_t getSizeEstimateBeforeLimit() const;
   size_t getCostEstimate() override;
 
   /**
@@ -591,9 +594,29 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-};
 
-// _____________________________________________________________________________
+ private:
+  // Merge sorted tail blocks into a partial hash-map result by sorting and
+  // aggregating them, then merging into the provided partial result.
+  IdTable mergeSortedTailIntoPartial(
+      IdTable&& partial,
+      const std::vector<std::pair<IdTable, LocalVocab>>& tailBlocks,
+      const std::vector<size_t>& columnIndices, LocalVocab* localVocab) const;
+
+  // Helper function for mergeSortedTailIntoPartial to aggregate tail blocks
+  IdTable aggregateTailBlocks(
+      const std::vector<std::pair<IdTable, LocalVocab>>& tailBlocks,
+      const std::vector<size_t>& columnIndices, LocalVocab& localVocab) const;
+
+  // Check via sampling if the hash-map path should be skipped due to too many
+  // groups
+  bool shouldSkipHashMapGrouping(const IdTable& table) const;
+  bool shouldSkipHashMapGroupingLazy(
+      const std::shared_ptr<const Result>& subresult) const;
+
+};  // class GroupByImpl
+
+// Concept to identify aggregation data vectors
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =

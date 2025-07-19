@@ -11,6 +11,7 @@ inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::DurationParameter;
+  using ad_utility::detail::parameterShortNames::Int;
   using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
   // NOTE: It is important that the value of the static variable is created by
@@ -49,6 +50,19 @@ inline auto& RuntimeParameters() {
         Bool<"use-binsearch-transitive-path">{true},
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
+        // === Sampling-based hybrid GROUP BY thresholds ===
+        // percent of rows to sample (1%)
+        Double<"group-by-sample-percent">{0.01},
+        // cap on sample size
+        SizeT<"group-by-sample-max-rows">{50000},
+        // LAZY CASE: switch to sort if the fraction (sampled
+        // distinct groups / sample size) exceeds this ratio
+        Double<"group-by-sample-distinct-ratio">{0.95},
+        // MATERIALIZED CASE: switch to sort if the estimated
+        // number of distinct groups exceeds this number
+        SizeT<"group-by-sample-group-threshold">{1'000'000},
+        // switch to sort if the number of HashMap groups exceeds this limit
+        SizeT<"group-by-hash-map-group-threshold">{1'000'000},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},
