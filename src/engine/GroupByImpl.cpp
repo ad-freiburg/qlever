@@ -122,15 +122,9 @@ size_t GroupByImpl::getResultWidth() const {
 std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
-  const auto& correctGroupByVars =
-      getExecutionContext()->getQueryTree().getParsedQuery().groupByVariables_;
-  sortedOn.reserve(correctGroupByVars.size());
-  for (const auto& var : correctGroupByVars) {
-    // It's possible a GROUP BY variable is not actually projected (e.g.
-    // `SELECT (COUNT(?a) as ?count) GROUP BY ?b`), so we must check.
-    if (varCols.contains(var)) {
-      sortedOn.push_back(varCols.at(var).columnIndex_);
-    }
+  sortedOn.reserve(_groupByVariables.size());
+  for (const auto& var : _groupByVariables) {
+    sortedOn.push_back(varCols[var].columnIndex_);
   }
   return sortedOn;
 }
@@ -192,7 +186,7 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
-uint64_t GroupByImpl::getSizeEstimateBeforeLimit() const {
+uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -201,14 +195,10 @@ uint64_t GroupByImpl::getSizeEstimateBeforeLimit() const {
   auto varToMultiplicity = [this](const Variable& var) -> float {
     return _subtree->getMultiplicity(_subtree->getVariableColumn(var));
   };
+
   float minMultiplicity = ql::ranges::min(
       _groupByVariables | ql::views::transform(varToMultiplicity));
   return _subtree->getSizeEstimate() / minMultiplicity;
-}
-
-uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
-  // Delegate to the const overload
-  return static_cast<const GroupByImpl&>(*this).getSizeEstimateBeforeLimit();
 }
 
 size_t GroupByImpl::getCostEstimate() {
@@ -269,13 +259,8 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
                                const vector<size_t>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
-  LOG(DEBUG) << "GroupBy input size " << inTable.size() << std::endl;
+  LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
-  // Reserve estimated number of result groups to reduce reallocations
-  if (!groupByCols.empty()) {
-    auto estimatedGroups = getSizeEstimateBeforeLimit();
-    dynResult.reserve(estimatedGroups);
-  }
 
   // If the input is empty, the result is also empty, except for an implicit
   // GROUP BY (`groupByCols.empty()`), which always has to produce one result
@@ -343,20 +328,18 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
-// Hybrid GROUP BY fallback strategy:
-// 1) If no aliases, the result is simply a collapsed version of the input
-// 2) If no grouping columns, handled by doGroupBy directly.
-// 3) Sample a fraction of rows and estimate distinct group count via hash
+// Hybrid GROUP BY fallback strategy (SORT vs. HASH MAP):
+// 1) Sample a fraction of rows and estimate distinct group count via hash
 // sketch;
 //    if estimated groups exceed threshold, skip hash-map path entirely.
-// 4) Attempt index-scan-based shortcuts (single index count, full index scan,
+// 2) Attempt index-scan-based shortcuts (single index count, full index scan,
 //    join full scan, object count).
-// 5) Otherwise, compute subresult (lazy if possible) and apply hash-map
+// 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
 // grouping.
-// 6) If the hash-map grows too large mid-aggregation, buffer
+// 4) If the hash-map grows too large mid-aggregation, buffer
 // remaining data and
 //    switch to sort-based aggregation via mergeSortedTailIntoPartial.
-// 7) If all optimizations fail or threshold crossed, fallback to standard
+// 5) If all optimizations fail or threshold crossed, fallback to standard
 // doGroupBy (sort+group-by).
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
@@ -441,17 +424,23 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     groupByColumns.push_back(it->second.columnIndex_);
   }
 
+  std::vector<size_t> groupByCols;
+  groupByCols.reserve(_groupByVariables.size());
+  for (const auto& var : _groupByVariables) {
+    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
+  }
+
   if (useHashMapOptimization) {
     // Helper lambda that calls `computeGroupByForHashMapOptimization` for the
     // given `subresults`.
     auto computeWithHashMap = [this, &metadataForUnsequentialData,
-                               &groupByColumns](auto&& subresults) {
+                               &groupByCols](auto&& subresults) {
       auto doCompute = [&](auto numCols) {
         return computeGroupByForHashMapOptimization<numCols>(
             metadataForUnsequentialData->aggregateAliases_, AD_FWD(subresults),
-            groupByColumns);
+            groupByCols);
       };
-      return ad_utility::callFixedSizeVi(groupByColumns.size(), doCompute);
+      return ad_utility::callFixedSizeVi(groupByCols.size(), doCompute);
     };
 
     // Now call `computeWithHashMap` and return the result. It expects a range
@@ -476,7 +465,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
         (std::array{inWidth, outWidth}), &GroupByImpl::computeResultLazily,
         this, std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
-        std::move(groupByColumns), !requestLaziness);
+        std::move(groupByCols), !requestLaziness);
 
     return requestLaziness
                ? Result{std::move(generator), resultSortedOn()}
@@ -493,7 +482,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
   IdTable idTable = CALL_FIXED_SIZE(
       (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
-      subresult->idTable(), groupByColumns, aggregates, &localVocab);
+      subresult->idTable(), groupByCols, aggregates, &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
@@ -570,24 +559,6 @@ Result::Generator GroupByImpl::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, bool singleIdTable) const {
-  // if the child produced no tables at all:
-
-  auto&& tables = subresult->idTables();
-  if (tables.begin() == tables.end()) {
-    // implicit grouping: yield one row of aggregates (or zero rows if no
-    // grouping cols)
-    if (_groupByVariables.empty()) {
-      // implicit GROUP BY with aggregates must produce exactly one row:
-      IdTable resultTable{getResultWidth(),
-                          getExecutionContext()->getAllocator()};
-      LocalVocab vocab{};
-      processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates, &vocab);
-      co_yield Result::IdTableVocabPair{std::move(resultTable),
-                                        std::move(vocab)};
-    }
-    co_return;
-  }
-
   size_t inWidth = _subtree->getResultWidth();
   AD_CONTRACT_CHECK(inWidth == IN_WIDTH || IN_WIDTH == 0);
   LocalVocab currentLocalVocab{};
@@ -597,17 +568,12 @@ Result::Generator GroupByImpl::computeResultLazily(
                           groupByCols.size()};
 
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
-  // Reserve estimated number of result groups to reduce reallocations
-  if (!groupByCols.empty()) {
-    auto estimatedGroups = getSizeEstimateBeforeLimit();
-    resultTable.reserve(estimatedGroups);
-  }
 
   bool groupSplitAcrossTables = false;
 
   GroupBlock currentGroupBlock;
 
-  for (Result::IdTableVocabPair& pair : tables) {
+  for (Result::IdTableVocabPair& pair : subresult->idTables()) {
     auto& idTable = pair.idTable_;
     if (idTable.empty()) {
       continue;
@@ -700,14 +666,6 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   if (!indexScan) {
     return std::nullopt;
-  }
-
-  // if the scan returned nothing, return an empty IdTable with the *correct*
-  // result width (one row for implicit GROUP BY, or zero rows for real GROUP
-  // BY):
-  if (indexScan->getExactSize() == 0) {
-    // no rows → no groups
-    return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
   }
 
   if (indexScan->getResultWidth() <= 1 ||
@@ -1034,12 +992,6 @@ std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::computeUnsequentialProcessingMetadata(
     std::vector<Aggregate>& aliases,
     const std::vector<Variable>& groupByVariables) {
-  // If there are no aliases, there is nothing to do, but lazy evaluation is
-  // still possible.
-  if (aliases.empty()) {
-    return HashMapOptimizationData{std::vector<HashMapAliasInformation>{}};
-  }
-
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -1701,7 +1653,6 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       }
       lookupTimer.cont();
       auto hashEntries = aggregationData.getHashEntries(groupValues);
-      size_t blockSize = hashEntries.size();
       lookupTimer.stop();
 
       aggregationTimer.cont();
@@ -1715,8 +1666,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
               aggregationData.getAggregationDataVariant(
                   aggregate.aggregateDataIndex_);
 
-          std::visit(makeProcessGroupsVisitor(blockSize, &evaluationContext,
-                                              hashEntries),
+          std::visit(makeProcessGroupsVisitor(currentBlockSize,
+                                              &evaluationContext, hashEntries),
                      std::move(expressionResult), aggregationDataVariant);
         }
       }
@@ -1750,6 +1701,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
   IdTable resultTable =
       createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
+
   if (switchToSort) {
     AD_LOG_DEBUG << "GroupBy HashMap: Switching to sort-based merge of "
                  << tailBlocks.size() << " leftover blocks" << std::endl;
