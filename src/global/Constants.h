@@ -25,6 +25,11 @@ constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 constexpr inline uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
+// A word posting is a combination of WordId, TextRecordId and Score. The
+// half-inverted text index uses those sorted by WordId to quickly look up
+// in which documents words occur. This parameter governs the number of
+// postings saved in one block written to disk. On retrieval blocks are read
+// as a whole.
 constexpr inline size_t NOF_WORD_POSTINGS_IN_TEXT_BLOCK = 50'000;
 constexpr inline char PREFIX_CHAR = '*';
 

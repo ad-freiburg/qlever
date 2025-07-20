@@ -13,6 +13,11 @@ class TextIndexBuilder : public IndexImpl {
   using WordMap = ad_utility::HashMap<WordIndex, Score>;
   using EntityMap = ad_utility::HashMap<VocabIndex, Score>;
 
+  // A word posting is a combination of WordId, TextRecordId and Score. The
+  // half-inverted text index uses those sorted by WordId to quickly look up
+  // in which documents words occur. This parameter governs the number of
+  // postings saved in one block written to disk. On retrieval blocks are read
+  // as a whole.
   size_t nofWordPostingsInTextBlock_ = NOF_WORD_POSTINGS_IN_TEXT_BLOCK;
 
  public:
@@ -37,8 +42,8 @@ class TextIndexBuilder : public IndexImpl {
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile) const;
 
-  void setNofWordPostingsInTextBlock(size_t nofWordsInTextBlock) {
-    nofWordPostingsInTextBlock_ = nofWordsInTextBlock;
+  void setNofWordPostingsInTextBlock(size_t nofWordPostingsInTextBlock) {
+    nofWordPostingsInTextBlock_ = nofWordPostingsInTextBlock;
   }
 
  private:

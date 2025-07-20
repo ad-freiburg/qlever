@@ -12,13 +12,12 @@ std::vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
                                       const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
-  assert(_blocks.size() > 0);
-  assert(_blocks.size() == _blockUpperBoundWordIds.size());
+  AD_CORRECTNESS_CHECK(_blocks.size() > 0);
+  AD_CORRECTNESS_CHECK(_blocks.size() == _blockUpperBoundWordIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector. This points to
   // the first element _blockUpperBoundWordIds that is >= lower.
-  auto it = ql::ranges::lower_bound(_blockUpperBoundWordIds.begin(),
-                                    _blockUpperBoundWordIds.end(), lower);
+  auto it = ql::ranges::lower_bound(_blockUpperBoundWordIds, lower);
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
     return {_blocks.back()};
