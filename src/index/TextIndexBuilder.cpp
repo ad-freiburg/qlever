@@ -5,7 +5,6 @@
 #include "index/TextIndexBuilder.h"
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
 // _____________________________________________________________________________
@@ -265,98 +264,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        WordTextVec& wordTextVec,
                                        EntityTextVec& entityTextVec) {
   ad_utility::File out(filename.c_str(), "w");
-  currenttOffset_ = 0;
-  WordIndex currentMinWordIndex = std::numeric_limits<WordIndex>::max();
-  WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
-  std::vector<Posting> classicPostings;
-  std::vector<Posting> entityPostings;
-  WordIndex lastWordIndex = 0;
-
-  auto wordTextVecView = wordTextVec.sortedView();
-  auto entityTextVecView = entityTextVec.sortedView();
-
-  auto entityIterator = entityTextVecView.begin();
-  // Since entityTextVecView is also sorted by WordIndex this iterator always
-  // points to the first element of the batch of rows with the same WordIndex.
-  auto entityStartWordIdIterator = entityIterator;
-  auto entitySentinel = entityTextVecView.end();
-
-  auto addEntityPostingsUpToWordIndex = [&entityPostings, &entityIterator,
-                                         &entityStartWordIdIterator,
-                                         &entitySentinel](WordIndex wordIndex) {
-    entityIterator = entityStartWordIdIterator;
-    if (entityIterator == entitySentinel) {
-      return;
-    }
-    WordIndex currentWordIndex =
-        static_cast<WordIndex>((*entityIterator)[0].getInt());
-    WordIndex batchStart =
-        static_cast<WordIndex>((*entityStartWordIdIterator)[0].getInt());
-    for (; entityIterator != entitySentinel && currentWordIndex < wordIndex;
-         ++entityIterator) {
-      batchStart =
-          static_cast<WordIndex>((*entityStartWordIdIterator)[0].getInt());
-      currentWordIndex = static_cast<WordIndex>((*entityIterator)[0].getInt());
-      // If new batch start reached then advance the other iterator
-      if (currentWordIndex > batchStart) {
-        entityStartWordIdIterator = entityIterator;
-      }
-      entityPostings.emplace_back((*entityIterator)[1].getTextRecordIndex(),
-                                  (*entityIterator)[2].getVocabIndex().get(),
-                                  (*entityIterator)[3].getDouble());
-    }
-  };
-
-  auto addBlock = [this, &classicPostings, &entityPostings, &lastWordIndex,
-                   &wordTextVecView, &addEntityPostingsUpToWordIndex,
-                   &currentMinWordIndex, &currentMaxWordIndex, &out]() {
-    addEntityPostingsUpToWordIndex(lastWordIndex);
-
-    // Sort both posting vectors by TextRecordIndex, wordIndex (or entityIndex),
-    // score
-    ql::ranges::sort(classicPostings);
-    ql::ranges::sort(entityPostings);
-
-    // Filter out duplicate entity postings
-    entityPostings.erase(std::ranges::unique(entityPostings).begin(),
-                         entityPostings.end());
-
-    // Write block to file
-    bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
-    ContextListMetaData classic = textIndexReadWrite::writePostings(
-        out, classicPostings, currenttOffset_, scoreIsInt);
-    ContextListMetaData entity = textIndexReadWrite::writePostings(
-        out, entityPostings, currenttOffset_, scoreIsInt);
-    textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex,
-                                         currentMaxWordIndex, classic, entity));
-
-    // Reset Variables
-    classicPostings.clear();
-    entityPostings.clear();
-    currentMinWordIndex = std::numeric_limits<WordIndex>::max();
-    currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
-  };
-
-  size_t index = 0;
-  for (const auto& row : wordTextVecView) {
-    // If block size is reached then add all touched
-    if (index % nofWordPostingsInTextBlock_ == 0 && index > 0) {
-      addBlock();
-    }
-    // Add row as posting
-    lastWordIndex = row[0].getInt();
-    if (lastWordIndex > currentMaxWordIndex) {
-      currentMaxWordIndex = lastWordIndex;
-    }
-    if (lastWordIndex < currentMinWordIndex) {
-      currentMinWordIndex = lastWordIndex;
-    }
-    classicPostings.emplace_back(row[1].getTextRecordIndex(), lastWordIndex,
-                                 row[2].getDouble());
-    ++index;
-  }
-  // Add last block
-  addBlock();
+  auto textBlockWriter = TextBlockWriter{wordTextVec, entityTextVec, out,
+                                         textScoringMetric_, textMeta_};
+  textBlockWriter.calculateAndWriteTextBlocks(nofWordPostingsInTextBlock_);
   LOG(DEBUG) << "Done creating text index." << std::endl;
   LOG(INFO) << "Statistics for text index: " << textMeta_.statistics()
             << std::endl;

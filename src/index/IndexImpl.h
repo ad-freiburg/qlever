@@ -91,12 +91,6 @@ class IndexImpl {
  public:
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // Word Id (uint_64t), Context Id (TextRecordIndex), Score (float)
-  using WordTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 3>;
-  // Word Id (uint_64t), Context Id (TextRecordIndex), Entity Id (VocabIndex),
-  // Score (float)
-  using EntityTextVec =
-      ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -130,7 +124,6 @@ class IndexImpl {
   DocsDB docsDB_;
   // A block boundary is always the last WordId in the block.
   std::vector<WordIndex> blockBoundaries_;
-  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.

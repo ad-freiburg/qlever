@@ -6,6 +6,8 @@
 #define QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 
 #include "index/IndexImpl.h"
+#include "index/Postings.h"
+#include "index/TextBlockWriter.h"
 
 // This class contains all the code that is only required when building the
 // fulltext index

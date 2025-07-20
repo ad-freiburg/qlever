@@ -196,13 +196,14 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
-  add("set-nof-word-postings-in-text-block,P",
-      po::value(&nofWordPostingsInTextBlock),
+  auto nofWordPostingsMessage = absl::StrCat(
       "Sets the number of word postings in a text block. The default is: ",
       NOF_WORD_POSTINGS_IN_TEXT_BLOCK,
-      "A word posting is a combination of WordId, TextRecordId and Score. The "
-      "half-inverted text index uses those sorted by WordId to quickly look "
-      "up in which documents words occur.");
+      ". A word posting is a combination of WordId, TextRecordId and Score. "
+      "The half-inverted text index uses those sorted by WordId to quickly "
+      "look up in which documents words occur.");
+  add("set-nof-word-postings-in-text-block,P",
+      po::value(&nofWordPostingsInTextBlock), nofWordPostingsMessage.c_str());
   add("bm25-b", po::value(&bScoringParam),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
