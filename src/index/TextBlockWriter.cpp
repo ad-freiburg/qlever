@@ -5,19 +5,12 @@
 template <typename WordTextVecView, typename EntityTextVecView>
 void TextBlockWriter<WordTextVecView, EntityTextVecView>::
     calculateAndWriteTextBlocks(size_t nofWordPostingsInTextBlock) {
-  size_t index = 0;
-  for (const auto& row : wordTextVecView_) {
-    // If block size is reached then add all touched
-    if (index % nofWordPostingsInTextBlock == 0 && index > 0) {
-      addBlock();
+  for (auto&& chunk :
+       ::ranges::views::chunk(wordTextVecView_, nofWordPostingsInTextBlock)) {
+    for (const auto& row : chunk) {
+      currentWordTextVecWordIndex_ = row[0].getInt();
+      addWordPosting(row);
     }
-    // Add row as posting
-    currentWordTextVecWordIndex_ = row[0].getInt();
-    addWordPosting(row);
-    ++index;
-  }
-  // Add the last block
-  if (!wordPostings_.empty()) {
     addBlock();
   }
 }
