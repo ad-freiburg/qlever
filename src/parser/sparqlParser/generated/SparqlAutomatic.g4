@@ -771,7 +771,7 @@ SEPARATOR : S E P A R A T O R;
 // LEXER RULES
 
 IRI_REF
-    : '<'  ~('<' | '>' | '"' | '{' | '}' | '|' | '^' | '\\' | '`'| [\u0000-\u0020])* '>'
+    : '<'  ~[<>"{}|^\\`\u0000-\u0020]* '>'
     ;
 
 PNAME_NS
@@ -793,7 +793,7 @@ VAR2
     ;
 
 LANGTAG
-    : '@' ([a-z] | [A-Z])+ ('-' ([a-z] | [A-Z] | DIGIT)+)*
+    : '@' ([a-zA-Z])+ ('-' ([a-zA-Z] | DIGIT)+)*
     ;
 
 // The PREFIX_LANGTAG is an extension of the SPARQL standard that allows IRIs
@@ -947,15 +947,6 @@ WS
 COMMENTS
     : '#' ~( '\r' | '\n')* ->skip
     ;
-
-
-
-
-
-
-
-
-// todo: builtin call
 
 fragment A : ('a' | 'A');
 fragment B : ('b' | 'B');
