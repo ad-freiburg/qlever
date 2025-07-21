@@ -88,7 +88,7 @@ class stream_generator_promise {
     // Disable false positive warning on GCC.
     DISABLE_OVERREAD_WARNINGS
     return yield_value(singleView);
-    ENABLE_OVERREAD_WARNINGS
+    GCC_REENABLE_WARNINGS
   }
 
   // Return true if the overflow has been completely consumed.

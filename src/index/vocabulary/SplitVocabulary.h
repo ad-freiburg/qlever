@@ -61,7 +61,7 @@ class SplitVocabulary {
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
 
-  // Because of the marker bits a `SplitVocabulary` should not hold another
+  // Because of the marker bits, a `SplitVocabulary` should not hold another
   // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
   // guaranteed that it does not hold an underlying `SplitVocabulary`.
   static_assert(!ad_utility::anyIsInstantiationOf<SplitVocabulary,
