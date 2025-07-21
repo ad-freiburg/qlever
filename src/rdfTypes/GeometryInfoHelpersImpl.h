@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 
+#include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
 #include "rdfTypes/GeoPoint.h"
@@ -151,6 +152,22 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   }
   return std::nullopt;
 }
+
+// Reverse projection applied by `sj::WKTParser`: convert coordinates from web
+// mercator int32 to normal lat-long double coordinates.
+inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
+    const util::geo::I32Point& p) {
+  return util::geo::webMercToLatLng<double>(
+      static_cast<double>(p.getX()) / PREC,
+      static_cast<double>(p.getY()) / PREC);
+};
+
+// Same as above, but for a bounding box.
+inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
+    const util::geo::I32Box& box) {
+  return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
+          projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
+};
 
 }  // namespace ad_utility::detail
 

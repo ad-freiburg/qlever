@@ -232,4 +232,25 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
 }
 
+// Helpers to convert points and bounding boxes from double lat/lng to web
+// mercator int32 representation used by libspatialjoin
+// util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
+//   auto projPoint = latLngToWebMerc(p);
+//   return {static_cast<int>(projPoint.getX() * PREC),
+//           static_cast<int>(projPoint.getY() * PREC)};
+// }
+// util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
+//   return {webMercProjFunc(b.getLowerLeft()),
+//           webMercProjFunc(b.getUpperRight())};
+// }
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, prefilterBoxToLatLng) {
+  // util::geo::DBox b1{{1, 2}, {3, 4}};
+  // auto b1WebMerc = boxToWebMerc(b1);
+  // auto result1 =
+  //     ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+  // checkBoundingBox(result1, b1);
+}
+
 }  // namespace

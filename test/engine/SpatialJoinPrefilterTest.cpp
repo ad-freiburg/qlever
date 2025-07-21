@@ -96,18 +96,6 @@ const std::vector<TestGeometry> testGeometries{
 constexpr std::string_view VAR_LEFT{"?geom1"};
 constexpr std::string_view VAR_RIGHT{"?geom2"};
 
-// Helpers to convert points and bounding boxes from double lat/lng to web
-// mercator int32 representation used by libspatialjoin
-util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
-  auto projPoint = latLngToWebMerc(p);
-  return {static_cast<int>(projPoint.getX() * PREC),
-          static_cast<int>(projPoint.getY() * PREC)};
-}
-util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
-  return {webMercProjFunc(b.getLowerLeft()),
-          webMercProjFunc(b.getUpperRight())};
-}
-
 // Helper to generate different test datasets
 std::string buildLibSJTestDataset(bool addApproxGermany = false,
                                   bool germanyDifferentPredicate = true,
@@ -627,18 +615,6 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
 }
 
 // Test for other utility functions related to geometry prefiltering
-
-// _____________________________________________________________________________
-TEST(SpatialJoinTest, prefilterBoxToLatLng) {
-  util::geo::DBox b1{{1, 2}, {3, 4}};
-  auto b1WebMerc = boxToWebMerc(b1);
-  auto result1 = SpatialJoinAlgorithms::prefilterBoxToLatLng(b1WebMerc);
-  ASSERT_TRUE(result1.has_value());
-  checkPrefilterBox(result1.value(), b1);
-
-  ASSERT_FALSE(
-      SpatialJoinAlgorithms::prefilterBoxToLatLng(std::nullopt).has_value());
-}
 
 // _____________________________________________________________________________
 TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {

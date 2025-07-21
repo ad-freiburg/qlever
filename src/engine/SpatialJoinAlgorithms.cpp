@@ -38,25 +38,6 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       geometries_{qec->getAllocator()} {}
 
 // ____________________________________________________________________________
-std::optional<util::geo::DBox> SpatialJoinAlgorithms::prefilterBoxToLatLng(
-    std::optional<util::geo::I32Box> prefilterBox) {
-  if (!prefilterBox.has_value()) {
-    return std::nullopt;
-  }
-
-  // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
-  // mercator int32 to normal lat-long double coordinates.
-  auto projection = [](const util::geo::I32Point& p) {
-    return util::geo::webMercToLatLng<double>(
-        static_cast<double>(p.getX()) / PREC,
-        static_cast<double>(p.getY()) / PREC);
-  };
-
-  return util::geo::DBox{projection(prefilterBox.value().getLowerLeft()),
-                         projection(prefilterBox.value().getUpperRight())};
-}
-
-// ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex) {
@@ -90,9 +71,13 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Convert prefilter box to lat lng for comparing against geometry info from
   // vocabulary.
-  const std::optional<util::geo::DBox> prefilterLatLngBox =
-      prefilterBoxToLatLng(prefilterBox);
-  bool precomputedBoundingBoxesAvailable =
+  std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
+  if (prefilterBox.has_value()) {
+    prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
+        prefilterBox.value());
+  }
+  bool isPrefilteringPossible =
+      prefilterLatLngBox.has_value() &&
       qec_->getIndex().getVocab().isGeoInfoAvailable();
   size_t prefilterCounter = 0;
 
@@ -104,7 +89,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
     if (id.getDatatype() == Datatype::VocabIndex) {
       // If we have a prefilter box, check if we also have a precomputed
       // bounding box for the geometry this `VocabIndex` is referring to.
-      if (precomputedBoundingBoxesAvailable &&
+      if (isPrefilteringPossible &&
           prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
                                     id.getVocabIndex())) {
         prefilterCounter++;
@@ -478,14 +463,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     // bail out early.
     return countSmall > 0 && countLarge > 0;
   };
-  bool nonEmptyChildren;
-  if (idTableLeft->size() < idTableRight->size()) {
-    nonEmptyChildren = runParser({idTableLeft, leftJoinCol},
-                                 {idTableRight, rightJoinCol}, false);
-  } else {
-    nonEmptyChildren = runParser({idTableRight, rightJoinCol},
-                                 {idTableLeft, leftJoinCol}, true);
-  }
+
+  IdTableAndJoinColumn leftTableAndCol{idTableLeft, leftJoinCol};
+  IdTableAndJoinColumn rightTableAndCol{idTableRight, rightJoinCol};
+  bool nonEmptyChildren =
+      idTableLeft->size() < idTableRight->size()
+          ? runParser(leftTableAndCol, rightTableAndCol, false)
+          : runParser(rightTableAndCol, leftTableAndCol, true);
 
   // Flush the geometry caches and the sweepline event list cache to disk and
   // add the time for parsing and processing the geometries to the runtime

@@ -161,11 +161,6 @@ class SpatialJoinAlgorithms {
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
 
-  // Helper for `libspatialjoinParse` to convert the `prefilterBox` to the
-  // appropriate coordinate scaling.
-  static std::optional<util::geo::DBox> prefilterBoxToLatLng(
-      std::optional<util::geo::I32Box> prefilterBox);
-
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
