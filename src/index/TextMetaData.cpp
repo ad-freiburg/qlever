@@ -45,6 +45,12 @@ TextMetaData::getBlockInfoByWordRange(const WordVocabIndex lower,
   ql::ranges::copy(ql::ranges::subrange(_blocks.begin() + startIndex,
                                         _blocks.begin() + endIndex + 1),
                    std::back_inserter(output));
+
+  // Look if the last block actually contains WordVocabIndices in range and if
+  // not remove the last block
+  if (!(output.back().get()._firstWordId <= upper)) {
+    output.pop_back();
+  }
   return output;
 }
 

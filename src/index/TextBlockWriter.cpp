@@ -5,6 +5,9 @@
 template <typename WordTextVecView, typename EntityTextVecView>
 void TextBlockWriter<WordTextVecView, EntityTextVecView>::
     calculateAndWriteTextBlocks(size_t nofWordPostingsInTextBlock) {
+  AD_CONTRACT_CHECK(
+      nofWordPostingsInTextBlock > 0,
+      "Number of word postings in text block has to be larger than zero.");
   for (auto&& chunk :
        ::ranges::views::chunk(wordTextVecView_, nofWordPostingsInTextBlock)) {
     for (const auto& row : chunk) {
