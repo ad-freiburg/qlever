@@ -7,7 +7,6 @@
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
-#include <spatialjoin/Sweeper.h>
 
 #include <cstdlib>
 #include <fstream>

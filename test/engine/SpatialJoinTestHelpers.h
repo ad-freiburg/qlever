@@ -241,6 +241,8 @@ const std::string lineSegmentGeorgesKoehlerAllee = makeLineLiteral(
     "48.0175414,7.8297512 48.0175792,7.8296852 48.017627,7.8293452 "
     "48.0178818,7.8279814 48.0189432");
 
+const std::string invalidWkt = makeLineLiteral("500 -500, 3 5, 7 8");
+
 // compared to the other areas, this one is not real, because it would be way
 // too large. Here the borders of germany get approximated by just a few points
 // to not make this file too crowded. As this geometry is only needed because

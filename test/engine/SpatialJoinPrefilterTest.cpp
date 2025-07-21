@@ -91,6 +91,7 @@ const std::vector<TestGeometry> testGeometries{
     {"eiffel", areaEiffelTower, false},
     {"approx-de", approximatedAreaGermany, true},
     {"uni-separate", areaTFCampus, true},
+    {"invalid", invalidWkt, false},
 };
 constexpr std::string_view VAR_LEFT{"?geom1"};
 constexpr std::string_view VAR_RIGHT{"?geom2"};
@@ -110,7 +111,8 @@ util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
 // Helper to generate different test datasets
 std::string buildLibSJTestDataset(bool addApproxGermany = false,
                                   bool germanyDifferentPredicate = true,
-                                  bool addSeparateUni = false) {
+                                  bool addSeparateUni = false,
+                                  bool addInvalid = false) {
   std::string kg;
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
     if (addApproxGermany && name == "approx-de") {
@@ -119,7 +121,10 @@ std::string buildLibSJTestDataset(bool addApproxGermany = false,
     if (addSeparateUni && name == "uni-separate") {
       kg = absl::StrCat(kg, "<uni-separate> <wkt-uni-separate> ", wkt, " .\n");
     }
-    if (name != "uni-separate" && name != "approx-de") {
+    if (addInvalid && name == "invalid") {
+      kg = absl::StrCat(kg, "<invalid> <wkt-invalid> ", wkt, " .\n");
+    }
+    if (name != "uni-separate" && name != "approx-de" && name != "invalid") {
       kg = absl::StrCat(
           kg, "<", name, "> <wkt-",
           (isInGermany && germanyDifferentPredicate ? "de" : "other"), "> ",
@@ -637,7 +642,7 @@ TEST(SpatialJoinTest, prefilterBoxToLatLng) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
-  auto kg = buildLibSJTestDataset(true, false, false);
+  auto kg = buildLibSJTestDataset(true, false, false, true);
   auto qec = buildQec(kg, true);
   const auto& index = qec->getIndex();
 
@@ -646,6 +651,7 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
   auto idxUni = getValId(nMap, "uni").getVocabIndex();
   auto idxLondon = getValId(nMap, "london").getVocabIndex();
   auto idxNewYork = getValId(nMap, "lib").getVocabIndex();
+  auto idxInvalid = getValId(nMap, "invalid").getVocabIndex();
 
   EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
       boundingBoxGermany, index, idxUni));
@@ -663,6 +669,13 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
 
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
       boundingBoxOtherPlaces, index, idxUni));
+
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxUniAndLondon, index, idxInvalid));
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxInvalid));
+  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      boundingBoxOtherPlaces, index, idxInvalid));
 }
 
 }  // namespace
