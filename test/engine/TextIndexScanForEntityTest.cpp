@@ -189,7 +189,9 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 }
 
-TEST(TextIndexScanForEntity, FullTextIndexEntityScan) {
+// Test if entity scans work not only for literal text index but also if text
+// index is build using words- and docsfile.
+TEST(TextIndexScanForEntity, FulltextIndexEntityScan) {
   auto qec = getQecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
