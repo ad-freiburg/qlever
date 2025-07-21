@@ -646,7 +646,7 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
   auto qec = buildQec(kg, true);
   const auto& index = qec->getIndex();
 
-  auto [vMap, nMap] = resolveValIdTable(qec, 7);
+  auto [vMap, nMap] = resolveValIdTable(qec, 8);
 
   auto idxUni = getValId(nMap, "uni").getVocabIndex();
   auto idxLondon = getValId(nMap, "london").getVocabIndex();
