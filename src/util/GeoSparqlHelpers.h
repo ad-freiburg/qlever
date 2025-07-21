@@ -115,8 +115,8 @@ class WktLength {
     if (!len.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(detail::kilometerToUnit(
-        static_cast<double>(len.value().length()) / 1000.0, unit));
+    return ValueId::makeFromDouble(
+        detail::kilometerToUnit(len.value().length() / 1000.0, unit));
   }
 };
 
@@ -124,7 +124,10 @@ class WktLength {
 class WktMetricLength {
  public:
   ValueId operator()(const std::optional<MetricLength>& len) const {
-    return WktLength{}(len, UnitOfMeasurement::METERS);
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(len.value().length());
   }
 };
 
@@ -167,7 +170,7 @@ class WktBoundingCoordinate {
   }
 };
 
-// Compute the distance between two WKT points in meters.
+// Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
