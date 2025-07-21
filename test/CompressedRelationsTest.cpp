@@ -150,7 +150,7 @@ compressedRelationTestWriteCompressedRelations(
   AD_CORRECTNESS_CHECK(numColumns >= 4);
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
-  vector<CompressedRelationMetadata> metaData;
+  std::vector<CompressedRelationMetadata> metaData;
   {
     size_t i = 0;
     for (const auto& input : inputs) {

@@ -4,6 +4,7 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
 // _____________________________________________________________________________
@@ -277,8 +278,8 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
   TextBlockIndex currentBlockIndex = 0;
   WordIndex currentMinWordIndex = std::numeric_limits<WordIndex>::max();
   WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
-  vector<Posting> classicPostings;
-  vector<Posting> entityPostings;
+  std::vector<Posting> classicPostings;
+  std::vector<Posting> entityPostings;
   for (const auto& value : vec.sortedView()) {
     TextBlockIndex textBlockIndex = value[0].getInt();
     bool flag = value[1].getBool();
@@ -289,9 +290,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, true, currenttOffset_, scoreIsInt);
+          out, classicPostings, currenttOffset_, scoreIsInt);
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, false, currenttOffset_, scoreIsInt);
+          out, entityPostings, currenttOffset_, scoreIsInt);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -317,9 +318,9 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
   AD_CONTRACT_CHECK(!classicPostings.empty());
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, true, currenttOffset_, scoreIsInt);
+      out, classicPostings, currenttOffset_, scoreIsInt);
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, false, currenttOffset_, scoreIsInt);
+      out, entityPostings, currenttOffset_, scoreIsInt);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();

@@ -15,6 +15,9 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using Loc = source_location;
 
+// Helpers that assert (approx.) equality of two GeometryInfo objects or for
+// instances of the associated helper classes.
+
 // ____________________________________________________________________________
 inline void checkGeometryType(std::optional<GeometryType> a,
                               std::optional<GeometryType> b,
@@ -127,6 +130,24 @@ inline void checkRequestedInfoForWktLiteral(
                     GeometryInfo::getRequestedInfo<GeometryType>(wkt));
   checkMetricLength(gi.getMetricLength(),
                     GeometryInfo::getRequestedInfo<MetricLength>(wkt));
+}
+
+// ____________________________________________________________________________
+inline void checkInvalidLiteral(std::string_view wkt,
+                                bool expectValidGeometryType = false,
+                                Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+
+  EXPECT_FALSE(GeometryInfo::fromWktLiteral(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getWktType(wkt).has_value(), expectValidGeometryType);
+  EXPECT_FALSE(GeometryInfo::getCentroid(wkt).has_value());
+  EXPECT_FALSE(GeometryInfo::getBoundingBox(wkt).has_value());
+
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<GeometryInfo>(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(wkt).has_value(),
+            expectValidGeometryType);
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
 }
 
 };  // namespace geoInfoTestHelpers

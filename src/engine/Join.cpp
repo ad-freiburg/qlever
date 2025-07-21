@@ -188,7 +188,7 @@ size_t Join::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
+std::vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
