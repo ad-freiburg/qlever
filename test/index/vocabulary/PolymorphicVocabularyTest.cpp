@@ -5,7 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
-#include "index/vocabulary/VocabularyType.h"
 
 using ad_utility::VocabularyType;
 
