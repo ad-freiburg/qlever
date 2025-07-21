@@ -240,7 +240,7 @@ TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
   checkInvalidLiteral(litCoordOutOfRange, true);
-  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
+  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type(),
                     {2});
   checkGeometryType(
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});

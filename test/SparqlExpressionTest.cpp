@@ -1410,14 +1410,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       v,  // POINT(24.3, 26.8)
       geoLit("LINESTRING(2 8, 4 6)"),
       geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
-      lit("BLABLIBLU(1 1, 2 2)")
-      // TODO<ullingerc> Handle invalid geo literals gracefully. Then add
-      // geoLit("BLABLIBLU(1 1, 2 2)")
+      lit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("LINESTRING(-5000 0, 1 2)"),
   };
-  checkMinX(boundingCoordInputs, Ids{U, U, D(24.3), D(2), D(2), U});
-  checkMinY(boundingCoordInputs, Ids{U, U, D(26.8), D(6), D(2), U});
-  checkMaxX(boundingCoordInputs, Ids{U, U, D(24.3), D(4), D(4), U});
-  checkMaxY(boundingCoordInputs, Ids{U, U, D(26.8), D(8), D(4), U});
+  checkMinX(boundingCoordInputs, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
+  checkMinY(boundingCoordInputs, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
+  checkMaxX(boundingCoordInputs, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
+  checkMaxY(boundingCoordInputs, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
 
   // auto checkLength = std::bind_front(testNaryExpression,
   // &makeLengthExpression); auto checkMetricLength =
