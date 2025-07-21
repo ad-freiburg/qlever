@@ -110,6 +110,6 @@ void TextBlockWriter<WordTextVecView, EntityTextVecView>::writeTextBlockToFile(
 }
 
 // Explicit instantiation for the specific types used
-template class TextBlockWriter<
+template struct TextBlockWriter<
     decltype(std::declval<WordTextVec&>().sortedView()),
     decltype(std::declval<EntityTextVec&>().sortedView())>;
