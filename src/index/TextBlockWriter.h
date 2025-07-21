@@ -100,7 +100,9 @@ struct TextBlockWriter {
 
   // Iterates over entityTextVec_ up to and including
   // currentWordTextVecWordIndex_. All entries are written to entityPostings_.
-  // Keeps track of the first
+  // Advances both entity text vec iterators while. After calling this the
+  // entityStartWordIdIterator points to the first element that has the
+  // currentWordTextVecWordIndex_ that was present when the function was called.
   void addEntityPostingsUpToWordIndex();
 
   template <typename WordRow>
@@ -109,6 +111,7 @@ struct TextBlockWriter {
   template <typename EntityRow>
   void addEntityPosting(const EntityRow& entityTextVecRow);
 
+  // Does the actual writing to disk using the posting lists
   void writeTextBlockToFile(const std::vector<WordPosting>& wordPostings,
                             const std::vector<EntityPosting>& entityPostings,
                             ad_utility::File& out,
