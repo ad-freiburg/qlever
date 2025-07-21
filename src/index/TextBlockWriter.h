@@ -8,6 +8,7 @@
 #include "TextMetaData.h"
 #include "TextScoringEnum.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/IndexTypes.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Postings.h"
 #include "util/File.h"
@@ -84,14 +85,14 @@ struct TextBlockWriter {
 
   ql::ranges::sentinel_t<EntityTextVecView> entityTextVecSentinel_;
 
-  std::vector<Posting> wordPostings_ = {};
-  std::vector<Posting> entityPostings_ = {};
+  std::vector<WordPosting> wordPostings_ = {};
+  std::vector<EntityPosting> entityPostings_ = {};
 
   // Tracks the offset in the out_ file to write the blocks
   off_t currentOffset_ = 0;
 
   // Tracks the current word index of wordTextVec_
-  WordIndex currentWordTextVecWordIndex_ = 0;
+  WordVocabIndex currentWordTextVecWordIndex_ = WordVocabIndex::make(0);
 
   // Is called after block boundary is reached to add all co-occuring entities
   // to entityPostings_ and then write the whole block to disk
@@ -108,11 +109,11 @@ struct TextBlockWriter {
   template <typename EntityRow>
   void addEntityPosting(const EntityRow& entityTextVecRow);
 
-  void writeTextBlockToFile(const std::vector<Posting>& wordPostings,
-                            const std::vector<Posting>& entityPostings,
+  void writeTextBlockToFile(const std::vector<WordPosting>& wordPostings,
+                            const std::vector<EntityPosting>& entityPostings,
                             ad_utility::File& out,
-                            WordIndex minWordIndexOfBlock,
-                            WordIndex maxWordIndexOfBlock);
+                            WordVocabIndex minWordIndexOfBlock,
+                            WordVocabIndex maxWordIndexOfBlock);
 };
 
 // Deduction guide

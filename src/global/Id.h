@@ -17,9 +17,6 @@ using ColumnIndex = uint64_t;
 
 // TODO<joka921> The following IDs only appear within the text index in the
 // `Index` class, so they should not be public.
-using WordIndex = uint64_t;
-using WordOrEntityIndex = uint64_t;
-using TextBlockIndex = uint64_t;
 using CompressionCode = uint64_t;
 
 #endif  // QLEVER_SRC_GLOBAL_ID_H

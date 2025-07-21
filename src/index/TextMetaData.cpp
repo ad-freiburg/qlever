@@ -9,8 +9,8 @@
 
 // _____________________________________________________________________________
 std::vector<std::reference_wrapper<const TextBlockMetaData>>
-TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
-                                      const uint64_t upper) const {
+TextMetaData::getBlockInfoByWordRange(const WordVocabIndex lower,
+                                      const WordVocabIndex upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
   AD_CORRECTNESS_CHECK(_blocks.size() > 0);
   AD_CORRECTNESS_CHECK(_blocks.size() == _blockUpperBoundWordIds.size());
@@ -29,8 +29,7 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   // Since the range is [lower, upper] as opposed to `[lower, upper)`.
   // TODO<joka921, flixtastic> fix this inconsistency with the usual C++
   // conventions.
-  auto upperIt = ql::ranges::upper_bound(_blockUpperBoundWordIds.begin(),
-                                         _blockUpperBoundWordIds.end(), upper);
+  auto upperIt = ql::ranges::upper_bound(_blockUpperBoundWordIds, upper);
   if (upperIt == _blockUpperBoundWordIds.end()) {
     --upperIt;
   }

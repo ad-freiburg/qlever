@@ -7,7 +7,6 @@
 
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
-#include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
@@ -154,6 +153,7 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
  *                      reference because it gets updated.
  *
  */
+template <typename Posting>
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const std::vector<Posting>& postings,
                                   off_t& currentOffset, bool scoreIsInt);

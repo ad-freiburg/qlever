@@ -8,7 +8,7 @@ void TextBlockWriter<WordTextVecView, EntityTextVecView>::
   for (auto&& chunk :
        ::ranges::views::chunk(wordTextVecView_, nofWordPostingsInTextBlock)) {
     for (const auto& row : chunk) {
-      currentWordTextVecWordIndex_ = row[0].getInt();
+      currentWordTextVecWordIndex_ = row[0].getWordVocabIndex();
       addWordPosting(row);
     }
     addBlock();
@@ -23,8 +23,8 @@ void TextBlockWriter<WordTextVecView, EntityTextVecView>::addBlock() {
 
   // This is possible since the wordPostings are filled in ascending WordIndex
   // order.
-  WordIndex minWordIndexOfBlock = std::get<1>(wordPostings_.front());
-  WordIndex maxWordIndexOfBlock = std::get<1>(wordPostings_.back());
+  WordVocabIndex minWordIndexOfBlock = std::get<1>(wordPostings_.front());
+  WordVocabIndex maxWordIndexOfBlock = std::get<1>(wordPostings_.back());
 
   // Sort both posting vectors by TextRecordIndex, wordIndex (or entityIndex),
   // score
@@ -58,13 +58,13 @@ void TextBlockWriter<WordTextVecView,
 
   bool startOfLastWordIdSet = false;
 
-  WordIndex currentEntityTextVecWordIndex =
-      static_cast<WordIndex>((*entityTextVecIterator_)[0].getInt());
+  WordVocabIndex currentEntityTextVecWordIndex =
+      ((*entityTextVecIterator_)[0].getWordVocabIndex());
   for (; entityTextVecIterator_ != entityTextVecSentinel_ &&
          currentEntityTextVecWordIndex < currentWordTextVecWordIndex_;
        ++entityTextVecIterator_) {
     currentEntityTextVecWordIndex =
-        static_cast<WordIndex>((*entityTextVecIterator_)[0].getInt());
+        (*entityTextVecIterator_)[0].getWordVocabIndex();
     if (currentEntityTextVecWordIndex == currentWordTextVecWordIndex_ &&
         !startOfLastWordIdSet) {
       entityStartWordIdIterator_ = entityTextVecIterator_;
@@ -80,7 +80,7 @@ template <typename EntityRow>
 void TextBlockWriter<WordTextVecView, EntityTextVecView>::addEntityPosting(
     const EntityRow& entityTextVecRow) {
   entityPostings_.emplace_back(entityTextVecRow[1].getTextRecordIndex(),
-                               entityTextVecRow[2].getVocabIndex().get(),
+                               entityTextVecRow[2].getVocabIndex(),
                                entityTextVecRow[3].getDouble());
 }
 
@@ -90,16 +90,16 @@ template <typename WordRow>
 void TextBlockWriter<WordTextVecView, EntityTextVecView>::addWordPosting(
     const WordRow& wordTextVecRow) {
   wordPostings_.emplace_back(wordTextVecRow[1].getTextRecordIndex(),
-                             wordTextVecRow[0].getInt(),
+                             wordTextVecRow[0].getWordVocabIndex(),
                              wordTextVecRow[2].getDouble());
 }
 
 // _____________________________________________________________________________
 template <typename WordTextVecView, typename EntityTextVecView>
 void TextBlockWriter<WordTextVecView, EntityTextVecView>::writeTextBlockToFile(
-    const std::vector<Posting>& wordPostings,
-    const std::vector<Posting>& entityPostings, ad_utility::File& out,
-    WordIndex minWordIndexOfBlock, WordIndex maxWordIndexOfBlock) {
+    const std::vector<WordPosting>& wordPostings,
+    const std::vector<EntityPosting>& entityPostings, ad_utility::File& out,
+    WordVocabIndex minWordIndexOfBlock, WordVocabIndex maxWordIndexOfBlock) {
   const bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
       out, wordPostings, currentOffset_, scoreIsInt);

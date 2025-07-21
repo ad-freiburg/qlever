@@ -212,16 +212,15 @@ void TextIndexBuilder::processWordCaseDuringInvertedListProcessing(
   // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
   WordVocabIndex vid;
   bool ret = textVocab_.getId(line.word_, &vid);
-  WordIndex wid = vid.get();
   if (!ret) {
     LOG(ERROR) << "ERROR: word \"" << line.word_ << "\" "
                << "not found in textVocab. Terminating\n";
     AD_FAIL();
   }
   if (scoreData.getScoringMetric() == TextScoringMetric::EXPLICIT) {
-    wordsInContext[wid] += line.score_;
+    wordsInContext[vid] += line.score_;
   } else {
-    wordsInContext[wid] = scoreData.getScore(wid, line.contextId_);
+    wordsInContext[vid] = scoreData.getScore(vid, line.contextId_);
   }
 }
 
@@ -244,14 +243,14 @@ void TextIndexBuilder::addContextToVectors(WordTextVec& wordTextVec,
                                            EntityTextVec& entityTextVec,
                                            TextRecordIndex context,
                                            const WordMap& words,
-                                           const EntityMap& entities) const {
+                                           const EntityMap& entities) {
   // Add all words to respective vector
   ql::ranges::for_each(words, [&](const auto& word) {
-    wordTextVec.push(std::array{Id::makeFromInt(word.first),
+    wordTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
                                 Id::makeFromTextRecordIndex(context),
                                 Id::makeFromDouble(word.second)});
     ql::ranges::for_each(entities, [&](const auto& entity) {
-      entityTextVec.push(std::array{Id::makeFromInt(word.first),
+      entityTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
                                     Id::makeFromTextRecordIndex(context),
                                     Id::makeFromVocabIndex(entity.first),
                                     Id::makeFromDouble(entity.second)});

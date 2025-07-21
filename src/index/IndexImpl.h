@@ -123,7 +123,7 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   // A block boundary is always the last WordId in the block.
-  std::vector<WordIndex> blockBoundaries_;
+  std::vector<WordVocabIndex> blockBoundaries_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
@@ -361,12 +361,12 @@ class IndexImpl {
     // range
     bool computeHasToBeFiltered(
         const IdRange<WordVocabIndex>& includingIdRange) const {
-      return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
-               tbmd_._lastWordId <= includingIdRange.last().get());
+      return !(tbmd_._firstWordId >= includingIdRange.first() &&
+               tbmd_._lastWordId <= includingIdRange.last());
     }
   };
 
-  std::string_view wordIdToString(WordIndex wordIndex) const;
+  std::string_view wordIdToString(WordVocabIndex wordIndex) const;
 
   /**
    *

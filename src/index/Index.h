@@ -51,24 +51,6 @@ class Index {
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
 
-  // Store all information about possible search results from the text index in
-  // one place.
-  // Every vector is either empty or has the same size as the others.
-  struct WordEntityPostings {
-    // Stores the index of the TextRecord of each result.
-    std::vector<TextRecordIndex> cids_;
-    // For every instance should wids_.size() never be < 1.
-    // For prefix-queries stores for each term and result the index of
-    // the Word the prefixed-word was completed to.
-    std::vector<std::vector<WordIndex>> wids_ = {{}};
-    // Stores the index of the entity of each result.
-    std::vector<Id> eids_;
-    // Stores for each result how often an entity
-    // appears in its associated TextRecord. [[OLD DEFINITION]]
-    // Now scores BM25 scores for all words that are in the voacabulary
-    std::vector<Score> scores_;
-  };
-
   using Filetype = qlever::Filetype;
   using InputFileSpecification = qlever::InputFileSpecification;
 
@@ -154,7 +136,7 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
+  [[nodiscard]] std::string_view wordIdToString(WordVocabIndex wordIndex) const;
 
   [[nodiscard]] size_t getSizeOfTextBlocksSum(const std::string& word,
                                               TextScanMode textScanMode) const;

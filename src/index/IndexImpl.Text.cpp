@@ -120,8 +120,8 @@ void IndexImpl::openTextFileHandle() {
 }
 
 // _____________________________________________________________________________
-std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
-  return textVocab_[WordVocabIndex::make(wordIndex)];
+std::string_view IndexImpl::wordIdToString(WordVocabIndex wordIndex) const {
+  return textVocab_[wordIndex];
 }
 
 // _____________________________________________________________________________
@@ -228,8 +228,8 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     }
     idRange = IdRange{idx, idx};
   }
-  auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
-                                                      idRange.last().get());
+  auto tbmdVector =
+      textMeta_.getBlockInfoByWordRange(idRange.first(), idRange.last());
 
   std::vector<TextBlockMetadataAndWordInfo> result;
   for (auto tbmd : tbmdVector) {

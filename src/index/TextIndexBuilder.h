@@ -12,7 +12,7 @@
 // This class contains all the code that is only required when building the
 // fulltext index
 class TextIndexBuilder : public IndexImpl {
-  using WordMap = ad_utility::HashMap<WordIndex, Score>;
+  using WordMap = ad_utility::HashMap<WordVocabIndex, Score>;
   using EntityMap = ad_utility::HashMap<VocabIndex, Score>;
 
   // A word posting is a combination of WordId, TextRecordId and Score. The
@@ -77,10 +77,10 @@ class TextIndexBuilder : public IndexImpl {
   static void logEntityNotFound(const std::string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
-  void addContextToVectors(WordTextVec& wordTextVec,
-                           EntityTextVec& entityTextVec,
-                           TextRecordIndex context, const WordMap& words,
-                           const EntityMap& entities) const;
+  static void addContextToVectors(WordTextVec& wordTextVec,
+                                  EntityTextVec& entityTextVec,
+                                  TextRecordIndex context, const WordMap& words,
+                                  const EntityMap& entities);
 
   void createTextIndex(const std::string& filename, WordTextVec& wordTextVec,
                        EntityTextVec& entityTextVec);
