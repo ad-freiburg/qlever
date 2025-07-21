@@ -62,7 +62,7 @@ class TextIndexScanForEntity : public Operation {
 
   bool knownEmptyResult() override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -80,7 +80,7 @@ class TextIndexScanForEntity : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   void setVariableToColumnMap();
 };

@@ -111,7 +111,7 @@ size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
@@ -121,7 +121,7 @@ vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<ColumnIndex> GroupByImpl::computeSortColumns(
+std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
   // If we have an implicit GROUP BY, where the entire input is a single group,
@@ -222,15 +222,23 @@ void GroupByImpl::processGroup(
   auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
-    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
+    } else if constexpr (sparqlExpression::isVectorResult<T>) {
+      AD_CORRECTNESS_CHECK(singleResult.size() == 1,
+                           "An expression returned a vector expression result "
+                           "that contained an unexpected amount of entries.");
+      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
+          std::move(singleResult.at(0)), *localVocab);
     } else {
-      // This should never happen since aggregates always return constants.
-      AD_FAIL();
+      // This should never happen since aggregates always return constants or
+      // vectors.
+      AD_THROW(absl::StrCat("An expression returned an invalid type ",
+                            typeid(T).name(),
+                            " as the result of an aggregation step."));
     }
   };
 

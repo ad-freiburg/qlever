@@ -100,7 +100,7 @@ class Variable {
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
   // it at the end of target.
-  void appendEscapedWord(std::string_view word, std::string& target) const;
+  static void appendEscapedWord(std::string_view word, std::string& target);
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_VARIABLE_H

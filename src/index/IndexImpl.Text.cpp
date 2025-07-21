@@ -68,7 +68,7 @@ IdTable IndexImpl::mergeTextBlockResults(
     TextScanMode textScanMode) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
-  vector<IdTable> partialResults;
+  std::vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
     IdTable partialResult{allocator};
     partialResult =
@@ -163,7 +163,7 @@ IdTable IndexImpl::getEntityMentionsForWord(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
-    const vector<std::string>& terms) const {
+    const std::vector<std::string>& terms) const {
   // Heuristic: Pick the term with the smallest number of entries to be read.
   // Note that
   // 1. The entries can be spread over multiple blocks and
@@ -197,7 +197,7 @@ size_t IndexImpl::getSizeOfTextBlocksSum(const std::string& word,
 
 // _____________________________________________________________________________
 size_t IndexImpl::getSizeOfTextBlocksSum(
-    const vector<TextBlockMetadataAndWordInfo>& tbmds,
+    const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     TextScanMode textScanMode) {
   auto addSizeOfBlock =
       [&textScanMode](size_t acc,
