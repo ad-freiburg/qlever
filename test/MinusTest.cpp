@@ -566,7 +566,7 @@ TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
 
   handler.flush();
 
-  EXPECT_THAT(resultTables, ::testing::ElementsAre(input));
+  EXPECT_THAT(resultTables, ::testing::ElementsAre(std::cref(input)));
   EXPECT_EQ(handler.localVocab().size(), 1);
   EXPECT_THAT(handler.localVocab().getAllWordsForTesting(),
               ::testing::ElementsAre(testLiteral));
