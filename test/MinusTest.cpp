@@ -445,6 +445,52 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 }
 
 // _____________________________________________________________________________
+TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
+  auto qec = ad_utility::testing::getQec();
+
+  LocalVocabEntry testLiteral{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"Abc\"")};
+
+  LocalVocab leftVocab{};
+  leftVocab.getIndexAndAddIfNotContained(testLiteral);
+  LocalVocab rightVocab{};
+  rightVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"Def\"")});
+
+  auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 11, 111}, {2, 22, 222}, {3, 33, 333}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
+                                           Variable{"?z"}},
+      false, std::vector<ColumnIndex>{2}, leftVocab.clone());
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{2222, 222}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?z"}},
+      false, std::vector<ColumnIndex>{1}, rightVocab.clone());
+  Minus minus{qec, left, right};
+
+  qec->getQueryTreeCache().clearAll();
+
+  auto result = minus.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto lazyResult = result.idTables();
+  auto it = lazyResult.begin();
+  ASSERT_NE(it, lazyResult.end());
+
+  EXPECT_EQ(it->idTable_, expected);
+  ASSERT_EQ(it->localVocab_.size(), 1);
+  EXPECT_THAT(it->localVocab_.getAllWordsForTesting(),
+              ::testing::ElementsAre(testLiteral));
+
+  EXPECT_EQ(++it, lazyResult.end());
+}
+
+// _____________________________________________________________________________
 TEST(Minus, lazyMinusExceedingChunkSize) {
   {
     std::vector<IdTable> expected;
