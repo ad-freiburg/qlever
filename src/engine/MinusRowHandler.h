@@ -5,6 +5,8 @@
 #ifndef MINUSROWHANDLER_H
 #define MINUSROWHANDLER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -174,6 +176,7 @@ class MinusRowHandler {
                   outputColumn.begin() + oldSize, CHUNK_SIZE, action);
     }
   }
+  FRIEND_TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush);
 };
 
 }  // namespace ad_utility

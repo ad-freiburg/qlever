@@ -12,6 +12,7 @@
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Minus.h"
+#include "engine/MinusRowHandler.h"
 #include "engine/ValuesForTesting.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -527,3 +528,47 @@ TEST(Minus, lazyMinusExceedingChunkSize) {
               std::move(expected), true);
   }
 }
+
+// Make sure that FRIEND_TEST finds this function correctly.
+namespace ad_utility {
+struct Wrapper {
+  IdTableView<0> table_;
+  const LocalVocab& localVocab_;
+  operator IdTableView<0>() const { return table_; }
+  const LocalVocab& getLocalVocab() const { return localVocab_; }
+};
+
+// _____________________________________________________________________________
+TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
+  auto qec = ad_utility::testing::getQec();
+
+  LocalVocabEntry testLiteral{
+      ad_utility::triple_component::Literal::fromStringRepresentation(
+          "\"Abc\"")};
+
+  LocalVocab leftVocab{};
+  leftVocab.getIndexAndAddIfNotContained(testLiteral);
+
+  std::vector<IdTable> resultTables;
+
+  ad_utility::MinusRowHandler handler{
+      1, IdTable{1, qec->getAllocator()},
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      [&resultTables](IdTable& table, LocalVocab&) {
+        resultTables.push_back(std::move(table));
+      }};
+
+  auto input = makeIdTableFromVector({{1}});
+
+  Wrapper wrapper{input.asStaticView<0>(), leftVocab};
+
+  handler.setOnlyLeftInputForOptionalJoin(wrapper);
+  handler.addOptionalRow(0);
+
+  handler.flush();
+
+  EXPECT_THAT(resultTables, ::testing::ElementsAre(input));
+  EXPECT_EQ(handler.currentVocab_, &leftVocab);
+  EXPECT_TRUE(std::move(handler).resultTable().empty());
+}
+};  // namespace ad_utility
