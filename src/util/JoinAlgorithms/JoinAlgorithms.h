@@ -17,7 +17,6 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/Generator.h"
 #include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
@@ -1374,7 +1373,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       }
       compatibleRowAction_.flush();
       leftSide_.undefBlocks_.clear();
+      leftSide_.undefBlocks_.shrink_to_fit();
       rightSide_.undefBlocks_.clear();
+      rightSide_.undefBlocks_.shrink_to_fit();
     }
   }
 
@@ -1494,6 +1495,7 @@ void zipperJoinForBlocksWithPotentialUndef(
     DoOptionalJoinTag = {}, DoMinusTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
   static constexpr bool DoMinus = DoMinusTag::value;
+  static_assert(!DoMinus || DoOptionalJoin);
 
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);

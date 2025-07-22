@@ -78,7 +78,8 @@ class Minus : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Lazily compute the minus join of two results when at least one of the
-  // results is computed lazily.
+  // results is computed lazily. This currently only works if we have just a
+  // single join column, otherwise this function will throw.
   Result lazyMinusJoin(std::shared_ptr<const Result> left,
                        std::shared_ptr<const Result> right,
                        bool requestLaziness);
