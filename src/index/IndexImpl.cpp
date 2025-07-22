@@ -278,8 +278,8 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 
   auto internalTriplesUnique{BlocksOfTriples{ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>())}};
-  createPSOAndPOSImpl(NumColumnsIndexBuilding,
-                      std::move(internalTriplesUnique), false);
+  createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
+                      false);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
@@ -1309,9 +1309,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
