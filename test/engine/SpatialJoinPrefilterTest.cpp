@@ -92,6 +92,7 @@ const std::vector<TestGeometry> testGeometries{
     {"approx-de", approximatedAreaGermany, true},
     {"uni-separate", areaTFCampus, true},
     {"invalid", invalidWkt, false},
+    {"capetown", areaCapeTownStation, false},
 };
 constexpr std::string_view VAR_LEFT{"?geom1"};
 constexpr std::string_view VAR_RIGHT{"?geom2"};
@@ -100,7 +101,8 @@ constexpr std::string_view VAR_RIGHT{"?geom2"};
 std::string buildLibSJTestDataset(bool addApproxGermany = false,
                                   bool germanyDifferentPredicate = true,
                                   bool addSeparateUni = false,
-                                  bool addInvalid = false) {
+                                  bool addInvalid = false,
+                                  bool addCapetown = false) {
   std::string kg;
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
     if (addApproxGermany && name == "approx-de") {
@@ -112,7 +114,8 @@ std::string buildLibSJTestDataset(bool addApproxGermany = false,
     if (addInvalid && name == "invalid") {
       kg = absl::StrCat(kg, "<invalid> <wkt-invalid> ", wkt, " .\n");
     }
-    if (name != "uni-separate" && name != "approx-de" && name != "invalid") {
+    if (name != "uni-separate" && name != "approx-de" && name != "invalid" &&
+        (name != "capetown" || addCapetown)) {
       kg = absl::StrCat(
           kg, "<", name, "> <wkt-",
           (isInGermany && germanyDifferentPredicate ? "de" : "other"), "> ",
@@ -234,7 +237,9 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
                           std::string_view rightPred,
                           const LibSpatialJoinConfig& sjTask,
                           SweeperTestResult& testResult,
-                          bool usePrefilter = true, Loc loc = Loc::current()) {
+                          bool usePrefilter = true,
+                          bool checkPrefilterDeactivate = false,
+                          Loc loc = Loc::current()) {
   using V = Variable;
   auto l = generateLocationTrace(loc);
 
@@ -304,6 +309,14 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
 
   if (sjTask.maxDist_.has_value()) {
     ASSERT_EQ(results.at(0).size(), resultDists.at(0).size());
+  }
+
+  // If the bounding box is very large, the prefiltering should be deactivated
+  if (checkPrefilterDeactivate) {
+    ASSERT_TRUE(spatialJoin->runtimeInfo().details_.contains(
+        "prefilter-disabled-by-bounding-box-area"));
+    ASSERT_TRUE(spatialJoin->runtimeInfo()
+                    .details_["prefilter-disabled-by-bounding-box-area"]);
   }
 
   // Convert result from row numbers in `IdTable`s to `ValueId`s
@@ -423,9 +436,13 @@ void checkSweeperTestResult(
 // expected bounding box after adding the geometries to `Sweeper`.
 util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
-  auto aggregatedWkt =
-      absl::StrCat("\"GEOMETRYCOLLECTION(", absl::StrJoin(wktGeometries, ", "),
-                   ")\"^^<", GEO_WKT_LITERAL, ">");
+  std::vector<std::string> wktWithoutDatatype;
+  for (const auto& geom : wktGeometries) {
+    wktWithoutDatatype.push_back(ad_utility::detail::removeDatatype(geom));
+  }
+  auto aggregatedWkt = absl::StrCat("\"GEOMETRYCOLLECTION(",
+                                    absl::StrJoin(wktWithoutDatatype, ", "),
+                                    ")\"^^<", GEO_WKT_LITERAL, ">");
   auto boundingBox = ad_utility::GeometryInfo::getBoundingBox(aggregatedWkt);
   if (!boundingBox.has_value()) {
     throw std::runtime_error("Could not compute expected bounding box.");
@@ -440,10 +457,14 @@ const auto boundingBoxOtherPlaces = makeAggregatedBoundingBox(
 const auto boundingBoxAllPlaces = makeAggregatedBoundingBox(
     {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee,
      areaLondonEye, areaStatueOfLiberty, areaEiffelTower});
+const auto boundingBoxVeryLarge = makeAggregatedBoundingBox(
+    {areaMuenster, areaUniFreiburg, lineSegmentGeorgesKoehlerAllee,
+     areaLondonEye, areaStatueOfLiberty, areaEiffelTower, areaCapeTownStation});
 const auto boundingBoxGermany =
     makeAggregatedBoundingBox({approximatedAreaGermany});
 const auto boundingBoxUniAndLondon =
     makeAggregatedBoundingBox({areaUniFreiburg, areaLondonEye});
+const auto boundingBoxUniSeparate = makeAggregatedBoundingBox({areaTFCampus});
 
 }  // namespace SpatialJoinPrefilterTestHelpers
 
@@ -610,6 +631,36 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
                           1,
                           5},
                          WITHIN_DIST);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
+  // Case 4: Very large bounding box, such that prefiltering is deactivated
+  // automatically because it will likely not provide a performance gain
+  // Left + Right: All geometries in Germany, France, UK, USA and South Africa
+  auto kg = buildLibSJTestDataset(false, false, true, false, true);
+  auto qec = buildQec(kg, true);
+  auto [vMap, nMap] = resolveValIdTable(qec, 8);
+
+  auto vIdUniSep = getValId(nMap, "uni-separate");
+  auto vIdUni = getValId(nMap, "uni");
+  auto vIdGkAllee = getValId(nMap, "gk-allee");
+
+  // Intersects with prefiltering, but prefiltering is not used due to too large
+  // bounding box
+  SweeperTestResult testResult;
+  runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS}, testResult,
+                       true, true);
+  checkSweeperTestResult(vMap, testResult,
+                         {{{INTERSECTS, vIdUni, vIdUniSep, 0},
+                           {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
+                          boundingBoxVeryLarge,
+                          boundingBoxUniSeparate,
+                          8,
+                          0,
+                          7,
+                          1},
+                         INTERSECTS, true);
 }
 
 // Test for other utility functions related to geometry prefiltering
