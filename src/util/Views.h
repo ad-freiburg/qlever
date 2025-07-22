@@ -16,10 +16,6 @@
 #include "backports/concepts.h"
 #include "backports/iterator.h"
 #include "backports/span.h"
-#include "range/v3/range/access.hpp"
-#include "range/v3/range/conversion.hpp"
-#include "range/v3/range/traits.hpp"
-#include "range/v3/view/subrange.hpp"
 #include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/Generator.h"
@@ -121,8 +117,8 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
-
-auto uniqueBlockView(SortedBlockView view) {
+ad_utility::InputRangeTypeErased<BlockType> uniqueBlockView(
+    SortedBlockView view) {
   struct uniqueBlockViewFromGet : ad_utility::InputRangeFromGet<BlockType> {
     SortedBlockView view_;
 
@@ -148,7 +144,7 @@ auto uniqueBlockView(SortedBlockView view) {
       }
 
       auto block = std::move(*iter_);
-      ql::ranges::advance(iter_, 1);
+      ++iter_;
       numInputs_ += block.size();
       auto beg = lastValueFromPreviousBlock_
                      ? ql::ranges::find_if(
@@ -163,8 +159,8 @@ auto uniqueBlockView(SortedBlockView view) {
       return block;
     }
   };
-  auto generator = std::make_unique<uniqueBlockViewFromGet>(std::move(view));
-  return ad_utility::InputRangeTypeErased{std::move(generator)};
+  return ad_utility::InputRangeTypeErased{
+      std::make_unique<uniqueBlockViewFromGet>(std::move(view))};
 }
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
