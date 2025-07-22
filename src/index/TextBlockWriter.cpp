@@ -42,8 +42,7 @@ void TextBlockWriter::finishBlock(WordVocabIndex upperBoundWordVocabIndex) {
   // the same text record appear in the same text block.
   // An example would be a text record "He <Newton> helped" and the words
   // "he" and "helped" are put in the same block.
-  entityPostings.erase(std::ranges::unique(entityPostings).begin(),
-                       entityPostings.end());
+  entityPostings.erase(::ranges::unique(entityPostings), entityPostings.end());
 
   writeTextBlockToFile(wordPostings_, entityPostings, out_, minWordIndexOfBlock,
                        upperBoundWordVocabIndex);
