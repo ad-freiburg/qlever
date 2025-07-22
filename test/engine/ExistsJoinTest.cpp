@@ -429,6 +429,43 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithJoinColumnAtNonZeroIndex) {
+  auto qec = ad_utility::testing::getQec();
+
+  auto expected =
+      makeIdTableFromVector({{10, U, T}, {11, 1, F}, {12, 2, T}, {13, 3, F}});
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(
+      makeIdTableFromVector({{V(10), U}, {11, 1}, {12, 2}, {13, 3}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{22, 2}}));
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(leftTables),
+      std::vector<std::optional<Variable>>{Variable{"?y"}, Variable{"?x"}},
+      false, std::vector<ColumnIndex>{1});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(rightTables),
+      std::vector<std::optional<Variable>>{Variable{"?z"}, Variable{"?x"}},
+      false, std::vector<ColumnIndex>{1});
+  ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
+
+  qec->getQueryTreeCache().clearAll();
+
+  auto result = existsJoin.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto lazyResult = result.idTables();
+  auto it = lazyResult.begin();
+  ASSERT_NE(it, lazyResult.end());
+
+  EXPECT_EQ(it->idTable_, expected);
+
+  EXPECT_EQ(++it, lazyResult.end());
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinExceedingChunkSize) {
   {
     std::vector<IdTable> expected;

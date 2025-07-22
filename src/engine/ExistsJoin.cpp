@@ -316,7 +316,7 @@ struct LazyExistsJoinImpl
           std::array{Result::IdTableVocabPair{result->idTable().clone(),
                                               result->getCopyOfLocalVocab()}}};
     }
-    return ad_utility::InputRangeTypeErased{result->idTables()};
+    return result->idTables();
   }
 
   // Convert result to a view of `IdTable`s. This is used for the right side.
@@ -345,16 +345,12 @@ struct LazyExistsJoinImpl
         leftJoinColumn_{leftJoinColumn},
         rightJoinColumn_{rightJoinColumn} {}
 
-  // Get the next non-empty result from the given range.
-  static std::optional<std::reference_wrapper<const IdTable>>
-  getNextNonEmptyResult(
-      ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>&
-          range) {
-    std::optional<std::reference_wrapper<const IdTable>> current;
+  // Fetch and store the next non-empty result from `rightRange_` in
+  // `currentRight_`.
+  void fetchNextRightBlock() {
     do {
-      current = range.get();
-    } while (current.has_value() && current.value().get().empty());
-    return current;
+      currentRight_ = rightRange_.get();
+    } while (currentRight_.has_value() && currentRight_.value().get().empty());
   }
 
   // Increment `currentRightIndex_` by one, or fetch the next non-empty element
@@ -364,7 +360,7 @@ struct LazyExistsJoinImpl
     // Get the next block from the range if we couldn't find a matching value
     // in this one.
     if (currentRightIndex_ == currentRight_.value().get().size()) {
-      currentRight_ = getNextNonEmptyResult(rightRange_);
+      fetchNextRightBlock();
       currentRightIndex_ = 0;
       // Optimization to copy all remaining blocks in one.
       if (!currentRight_.has_value()) {
@@ -403,7 +399,7 @@ struct LazyExistsJoinImpl
   std::optional<Result::IdTableVocabPair> get() override {
     if (!currentRight_.has_value() &&
         allRowsFromLeftExist_ == FastForwardState::Unknown) {
-      currentRight_ = getNextNonEmptyResult(rightRange_);
+      fetchNextRightBlock();
       if (currentRight_.has_value()) {
         if (currentRight_.value().get().at(0, rightJoinColumn_).isUndefined()) {
           allRowsFromLeftExist_ = FastForwardState::Yes;
