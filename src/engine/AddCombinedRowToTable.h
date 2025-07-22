@@ -11,21 +11,13 @@
 
 #include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-
-namespace detail::concepts {
-template <typename T>
-CPP_requires(HasAsStaticView,
-             requires(T& table)(table.template asStaticView<0>()));
-
-template <typename T>
-CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
-}  // namespace detail::concepts
 
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
@@ -138,26 +130,11 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
-  // `IdTableView<0>`. Identity for `IdTableView<0>`.
-  template <typename T>
-  static IdTableView<0> toView(const T& table) {
-    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
-      return table.template asStaticView<0>();
-    } else {
-      return table;
-    }
-  }
-
   // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
   // passed pointer reference to that vocab.
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
-    AD_CORRECTNESS_CHECK(currentVocab == nullptr);
-    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
-      currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(table.getLocalVocab());
-    }
+    detail::mergeVocabInto(table, currentVocab, mergedVocab_);
   }
 
   // Flush remaining pending entries before changing the input.
@@ -189,7 +166,8 @@ class AddCombinedRowToIdTable {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
-    inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
+    inputLeftAndRight_ =
+        std::array{detail::toView(inputLeft), detail::toView(inputRight)};
     checkNumColumns();
   }
 
@@ -200,11 +178,12 @@ class AddCombinedRowToIdTable {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
-    inputLeftAndRight_ = std::array{
-        toView(inputLeft),
-        IdTableView<0>{resultTable_.numColumns() -
-                           toView(inputLeft).numColumns() + numJoinColumns_,
-                       ad_utility::makeUnlimitedAllocator<Id>()}};
+    inputLeftAndRight_ =
+        std::array{detail::toView(inputLeft),
+                   IdTableView<0>{resultTable_.numColumns() -
+                                      detail::toView(inputLeft).numColumns() +
+                                      numJoinColumns_,
+                                  ad_utility::makeUnlimitedAllocator<Id>()}};
   }
 
   // The next free row in the output will be created from
