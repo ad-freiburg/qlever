@@ -8,6 +8,9 @@
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
+#include <array>
+#include <string_view>
+
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
@@ -28,14 +31,15 @@ using ParsedWkt =
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
-// ____________________________________________________________________________
+// Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
   return std::string{asStringViewUnsafe(lit.getContent())};
 }
 
-// ____________________________________________________________________________
+// Tries to extract the geometry type and parse the geometry given by a WKT
+// literal with quotes and datatype using `pb_util`
 inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -76,12 +80,13 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   return {type, parsed};
 }
 
-// ____________________________________________________________________________
+// Convert a point from `pb_util` to a `GeoPoint`
 inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
   return {point.getY(), point.getX()};
 }
 
-// ____________________________________________________________________________
+// Compute the centroid of a parsed geometry and return it as a `GeoPoint`
+// wrapped inside a `Centroid` struct.
 inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
   try {
@@ -94,7 +99,8 @@ inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   }
 }
 
-// ____________________________________________________________________________
+// Compute the bounding box of a parsed geometry and return it as a pair of two
+// `GeoPoint`s wrapped inside a `BoundingBox` struct.
 inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
     const ParsedWkt& geometry) {
   auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
@@ -110,12 +116,13 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
   }
 }
 
-// ____________________________________________________________________________
+// Convert a `GeoPoint` to a point as required by `pb_util`.
 inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
   return {point.getLng(), point.getLat()};
 }
 
-// ____________________________________________________________________________
+// Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
+// (without quotes or datatype).
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
                                     const GeoPoint& upperRight) {
   Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
@@ -123,20 +130,23 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   return getWKT(box);
 }
 
-// ____________________________________________________________________________
+// Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
+// required by `pb_util`.
 inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
   return {geoPointToUtilPoint(boundingBox.lowerLeft_),
           geoPointToUtilPoint(boundingBox.upperRight_)};
 }
 
-// ____________________________________________________________________________
+// Constexpr helper to add the required suffixes to the OGC simple features IRI
+// prefix.
 template <detail::constexpr_str_cat_impl::ConstexprString suffix>
 inline constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();
 }
 
-static constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
-    std::nullopt,
+// Concrete IRIs, built at compile time, for the supported geometry types.
+static constexpr std::array<std::optional<std::string_view>, 8> SF_WKT_TYPE_IRI{
+    std::nullopt,  // Invalid geometry
     addSfPrefix<"Point">(),
     addSfPrefix<"LineString">(),
     addSfPrefix<"Polygon">(),
@@ -145,10 +155,10 @@ static constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
     addSfPrefix<"MultiPolygon">(),
     addSfPrefix<"GeometryCollection">()};
 
-// ____________________________________________________________________________
+// Lookup the IRI for a given WKT type in the array of prepared IRIs.
 inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   if (type < 8) {
-    return SF_WKT_TYPE_IRI[type];
+    return SF_WKT_TYPE_IRI.at(type);
   }
   return std::nullopt;
 }
