@@ -167,7 +167,7 @@ class MinusRowHandler {
     resultTable_.resize(oldSize + indexBuffer_.size());
 
     auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
-    for (const auto& [outputColumn, inputColumn] : ql::ranges::zip_view(
+    for (const auto& [outputColumn, inputColumn] : ::ranges::zip_view(
              resultTable_.getColumns(), inputLeft_.value().getColumns())) {
       chunkedCopy(ql::views::transform(
                       indexBuffer_,
