@@ -324,15 +324,13 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
 
   // Convert aggregated bounding boxes from web mercator int32 to lat/lng double
   auto boxLatLng =
-      SpatialJoinAlgorithms::prefilterBoxToLatLng(aggBoundingBoxLeft);
-  ASSERT_TRUE(boxLatLng.has_value());
-  auto boxRightLatLng =
-      SpatialJoinAlgorithms::prefilterBoxToLatLng(aggBoundingBoxRight);
-  ASSERT_TRUE(boxRightLatLng.has_value());
+      ad_utility::detail::projectInt32WebMercToDoubleLatLng(aggBoundingBoxLeft);
+  auto boxRightLatLng = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
+      aggBoundingBoxRight);
 
   // Write struct with all results of the test run
-  testResult = {resultMatched, boxLatLng.value(), boxRightLatLng.value(), numEl,
-                numSkipped,    numGeomAddedLeft,  numGeomAddedRight};
+  testResult = {resultMatched, boxLatLng,        boxRightLatLng,   numEl,
+                numSkipped,    numGeomAddedLeft, numGeomAddedRight};
 }
 
 // Helper to approximately compare two prefilter boxes from
