@@ -56,16 +56,28 @@ struct TextBlockWriter {
         entityTextVecView_(entityTextVec.sortedView()),
         out_(out),
         textScoringMetric_(textScoringMetric),
-        textMeta_(textMeta),
+        textMeta_{textMeta},
         entityTextVecIterator_(entityTextVecView_.begin()),
         entityTextVecSentinel_(entityTextVecView_.end()) {}
+
+  // Creates an object TextBlockWriter to calculate and write all blocks to the
+  // text index file.
+  static void writeTextIndexFile(const std::string& filename,
+                                 WordTextVec& wordTextVec,
+                                 EntityTextVec& entityTextVec,
+                                 TextScoringMetric textScoringMetric,
+                                 TextMetaData& textMeta,
+                                 size_t nofWordPostingsInTextBlock);
+
+ private:
+  static void writeTextMetaDataToFile(ad_utility::File& out,
+                                      TextMetaData& textMeta);
 
   // Uses the text vecs given during construction to write text blocks to disk
   // that contain exactly nofWordPostingsInTextBlock word postings in the text
   // block except the last block which could potentially contain less
   void calculateAndWriteTextBlocks(size_t nofWordPostingsInTextBlock);
 
- private:
   WordTextVecView wordTextVecView_;
   EntityTextVecView entityTextVecView_;
 

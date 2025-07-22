@@ -53,11 +53,6 @@ struct TypedIndex {
     serializer | id._value;
   }
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, const TypedIndex& id) {
-    serializer | id.get();
-  }
-
   // This is only used in debug and test code.
   friend std::ostream& operator<<(std::ostream& ostr, const TypedIndex& id) {
     ostr << tag << ':' << id.get();

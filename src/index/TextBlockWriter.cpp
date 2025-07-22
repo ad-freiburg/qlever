@@ -5,7 +5,38 @@
 #include "index/TextBlockWriter.h"
 
 #include "index/TextIndexReadWrite.h"
+#include "util/Serializer/FileSerializer.h"
 
+// _____________________________________________________________________________
+void TextBlockWriter::writeTextIndexFile(const std::string& filename,
+                                         WordTextVec& wordTextVec,
+                                         EntityTextVec& entityTextVec,
+                                         TextScoringMetric textScoringMetric,
+                                         TextMetaData& textMeta,
+                                         size_t nofWordPostingsInTextBlock) {
+  ad_utility::File out(filename.c_str(), "w");
+  auto textBlockWriter = TextBlockWriter{wordTextVec, entityTextVec, out,
+                                         textScoringMetric, textMeta};
+  textBlockWriter.calculateAndWriteTextBlocks(nofWordPostingsInTextBlock);
+  LOG(DEBUG) << "Done creating text index." << std::endl;
+  LOG(INFO) << "Statistics for text index: " << textMeta.statistics()
+            << std::endl;
+}
+
+// _____________________________________________________________________________
+void TextBlockWriter::writeTextMetaDataToFile(ad_utility::File& out,
+                                              TextMetaData& textMeta) {
+  LOG(DEBUG) << "Writing Meta data to index file ..." << std::endl;
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
+  serializer << textMeta;
+  out = std::move(serializer).file();
+  off_t startOfMeta = textMeta.getOffsetAfter();
+  out.write(&startOfMeta, sizeof(startOfMeta));
+  out.close();
+  LOG(INFO) << "Text index build completed" << std::endl;
+}
+
+// _____________________________________________________________________________
 void TextBlockWriter::calculateAndWriteTextBlocks(
     size_t nofWordPostingsInTextBlock) {
   AD_CONTRACT_CHECK(

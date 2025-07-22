@@ -261,22 +261,9 @@ void TextIndexBuilder::addContextToVectors(WordTextVec& wordTextVec,
 void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        WordTextVec& wordTextVec,
                                        EntityTextVec& entityTextVec) {
-  ad_utility::File out(filename.c_str(), "w");
-  auto textBlockWriter = TextBlockWriter{wordTextVec, entityTextVec, out,
-                                         textScoringMetric_, textMeta_};
-  textBlockWriter.calculateAndWriteTextBlocks(nofWordPostingsInTextBlock_);
-  LOG(DEBUG) << "Done creating text index." << std::endl;
-  LOG(INFO) << "Statistics for text index: " << textMeta_.statistics()
-            << std::endl;
-
-  LOG(DEBUG) << "Writing Meta data to index file ..." << std::endl;
-  ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
-  serializer << textMeta_;
-  out = std::move(serializer).file();
-  off_t startOfMeta = textMeta_.getOffsetAfter();
-  out.write(&startOfMeta, sizeof(startOfMeta));
-  out.close();
-  LOG(INFO) << "Text index build completed" << std::endl;
+  TextBlockWriter::writeTextIndexFile(filename, wordTextVec, entityTextVec,
+                                      textScoringMetric_, textMeta_,
+                                      nofWordPostingsInTextBlock_);
 }
 
 // _____________________________________________________________________________

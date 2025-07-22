@@ -12,33 +12,35 @@ std::vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const WordVocabIndex lower,
                                       const WordVocabIndex upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
-  AD_CORRECTNESS_CHECK(_blocks.size() > 0);
-  AD_CORRECTNESS_CHECK(_blocks.size() == _blockUpperBoundWordIds.size());
+  AD_CORRECTNESS_CHECK(!_blocks.empty());
 
-  // Binary search in the sorted _blockUpperBoundWordIds vector. This points to
-  // the first element _blockUpperBoundWordIds that is >= lower.
-  auto it = ql::ranges::lower_bound(_blockUpperBoundWordIds, lower);
+  auto projection = [](const auto& block) -> const auto& {
+    return block._lastWordId;
+  };
+
+  // Binary search in the sorted _blocks vector using the lastWordIds of the
+  // blocks. This points to the first block having a lastWordId >= lower.
+  auto it = ql::ranges::lower_bound(_blocks, lower, std::less<>{}, projection);
   // If the word would be behind all that, return the last block
-  if (it == _blockUpperBoundWordIds.end()) {
+  if (it == _blocks.end()) {
     return {_blocks.back()};
   }
 
-  // Binary search in the sorted _blockUpperBoundWordIds vector. This points to
-  // the first element of _blockUpperBoundWordIds that is > upper. We want this
-  // element since this block potentially contains elements of the range.
+  // Binary search in the sorted _blocks vector using the lastWordIds of the
+  // blocks. This points to the first block having a lastWordId > upper. We want
+  // this block since it potentially contains elements of the range.
   // Since the range is [lower, upper] as opposed to `[lower, upper)`.
   // TODO<joka921, flixtastic> fix this inconsistency with the usual C++
   // conventions.
-  auto upperIt = ql::ranges::upper_bound(_blockUpperBoundWordIds, upper);
-  if (upperIt == _blockUpperBoundWordIds.end()) {
+  auto upperIt =
+      ql::ranges::upper_bound(_blocks, upper, std::less<>{}, projection);
+  if (upperIt == _blocks.end()) {
     --upperIt;
   }
 
-  // Convert iterators to indices
-  auto startIndex =
-      static_cast<size_t>(std::distance(_blockUpperBoundWordIds.begin(), it));
-  auto endIndex = static_cast<size_t>(
-      std::distance(_blockUpperBoundWordIds.begin(), upperIt));
+  // Convert iterators to vector indices
+  auto startIndex = std::distance(_blocks.begin(), it);
+  auto endIndex = std::distance(_blocks.begin(), upperIt);
 
   // Collect all blocks
   std::vector<std::reference_wrapper<const TextBlockMetaData>> output;
@@ -83,7 +85,6 @@ std::string TextMetaData::statistics() const {
 // _____________________________________________________________________________
 void TextMetaData::addBlock(const TextBlockMetaData& md) {
   _blocks.push_back(md);
-  _blockUpperBoundWordIds.push_back(md._lastWordId);
 }
 
 // _____________________________________________________________________________
