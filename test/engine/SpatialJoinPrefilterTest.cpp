@@ -701,6 +701,15 @@ TEST(SpatialJoinTest, prefilterGeoByBoundingBox) {
       boundingBoxGermany, index, idxInvalid));
   EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
       boundingBoxOtherPlaces, index, idxInvalid));
+
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(std::nullopt,
+                                                                index, idxUni));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxLondon));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxNewYork));
+  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxInvalid));
 }
 
 }  // namespace
