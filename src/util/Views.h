@@ -27,8 +27,6 @@
 #include "util/Log.h"
 #include "util/ResetWhenMoved.h"
 
-namespace {}  // namespace
-
 namespace ad_utility {
 
 namespace detail {
@@ -541,7 +539,7 @@ CPP_template(typename Range, typename ElementType)(
 
     std::optional<ql::span<ElementType>> get() override {
       if (splitIter_ != ql::ranges::end(splitView_)) {
-        buffer_ = ranges::to<std::vector<ElementType>>(*splitIter_);
+        buffer_ = ::ranges::to<std::vector<ElementType>>(*splitIter_);
         ++splitIter_;
         return ql::span(buffer_.begin(), buffer_.size());
       }
