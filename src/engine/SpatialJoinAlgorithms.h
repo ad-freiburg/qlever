@@ -235,6 +235,11 @@ class SpatialJoinAlgorithms {
   SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
 
+  // Maximum area of bounding box in square coordinates for prefiltering
+  // libspatialjoin input by bounding box. If exceeded, prefiltering is
+  // disabled. See `libspatialjoinParse`.
+  static constexpr double maxAreaPrefilterBox_ = 2500.0;
+
   // if the distance calculation should be approximated, by the midpoint of
   // the area
   bool useMidpointForAreas_ = true;

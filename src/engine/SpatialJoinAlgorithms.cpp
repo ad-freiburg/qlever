@@ -69,17 +69,27 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // Initialize the parser.
   sj::WKTParser parser(&sweeper, numThreads);
 
-  // Convert prefilter box to lat lng for comparing against geometry info from
-  // vocabulary.
+  // Convert prefilter box to lat lng coordinates for comparing against geometry
+  // info from vocabulary.
   std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
+  size_t prefilterCounter = 0;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
         prefilterBox.value());
   }
-  bool isPrefilteringPossible =
-      prefilterLatLngBox.has_value() &&
-      qec_->getIndex().getVocab().isGeoInfoAvailable();
-  size_t prefilterCounter = 0;
+  bool usePrefiltering = prefilterLatLngBox.has_value() &&
+                         qec_->getIndex().getVocab().isGeoInfoAvailable();
+
+  // If the prefilter box is larger than 50 x 50 coordinates, the
+  // prefiltering overhead (cost of retrieving bounding boxes from disk) is
+  // likely larger than its performance gain. Therefore prefiltering is
+  // disabled in this case.
+  if (usePrefiltering &&
+      util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox_) {
+    usePrefiltering = false;
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "prefilter-disabled-by-bounding-box-area", true);
+  }
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
@@ -89,7 +99,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
     if (id.getDatatype() == Datatype::VocabIndex) {
       // If we have a prefilter box, check if we also have a precomputed
       // bounding box for the geometry this `VocabIndex` is referring to.
-      if (isPrefilteringPossible &&
+      if (usePrefiltering &&
           prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
                                     id.getVocabIndex())) {
         prefilterCounter++;
