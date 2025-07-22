@@ -323,13 +323,13 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
   }
 
   // Convert aggregated bounding boxes from web mercator int32 to lat/lng double
-  auto boxLatLng =
+  auto boxLeftLatLng =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(aggBoundingBoxLeft);
   auto boxRightLatLng = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
       aggBoundingBoxRight);
 
   // Write struct with all results of the test run
-  testResult = {resultMatched, boxLatLng,        boxRightLatLng,   numEl,
+  testResult = {resultMatched, boxLeftLatLng,    boxRightLatLng,   numEl,
                 numSkipped,    numGeomAddedLeft, numGeomAddedRight};
 }
 
