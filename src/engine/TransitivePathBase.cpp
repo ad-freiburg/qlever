@@ -286,7 +286,7 @@ std::string TransitivePathBase::getDescriptor() const {
 size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+std::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
   if (lhs_.isSortedOnInputCol()) {
     return {0};
   }
@@ -393,7 +393,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 }
 
 // _____________________________________________________________________________
-vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
+std::vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
   std::vector<QueryExecutionTree*> res;
   auto addChildren = [](std::vector<QueryExecutionTree*>& res,
                         TransitivePathSide side) {

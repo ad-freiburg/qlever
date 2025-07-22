@@ -9,6 +9,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -45,8 +46,18 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return GeometryInfo{type, boundingBoxAsGeoPoints(parsed.value()),
-                      centroidAsGeoPoint(parsed.value())};
+
+  auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value());
+  if (!boundingBox.has_value() || !centroid.has_value()) {
+    LOG(DEBUG) << "The WKT string `" << wkt
+               << "` would lead to an invalid centroid or bounding box. It "
+                  "will thus be treated as an invalid WKT literal."
+               << std::endl;
+    return std::nullopt;
+  }
+
+  return GeometryInfo{type, boundingBox.value(), centroid.value()};
 }
 
 // ____________________________________________________________________________

@@ -1,6 +1,13 @@
+add_subdirectory(data)
+
 addLinkAndDiscoverTest(ParallelBufferTest parser)
 addLinkAndDiscoverTest(LiteralOrIriTest engine)
 addLinkAndDiscoverTest(PayloadVariablesTest engine)
 addLinkAndDiscoverTest(QuadTest engine)
 addLinkAndDiscoverTest(BlankNodeExpressionTest engine)
 addLinkAndDiscoverTest(PropertyPathTest parser)
+addLinkAndDiscoverTest(UpdateTriplesTest parser)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserUpdateTest parser engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserExpressionTest parser sparqlExpressions engine)
+

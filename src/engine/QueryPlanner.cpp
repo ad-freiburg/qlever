@@ -306,7 +306,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getDistinctRow(
+std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
@@ -336,7 +336,7 @@ vector<SubtreePlan> QueryPlanner::getDistinctRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
+std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
@@ -367,7 +367,7 @@ vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getHavingRow(
+std::vector<SubtreePlan> QueryPlanner::getHavingRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -399,7 +399,7 @@ std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getGroupByRow(
+std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -432,7 +432,7 @@ vector<SubtreePlan> QueryPlanner::getGroupByRow(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::getOrderByRow(
+std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -578,9 +578,15 @@ CPP_concept TriplePosition =
 SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-  return sparqlParserHelpers::ParserAndVisitor{filterString}
-      .parseTypesafe(&SparqlAutomaticParser::filterR)
-      .resultOfParse_;
+
+  ad_utility::BlankNodeManager bn;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+                    .parseTypesafe(&SparqlAutomaticParser::filterR)
+                    .resultOfParse_;
+
+  // The `filter` rule never adds blank nodes.
+  AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
+  return result;
 };
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
@@ -1183,7 +1189,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::merge(
+std::vector<SubtreePlan> QueryPlanner::merge(
     const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
     const QueryPlanner::TripleGraph& tg) const {
   // TODO: Add the following features:
@@ -1709,7 +1715,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 };
 
 // _____________________________________________________________________________
-vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
+std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children) {
   auto [initialPlans, additionalFilters] =
@@ -1817,7 +1823,7 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
+std::vector<std::pair<QueryPlanner::TripleGraph, std::vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
     ad_utility::HashMap<std::string, vector<size_t>>& contextVarToTextNodes)
@@ -1896,7 +1902,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 }
 
 // _____________________________________________________________________________
-vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
+std::vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
     size_t startNode, ad_utility::HashSet<size_t> leaveOut) const {
   vector<size_t> res;
   ad_utility::HashSet<size_t> visited;
@@ -1919,7 +1925,7 @@ vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
 }
 
 // _____________________________________________________________________________
-vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
+std::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;
@@ -2752,7 +2758,11 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     ql::ranges::for_each(
         candidates, [this, &newPlans](const SubtreePlan& plan) {
           auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          // Note: It is important that we do NOT copy the filter and
+          // textLimit IDs, as they originate from the inner scope of the
+          // OPTIONAL clause and have been already completely dealt with.
+          // This was the cause of
+          // https://github.com/ad-freiburg/qlever/issues/2194.
           newPlans.push_back(std::move(joinedPlan));
         });
     return true;

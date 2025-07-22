@@ -27,8 +27,6 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 
-using std::vector;
-
 // Data container for prefixes
 class SparqlPrefix {
  public:
@@ -70,10 +68,10 @@ class ParsedQuery {
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
-  vector<SparqlFilter> _havingClauses;
-  vector<VariableOrderKey> _orderBy;
+  std::vector<SparqlFilter> _havingClauses;
+  std::vector<VariableOrderKey> _orderBy;
   IsInternalSort _isInternalSort = IsInternalSort::False;
-  vector<Variable> _groupByVariables;
+  std::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
@@ -135,7 +133,8 @@ class ParsedQuery {
   void registerVariableVisibleInQueryBody(const Variable& variable);
 
   // Add variables, that were found in the query body.
-  void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
+  void registerVariablesVisibleInQueryBody(
+      const std::vector<Variable>& variables);
 
   // Return all the warnings that have been added via `addWarning()` or
   // `addWarningOrThrow`.

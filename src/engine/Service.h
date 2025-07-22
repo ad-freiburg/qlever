@@ -83,7 +83,7 @@ class Service : public Operation {
   bool knownEmptyResult() override { return false; }
 
   // A SERVICE clause has no children.
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(

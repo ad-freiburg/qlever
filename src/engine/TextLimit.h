@@ -20,15 +20,15 @@ class TextLimit : public Operation {
   const size_t limit_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
-  const vector<ColumnIndex> entityColumns_;
-  const vector<ColumnIndex> scoreColumns_;
+  const std::vector<ColumnIndex> entityColumns_;
+  const std::vector<ColumnIndex> scoreColumns_;
 
  public:
   TextLimit(QueryExecutionContext* qec, const size_t limit,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
-            const vector<ColumnIndex>& entityColumns,
-            const vector<ColumnIndex>& scoreColumns);
+            const std::vector<ColumnIndex>& entityColumns,
+            const std::vector<ColumnIndex>& scoreColumns);
 
   ~TextLimit() override = default;
 
@@ -44,9 +44,9 @@ class TextLimit : public Operation {
 
   Variable getTextRecordVariable() const;
 
-  vector<Variable> getEntityVariables() const;
+  std::vector<Variable> getEntityVariables() const;
 
-  vector<Variable> getScoreVariables() const;
+  std::vector<Variable> getScoreVariables() const;
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -58,7 +58,7 @@ class TextLimit : public Operation {
     return limit_ == 0 || child_->knownEmptyResult();
   }
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -67,7 +67,9 @@ class TextLimit : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }
+  std::vector<QueryExecutionTree*> getChildren() override {
+    return {child_.get()};
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

@@ -104,6 +104,7 @@ class GeoVocabulary {
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
         underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
+    size_t numInvalidGeometries_ = 0;
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word
@@ -118,6 +119,8 @@ class GeoVocabulary {
     // Finish the writing on the underlying writer and close the `geoInfoFile_`
     // file handle. After this no more calls to `operator()` are allowed.
     void finishImpl() override;
+
+    ~WordWriter() override;
   };
 
   // ___________________________________________________________________________
