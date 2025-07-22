@@ -21,6 +21,7 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
+#include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -270,8 +271,10 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
-  auto internalTriplesUnique = ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>());
+  // TODO: remove cppcoro dependency
+  auto internalTriplesUnique =
+      cppcoro::fromInputRange(ad_utility::uniqueBlockView(
+          internalTriplesPsoSorter.template getSortedBlocks<0>()));
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
                       false);
   onDiskBase_ = std::move(onDiskBaseBackup);
@@ -368,8 +371,10 @@ void IndexImpl::createFromFiles(
   };
 
   // For the first permutation, perform a unique.
+  // TODO: remove cppcoro dependency
   auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
+      cppcoro::fromInputRange(ad_utility::uniqueBlockView(
+          ad_utility::InputRangeTypeErased{firstSorter.getSortedOutput()}));
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();

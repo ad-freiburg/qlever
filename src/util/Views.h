@@ -124,7 +124,7 @@ template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
 
-cppcoro::generator<BlockType> uniqueBlockView(SortedBlockView view) {
+auto uniqueBlockView(SortedBlockView view) {
   struct uniqueBlockViewFromGet : ad_utility::InputRangeFromGet<BlockType> {
     SortedBlockView view_;
 
@@ -166,10 +166,7 @@ cppcoro::generator<BlockType> uniqueBlockView(SortedBlockView view) {
     }
   };
   auto generator = std::make_unique<uniqueBlockViewFromGet>(std::move(view));
-  /*return*/ for (auto elem :
-                  ad_utility::InputRangeTypeErased{std::move(generator)}) {
-    co_yield elem;
-  }
+  return ad_utility::InputRangeTypeErased{std::move(generator)};
 }
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
@@ -544,7 +541,7 @@ CPP_template(typename Range, typename ElementType)(
 
     std::optional<ql::span<ElementType>> get() override {
       if (splitIter_ != ql::ranges::end(splitView_)) {
-        buffer_ = ql::ranges::to<std::vector<ElementType>>(*splitIter_);
+        buffer_ = ranges::to<std::vector<ElementType>>(*splitIter_);
         ++splitIter_;
         return ql::span(buffer_.begin(), buffer_.size());
       }
