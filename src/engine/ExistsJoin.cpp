@@ -357,6 +357,22 @@ struct LazyExistsJoinImpl
     return current;
   }
 
+  // Increment `currentRightIndex_` by one, or fetch the next non-empty element
+  // from `rightRange_` and reset `currentRightIndex_` back to zero.
+  void incrementToNextRow() {
+    currentRightIndex_++;
+    // Get the next block from the range if we couldn't find a matching value
+    // in this one.
+    if (currentRightIndex_ == currentRight_.value().get().size()) {
+      currentRight_ = getNextNonEmptyResult(rightRange_);
+      currentRightIndex_ = 0;
+      // Optimization to copy all remaining blocks in one.
+      if (!currentRight_.has_value()) {
+        allRowsFromLeftExist_ = FastForwardState::No;
+      }
+    }
+  }
+
   // Check if the `id` has a match on the right side. This will increment the
   // index until a match is found, or no matches exist.
   bool hasMatch(Id id) {
@@ -377,17 +393,7 @@ struct LazyExistsJoinImpl
       if (comparison > 0) {
         return false;
       }
-      currentRightIndex_++;
-      // Get the next block from the range if we couldn't find a matching value
-      // in this one.
-      if (currentRightIndex_ == currentRight_.value().get().size()) {
-        currentRight_ = getNextNonEmptyResult(rightRange_);
-        currentRightIndex_ = 0;
-        // Optimization to copy all remaining blocks in one.
-        if (!currentRight_.has_value()) {
-          allRowsFromLeftExist_ = FastForwardState::No;
-        }
-      }
+      incrementToNextRow();
     }
     return false;
   }
