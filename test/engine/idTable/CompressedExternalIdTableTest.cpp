@@ -58,26 +58,38 @@ auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
 
 TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
   using namespace ad_utility::memory_literals;
-  std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
-  ad_utility::CompressedExternalIdTableWriter writer{
-      filename, 3, ad_utility::testing::makeAllocator(), 48_B};
-  std::vector<CopyableIdTable<0>> tables;
-  tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
-  tables.push_back(makeIdTableFromVector({{2, 3, 7}, {3, 6, 8}, {4, 2, 123}}));
-  tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
 
-  for (const auto& table : tables) {
-    writer.writeIdTable(table);
-  }
+  auto runTestForBlockSize = [](ad_utility::MemorySize memoryToUse,
+                                ad_utility::source_location l =
+                                    source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), memoryToUse};
+    std::vector<CopyableIdTable<0>> tables;
+    tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
+    tables.push_back(
+        makeIdTableFromVector({{2, 3, 7}, {3, 6, 8}, {4, 2, 123}}));
+    tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
 
-  auto generators = writer.getAllGenerators();
-  ASSERT_EQ(generators.size(), tables.size());
+    for (const auto& table : tables) {
+      writer.writeIdTable(table);
+    }
 
-  using namespace ::testing;
-  std::vector<CopyableIdTable<0>> result;
-  auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
-  ql::ranges::copy(tr, std::back_inserter(result));
-  ASSERT_THAT(result, ElementsAreArray(tables));
+    auto generators = writer.getAllGenerators();
+    ASSERT_EQ(generators.size(), tables.size());
+
+    using namespace ::testing;
+    std::vector<CopyableIdTable<0>> result;
+    auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
+    ql::ranges::copy(tr, std::back_inserter(result));
+    EXPECT_THAT(result, ElementsAreArray(tables));
+  };
+  // With 10 bytes per block, the first and second IdTable are split up into
+  // multiple blocks.
+  runTestForBlockSize(10_B);
+  // With 48 bytes, each IdTable is stored in a single block.
+  runTestForBlockSize(48_B);
 }
 
 template <size_t NumStaticColumns>
