@@ -233,13 +233,11 @@ QET makeRightChild(QEC qec, std::string_view pred) {
 
 // Run a complete spatial join and record information into a `SweeperTestResult`
 // struct, which can be compared against an expected result in the next step.
-void runParsingAndSweeper(QEC qec, std::string_view leftPred,
-                          std::string_view rightPred,
-                          const LibSpatialJoinConfig& sjTask,
-                          SweeperTestResult& testResult,
-                          bool usePrefilter = true,
-                          bool checkPrefilterDeactivate = false,
-                          Loc loc = Loc::current()) {
+void runParsingAndSweeper(
+    QEC qec, std::string_view leftPred, std::string_view rightPred,
+    const LibSpatialJoinConfig& sjTask, SweeperTestResult& testResult,
+    bool usePrefilter = true, bool checkPrefilterDeactivate = false,
+    bool useRegularImplementation = false, Loc loc = Loc::current()) {
   using V = Variable;
   auto l = generateLocationTrace(loc);
 
@@ -248,8 +246,9 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
   auto rightChild = makeRightChild(qec, rightPred);
 
   // Build spatial join operation
-  SpatialJoinConfiguration config{sjTask, V{std::string{VAR_LEFT}},
-                                  V{std::string{VAR_RIGHT}}};
+  V varLeft{std::string{VAR_LEFT}};
+  V varRight{std::string{VAR_RIGHT}};
+  SpatialJoinConfiguration config{sjTask, varLeft, varRight};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
@@ -260,6 +259,30 @@ void runParsingAndSweeper(QEC qec, std::string_view leftPred,
   // Build `SpatialJoinAlgorithms` instance from spatial join operation
   auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
   SpatialJoinAlgorithms sjAlgo{qec, prepared, config, spatialJoin};
+
+  // The regular implementation can also be tested instead of this mock version,
+  // but then only limited information is available.
+  if (useRegularImplementation) {
+    auto result = sjAlgo.LibspatialjoinAlgorithm();
+    auto varToCol = spatialJoin->computeVariableToColumnMap();
+    auto leftCol = varToCol.at(varLeft).columnIndex_;
+    auto rightCol = varToCol.at(varRight).columnIndex_;
+    auto resultNumRows = result.idTable().numRows();
+    testResult = SweeperTestResult{};
+    testResult.results_.reserve(resultNumRows);
+    for (size_t i = 0; i < result.idTable().numRows(); i++) {
+      testResult.results_.emplace_back(sjTask.joinType_,
+                                       result.idTable().at(i, leftCol),
+                                       result.idTable().at(i, rightCol), 0);
+    }
+    if (spatialJoin->runtimeInfo().details_.contains(
+            "num-geoms-dropped-by-prefilter")) {
+      testResult.numElementsSkippedByPrefilter_ =
+          static_cast<size_t>(spatialJoin->runtimeInfo()
+                                  .details_["num-geoms-dropped-by-prefilter"]);
+    }
+    return;
+  }
 
   // Instantiate a libspatialjoin `Sweeper`
   SweeperResult results{{}};
@@ -661,6 +684,50 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
                           7,
                           1},
                          INTERSECTS, true);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinTest, BoundingBoxPrefilterRegularImplementation) {
+  // Case 5: Test that the regular implementation `LibspatialjoinAlgorithm()`
+  // instead of the test mock version calls the parsing and prefiltering
+  // correctly
+  // Left: All other test geometries (3x in Freiburg, 1x in London, Paris and
+  // New York)
+  // Right: Approximate boundary of Germany
+  auto kg = buildLibSJTestDataset(true, false, false);
+  auto qec = buildQec(kg, true);
+
+  auto [vMap, nMap] = resolveValIdTable(qec, 7);
+  auto vIdGermany = getValId(nMap, "approx-de");
+  auto vIdUni = getValId(nMap, "uni");
+  auto vIdGkAllee = getValId(nMap, "gk-allee");
+  auto vIdMinster = getValId(nMap, "minster");
+
+  // Within search: Geometry inside of Germany
+  SweeperTestResult testResultRegularImpl;
+  runParsingAndSweeper(qec, "other", "approx-de", {WITHIN},
+                       testResultRegularImpl, true, false, true);
+  // Here we can only check the results and the number of geometries skipped by
+  // prefilter, because we are not using the mock algorithm which captures the
+  // other information.
+  checkSweeperTestResult(vMap, testResultRegularImpl,
+                         {{
+                              {WITHIN, vIdUni, vIdGermany, 0},
+                              {WITHIN, vIdGkAllee, vIdGermany, 0},
+                              {WITHIN, vIdMinster, vIdGermany, 0},
+                          },
+                          {},
+                          {},
+                          0,
+                          3,
+                          0,
+                          0});
+
+  // One child is an empty index scan
+  SweeperTestResult testResultEmpty;
+  runParsingAndSweeper(qec, "does-not-exist", "approx-de", {INTERSECTS},
+                       testResultEmpty, true, false, true);
+  checkSweeperTestResult(vMap, testResultEmpty, {{}, {}, {}, 0, 0, 0, 0});
 }
 
 // Test for other utility functions related to geometry prefiltering
