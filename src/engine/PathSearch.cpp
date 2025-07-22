@@ -203,7 +203,7 @@ bool PathSearch::knownEmptyResult() {
 };
 
 // _____________________________________________________________________________
-vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,

@@ -6,12 +6,14 @@
 #ifndef QLEVER_SRC_PARSER_SPARQLTRIPLE_H
 #define QLEVER_SRC_PARSER_SPARQLTRIPLE_H
 
+#include <boost/optional.hpp>
 #include <utility>
 #include <vector>
 
 #include "global/Id.h"
 #include "parser/PropertyPath.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/Types.h"
 #include "rdfTypes/Variable.h"
 
 // Data container for parsed triples from the where clause.

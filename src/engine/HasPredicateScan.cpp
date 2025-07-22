@@ -141,7 +141,7 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:

@@ -194,6 +194,9 @@ class TripleComponent {
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
 
+  // Access the underlying variant (mostly used for testing)
+  const auto& getVariant() const { return _variant; }
+
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.

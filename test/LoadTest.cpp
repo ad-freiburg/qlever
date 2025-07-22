@@ -37,6 +37,7 @@ class LoadTest : public ::testing::Test {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
+  ad_utility::BlankNodeManager blankNodeManager_;
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
   // predefined response for testing.
@@ -81,19 +82,44 @@ TEST_F(LoadTest, basicMethods) {
 }
 
 TEST_F(LoadTest, computeResult) {
+  auto testSilentBehavior = [this](parsedQuery::Load pq,
+                                   SendRequestType sendFunc,
+                                   ad_utility::source_location loc =
+                                       ad_utility::source_location::current()) {
+    auto impl = [this, &pq,
+                 &sendFunc](ad_utility::source_location loc =
+                                ad_utility::source_location::current()) {
+      auto tr = generateLocationTrace(loc);
+      Load load{testQec, pq, sendFunc};
+      auto res = load.computeResultOnlyForTesting();
+      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.localVocab(), testing::IsEmpty());
+    };
+
+    auto tr = generateLocationTrace(loc);
+    // Not silent, but syntax test mode is activated.
+    pq.silent_ = false;
+    {
+      auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+      impl();
+    }
+    // Silent, but syntax test mode is deactivated.
+    pq.silent_ = true;
+    impl();
+  };
+
   auto expectThrowOnlyIfNotSilent =
-      [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<std::string>& expectedError,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+      [this, testSilentBehavior](
+          parsedQuery::Load pq, SendRequestType sendFunc,
+          const testing::Matcher<std::string>& expectedError,
+          ad_utility::source_location loc =
+              ad_utility::source_location::current()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
         AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
                                      expectedError);
-        pq.silent_ = true;
-        Load silentLoad{testQec, pq, sendFunc};
-        EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
+        testSilentBehavior(pq, sendFunc);
       };
   auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
@@ -270,7 +296,8 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(&blankNodeManager_,
+                                                "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

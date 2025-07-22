@@ -812,7 +812,7 @@ TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
       ad_utility::makeExecutionTree<SpatialJoin>(
           getQec(),
           SpatialJoinConfiguration{
-              SpatialJoinConfig{SpatialJoinType::INTERSECTS},
+              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
               Variable{"?subject"}, Variable{"?object"}},
           std::nullopt, std::nullopt);
   auto description = spatialJoinOperation->getRootOperation()->getDescriptor();

@@ -27,7 +27,7 @@ class StallForeverOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
@@ -69,7 +69,7 @@ class ShallowParentOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
@@ -117,7 +117,7 @@ class AlwaysFailOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  vector<ColumnIndex> resultSortedOn() const override { return {0}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {0}; }
   VariableToColumnMap computeVariableToColumnMap() const override {
     if (!variable_.has_value()) {
       return {};
@@ -163,7 +163,7 @@ class CustomGeneratorOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
