@@ -358,6 +358,37 @@ TEST(ExistsJoin, lazyExistsJoinWithUndefLeftInSeparateTable) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinFastForwardsCorrectlyOnEmptyRight) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), F}}));
+  expected.push_back(makeIdTableFromVector(
+      {{V(1), V(11), F}, {V(2), V(12), F}, {V(3), V(13), F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinSkipsEmptyTablesOnTheRight) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector(
+      {{V(1), V(11), F}, {V(2), V(12), F}, {V(3), V(13), F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(IdTable{2, leftTables.back().getAllocator()});
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
   auto qec = ad_utility::testing::getQec();
 

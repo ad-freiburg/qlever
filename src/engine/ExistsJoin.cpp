@@ -379,8 +379,9 @@ struct LazyExistsJoinImpl
       return currentRight_.has_value();
     }
     // Search for the next match.
-    while (currentRight_.has_value() &&
-           currentRightIndex_ < currentRight_.value().get().size()) {
+    while (currentRight_.has_value()) {
+      AD_CORRECTNESS_CHECK(currentRightIndex_ <
+                           currentRight_.value().get().size());
       auto comparison = currentRight_.value().get().at(currentRightIndex_,
                                                        rightJoinColumn_) <=> id;
       if (comparison == 0) {
