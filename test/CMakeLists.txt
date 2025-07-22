@@ -311,7 +311,7 @@ addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 
-addLinkAndDiscoverTest(ResetWhenMovedTest)
+addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest)
 

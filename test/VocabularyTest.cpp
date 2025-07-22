@@ -7,12 +7,14 @@
 #include <cstdio>
 #include <vector>
 
-#include "../src/index/Vocabulary.h"
-#include "../src/util/json.h"
+#include "index/Vocabulary.h"
+#include "index/vocabulary/VocabularyType.h"
+#include "util/json.h"
 
 using json = nlohmann::json;
 using std::string;
 
+// _____________________________________________________________________________
 TEST(VocabularyTest, getIdForWordTest) {
   std::vector<TextVocabulary> vec(2);
 
@@ -50,6 +52,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   ASSERT_EQ(voc.getGeoInfo(WordVocabIndex::make(2)), std::nullopt);
 }
 
+// _____________________________________________________________________________
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
   ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
@@ -87,6 +90,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   ad_utility::deleteFile(filename);
 }
 
+// _____________________________________________________________________________
 TEST(VocabularyTest, createFromSetTest) {
   ad_utility::HashSet<string> s;
   s.insert("a");
@@ -105,12 +109,14 @@ TEST(VocabularyTest, createFromSetTest) {
   ad_utility::deleteFile(filename);
 }
 
+// _____________________________________________________________________________
 TEST(VocabularyTest, IncompleteLiterals) {
   TripleComponentComparator comp("en", "US", false);
 
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }
 
+// _____________________________________________________________________________
 TEST(Vocabulary, PrefixFilter) {
   RdfsVocabulary vocabulary;
   vocabulary.setLocale("en", "US", true);
@@ -129,4 +135,25 @@ TEST(Vocabulary, PrefixFilter) {
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)}}};
   ASSERT_EQ(ranges, expectedRanges);
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, IsGeoInfoAvailable) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
+
+  RdfsVocabulary v1;
+  v1.resetToType(VocabularyType{OnDiskCompressed});
+  ASSERT_FALSE(v1.isGeoInfoAvailable());
+
+  RdfsVocabulary v2;
+  v2.resetToType(VocabularyType{InMemoryUncompressed});
+  ASSERT_FALSE(v2.isGeoInfoAvailable());
+
+  RdfsVocabulary v3;
+  v3.resetToType(VocabularyType{OnDiskCompressedGeoSplit});
+  ASSERT_TRUE(v3.isGeoInfoAvailable());
+
+  TextVocabulary v4;
+  ASSERT_FALSE(v4.isGeoInfoAvailable());
 }
