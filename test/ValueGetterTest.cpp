@@ -200,4 +200,13 @@ TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
   checkGeoInfoFromValueId(ValueId::makeFromDouble(42.01), std::nullopt);
 }
 
+// _____________________________________________________________________________
+TEST(GeoPointOrWktValueGetterTest, OperatorWithIdGeoPoint) {}
+
+// _____________________________________________________________________________
+TEST(GeoPointOrWktValueGetterTest, OperatorWithIdVocab) {}
+
+// _____________________________________________________________________________
+TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {}
+
 };  // namespace
