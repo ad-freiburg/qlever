@@ -104,7 +104,7 @@ CPP_concept RequestedInfoT = SameAsAny<T, GeometryInfo, Centroid, BoundingBox,
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 2;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
