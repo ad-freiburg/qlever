@@ -16,7 +16,6 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
-#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -312,7 +311,7 @@ class CompressedRelationWriter {
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
@@ -591,6 +590,9 @@ class CompressedRelationReader {
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
+  using IdTableGeneratorInputRange =
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
+
  private:
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
@@ -668,7 +670,7 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  CompressedRelationReader::IdTableGenerator lazyScan(
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
@@ -804,7 +806,7 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   template <typename T>
-  IdTableGenerator asyncParallelBlockGenerator(
+  IdTableGeneratorInputRange asyncParallelBlockGenerator(
       T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
       LimitOffsetClause& limitOffset) const;

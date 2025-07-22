@@ -17,6 +17,9 @@
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
+namespace ad_utility {
+struct NoDetails;
+}
 namespace cppcoro {
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
@@ -298,10 +301,20 @@ T getSingleElement(generator<T, Details> g) {
   return t;
 }
 
-// helper function to convert ad_utility::InputRangeTypeErased<T> to
-// cppcoro::generator<T> with no details
+// helper function to convert ad_utility::InputRangeTypeErased<T,D> to
+// cppcoro::generator<T,D> with no details
 template <typename T>
-generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
+generator<T, NoDetails> fromInputRange(
+    ad_utility::InputRangeTypeErased<T, ad_utility::NoDetails> range) {
+  for (auto& value : range) {
+    co_yield value;
+  }
+}
+
+// helper function to convert ad_utility::InputRangeTypeErased<T,D> to
+// cppcoro::generator<T,D>, details type is copied
+template <typename T, typename D>
+generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
   for (auto& value : range) {
     co_yield value;
   }
