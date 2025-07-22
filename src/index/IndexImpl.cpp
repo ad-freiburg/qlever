@@ -276,10 +276,10 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
 
-  auto internalTriplesUnique = ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>());
+  auto internalTriplesUnique{BlocksOfTriples{ad_utility::uniqueBlockView(
+      internalTriplesPsoSorter.template getSortedBlocks<0>())}};
   createPSOAndPOSImpl(NumColumnsIndexBuilding,
-                      BlocksOfTriples{std::move(internalTriplesUnique)}, false);
+                      std::move(internalTriplesUnique), false);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
