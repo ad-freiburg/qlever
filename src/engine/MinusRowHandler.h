@@ -32,14 +32,8 @@ class MinusRowHandler {
   LocalVocab mergedVocab_{};
   // Pointer to the current `LocalVocab` of the left input.
   const LocalVocab* currentVocab_ = nullptr;
-  // Matching indices of the left input.
+  // Non-matching indices of the left input, the ones to copy to the result.
   std::vector<size_t> indexBuffer_{};
-  // Index of the first processed row in the left input. This doesn't have to be
-  // a match.
-  std::optional<size_t> startIndex_ = std::nullopt;
-  // Index of the last processed row in the left input. This doesn't have to be
-  // a match.
-  size_t endIndex_ = 0;
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
@@ -69,32 +63,14 @@ class MinusRowHandler {
     AD_CONTRACT_CHECK(cancellationHandle_);
   }
 
-  // Add a matching row to the index buffer.
-  void addRow(size_t index, size_t) {
-    AD_EXPENSIVE_CHECK(inputLeft_.has_value());
-    if (indexBuffer_.empty() || indexBuffer_.back() < index) {
-      indexBuffer_.push_back(index);
-    } else {
-      // The indices must be strictly increasing (unless they are duplicates)
-      AD_EXPENSIVE_CHECK(
-          indexBuffer_.size() >= indexBuffer_.back() - index &&
-              indexBuffer_.at(indexBuffer_.size() - 1 -
-                              (indexBuffer_.back() - index)) == index,
-          "Non-sequential value was not a duplicate!");
-    }
-    if (!startIndex_.has_value()) {
-      startIndex_ = index;
-    } else {
-      AD_EXPENSIVE_CHECK(startIndex_.value() <= index);
-    }
-    endIndex_ = std::max(endIndex_, index + 1);
-  }
+  // No-op for `MINUS`.
+  void addRow(size_t, size_t) {}
 
   // Flush remaining pending entries before changing the input.
   void flushBeforeInputChange() {
     // Clear to avoid unnecessary merge.
     currentVocab_ = nullptr;
-    if (startIndex_.has_value()) {
+    if (!indexBuffer_.empty()) {
       AD_CORRECTNESS_CHECK(inputLeft_.has_value());
       flush();
     } else if (resultTable_.empty()) {
@@ -130,16 +106,10 @@ class MinusRowHandler {
     AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
   }
 
-  // The next non-matching row in the output will be created from
-  // `inputLeft_[rowIndexA]`.
+  // Store the next non-matching row to keep.
   void addOptionalRow(size_t rowIndexA) {
     AD_EXPENSIVE_CHECK(inputLeft_.has_value());
-    if (!startIndex_.has_value()) {
-      startIndex_ = rowIndexA;
-    } else {
-      AD_EXPENSIVE_CHECK(startIndex_.value() < rowIndexA);
-    }
-    endIndex_ = std::max(endIndex_, rowIndexA + 1);
+    indexBuffer_.push_back(rowIndexA);
   }
 
   // Move the result out after the last write. The function ensures, that the
@@ -169,8 +139,8 @@ class MinusRowHandler {
     // Sometimes the left input and right input are not valid anymore, because
     // the `IdTable`s they point to have already been destroyed. This case is
     // okay, as long as there was a manual call to `flush` (after which
-    // `!startIndex_.has_value()`) before the inputs went out of scope.
-    if (!startIndex_.has_value()) {
+    // `indexBuffer_.empty()`) before the inputs went out of scope.
+    if (indexBuffer_.empty()) {
       return;
     }
     AD_CORRECTNESS_CHECK(inputLeft_.has_value());
@@ -178,8 +148,6 @@ class MinusRowHandler {
     handle();
 
     indexBuffer_.clear();
-    startIndex_ = std::nullopt;
-    endIndex_ = 0;
     std::invoke(blockwiseCallback_, resultTable_, mergedVocab_);
     // The current `IdTable`s might still be active, so we have to merge the
     // local vocabs again if all other sets were moved-out.
@@ -194,30 +162,17 @@ class MinusRowHandler {
   }
   // Process pending rows and materialize them into the actual table.
   void handle() {
-    const auto& matchingIndices = indexBuffer_;
-    size_t startIndex = startIndex_.value();
-    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(matchingIndices));
+    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(indexBuffer_));
     size_t oldSize = resultTable_.size();
-    AD_CORRECTNESS_CHECK(endIndex_ - startIndex >= matchingIndices.size());
-    resultTable_.resize(oldSize +
-                        (endIndex_ - startIndex - matchingIndices.size()));
+    resultTable_.resize(oldSize + indexBuffer_.size());
 
     auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
-    size_t col = 0;
-    for (auto targetColumn : resultTable_.getColumns()) {
-      auto inputColumn = inputLeft_.value().getColumn(col);
-      auto columnIt = targetColumn.begin() + oldSize;
-      size_t lastIndex = startIndex;
-      for (size_t index : matchingIndices) {
-        auto inputRange = inputColumn.subspan(lastIndex, index - lastIndex);
-        chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
-        columnIt += inputRange.size();
-        lastIndex = index + 1;
-      }
-      auto inputRange = inputColumn.subspan(lastIndex, endIndex_ - lastIndex);
-      chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
-      AD_CORRECTNESS_CHECK(columnIt + inputRange.size() == targetColumn.end());
-      col++;
+    for (const auto& [outputColumn, inputColumn] : ql::ranges::zip_view(
+             resultTable_.getColumns(), inputLeft_.value().getColumns())) {
+      chunkedCopy(ql::views::transform(
+                      indexBuffer_,
+                      [&inputColumn](size_t row) { return inputColumn[row]; }),
+                  outputColumn.begin() + oldSize, CHUNK_SIZE, action);
     }
   }
 };
