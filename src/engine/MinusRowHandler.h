@@ -64,7 +64,9 @@ class MinusRowHandler {
   }
 
   // No-op for `MINUS`.
-  void addRow(size_t, size_t) {}
+  static void addRow(size_t, size_t) {
+    // `BlockZipperJoinImpl` expects this interface.
+  }
 
   // Flush remaining pending entries before changing the input.
   void flushBeforeInputChange() {
@@ -130,10 +132,7 @@ class MinusRowHandler {
   MinusRowHandler& operator=(MinusRowHandler&&) = delete;
 
   // Write the result rows the indices of which have been stored in the buffers
-  // since the last call to `flush()`. This function is automatically called by
-  // the `addRow` functions if the buffers exceed a certain size, but you also
-  // have to call it manually after adding the last row, else the destructor
-  // will throw an exception.
+  // since the last call to `flush()`.
   void flush() {
     cancellationHandle_->throwIfCancelled();
     // Sometimes the left input and right input are not valid anymore, because
