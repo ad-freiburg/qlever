@@ -529,8 +529,7 @@ TEST(Minus, lazyMinusExceedingChunkSize) {
   }
 }
 
-// Make sure that FRIEND_TEST finds this function correctly.
-namespace ad_utility {
+// _____________________________________________________________________________
 struct Wrapper {
   IdTableView<0> table_;
   const LocalVocab& localVocab_;
@@ -568,7 +567,8 @@ TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   handler.flush();
 
   EXPECT_THAT(resultTables, ::testing::ElementsAre(input));
-  EXPECT_EQ(handler.currentVocab_, &leftVocab);
+  EXPECT_EQ(handler.localVocab().size(), 1);
+  EXPECT_THAT(handler.localVocab().getAllWordsForTesting(),
+              ::testing::ElementsAre(testLiteral));
   EXPECT_TRUE(std::move(handler).resultTable().empty());
 }
-};  // namespace ad_utility
