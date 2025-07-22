@@ -4,7 +4,6 @@
 
 #include "index/TextIndexBuilder.h"
 
-#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "index/TextIndexReadWrite.h"
 
 // _____________________________________________________________________________

@@ -5,12 +5,12 @@
 #ifndef QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 #define QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 
-#include "TextMetaData.h"
-#include "TextScoringEnum.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/IndexTypes.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Postings.h"
+#include "index/TextMetaData.h"
+#include "index/TextScoringEnum.h"
 #include "util/File.h"
 
 // Word Id (uint_64t), Context Id (TextRecordIndex), Score (float)
@@ -18,6 +18,9 @@ using WordTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 3>;
 // Word Id (uint_64t), Context Id (TextRecordIndex), Entity Id (VocabIndex),
 // Score (float)
 using EntityTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
+
+using WordTextVecView = decltype(std::declval<WordTextVec&>().sortedView());
+using EntityTextVecView = decltype(std::declval<EntityTextVec&>().sortedView());
 
 /**
  * @brief This struct is used to calculate and write the text blocks.
@@ -36,12 +39,15 @@ using EntityTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
  *         wordPostings_. If nofWordPostingsInTextBlock number of words were
  *         added, start parsing the entityTextVec. Since the entityTextVec is
  *         also sorted by word id, it can be parsed up to the last word id.
- *         This adds all entities that co-occur with any word of the block to
- *         entityPostings_. Once both posting lists are collected they are
- *         written to disk in one text block.
+ *         This adds all entities that co-occur with any word of the block.
+ *         Once both posting lists are collected they are written to disk in one
+ *         text block.
+ *         DISCLAIMER: Entity postings corresponding to a certain word are only
+ *         added to the first block this word occurs in. This leads to less
+ *         duplication. During retrieval all blocks containing the word
+ *         are fetched. This guarantees the entityList to be fetched too.
  *
  */
-template <typename WordTextVecView, typename EntityTextVecView>
 struct TextBlockWriter {
   TextBlockWriter(WordTextVec& wordTextVec, EntityTextVec& entityTextVec,
                   ad_utility::File& out, TextScoringMetric textScoringMetric,
@@ -52,7 +58,6 @@ struct TextBlockWriter {
         textScoringMetric_(textScoringMetric),
         textMeta_(textMeta),
         entityTextVecIterator_(entityTextVecView_.begin()),
-        entityStartWordIdIterator_(entityTextVecIterator_),
         entityTextVecSentinel_(entityTextVecView_.end()) {}
 
   // Uses the text vecs given during construction to write text blocks to disk
@@ -72,44 +77,29 @@ struct TextBlockWriter {
 
   // Iterators
   ql::ranges::iterator_t<EntityTextVecView> entityTextVecIterator_;
-
-  // The reason and logic for this iterator is the following:
-  // Both wordTextVec and entityTextVec are sorted by WordId.
-  // If a WordId appears in a block, all entities it co-occurs with are added.
-  // This is done through advancing entityIterator. entityStartWordIdIterator
-  // stays at the beginning of the "batch" which is all entries in the
-  // entityTextVec with the same WordId. This is necessary since the wordId
-  // can appear again in the next block, and we have to add all those entities
-  // again. For this reason we can't lose the iterator.
-  ql::ranges::iterator_t<EntityTextVecView> entityStartWordIdIterator_;
-
   ql::ranges::sentinel_t<EntityTextVecView> entityTextVecSentinel_;
 
   std::vector<WordPosting> wordPostings_ = {};
-  std::vector<EntityPosting> entityPostings_ = {};
 
   // Tracks the offset in the out_ file to write the blocks
   off_t currentOffset_ = 0;
 
-  // Tracks the current word index of wordTextVec_
-  WordVocabIndex currentWordTextVecWordIndex_ = WordVocabIndex::make(0);
-
   // Is called after block boundary is reached to add all co-occuring entities
-  // to entityPostings_ and then write the whole block to disk
-  void addBlock();
+  // up to upperBoundWordVocabIndex to entityPostings_ and then write the whole
+  // block to disk
+  void finishBlock(WordVocabIndex upperBoundWordVocabIndex);
 
   // Iterates over entityTextVec_ up to and including
-  // currentWordTextVecWordIndex_. All entries are written to entityPostings_.
-  // Advances both entity text vec iterators while. After calling this the
-  // entityStartWordIdIterator points to the first element that has the
-  // currentWordTextVecWordIndex_ that was present when the function was called.
-  void addEntityPostingsUpToWordIndex();
+  // upperBoundWordVocabIndex. All entries are written to entityPostings_.
+  std::vector<EntityPosting> addEntityPostingsUpToWordIndex(
+      WordVocabIndex upperBoundWordVocabIndex);
 
   template <typename WordRow>
   void addWordPosting(const WordRow& wordTextVecRow);
 
   template <typename EntityRow>
-  void addEntityPosting(const EntityRow& entityTextVecRow);
+  static void addEntityPosting(std::vector<EntityPosting>& vecToAddTo,
+                               const EntityRow& entityTextVecRow);
 
   // Does the actual writing to disk using the posting lists
   void writeTextBlockToFile(const std::vector<WordPosting>& wordPostings,
@@ -118,12 +108,5 @@ struct TextBlockWriter {
                             WordVocabIndex minWordIndexOfBlock,
                             WordVocabIndex maxWordIndexOfBlock);
 };
-
-// Deduction guide
-template <typename WordTextVec, typename EntityTextVec>
-TextBlockWriter(WordTextVec&, EntityTextVec&, ad_utility::File&,
-                TextScoringMetric&, TextMetaData&)
-    -> TextBlockWriter<decltype(std::declval<WordTextVec&>().sortedView()),
-                       decltype(std::declval<EntityTextVec&>().sortedView())>;
 
 #endif  // QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
