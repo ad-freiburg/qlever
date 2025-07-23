@@ -365,20 +365,6 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   auto metadataForUnsequentialData =
       checkIfHashMapOptimizationPossible(aggregates);
   bool useHashMapOptimization = metadataForUnsequentialData.has_value();
-  AD_LOG_DEBUG << "GroupBy HashMap optimization: "
-               << (useHashMapOptimization ? "enabled" : "disabled")
-               << std::endl;
-
-  // Use the correct sampling-based hash-map grouping guard depending on
-  // materialization
-  auto shouldSkipHashMapGroupingDynamic =
-      [this](const std::shared_ptr<const Result>& subresult) {
-        if (subresult->isFullyMaterialized()) {
-          return shouldSkipHashMapGrouping(subresult->idTable());
-        } else {
-          return shouldSkipHashMapGroupingLazy(subresult);
-        }
-      };
 
   std::shared_ptr<const Result> subresult;
   if (useHashMapOptimization) {
@@ -969,7 +955,6 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   // TODO<C++23> Use `std::optional::or_else`.
-
   if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
     if (auto result = computeGroupByForSingleIndexScan()) {
       return result;
@@ -1589,21 +1574,12 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
-  std::string groupByVariablesString = absl::StrJoin(
-      _groupByVariables, ", ",
-      [](std::string* out, const Variable& var) { out->append(var.name()); });
-  AD_LOG_DEBUG << "Entering HashMapOptimization with " << columnIndices.size()
-               << " grouping columns, namely [" << groupByVariablesString
-               << "] and " << aggregateAliases.size()
-               << " aggregates. Group threshold: " << groupThreshold
-               << std::endl;
-
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
 
-  auto beginIt = std::ranges::begin(subresults);
-  auto endIt = std::ranges::end(subresults);
-  bool singleBlock = std::ranges::next(beginIt) == endIt;
+  auto beginIt = ql::ranges::begin(subresults);
+  auto endIt = ql::ranges::end(subresults);
+  bool singleBlock = ql::ranges::next(beginIt) == endIt;
 
   // Iterate through input blocks; break out and buffer the rest if threshold
   // exceeded
@@ -1994,4 +1970,14 @@ bool GroupByImpl::shouldSkipHashMapGroupingLazy(
   // If the estimated number of distinct groups exceeds the threshold, skip the
   // hash-map optimization
   return estimatedGroupRatio > ratioThreshold;
+}
+
+// _____________________________________________________________________________
+bool GroupByImpl::shouldSkipHashMapGroupingDynamic(
+    const std::shared_ptr<const Result>& subresult) const {
+  if (subresult->isFullyMaterialized()) {
+    return shouldSkipHashMapGrouping(subresult->idTable());
+  } else {
+    return shouldSkipHashMapGroupingLazy(subresult);
+  }
 }

@@ -610,6 +610,8 @@ class GroupByImpl : public Operation {
   bool shouldSkipHashMapGrouping(const IdTable& table) const;
   bool shouldSkipHashMapGroupingLazy(
       const std::shared_ptr<const Result>& subresult) const;
+  bool shouldSkipHashMapGroupingDynamic(
+      const std::shared_ptr<const Result>& subresult) const;
 
 };  // class GroupByImpl
 
