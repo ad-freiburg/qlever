@@ -152,6 +152,21 @@ template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MAX_Y>()
     const;
 
 // ____________________________________________________________________________
+NumGeometries GeometryInfo::getNumGeometries() const {
+  return {numGeometries_};
+}
+
+// ____________________________________________________________________________
+std::optional<NumGeometries> GeometryInfo::getNumGeometries(
+    std::string_view wkt) {
+  auto [type, parsed] = detail::parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  return NumGeometries{detail::countChildGeometries(parsed.value())};
+}
+
+// ____________________________________________________________________________
 template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
 RequestedInfo GeometryInfo::getRequestedInfo() const {
@@ -163,6 +178,8 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
     return getBoundingBox();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return getWktType();
+  } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
+    return getNumGeometries();
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -173,6 +190,7 @@ template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
 template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
 template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
+template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 
 // ____________________________________________________________________________
 template <typename RequestedInfo>
@@ -187,6 +205,8 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getBoundingBox(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return GeometryInfo::getWktType(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
+    return GeometryInfo::getNumGeometries(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -201,5 +221,7 @@ template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
 template std::optional<GeometryType>
 GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
+template std::optional<NumGeometries>
+GeometryInfo::getRequestedInfo<NumGeometries>(std::string_view wkt);
 
 }  // namespace ad_utility
