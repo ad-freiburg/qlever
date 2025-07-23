@@ -1,9 +1,11 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.13.2
 
-#include "SparqlAutomaticParser.h"
 
 #include "SparqlAutomaticListener.h"
+
+#include "SparqlAutomaticParser.h"
+
 
 using namespace antlrcpp;
 
@@ -13,20 +15,16 @@ namespace {
 
 struct SparqlAutomaticParserStaticData final {
   SparqlAutomaticParserStaticData(std::vector<std::string> ruleNames,
-                                  std::vector<std::string> literalNames,
-                                  std::vector<std::string> symbolicNames)
-      : ruleNames(std::move(ruleNames)),
-        literalNames(std::move(literalNames)),
+                        std::vector<std::string> literalNames,
+                        std::vector<std::string> symbolicNames)
+      : ruleNames(std::move(ruleNames)), literalNames(std::move(literalNames)),
         symbolicNames(std::move(symbolicNames)),
         vocabulary(this->literalNames, this->symbolicNames) {}
 
-  SparqlAutomaticParserStaticData(const SparqlAutomaticParserStaticData&) =
-      delete;
+  SparqlAutomaticParserStaticData(const SparqlAutomaticParserStaticData&) = delete;
   SparqlAutomaticParserStaticData(SparqlAutomaticParserStaticData&&) = delete;
-  SparqlAutomaticParserStaticData& operator=(
-      const SparqlAutomaticParserStaticData&) = delete;
-  SparqlAutomaticParserStaticData& operator=(
-      SparqlAutomaticParserStaticData&&) = delete;
+  SparqlAutomaticParserStaticData& operator=(const SparqlAutomaticParserStaticData&) = delete;
+  SparqlAutomaticParserStaticData& operator=(SparqlAutomaticParserStaticData&&) = delete;
 
   std::vector<antlr4::dfa::DFA> decisionToDFA;
   antlr4::atn::PredictionContextCache sharedContextCache;
@@ -42,8 +40,7 @@ struct SparqlAutomaticParserStaticData final {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
 static thread_local
 #endif
-    std::unique_ptr<SparqlAutomaticParserStaticData>
-        sparqlautomaticParserStaticData = nullptr;
+std::unique_ptr<SparqlAutomaticParserStaticData> sparqlautomaticParserStaticData = nullptr;
 
 void sparqlautomaticParserInitialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
@@ -54,1596 +51,730 @@ void sparqlautomaticParserInitialize() {
   assert(sparqlautomaticParserStaticData == nullptr);
 #endif
   auto staticData = std::make_unique<SparqlAutomaticParserStaticData>(
-      std::vector<std::string>{
-          "query",
-          "prologue",
-          "baseDecl",
-          "prefixDecl",
-          "selectQuery",
-          "subSelect",
-          "selectClause",
-          "varOrAlias",
-          "alias",
-          "aliasWithoutBrackets",
-          "constructQuery",
-          "describeQuery",
-          "askQuery",
-          "datasetClause",
-          "defaultGraphClause",
-          "namedGraphClause",
-          "sourceSelector",
-          "whereClause",
-          "solutionModifier",
-          "groupClause",
-          "groupCondition",
-          "havingClause",
-          "havingCondition",
-          "orderClause",
-          "orderCondition",
-          "limitOffsetClauses",
-          "limitClause",
-          "offsetClause",
-          "textLimitClause",
-          "valuesClause",
-          "update",
-          "update1",
-          "load",
-          "clear",
-          "drop",
-          "create",
-          "add",
-          "move",
-          "copy",
-          "insertData",
-          "deleteData",
-          "deleteWhere",
-          "modify",
-          "deleteClause",
-          "insertClause",
-          "usingClause",
-          "graphOrDefault",
-          "graphRef",
-          "graphRefAll",
-          "quadPattern",
-          "quadData",
-          "quads",
-          "quadsNotTriples",
-          "triplesTemplate",
-          "groupGraphPattern",
-          "groupGraphPatternSub",
-          "graphPatternNotTriplesAndMaybeTriples",
-          "triplesBlock",
-          "graphPatternNotTriples",
-          "optionalGraphPattern",
-          "graphGraphPattern",
-          "serviceGraphPattern",
-          "bind",
-          "inlineData",
-          "dataBlock",
-          "inlineDataOneVar",
-          "inlineDataFull",
-          "dataBlockSingle",
-          "dataBlockValue",
-          "minusGraphPattern",
-          "groupOrUnionGraphPattern",
-          "filterR",
-          "constraint",
-          "functionCall",
-          "argList",
-          "expressionList",
-          "constructTemplate",
-          "constructTriples",
-          "triplesSameSubject",
-          "propertyList",
-          "propertyListNotEmpty",
-          "verb",
-          "objectList",
-          "objectR",
-          "triplesSameSubjectPath",
-          "propertyListPath",
-          "propertyListPathNotEmpty",
-          "verbPath",
-          "verbSimple",
-          "tupleWithoutPath",
-          "tupleWithPath",
-          "verbPathOrSimple",
-          "objectListPath",
-          "objectPath",
-          "path",
-          "pathAlternative",
-          "pathSequence",
-          "pathElt",
-          "pathEltOrInverse",
-          "pathMod",
-          "pathPrimary",
-          "pathNegatedPropertySet",
-          "pathOneInPropertySet",
-          "integer",
-          "triplesNode",
-          "blankNodePropertyList",
-          "triplesNodePath",
-          "blankNodePropertyListPath",
-          "collection",
-          "collectionPath",
-          "graphNode",
-          "graphNodePath",
-          "varOrTerm",
-          "varOrIri",
-          "var",
-          "graphTerm",
-          "expression",
-          "conditionalOrExpression",
-          "conditionalAndExpression",
-          "valueLogical",
-          "relationalExpression",
-          "numericExpression",
-          "additiveExpression",
-          "multiplicativeExpressionWithSign",
-          "plusSubexpression",
-          "minusSubexpression",
-          "multiplicativeExpressionWithLeadingSignButNoSpace",
-          "multiplicativeExpression",
-          "multiplyOrDivideExpression",
-          "multiplyExpression",
-          "divideExpression",
-          "unaryExpression",
-          "primaryExpression",
-          "brackettedExpression",
-          "builtInCall",
-          "regexExpression",
-          "langExpression",
-          "substringExpression",
-          "strReplaceExpression",
-          "existsFunc",
-          "notExistsFunc",
-          "aggregate",
-          "iriOrFunction",
-          "rdfLiteral",
-          "numericLiteral",
-          "numericLiteralUnsigned",
-          "numericLiteralPositive",
-          "numericLiteralNegative",
-          "booleanLiteral",
-          "string",
-          "iri",
-          "prefixedName",
-          "blankNode",
-          "iriref",
-          "pnameLn",
-          "pnameNs"},
-      std::vector<std::string>{"",     "'*'",  "'('",  "')'",    "'{'",
-                               "'}'",  "';'",  "'.'",  "','",    "'a'",
-                               "'|'",  "'/'",  "'^'",  "'+'",    "'\\u003F'",
-                               "'!'",  "'['",  "']'",  "'||'",   "'&&'",
-                               "'='",  "'!='", "'<'",  "'>'",    "'<='",
-                               "'>='", "'-'",  "'^^'", "'true'", "'false'"},
-      std::vector<std::string>{"",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "",
-                               "BASE",
-                               "PREFIX",
-                               "SELECT",
-                               "DISTINCT",
-                               "REDUCED",
-                               "AS",
-                               "CONSTRUCT",
-                               "WHERE",
-                               "DESCRIBE",
-                               "ASK",
-                               "FROM",
-                               "NAMED",
-                               "GROUPBY",
-                               "GROUP_CONCAT",
-                               "HAVING",
-                               "ORDERBY",
-                               "INTERNALSORTBY",
-                               "ASC",
-                               "DESC",
-                               "LIMIT",
-                               "OFFSET",
-                               "TEXTLIMIT",
-                               "VALUES",
-                               "LOAD",
-                               "SILENT",
-                               "INTO",
-                               "CLEAR",
-                               "DROP",
-                               "CREATE",
-                               "ADD",
-                               "TO",
-                               "DATA",
-                               "MOVE",
-                               "COPY",
-                               "INSERT",
-                               "DELETE",
-                               "WITH",
-                               "USING",
-                               "DEFAULT",
-                               "GRAPH",
-                               "ALL",
-                               "OPTIONAL",
-                               "SERVICE",
-                               "BIND",
-                               "UNDEF",
-                               "MINUS",
-                               "UNION",
-                               "FILTER",
-                               "NOT",
-                               "IN",
-                               "STR",
-                               "LANG",
-                               "LANGMATCHES",
-                               "DATATYPE",
-                               "BOUND",
-                               "IRI",
-                               "URI",
-                               "BNODE",
-                               "RAND",
-                               "ABS",
-                               "CEIL",
-                               "FLOOR",
-                               "ROUND",
-                               "CONCAT",
-                               "STRLEN",
-                               "UCASE",
-                               "LCASE",
-                               "ENCODE_FOR_URI",
-                               "FOR",
-                               "CONTAINS",
-                               "STRSTARTS",
-                               "STRENDS",
-                               "STRBEFORE",
-                               "STRAFTER",
-                               "YEAR",
-                               "MONTH",
-                               "DAY",
-                               "HOURS",
-                               "MINUTES",
-                               "SECONDS",
-                               "TIMEZONE",
-                               "TZ",
-                               "NOW",
-                               "UUID",
-                               "STRUUID",
-                               "SHA1",
-                               "SHA256",
-                               "SHA384",
-                               "SHA512",
-                               "MD5",
-                               "COALESCE",
-                               "IF",
-                               "STRLANG",
-                               "STRDT",
-                               "SAMETERM",
-                               "ISIRI",
-                               "ISURI",
-                               "ISBLANK",
-                               "ISLITERAL",
-                               "ISNUMERIC",
-                               "REGEX",
-                               "SUBSTR",
-                               "REPLACE",
-                               "EXISTS",
-                               "COUNT",
-                               "SUM",
-                               "MIN",
-                               "MAX",
-                               "AVG",
-                               "STDEV",
-                               "SAMPLE",
-                               "SEPARATOR",
-                               "IRI_REF",
-                               "PNAME_NS",
-                               "PNAME_LN",
-                               "BLANK_NODE_LABEL",
-                               "VAR1",
-                               "VAR2",
-                               "LANGTAG",
-                               "PREFIX_LANGTAG",
-                               "INTEGER",
-                               "DECIMAL",
-                               "DOUBLE",
-                               "INTEGER_POSITIVE",
-                               "DECIMAL_POSITIVE",
-                               "DOUBLE_POSITIVE",
-                               "INTEGER_NEGATIVE",
-                               "DECIMAL_NEGATIVE",
-                               "DOUBLE_NEGATIVE",
-                               "EXPONENT",
-                               "STRING_LITERAL1",
-                               "STRING_LITERAL2",
-                               "STRING_LITERAL_LONG1",
-                               "STRING_LITERAL_LONG2",
-                               "ECHAR",
-                               "NIL",
-                               "ANON",
-                               "PN_CHARS_U",
-                               "VARNAME",
-                               "PN_PREFIX",
-                               "PN_LOCAL",
-                               "PLX",
-                               "PERCENT",
-                               "HEX",
-                               "PN_LOCAL_ESC",
-                               "WS",
-                               "COMMENTS"});
+    std::vector<std::string>{
+      "query", "prologue", "baseDecl", "prefixDecl", "selectQuery", "subSelect", 
+      "selectClause", "varOrAlias", "alias", "aliasWithoutBrackets", "constructQuery", 
+      "describeQuery", "askQuery", "datasetClause", "defaultGraphClause", 
+      "namedGraphClause", "sourceSelector", "whereClause", "solutionModifier", 
+      "groupClause", "groupCondition", "havingClause", "havingCondition", 
+      "orderClause", "orderCondition", "limitOffsetClauses", "limitClause", 
+      "offsetClause", "textLimitClause", "valuesClause", "update", "update1", 
+      "load", "clear", "drop", "create", "add", "move", "copy", "insertData", 
+      "deleteData", "deleteWhere", "modify", "deleteClause", "insertClause", 
+      "usingClause", "graphOrDefault", "graphRef", "graphRefAll", "quadPattern", 
+      "quadData", "quads", "quadsNotTriples", "triplesTemplate", "groupGraphPattern", 
+      "groupGraphPatternSub", "graphPatternNotTriplesAndMaybeTriples", "triplesBlock", 
+      "graphPatternNotTriples", "optionalGraphPattern", "graphGraphPattern", 
+      "serviceGraphPattern", "bind", "inlineData", "dataBlock", "inlineDataOneVar", 
+      "inlineDataFull", "dataBlockSingle", "dataBlockValue", "minusGraphPattern", 
+      "groupOrUnionGraphPattern", "filterR", "constraint", "functionCall", 
+      "argList", "expressionList", "constructTemplate", "constructTriples", 
+      "triplesSameSubject", "propertyList", "propertyListNotEmpty", "verb", 
+      "objectList", "objectR", "triplesSameSubjectPath", "propertyListPath", 
+      "propertyListPathNotEmpty", "verbPath", "verbSimple", "tupleWithoutPath", 
+      "tupleWithPath", "verbPathOrSimple", "objectListPath", "objectPath", 
+      "path", "pathAlternative", "pathSequence", "pathElt", "pathEltOrInverse", 
+      "pathMod", "exactLength", "onlyMin", "minMax", "onlyMax", "stepsExact", 
+      "stepsMin", "stepsMax", "pathPrimary", "pathNegatedPropertySet", "pathOneInPropertySet", 
+      "integer", "triplesNode", "blankNodePropertyList", "triplesNodePath", 
+      "blankNodePropertyListPath", "collection", "collectionPath", "graphNode", 
+      "graphNodePath", "varOrTerm", "varOrIri", "var", "graphTerm", "expression", 
+      "conditionalOrExpression", "conditionalAndExpression", "valueLogical", 
+      "relationalExpression", "numericExpression", "additiveExpression", 
+      "multiplicativeExpressionWithSign", "plusSubexpression", "minusSubexpression", 
+      "multiplicativeExpressionWithLeadingSignButNoSpace", "multiplicativeExpression", 
+      "multiplyOrDivideExpression", "multiplyExpression", "divideExpression", 
+      "unaryExpression", "primaryExpression", "brackettedExpression", "builtInCall", 
+      "regexExpression", "langExpression", "substringExpression", "strReplaceExpression", 
+      "existsFunc", "notExistsFunc", "aggregate", "iriOrFunction", "rdfLiteral", 
+      "numericLiteral", "numericLiteralUnsigned", "numericLiteralPositive", 
+      "numericLiteralNegative", "booleanLiteral", "string", "iri", "prefixedName", 
+      "blankNode", "iriref", "pnameLn", "pnameNs"
+    },
+    std::vector<std::string>{
+      "", "'*'", "'('", "')'", "'{'", "'}'", "';'", "'.'", "','", "'a'", 
+      "'|'", "'/'", "'^'", "'+'", "'\\u003F'", "'!'", "'['", "']'", "'||'", 
+      "'&&'", "'='", "'!='", "'<'", "'>'", "'<='", "'>='", "'-'", "'^^'", 
+      "'true'", "'false'"
+    },
+    std::vector<std::string>{
+      "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+      "", "", "", "", "", "", "", "", "", "", "", "", "", "BASE", "PREFIX", 
+      "SELECT", "DISTINCT", "REDUCED", "AS", "CONSTRUCT", "WHERE", "DESCRIBE", 
+      "ASK", "FROM", "NAMED", "GROUPBY", "GROUP_CONCAT", "HAVING", "ORDERBY", 
+      "INTERNALSORTBY", "ASC", "DESC", "LIMIT", "OFFSET", "TEXTLIMIT", "VALUES", 
+      "LOAD", "SILENT", "INTO", "CLEAR", "DROP", "CREATE", "ADD", "TO", 
+      "DATA", "MOVE", "COPY", "INSERT", "DELETE", "WITH", "USING", "DEFAULT", 
+      "GRAPH", "ALL", "OPTIONAL", "SERVICE", "BIND", "UNDEF", "MINUS", "UNION", 
+      "FILTER", "NOT", "IN", "STR", "LANG", "LANGMATCHES", "DATATYPE", "BOUND", 
+      "IRI", "URI", "BNODE", "RAND", "ABS", "CEIL", "FLOOR", "ROUND", "CONCAT", 
+      "STRLEN", "UCASE", "LCASE", "ENCODE_FOR_URI", "FOR", "CONTAINS", "STRSTARTS", 
+      "STRENDS", "STRBEFORE", "STRAFTER", "YEAR", "MONTH", "DAY", "HOURS", 
+      "MINUTES", "SECONDS", "TIMEZONE", "TZ", "NOW", "UUID", "STRUUID", 
+      "SHA1", "SHA256", "SHA384", "SHA512", "MD5", "COALESCE", "IF", "STRLANG", 
+      "STRDT", "SAMETERM", "ISIRI", "ISURI", "ISBLANK", "ISLITERAL", "ISNUMERIC", 
+      "REGEX", "SUBSTR", "REPLACE", "EXISTS", "COUNT", "SUM", "MIN", "MAX", 
+      "AVG", "STDEV", "SAMPLE", "SEPARATOR", "IRI_REF", "PNAME_NS", "PNAME_LN", 
+      "BLANK_NODE_LABEL", "VAR1", "VAR2", "LANGTAG", "PREFIX_LANGTAG", "INTEGER", 
+      "DECIMAL", "DOUBLE", "INTEGER_POSITIVE", "DECIMAL_POSITIVE", "DOUBLE_POSITIVE", 
+      "INTEGER_NEGATIVE", "DECIMAL_NEGATIVE", "DOUBLE_NEGATIVE", "EXPONENT", 
+      "STRING_LITERAL1", "STRING_LITERAL2", "STRING_LITERAL_LONG1", "STRING_LITERAL_LONG2", 
+      "ECHAR", "NIL", "ANON", "PN_CHARS_U", "VARNAME", "PN_PREFIX", "PN_LOCAL", 
+      "PLX", "PERCENT", "HEX", "PN_LOCAL_ESC", "WS", "COMMENTS"
+    }
+  );
   static const int32_t serializedATNSegment[] = {
-      4,    1,    176,  1665, 2,    0,    7,    0,    2,    1,    7,    1,
-      2,    2,    7,    2,    2,    3,    7,    3,    2,    4,    7,    4,
-      2,    5,    7,    5,    2,    6,    7,    6,    2,    7,    7,    7,
-      2,    8,    7,    8,    2,    9,    7,    9,    2,    10,   7,    10,
-      2,    11,   7,    11,   2,    12,   7,    12,   2,    13,   7,    13,
-      2,    14,   7,    14,   2,    15,   7,    15,   2,    16,   7,    16,
-      2,    17,   7,    17,   2,    18,   7,    18,   2,    19,   7,    19,
-      2,    20,   7,    20,   2,    21,   7,    21,   2,    22,   7,    22,
-      2,    23,   7,    23,   2,    24,   7,    24,   2,    25,   7,    25,
-      2,    26,   7,    26,   2,    27,   7,    27,   2,    28,   7,    28,
-      2,    29,   7,    29,   2,    30,   7,    30,   2,    31,   7,    31,
-      2,    32,   7,    32,   2,    33,   7,    33,   2,    34,   7,    34,
-      2,    35,   7,    35,   2,    36,   7,    36,   2,    37,   7,    37,
-      2,    38,   7,    38,   2,    39,   7,    39,   2,    40,   7,    40,
-      2,    41,   7,    41,   2,    42,   7,    42,   2,    43,   7,    43,
-      2,    44,   7,    44,   2,    45,   7,    45,   2,    46,   7,    46,
-      2,    47,   7,    47,   2,    48,   7,    48,   2,    49,   7,    49,
-      2,    50,   7,    50,   2,    51,   7,    51,   2,    52,   7,    52,
-      2,    53,   7,    53,   2,    54,   7,    54,   2,    55,   7,    55,
-      2,    56,   7,    56,   2,    57,   7,    57,   2,    58,   7,    58,
-      2,    59,   7,    59,   2,    60,   7,    60,   2,    61,   7,    61,
-      2,    62,   7,    62,   2,    63,   7,    63,   2,    64,   7,    64,
-      2,    65,   7,    65,   2,    66,   7,    66,   2,    67,   7,    67,
-      2,    68,   7,    68,   2,    69,   7,    69,   2,    70,   7,    70,
-      2,    71,   7,    71,   2,    72,   7,    72,   2,    73,   7,    73,
-      2,    74,   7,    74,   2,    75,   7,    75,   2,    76,   7,    76,
-      2,    77,   7,    77,   2,    78,   7,    78,   2,    79,   7,    79,
-      2,    80,   7,    80,   2,    81,   7,    81,   2,    82,   7,    82,
-      2,    83,   7,    83,   2,    84,   7,    84,   2,    85,   7,    85,
-      2,    86,   7,    86,   2,    87,   7,    87,   2,    88,   7,    88,
-      2,    89,   7,    89,   2,    90,   7,    90,   2,    91,   7,    91,
-      2,    92,   7,    92,   2,    93,   7,    93,   2,    94,   7,    94,
-      2,    95,   7,    95,   2,    96,   7,    96,   2,    97,   7,    97,
-      2,    98,   7,    98,   2,    99,   7,    99,   2,    100,  7,    100,
-      2,    101,  7,    101,  2,    102,  7,    102,  2,    103,  7,    103,
-      2,    104,  7,    104,  2,    105,  7,    105,  2,    106,  7,    106,
-      2,    107,  7,    107,  2,    108,  7,    108,  2,    109,  7,    109,
-      2,    110,  7,    110,  2,    111,  7,    111,  2,    112,  7,    112,
-      2,    113,  7,    113,  2,    114,  7,    114,  2,    115,  7,    115,
-      2,    116,  7,    116,  2,    117,  7,    117,  2,    118,  7,    118,
-      2,    119,  7,    119,  2,    120,  7,    120,  2,    121,  7,    121,
-      2,    122,  7,    122,  2,    123,  7,    123,  2,    124,  7,    124,
-      2,    125,  7,    125,  2,    126,  7,    126,  2,    127,  7,    127,
-      2,    128,  7,    128,  2,    129,  7,    129,  2,    130,  7,    130,
-      2,    131,  7,    131,  2,    132,  7,    132,  2,    133,  7,    133,
-      2,    134,  7,    134,  2,    135,  7,    135,  2,    136,  7,    136,
-      2,    137,  7,    137,  2,    138,  7,    138,  2,    139,  7,    139,
-      2,    140,  7,    140,  2,    141,  7,    141,  2,    142,  7,    142,
-      2,    143,  7,    143,  2,    144,  7,    144,  2,    145,  7,    145,
-      2,    146,  7,    146,  2,    147,  7,    147,  2,    148,  7,    148,
-      2,    149,  7,    149,  2,    150,  7,    150,  2,    151,  7,    151,
-      2,    152,  7,    152,  2,    153,  7,    153,  2,    154,  7,    154,
-      2,    155,  7,    155,  1,    0,    1,    0,    1,    0,    1,    0,
-      1,    0,    3,    0,    318,  8,    0,    1,    0,    1,    0,    1,
-      0,    1,    1,    1,    1,    5,    1,    325,  8,    1,    10,   1,
-      12,   1,    328,  9,    1,    1,    2,    1,    2,    1,    2,    1,
-      3,    1,    3,    1,    3,    1,    3,    1,    4,    1,    4,    5,
-      4,    339,  8,    4,    10,   4,    12,   4,    342,  9,    4,    1,
-      4,    1,    4,    1,    4,    1,    5,    1,    5,    1,    5,    1,
-      5,    1,    5,    1,    6,    1,    6,    3,    6,    354,  8,    6,
-      1,    6,    4,    6,    357,  8,    6,    11,   6,    12,   6,    358,
-      1,    6,    3,    6,    362,  8,    6,    1,    7,    1,    7,    3,
-      7,    366,  8,    7,    1,    8,    1,    8,    1,    8,    1,    8,
-      1,    9,    1,    9,    1,    9,    1,    9,    1,    10,   1,    10,
-      1,    10,   5,    10,   379,  8,    10,   10,   10,   12,   10,   382,
-      9,    10,   1,    10,   1,    10,   1,    10,   1,    10,   5,    10,
-      388,  8,    10,   10,   10,   12,   10,   391,  9,    10,   1,    10,
-      1,    10,   1,    10,   3,    10,   396,  8,    10,   1,    10,   1,
-      10,   3,    10,   400,  8,    10,   1,    11,   1,    11,   4,    11,
-      404,  8,    11,   11,   11,   12,   11,   405,  1,    11,   3,    11,
-      409,  8,    11,   1,    11,   5,    11,   412,  8,    11,   10,   11,
-      12,   11,   415,  9,    11,   1,    11,   3,    11,   418,  8,    11,
-      1,    11,   1,    11,   1,    12,   1,    12,   5,    12,   424,  8,
-      12,   10,   12,   12,   12,   427,  9,    12,   1,    12,   1,    12,
-      1,    12,   1,    13,   1,    13,   1,    13,   3,    13,   435,  8,
-      13,   1,    14,   1,    14,   1,    15,   1,    15,   1,    15,   1,
-      16,   1,    16,   1,    17,   3,    17,   445,  8,    17,   1,    17,
-      1,    17,   1,    18,   3,    18,   450,  8,    18,   1,    18,   3,
-      18,   453,  8,    18,   1,    18,   3,    18,   456,  8,    18,   1,
-      18,   3,    18,   459,  8,    18,   1,    19,   1,    19,   4,    19,
-      463,  8,    19,   11,   19,   12,   19,   464,  1,    20,   1,    20,
-      1,    20,   1,    20,   1,    20,   1,    20,   3,    20,   473,  8,
-      20,   1,    20,   1,    20,   1,    20,   3,    20,   478,  8,    20,
-      1,    21,   1,    21,   4,    21,   482,  8,    21,   11,   21,   12,
-      21,   483,  1,    22,   1,    22,   1,    23,   1,    23,   3,    23,
-      490,  8,    23,   1,    23,   4,    23,   493,  8,    23,   11,   23,
-      12,   23,   494,  1,    24,   1,    24,   1,    24,   1,    24,   3,
-      24,   501,  8,    24,   3,    24,   503,  8,    24,   1,    25,   1,
-      25,   3,    25,   507,  8,    25,   1,    25,   3,    25,   510,  8,
-      25,   1,    25,   1,    25,   3,    25,   514,  8,    25,   1,    25,
-      3,    25,   517,  8,    25,   1,    25,   1,    25,   3,    25,   521,
-      8,    25,   1,    25,   3,    25,   524,  8,    25,   1,    25,   1,
-      25,   3,    25,   528,  8,    25,   1,    25,   3,    25,   531,  8,
-      25,   1,    25,   1,    25,   3,    25,   535,  8,    25,   1,    25,
-      3,    25,   538,  8,    25,   1,    25,   1,    25,   3,    25,   542,
-      8,    25,   1,    25,   3,    25,   545,  8,    25,   3,    25,   547,
-      8,    25,   1,    26,   1,    26,   1,    26,   1,    27,   1,    27,
-      1,    27,   1,    28,   1,    28,   1,    28,   1,    29,   1,    29,
-      3,    29,   560,  8,    29,   1,    30,   1,    30,   1,    30,   1,
-      30,   1,    30,   1,    30,   5,    30,   568,  8,    30,   10,   30,
-      12,   30,   571,  9,    30,   1,    30,   1,    30,   3,    30,   575,
-      8,    30,   3,    30,   577,  8,    30,   1,    30,   1,    30,   1,
-      31,   1,    31,   1,    31,   1,    31,   1,    31,   1,    31,   1,
-      31,   1,    31,   1,    31,   1,    31,   1,    31,   3,    31,   592,
-      8,    31,   1,    32,   1,    32,   3,    32,   596,  8,    32,   1,
-      32,   1,    32,   1,    32,   3,    32,   601,  8,    32,   1,    33,
-      1,    33,   3,    33,   605,  8,    33,   1,    33,   1,    33,   1,
-      34,   1,    34,   3,    34,   611,  8,    34,   1,    34,   1,    34,
-      1,    35,   1,    35,   3,    35,   617,  8,    35,   1,    35,   1,
-      35,   1,    36,   1,    36,   3,    36,   623,  8,    36,   1,    36,
-      1,    36,   1,    36,   1,    36,   1,    37,   1,    37,   3,    37,
-      631,  8,    37,   1,    37,   1,    37,   1,    37,   1,    37,   1,
-      38,   1,    38,   3,    38,   639,  8,    38,   1,    38,   1,    38,
-      1,    38,   1,    38,   1,    39,   1,    39,   1,    39,   1,    39,
-      1,    40,   1,    40,   1,    40,   1,    40,   1,    41,   1,    41,
-      1,    41,   1,    41,   1,    42,   1,    42,   3,    42,   659,  8,
-      42,   1,    42,   1,    42,   3,    42,   663,  8,    42,   1,    42,
-      3,    42,   666,  8,    42,   1,    42,   5,    42,   669,  8,    42,
-      10,   42,   12,   42,   672,  9,    42,   1,    42,   1,    42,   1,
-      42,   1,    43,   1,    43,   1,    43,   1,    44,   1,    44,   1,
-      44,   1,    45,   1,    45,   1,    45,   1,    45,   3,    45,   687,
-      8,    45,   1,    46,   1,    46,   3,    46,   691,  8,    46,   1,
-      46,   3,    46,   694,  8,    46,   1,    47,   1,    47,   1,    47,
-      1,    48,   1,    48,   1,    48,   1,    48,   3,    48,   703,  8,
-      48,   1,    49,   1,    49,   1,    49,   1,    49,   1,    50,   1,
-      50,   1,    50,   1,    50,   1,    51,   3,    51,   714,  8,    51,
-      1,    51,   1,    51,   3,    51,   718,  8,    51,   1,    51,   3,
-      51,   721,  8,    51,   5,    51,   723,  8,    51,   10,   51,   12,
-      51,   726,  9,    51,   1,    52,   1,    52,   1,    52,   1,    52,
-      3,    52,   732,  8,    52,   1,    52,   1,    52,   1,    53,   1,
-      53,   1,    53,   5,    53,   739,  8,    53,   10,   53,   12,   53,
-      742,  9,    53,   1,    53,   3,    53,   745,  8,    53,   1,    54,
-      1,    54,   1,    54,   3,    54,   750,  8,    54,   1,    54,   1,
-      54,   1,    55,   3,    55,   755,  8,    55,   1,    55,   5,    55,
-      758,  8,    55,   10,   55,   12,   55,   761,  9,    55,   1,    56,
-      1,    56,   3,    56,   765,  8,    56,   1,    56,   3,    56,   768,
-      8,    56,   1,    57,   1,    57,   1,    57,   3,    57,   773,  8,
-      57,   3,    57,   775,  8,    57,   1,    58,   1,    58,   1,    58,
-      1,    58,   1,    58,   1,    58,   1,    58,   1,    58,   3,    58,
-      785,  8,    58,   1,    59,   1,    59,   1,    59,   1,    60,   1,
-      60,   1,    60,   1,    60,   1,    61,   1,    61,   3,    61,   796,
-      8,    61,   1,    61,   1,    61,   1,    61,   1,    62,   1,    62,
-      1,    62,   1,    62,   1,    62,   1,    62,   1,    62,   1,    63,
-      1,    63,   1,    63,   1,    64,   1,    64,   3,    64,   813,  8,
-      64,   1,    65,   1,    65,   1,    65,   5,    65,   818,  8,    65,
-      10,   65,   12,   65,   821,  9,    65,   1,    65,   1,    65,   1,
-      66,   1,    66,   1,    66,   5,    66,   828,  8,    66,   10,   66,
-      12,   66,   831,  9,    66,   1,    66,   3,    66,   834,  8,    66,
-      1,    66,   1,    66,   5,    66,   838,  8,    66,   10,   66,   12,
-      66,   841,  9,    66,   1,    66,   1,    66,   1,    67,   1,    67,
-      5,    67,   847,  8,    67,   10,   67,   12,   67,   850,  9,    67,
-      1,    67,   1,    67,   3,    67,   854,  8,    67,   1,    68,   1,
-      68,   1,    68,   1,    68,   1,    68,   3,    68,   861,  8,    68,
-      1,    69,   1,    69,   1,    69,   1,    70,   1,    70,   1,    70,
-      5,    70,   869,  8,    70,   10,   70,   12,   70,   872,  9,    70,
-      1,    71,   1,    71,   1,    71,   1,    72,   1,    72,   1,    72,
-      3,    72,   880,  8,    72,   1,    73,   1,    73,   1,    73,   1,
-      74,   1,    74,   1,    74,   3,    74,   888,  8,    74,   1,    74,
-      1,    74,   1,    74,   5,    74,   893,  8,    74,   10,   74,   12,
-      74,   896,  9,    74,   1,    74,   1,    74,   3,    74,   900,  8,
-      74,   1,    75,   1,    75,   1,    75,   1,    75,   1,    75,   5,
-      75,   907,  8,    75,   10,   75,   12,   75,   910,  9,    75,   1,
-      75,   1,    75,   3,    75,   914,  8,    75,   1,    76,   1,    76,
-      3,    76,   918,  8,    76,   1,    76,   1,    76,   1,    77,   1,
-      77,   1,    77,   3,    77,   925,  8,    77,   3,    77,   927,  8,
-      77,   1,    78,   1,    78,   1,    78,   1,    78,   1,    78,   1,
-      78,   3,    78,   935,  8,    78,   1,    79,   3,    79,   938,  8,
-      79,   1,    80,   1,    80,   1,    80,   1,    80,   1,    80,   1,
-      80,   3,    80,   946,  8,    80,   5,    80,   948,  8,    80,   10,
-      80,   12,   80,   951,  9,    80,   1,    81,   1,    81,   3,    81,
-      955,  8,    81,   1,    82,   1,    82,   1,    82,   5,    82,   960,
-      8,    82,   10,   82,   12,   82,   963,  9,    82,   1,    83,   1,
-      83,   1,    84,   1,    84,   1,    84,   1,    84,   1,    84,   1,
-      84,   3,    84,   973,  8,    84,   1,    85,   3,    85,   976,  8,
-      85,   1,    86,   1,    86,   1,    86,   3,    86,   981,  8,    86,
-      5,    86,   983,  8,    86,   10,   86,   12,   86,   986,  9,    86,
-      1,    87,   1,    87,   1,    88,   1,    88,   1,    89,   1,    89,
-      1,    89,   1,    90,   1,    90,   1,    90,   1,    91,   1,    91,
-      3,    91,   1000, 8,    91,   1,    92,   1,    92,   1,    92,   5,
-      92,   1005, 8,    92,   10,   92,   12,   92,   1008, 9,    92,   1,
-      93,   1,    93,   1,    94,   1,    94,   1,    95,   1,    95,   1,
-      95,   5,    95,   1017, 8,    95,   10,   95,   12,   95,   1020, 9,
-      95,   1,    96,   1,    96,   1,    96,   5,    96,   1025, 8,    96,
-      10,   96,   12,   96,   1028, 9,    96,   1,    97,   1,    97,   3,
-      97,   1032, 8,    97,   1,    98,   1,    98,   1,    98,   3,    98,
-      1037, 8,    98,   1,    99,   1,    99,   1,    100,  1,    100,  1,
-      100,  1,    100,  1,    100,  1,    100,  1,    100,  1,    100,  3,
-      100,  1049, 8,    100,  1,    101,  1,    101,  1,    101,  1,    101,
-      1,    101,  5,    101,  1056, 8,    101,  10,   101,  12,   101,  1059,
-      9,    101,  3,    101,  1061, 8,    101,  1,    101,  3,    101,  1064,
-      8,    101,  1,    102,  1,    102,  1,    102,  1,    102,  1,    102,
-      3,    102,  1071, 8,    102,  3,    102,  1073, 8,    102,  1,    103,
-      1,    103,  1,    104,  1,    104,  3,    104,  1079, 8,    104,  1,
-      105,  1,    105,  1,    105,  1,    105,  1,    106,  1,    106,  3,
-      106,  1087, 8,    106,  1,    107,  1,    107,  1,    107,  1,    107,
-      1,    108,  1,    108,  4,    108,  1095, 8,    108,  11,   108,  12,
-      108,  1096, 1,    108,  1,    108,  1,    109,  1,    109,  4,    109,
-      1103, 8,    109,  11,   109,  12,   109,  1104, 1,    109,  1,    109,
-      1,    110,  1,    110,  3,    110,  1111, 8,    110,  1,    111,  1,
-      111,  3,    111,  1115, 8,    111,  1,    112,  1,    112,  3,    112,
-      1119, 8,    112,  1,    113,  1,    113,  3,    113,  1123, 8,    113,
-      1,    114,  1,    114,  1,    115,  1,    115,  1,    115,  1,    115,
-      1,    115,  1,    115,  3,    115,  1133, 8,    115,  1,    116,  1,
-      116,  1,    117,  1,    117,  1,    117,  5,    117,  1140, 8,    117,
-      10,   117,  12,   117,  1143, 9,    117,  1,    118,  1,    118,  1,
-      118,  5,    118,  1148, 8,    118,  10,   118,  12,   118,  1151, 9,
-      118,  1,    119,  1,    119,  1,    120,  1,    120,  1,    120,  1,
-      120,  1,    120,  1,    120,  1,    120,  1,    120,  1,    120,  1,
-      120,  1,    120,  1,    120,  1,    120,  1,    120,  1,    120,  1,
-      120,  1,    120,  1,    120,  3,    120,  1173, 8,    120,  1,    121,
-      1,    121,  1,    122,  1,    122,  5,    122,  1179, 8,    122,  10,
-      122,  12,   122,  1182, 9,    122,  1,    123,  1,    123,  1,    123,
-      1,    123,  1,    123,  3,    123,  1189, 8,    123,  1,    124,  1,
-      124,  1,    125,  1,    125,  1,    126,  1,    126,  3,    126,  1197,
-      8,    126,  1,    126,  5,    126,  1200, 8,    126,  10,   126,  12,
-      126,  1203, 9,    126,  1,    127,  1,    127,  5,    127,  1207, 8,
-      127,  10,   127,  12,   127,  1210, 9,    127,  1,    128,  1,    128,
-      3,    128,  1214, 8,    128,  1,    129,  1,    129,  1,    129,  1,
-      130,  1,    130,  1,    130,  1,    131,  1,    131,  1,    131,  1,
-      131,  1,    131,  1,    131,  1,    131,  3,    131,  1229, 8,    131,
-      1,    132,  1,    132,  1,    132,  1,    132,  1,    132,  1,    132,
-      1,    132,  3,    132,  1238, 8,    132,  1,    133,  1,    133,  1,
-      133,  1,    133,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,
-      134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  3,
-      134,  1284, 8,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  1,    134,  1,    134,
-      1,    134,  1,    134,  1,    134,  1,    134,  3,    134,  1498, 8,
-      134,  1,    135,  1,    135,  1,    135,  1,    135,  1,    135,  1,
-      135,  1,    135,  3,    135,  1507, 8,    135,  1,    135,  1,    135,
-      1,    136,  1,    136,  1,    136,  1,    136,  1,    136,  1,    137,
-      1,    137,  1,    137,  1,    137,  1,    137,  1,    137,  1,    137,
-      3,    137,  1523, 8,    137,  1,    137,  1,    137,  1,    138,  1,
-      138,  1,    138,  1,    138,  1,    138,  1,    138,  1,    138,  1,
-      138,  1,    138,  3,    138,  1536, 8,    138,  1,    138,  1,    138,
-      1,    139,  1,    139,  1,    139,  1,    140,  1,    140,  1,    140,
-      1,    140,  1,    141,  1,    141,  1,    141,  3,    141,  1550, 8,
-      141,  1,    141,  1,    141,  3,    141,  1554, 8,    141,  1,    141,
-      1,    141,  1,    141,  1,    141,  3,    141,  1560, 8,    141,  1,
-      141,  1,    141,  1,    141,  1,    141,  1,    141,  1,    141,  3,
-      141,  1568, 8,    141,  1,    141,  1,    141,  1,    141,  1,    141,
-      1,    141,  1,    141,  3,    141,  1576, 8,    141,  1,    141,  1,
-      141,  1,    141,  1,    141,  1,    141,  1,    141,  3,    141,  1584,
-      8,    141,  1,    141,  1,    141,  1,    141,  1,    141,  1,    141,
-      1,    141,  3,    141,  1592, 8,    141,  1,    141,  1,    141,  1,
-      141,  1,    141,  1,    141,  1,    141,  3,    141,  1600, 8,    141,
-      1,    141,  1,    141,  1,    141,  1,    141,  1,    141,  1,    141,
-      3,    141,  1608, 8,    141,  1,    141,  1,    141,  1,    141,  1,
-      141,  1,    141,  3,    141,  1615, 8,    141,  1,    141,  1,    141,
-      3,    141,  1619, 8,    141,  1,    142,  1,    142,  3,    142,  1623,
-      8,    142,  1,    143,  1,    143,  1,    143,  1,    143,  3,    143,
-      1629, 8,    143,  1,    144,  1,    144,  1,    144,  3,    144,  1634,
-      8,    144,  1,    145,  1,    145,  1,    146,  1,    146,  1,    147,
-      1,    147,  1,    148,  1,    148,  1,    149,  1,    149,  1,    150,
-      3,    150,  1647, 8,    150,  1,    150,  1,    150,  3,    150,  1651,
-      8,    150,  1,    151,  1,    151,  3,    151,  1655, 8,    151,  1,
-      152,  1,    152,  1,    153,  1,    153,  1,    154,  1,    154,  1,
-      155,  1,    155,  1,    155,  0,    0,    156,  0,    2,    4,    6,
-      8,    10,   12,   14,   16,   18,   20,   22,   24,   26,   28,   30,
-      32,   34,   36,   38,   40,   42,   44,   46,   48,   50,   52,   54,
-      56,   58,   60,   62,   64,   66,   68,   70,   72,   74,   76,   78,
-      80,   82,   84,   86,   88,   90,   92,   94,   96,   98,   100,  102,
-      104,  106,  108,  110,  112,  114,  116,  118,  120,  122,  124,  126,
-      128,  130,  132,  134,  136,  138,  140,  142,  144,  146,  148,  150,
-      152,  154,  156,  158,  160,  162,  164,  166,  168,  170,  172,  174,
-      176,  178,  180,  182,  184,  186,  188,  190,  192,  194,  196,  198,
-      200,  202,  204,  206,  208,  210,  212,  214,  216,  218,  220,  222,
-      224,  226,  228,  230,  232,  234,  236,  238,  240,  242,  244,  246,
-      248,  250,  252,  254,  256,  258,  260,  262,  264,  266,  268,  270,
-      272,  274,  276,  278,  280,  282,  284,  286,  288,  290,  292,  294,
-      296,  298,  300,  302,  304,  306,  308,  310,  0,    10,   1,    0,
-      33,   34,   1,    0,    47,   48,   2,    0,    1,    1,    13,   14,
-      1,    0,    146,  147,  1,    0,    150,  152,  1,    0,    153,  155,
-      1,    0,    156,  158,  1,    0,    28,   29,   1,    0,    160,  163,
-      2,    0,    145,  145,  166,  166,  1783, 0,    312,  1,    0,    0,
-      0,    2,    326,  1,    0,    0,    0,    4,    329,  1,    0,    0,
-      0,    6,    332,  1,    0,    0,    0,    8,    336,  1,    0,    0,
-      0,    10,   346,  1,    0,    0,    0,    12,   351,  1,    0,    0,
-      0,    14,   365,  1,    0,    0,    0,    16,   367,  1,    0,    0,
-      0,    18,   371,  1,    0,    0,    0,    20,   375,  1,    0,    0,
-      0,    22,   401,  1,    0,    0,    0,    24,   421,  1,    0,    0,
-      0,    26,   431,  1,    0,    0,    0,    28,   436,  1,    0,    0,
-      0,    30,   438,  1,    0,    0,    0,    32,   441,  1,    0,    0,
-      0,    34,   444,  1,    0,    0,    0,    36,   449,  1,    0,    0,
-      0,    38,   460,  1,    0,    0,    0,    40,   477,  1,    0,    0,
-      0,    42,   479,  1,    0,    0,    0,    44,   485,  1,    0,    0,
-      0,    46,   489,  1,    0,    0,    0,    48,   502,  1,    0,    0,
-      0,    50,   546,  1,    0,    0,    0,    52,   548,  1,    0,    0,
-      0,    54,   551,  1,    0,    0,    0,    56,   554,  1,    0,    0,
-      0,    58,   559,  1,    0,    0,    0,    60,   561,  1,    0,    0,
-      0,    62,   591,  1,    0,    0,    0,    64,   593,  1,    0,    0,
-      0,    66,   602,  1,    0,    0,    0,    68,   608,  1,    0,    0,
-      0,    70,   614,  1,    0,    0,    0,    72,   620,  1,    0,    0,
-      0,    74,   628,  1,    0,    0,    0,    76,   636,  1,    0,    0,
-      0,    78,   644,  1,    0,    0,    0,    80,   648,  1,    0,    0,
-      0,    82,   652,  1,    0,    0,    0,    84,   658,  1,    0,    0,
-      0,    86,   676,  1,    0,    0,    0,    88,   679,  1,    0,    0,
-      0,    90,   682,  1,    0,    0,    0,    92,   693,  1,    0,    0,
-      0,    94,   695,  1,    0,    0,    0,    96,   702,  1,    0,    0,
-      0,    98,   704,  1,    0,    0,    0,    100,  708,  1,    0,    0,
-      0,    102,  713,  1,    0,    0,    0,    104,  727,  1,    0,    0,
-      0,    106,  735,  1,    0,    0,    0,    108,  746,  1,    0,    0,
-      0,    110,  754,  1,    0,    0,    0,    112,  762,  1,    0,    0,
-      0,    114,  769,  1,    0,    0,    0,    116,  784,  1,    0,    0,
-      0,    118,  786,  1,    0,    0,    0,    120,  789,  1,    0,    0,
-      0,    122,  793,  1,    0,    0,    0,    124,  800,  1,    0,    0,
-      0,    126,  807,  1,    0,    0,    0,    128,  812,  1,    0,    0,
-      0,    130,  814,  1,    0,    0,    0,    132,  833,  1,    0,    0,
-      0,    134,  853,  1,    0,    0,    0,    136,  860,  1,    0,    0,
-      0,    138,  862,  1,    0,    0,    0,    140,  865,  1,    0,    0,
-      0,    142,  873,  1,    0,    0,    0,    144,  879,  1,    0,    0,
-      0,    146,  881,  1,    0,    0,    0,    148,  899,  1,    0,    0,
-      0,    150,  913,  1,    0,    0,    0,    152,  915,  1,    0,    0,
-      0,    154,  921,  1,    0,    0,    0,    156,  934,  1,    0,    0,
-      0,    158,  937,  1,    0,    0,    0,    160,  939,  1,    0,    0,
-      0,    162,  954,  1,    0,    0,    0,    164,  956,  1,    0,    0,
-      0,    166,  964,  1,    0,    0,    0,    168,  972,  1,    0,    0,
-      0,    170,  975,  1,    0,    0,    0,    172,  977,  1,    0,    0,
-      0,    174,  987,  1,    0,    0,    0,    176,  989,  1,    0,    0,
-      0,    178,  991,  1,    0,    0,    0,    180,  994,  1,    0,    0,
-      0,    182,  999,  1,    0,    0,    0,    184,  1001, 1,    0,    0,
-      0,    186,  1009, 1,    0,    0,    0,    188,  1011, 1,    0,    0,
-      0,    190,  1013, 1,    0,    0,    0,    192,  1021, 1,    0,    0,
-      0,    194,  1029, 1,    0,    0,    0,    196,  1036, 1,    0,    0,
-      0,    198,  1038, 1,    0,    0,    0,    200,  1048, 1,    0,    0,
-      0,    202,  1063, 1,    0,    0,    0,    204,  1072, 1,    0,    0,
-      0,    206,  1074, 1,    0,    0,    0,    208,  1078, 1,    0,    0,
-      0,    210,  1080, 1,    0,    0,    0,    212,  1086, 1,    0,    0,
-      0,    214,  1088, 1,    0,    0,    0,    216,  1092, 1,    0,    0,
-      0,    218,  1100, 1,    0,    0,    0,    220,  1110, 1,    0,    0,
-      0,    222,  1114, 1,    0,    0,    0,    224,  1118, 1,    0,    0,
-      0,    226,  1122, 1,    0,    0,    0,    228,  1124, 1,    0,    0,
-      0,    230,  1132, 1,    0,    0,    0,    232,  1134, 1,    0,    0,
-      0,    234,  1136, 1,    0,    0,    0,    236,  1144, 1,    0,    0,
-      0,    238,  1152, 1,    0,    0,    0,    240,  1154, 1,    0,    0,
-      0,    242,  1174, 1,    0,    0,    0,    244,  1176, 1,    0,    0,
-      0,    246,  1188, 1,    0,    0,    0,    248,  1190, 1,    0,    0,
-      0,    250,  1192, 1,    0,    0,    0,    252,  1196, 1,    0,    0,
-      0,    254,  1204, 1,    0,    0,    0,    256,  1213, 1,    0,    0,
-      0,    258,  1215, 1,    0,    0,    0,    260,  1218, 1,    0,    0,
-      0,    262,  1228, 1,    0,    0,    0,    264,  1237, 1,    0,    0,
-      0,    266,  1239, 1,    0,    0,    0,    268,  1497, 1,    0,    0,
-      0,    270,  1499, 1,    0,    0,    0,    272,  1510, 1,    0,    0,
-      0,    274,  1515, 1,    0,    0,    0,    276,  1526, 1,    0,    0,
-      0,    278,  1539, 1,    0,    0,    0,    280,  1542, 1,    0,    0,
-      0,    282,  1618, 1,    0,    0,    0,    284,  1620, 1,    0,    0,
-      0,    286,  1624, 1,    0,    0,    0,    288,  1633, 1,    0,    0,
-      0,    290,  1635, 1,    0,    0,    0,    292,  1637, 1,    0,    0,
-      0,    294,  1639, 1,    0,    0,    0,    296,  1641, 1,    0,    0,
-      0,    298,  1643, 1,    0,    0,    0,    300,  1646, 1,    0,    0,
-      0,    302,  1654, 1,    0,    0,    0,    304,  1656, 1,    0,    0,
-      0,    306,  1658, 1,    0,    0,    0,    308,  1660, 1,    0,    0,
-      0,    310,  1662, 1,    0,    0,    0,    312,  317,  3,    2,    1,
-      0,    313,  318,  3,    8,    4,    0,    314,  318,  3,    20,   10,
-      0,    315,  318,  3,    22,   11,   0,    316,  318,  3,    24,   12,
-      0,    317,  313,  1,    0,    0,    0,    317,  314,  1,    0,    0,
-      0,    317,  315,  1,    0,    0,    0,    317,  316,  1,    0,    0,
-      0,    318,  319,  1,    0,    0,    0,    319,  320,  3,    58,   29,
-      0,    320,  321,  5,    0,    0,    1,    321,  1,    1,    0,    0,
-      0,    322,  325,  3,    4,    2,    0,    323,  325,  3,    6,    3,
-      0,    324,  322,  1,    0,    0,    0,    324,  323,  1,    0,    0,
-      0,    325,  328,  1,    0,    0,    0,    326,  324,  1,    0,    0,
-      0,    326,  327,  1,    0,    0,    0,    327,  3,    1,    0,    0,
-      0,    328,  326,  1,    0,    0,    0,    329,  330,  5,    30,   0,
-      0,    330,  331,  3,    306,  153,  0,    331,  5,    1,    0,    0,
-      0,    332,  333,  5,    31,   0,    0,    333,  334,  5,    143,  0,
-      0,    334,  335,  3,    306,  153,  0,    335,  7,    1,    0,    0,
-      0,    336,  340,  3,    12,   6,    0,    337,  339,  3,    26,   13,
-      0,    338,  337,  1,    0,    0,    0,    339,  342,  1,    0,    0,
-      0,    340,  338,  1,    0,    0,    0,    340,  341,  1,    0,    0,
-      0,    341,  343,  1,    0,    0,    0,    342,  340,  1,    0,    0,
-      0,    343,  344,  3,    34,   17,   0,    344,  345,  3,    36,   18,
-      0,    345,  9,    1,    0,    0,    0,    346,  347,  3,    12,   6,
-      0,    347,  348,  3,    34,   17,   0,    348,  349,  3,    36,   18,
-      0,    349,  350,  3,    58,   29,   0,    350,  11,   1,    0,    0,
-      0,    351,  353,  5,    32,   0,    0,    352,  354,  7,    0,    0,
-      0,    353,  352,  1,    0,    0,    0,    353,  354,  1,    0,    0,
-      0,    354,  361,  1,    0,    0,    0,    355,  357,  3,    14,   7,
-      0,    356,  355,  1,    0,    0,    0,    357,  358,  1,    0,    0,
-      0,    358,  356,  1,    0,    0,    0,    358,  359,  1,    0,    0,
-      0,    359,  362,  1,    0,    0,    0,    360,  362,  5,    1,    0,
-      0,    361,  356,  1,    0,    0,    0,    361,  360,  1,    0,    0,
-      0,    362,  13,   1,    0,    0,    0,    363,  366,  3,    228,  114,
-      0,    364,  366,  3,    16,   8,    0,    365,  363,  1,    0,    0,
-      0,    365,  364,  1,    0,    0,    0,    366,  15,   1,    0,    0,
-      0,    367,  368,  5,    2,    0,    0,    368,  369,  3,    18,   9,
-      0,    369,  370,  5,    3,    0,    0,    370,  17,   1,    0,    0,
-      0,    371,  372,  3,    232,  116,  0,    372,  373,  5,    35,   0,
-      0,    373,  374,  3,    228,  114,  0,    374,  19,   1,    0,    0,
-      0,    375,  399,  5,    36,   0,    0,    376,  380,  3,    152,  76,
-      0,    377,  379,  3,    26,   13,   0,    378,  377,  1,    0,    0,
-      0,    379,  382,  1,    0,    0,    0,    380,  378,  1,    0,    0,
-      0,    380,  381,  1,    0,    0,    0,    381,  383,  1,    0,    0,
-      0,    382,  380,  1,    0,    0,    0,    383,  384,  3,    34,   17,
-      0,    384,  385,  3,    36,   18,   0,    385,  400,  1,    0,    0,
-      0,    386,  388,  3,    26,   13,   0,    387,  386,  1,    0,    0,
-      0,    388,  391,  1,    0,    0,    0,    389,  387,  1,    0,    0,
-      0,    389,  390,  1,    0,    0,    0,    390,  392,  1,    0,    0,
-      0,    391,  389,  1,    0,    0,    0,    392,  393,  5,    37,   0,
-      0,    393,  395,  5,    4,    0,    0,    394,  396,  3,    106,  53,
-      0,    395,  394,  1,    0,    0,    0,    395,  396,  1,    0,    0,
-      0,    396,  397,  1,    0,    0,    0,    397,  398,  5,    5,    0,
-      0,    398,  400,  3,    36,   18,   0,    399,  376,  1,    0,    0,
-      0,    399,  389,  1,    0,    0,    0,    400,  21,   1,    0,    0,
-      0,    401,  408,  5,    38,   0,    0,    402,  404,  3,    226,  113,
-      0,    403,  402,  1,    0,    0,    0,    404,  405,  1,    0,    0,
-      0,    405,  403,  1,    0,    0,    0,    405,  406,  1,    0,    0,
-      0,    406,  409,  1,    0,    0,    0,    407,  409,  5,    1,    0,
-      0,    408,  403,  1,    0,    0,    0,    408,  407,  1,    0,    0,
-      0,    409,  413,  1,    0,    0,    0,    410,  412,  3,    26,   13,
-      0,    411,  410,  1,    0,    0,    0,    412,  415,  1,    0,    0,
-      0,    413,  411,  1,    0,    0,    0,    413,  414,  1,    0,    0,
-      0,    414,  417,  1,    0,    0,    0,    415,  413,  1,    0,    0,
-      0,    416,  418,  3,    34,   17,   0,    417,  416,  1,    0,    0,
-      0,    417,  418,  1,    0,    0,    0,    418,  419,  1,    0,    0,
-      0,    419,  420,  3,    36,   18,   0,    420,  23,   1,    0,    0,
-      0,    421,  425,  5,    39,   0,    0,    422,  424,  3,    26,   13,
-      0,    423,  422,  1,    0,    0,    0,    424,  427,  1,    0,    0,
-      0,    425,  423,  1,    0,    0,    0,    425,  426,  1,    0,    0,
-      0,    426,  428,  1,    0,    0,    0,    427,  425,  1,    0,    0,
-      0,    428,  429,  3,    34,   17,   0,    429,  430,  3,    36,   18,
-      0,    430,  25,   1,    0,    0,    0,    431,  434,  5,    40,   0,
-      0,    432,  435,  3,    28,   14,   0,    433,  435,  3,    30,   15,
-      0,    434,  432,  1,    0,    0,    0,    434,  433,  1,    0,    0,
-      0,    435,  27,   1,    0,    0,    0,    436,  437,  3,    32,   16,
-      0,    437,  29,   1,    0,    0,    0,    438,  439,  5,    41,   0,
-      0,    439,  440,  3,    32,   16,   0,    440,  31,   1,    0,    0,
-      0,    441,  442,  3,    300,  150,  0,    442,  33,   1,    0,    0,
-      0,    443,  445,  5,    37,   0,    0,    444,  443,  1,    0,    0,
-      0,    444,  445,  1,    0,    0,    0,    445,  446,  1,    0,    0,
-      0,    446,  447,  3,    108,  54,   0,    447,  35,   1,    0,    0,
-      0,    448,  450,  3,    38,   19,   0,    449,  448,  1,    0,    0,
-      0,    449,  450,  1,    0,    0,    0,    450,  452,  1,    0,    0,
-      0,    451,  453,  3,    42,   21,   0,    452,  451,  1,    0,    0,
-      0,    452,  453,  1,    0,    0,    0,    453,  455,  1,    0,    0,
-      0,    454,  456,  3,    46,   23,   0,    455,  454,  1,    0,    0,
-      0,    455,  456,  1,    0,    0,    0,    456,  458,  1,    0,    0,
-      0,    457,  459,  3,    50,   25,   0,    458,  457,  1,    0,    0,
-      0,    458,  459,  1,    0,    0,    0,    459,  37,   1,    0,    0,
-      0,    460,  462,  5,    42,   0,    0,    461,  463,  3,    40,   20,
-      0,    462,  461,  1,    0,    0,    0,    463,  464,  1,    0,    0,
-      0,    464,  462,  1,    0,    0,    0,    464,  465,  1,    0,    0,
-      0,    465,  39,   1,    0,    0,    0,    466,  478,  3,    268,  134,
-      0,    467,  478,  3,    146,  73,   0,    468,  469,  5,    2,    0,
-      0,    469,  472,  3,    232,  116,  0,    470,  471,  5,    35,   0,
-      0,    471,  473,  3,    228,  114,  0,    472,  470,  1,    0,    0,
-      0,    472,  473,  1,    0,    0,    0,    473,  474,  1,    0,    0,
-      0,    474,  475,  5,    3,    0,    0,    475,  478,  1,    0,    0,
-      0,    476,  478,  3,    228,  114,  0,    477,  466,  1,    0,    0,
-      0,    477,  467,  1,    0,    0,    0,    477,  468,  1,    0,    0,
-      0,    477,  476,  1,    0,    0,    0,    478,  41,   1,    0,    0,
-      0,    479,  481,  5,    44,   0,    0,    480,  482,  3,    44,   22,
-      0,    481,  480,  1,    0,    0,    0,    482,  483,  1,    0,    0,
-      0,    483,  481,  1,    0,    0,    0,    483,  484,  1,    0,    0,
-      0,    484,  43,   1,    0,    0,    0,    485,  486,  3,    144,  72,
-      0,    486,  45,   1,    0,    0,    0,    487,  490,  5,    45,   0,
-      0,    488,  490,  5,    46,   0,    0,    489,  487,  1,    0,    0,
-      0,    489,  488,  1,    0,    0,    0,    490,  492,  1,    0,    0,
-      0,    491,  493,  3,    48,   24,   0,    492,  491,  1,    0,    0,
-      0,    493,  494,  1,    0,    0,    0,    494,  492,  1,    0,    0,
-      0,    494,  495,  1,    0,    0,    0,    495,  47,   1,    0,    0,
-      0,    496,  497,  7,    1,    0,    0,    497,  503,  3,    266,  133,
-      0,    498,  501,  3,    144,  72,   0,    499,  501,  3,    228,  114,
-      0,    500,  498,  1,    0,    0,    0,    500,  499,  1,    0,    0,
-      0,    501,  503,  1,    0,    0,    0,    502,  496,  1,    0,    0,
-      0,    502,  500,  1,    0,    0,    0,    503,  49,   1,    0,    0,
-      0,    504,  506,  3,    52,   26,   0,    505,  507,  3,    54,   27,
-      0,    506,  505,  1,    0,    0,    0,    506,  507,  1,    0,    0,
-      0,    507,  509,  1,    0,    0,    0,    508,  510,  3,    56,   28,
-      0,    509,  508,  1,    0,    0,    0,    509,  510,  1,    0,    0,
-      0,    510,  547,  1,    0,    0,    0,    511,  513,  3,    52,   26,
-      0,    512,  514,  3,    56,   28,   0,    513,  512,  1,    0,    0,
-      0,    513,  514,  1,    0,    0,    0,    514,  516,  1,    0,    0,
-      0,    515,  517,  3,    54,   27,   0,    516,  515,  1,    0,    0,
-      0,    516,  517,  1,    0,    0,    0,    517,  547,  1,    0,    0,
-      0,    518,  520,  3,    54,   27,   0,    519,  521,  3,    52,   26,
-      0,    520,  519,  1,    0,    0,    0,    520,  521,  1,    0,    0,
-      0,    521,  523,  1,    0,    0,    0,    522,  524,  3,    56,   28,
-      0,    523,  522,  1,    0,    0,    0,    523,  524,  1,    0,    0,
-      0,    524,  547,  1,    0,    0,    0,    525,  527,  3,    54,   27,
-      0,    526,  528,  3,    56,   28,   0,    527,  526,  1,    0,    0,
-      0,    527,  528,  1,    0,    0,    0,    528,  530,  1,    0,    0,
-      0,    529,  531,  3,    52,   26,   0,    530,  529,  1,    0,    0,
-      0,    530,  531,  1,    0,    0,    0,    531,  547,  1,    0,    0,
-      0,    532,  534,  3,    56,   28,   0,    533,  535,  3,    54,   27,
-      0,    534,  533,  1,    0,    0,    0,    534,  535,  1,    0,    0,
-      0,    535,  537,  1,    0,    0,    0,    536,  538,  3,    52,   26,
-      0,    537,  536,  1,    0,    0,    0,    537,  538,  1,    0,    0,
-      0,    538,  547,  1,    0,    0,    0,    539,  541,  3,    56,   28,
-      0,    540,  542,  3,    52,   26,   0,    541,  540,  1,    0,    0,
-      0,    541,  542,  1,    0,    0,    0,    542,  544,  1,    0,    0,
-      0,    543,  545,  3,    54,   27,   0,    544,  543,  1,    0,    0,
-      0,    544,  545,  1,    0,    0,    0,    545,  547,  1,    0,    0,
-      0,    546,  504,  1,    0,    0,    0,    546,  511,  1,    0,    0,
-      0,    546,  518,  1,    0,    0,    0,    546,  525,  1,    0,    0,
-      0,    546,  532,  1,    0,    0,    0,    546,  539,  1,    0,    0,
-      0,    547,  51,   1,    0,    0,    0,    548,  549,  5,    49,   0,
-      0,    549,  550,  3,    206,  103,  0,    550,  53,   1,    0,    0,
-      0,    551,  552,  5,    50,   0,    0,    552,  553,  3,    206,  103,
-      0,    553,  55,   1,    0,    0,    0,    554,  555,  5,    51,   0,
-      0,    555,  556,  3,    206,  103,  0,    556,  57,   1,    0,    0,
-      0,    557,  558,  5,    52,   0,    0,    558,  560,  3,    128,  64,
-      0,    559,  557,  1,    0,    0,    0,    559,  560,  1,    0,    0,
-      0,    560,  59,   1,    0,    0,    0,    561,  576,  3,    2,    1,
-      0,    562,  569,  3,    62,   31,   0,    563,  564,  5,    6,    0,
-      0,    564,  565,  3,    2,    1,    0,    565,  566,  3,    62,   31,
-      0,    566,  568,  1,    0,    0,    0,    567,  563,  1,    0,    0,
-      0,    568,  571,  1,    0,    0,    0,    569,  567,  1,    0,    0,
-      0,    569,  570,  1,    0,    0,    0,    570,  574,  1,    0,    0,
-      0,    571,  569,  1,    0,    0,    0,    572,  573,  5,    6,    0,
-      0,    573,  575,  3,    2,    1,    0,    574,  572,  1,    0,    0,
-      0,    574,  575,  1,    0,    0,    0,    575,  577,  1,    0,    0,
-      0,    576,  562,  1,    0,    0,    0,    576,  577,  1,    0,    0,
-      0,    577,  578,  1,    0,    0,    0,    578,  579,  5,    0,    0,
-      1,    579,  61,   1,    0,    0,    0,    580,  592,  3,    64,   32,
-      0,    581,  592,  3,    66,   33,   0,    582,  592,  3,    68,   34,
-      0,    583,  592,  3,    72,   36,   0,    584,  592,  3,    74,   37,
-      0,    585,  592,  3,    76,   38,   0,    586,  592,  3,    70,   35,
-      0,    587,  592,  3,    78,   39,   0,    588,  592,  3,    80,   40,
-      0,    589,  592,  3,    82,   41,   0,    590,  592,  3,    84,   42,
-      0,    591,  580,  1,    0,    0,    0,    591,  581,  1,    0,    0,
-      0,    591,  582,  1,    0,    0,    0,    591,  583,  1,    0,    0,
-      0,    591,  584,  1,    0,    0,    0,    591,  585,  1,    0,    0,
-      0,    591,  586,  1,    0,    0,    0,    591,  587,  1,    0,    0,
-      0,    591,  588,  1,    0,    0,    0,    591,  589,  1,    0,    0,
-      0,    591,  590,  1,    0,    0,    0,    592,  63,   1,    0,    0,
-      0,    593,  595,  5,    53,   0,    0,    594,  596,  5,    54,   0,
-      0,    595,  594,  1,    0,    0,    0,    595,  596,  1,    0,    0,
-      0,    596,  597,  1,    0,    0,    0,    597,  600,  3,    300,  150,
-      0,    598,  599,  5,    55,   0,    0,    599,  601,  3,    94,   47,
-      0,    600,  598,  1,    0,    0,    0,    600,  601,  1,    0,    0,
-      0,    601,  65,   1,    0,    0,    0,    602,  604,  5,    56,   0,
-      0,    603,  605,  5,    54,   0,    0,    604,  603,  1,    0,    0,
-      0,    604,  605,  1,    0,    0,    0,    605,  606,  1,    0,    0,
-      0,    606,  607,  3,    96,   48,   0,    607,  67,   1,    0,    0,
-      0,    608,  610,  5,    57,   0,    0,    609,  611,  5,    54,   0,
-      0,    610,  609,  1,    0,    0,    0,    610,  611,  1,    0,    0,
-      0,    611,  612,  1,    0,    0,    0,    612,  613,  3,    96,   48,
-      0,    613,  69,   1,    0,    0,    0,    614,  616,  5,    58,   0,
-      0,    615,  617,  5,    54,   0,    0,    616,  615,  1,    0,    0,
-      0,    616,  617,  1,    0,    0,    0,    617,  618,  1,    0,    0,
-      0,    618,  619,  3,    94,   47,   0,    619,  71,   1,    0,    0,
-      0,    620,  622,  5,    59,   0,    0,    621,  623,  5,    54,   0,
-      0,    622,  621,  1,    0,    0,    0,    622,  623,  1,    0,    0,
-      0,    623,  624,  1,    0,    0,    0,    624,  625,  3,    92,   46,
-      0,    625,  626,  5,    60,   0,    0,    626,  627,  3,    92,   46,
-      0,    627,  73,   1,    0,    0,    0,    628,  630,  5,    62,   0,
-      0,    629,  631,  5,    54,   0,    0,    630,  629,  1,    0,    0,
-      0,    630,  631,  1,    0,    0,    0,    631,  632,  1,    0,    0,
-      0,    632,  633,  3,    92,   46,   0,    633,  634,  5,    60,   0,
-      0,    634,  635,  3,    92,   46,   0,    635,  75,   1,    0,    0,
-      0,    636,  638,  5,    63,   0,    0,    637,  639,  5,    54,   0,
-      0,    638,  637,  1,    0,    0,    0,    638,  639,  1,    0,    0,
-      0,    639,  640,  1,    0,    0,    0,    640,  641,  3,    92,   46,
-      0,    641,  642,  5,    60,   0,    0,    642,  643,  3,    92,   46,
-      0,    643,  77,   1,    0,    0,    0,    644,  645,  5,    64,   0,
-      0,    645,  646,  5,    61,   0,    0,    646,  647,  3,    100,  50,
-      0,    647,  79,   1,    0,    0,    0,    648,  649,  5,    65,   0,
-      0,    649,  650,  5,    61,   0,    0,    650,  651,  3,    100,  50,
-      0,    651,  81,   1,    0,    0,    0,    652,  653,  5,    65,   0,
-      0,    653,  654,  5,    37,   0,    0,    654,  655,  3,    98,   49,
-      0,    655,  83,   1,    0,    0,    0,    656,  657,  5,    66,   0,
-      0,    657,  659,  3,    300,  150,  0,    658,  656,  1,    0,    0,
-      0,    658,  659,  1,    0,    0,    0,    659,  665,  1,    0,    0,
-      0,    660,  662,  3,    86,   43,   0,    661,  663,  3,    88,   44,
-      0,    662,  661,  1,    0,    0,    0,    662,  663,  1,    0,    0,
-      0,    663,  666,  1,    0,    0,    0,    664,  666,  3,    88,   44,
-      0,    665,  660,  1,    0,    0,    0,    665,  664,  1,    0,    0,
-      0,    666,  670,  1,    0,    0,    0,    667,  669,  3,    90,   45,
-      0,    668,  667,  1,    0,    0,    0,    669,  672,  1,    0,    0,
-      0,    670,  668,  1,    0,    0,    0,    670,  671,  1,    0,    0,
-      0,    671,  673,  1,    0,    0,    0,    672,  670,  1,    0,    0,
-      0,    673,  674,  5,    37,   0,    0,    674,  675,  3,    108,  54,
-      0,    675,  85,   1,    0,    0,    0,    676,  677,  5,    65,   0,
-      0,    677,  678,  3,    98,   49,   0,    678,  87,   1,    0,    0,
-      0,    679,  680,  5,    64,   0,    0,    680,  681,  3,    98,   49,
-      0,    681,  89,   1,    0,    0,    0,    682,  686,  5,    67,   0,
-      0,    683,  687,  3,    300,  150,  0,    684,  685,  5,    41,   0,
-      0,    685,  687,  3,    300,  150,  0,    686,  683,  1,    0,    0,
-      0,    686,  684,  1,    0,    0,    0,    687,  91,   1,    0,    0,
-      0,    688,  694,  5,    68,   0,    0,    689,  691,  5,    69,   0,
-      0,    690,  689,  1,    0,    0,    0,    690,  691,  1,    0,    0,
-      0,    691,  692,  1,    0,    0,    0,    692,  694,  3,    300,  150,
-      0,    693,  688,  1,    0,    0,    0,    693,  690,  1,    0,    0,
-      0,    694,  93,   1,    0,    0,    0,    695,  696,  5,    69,   0,
-      0,    696,  697,  3,    300,  150,  0,    697,  95,   1,    0,    0,
-      0,    698,  703,  3,    94,   47,   0,    699,  703,  5,    68,   0,
-      0,    700,  703,  5,    41,   0,    0,    701,  703,  5,    70,   0,
-      0,    702,  698,  1,    0,    0,    0,    702,  699,  1,    0,    0,
-      0,    702,  700,  1,    0,    0,    0,    702,  701,  1,    0,    0,
-      0,    703,  97,   1,    0,    0,    0,    704,  705,  5,    4,    0,
-      0,    705,  706,  3,    102,  51,   0,    706,  707,  5,    5,    0,
-      0,    707,  99,   1,    0,    0,    0,    708,  709,  5,    4,    0,
-      0,    709,  710,  3,    102,  51,   0,    710,  711,  5,    5,    0,
-      0,    711,  101,  1,    0,    0,    0,    712,  714,  3,    106,  53,
-      0,    713,  712,  1,    0,    0,    0,    713,  714,  1,    0,    0,
-      0,    714,  724,  1,    0,    0,    0,    715,  717,  3,    104,  52,
-      0,    716,  718,  5,    7,    0,    0,    717,  716,  1,    0,    0,
-      0,    717,  718,  1,    0,    0,    0,    718,  720,  1,    0,    0,
-      0,    719,  721,  3,    106,  53,   0,    720,  719,  1,    0,    0,
-      0,    720,  721,  1,    0,    0,    0,    721,  723,  1,    0,    0,
-      0,    722,  715,  1,    0,    0,    0,    723,  726,  1,    0,    0,
-      0,    724,  722,  1,    0,    0,    0,    724,  725,  1,    0,    0,
-      0,    725,  103,  1,    0,    0,    0,    726,  724,  1,    0,    0,
-      0,    727,  728,  5,    69,   0,    0,    728,  729,  3,    226,  113,
-      0,    729,  731,  5,    4,    0,    0,    730,  732,  3,    106,  53,
-      0,    731,  730,  1,    0,    0,    0,    731,  732,  1,    0,    0,
-      0,    732,  733,  1,    0,    0,    0,    733,  734,  5,    5,    0,
-      0,    734,  105,  1,    0,    0,    0,    735,  740,  3,    156,  78,
-      0,    736,  737,  5,    7,    0,    0,    737,  739,  3,    156,  78,
-      0,    738,  736,  1,    0,    0,    0,    739,  742,  1,    0,    0,
-      0,    740,  738,  1,    0,    0,    0,    740,  741,  1,    0,    0,
-      0,    741,  744,  1,    0,    0,    0,    742,  740,  1,    0,    0,
-      0,    743,  745,  5,    7,    0,    0,    744,  743,  1,    0,    0,
-      0,    744,  745,  1,    0,    0,    0,    745,  107,  1,    0,    0,
-      0,    746,  749,  5,    4,    0,    0,    747,  750,  3,    10,   5,
-      0,    748,  750,  3,    110,  55,   0,    749,  747,  1,    0,    0,
-      0,    749,  748,  1,    0,    0,    0,    750,  751,  1,    0,    0,
-      0,    751,  752,  5,    5,    0,    0,    752,  109,  1,    0,    0,
-      0,    753,  755,  3,    114,  57,   0,    754,  753,  1,    0,    0,
-      0,    754,  755,  1,    0,    0,    0,    755,  759,  1,    0,    0,
-      0,    756,  758,  3,    112,  56,   0,    757,  756,  1,    0,    0,
-      0,    758,  761,  1,    0,    0,    0,    759,  757,  1,    0,    0,
-      0,    759,  760,  1,    0,    0,    0,    760,  111,  1,    0,    0,
-      0,    761,  759,  1,    0,    0,    0,    762,  764,  3,    116,  58,
-      0,    763,  765,  5,    7,    0,    0,    764,  763,  1,    0,    0,
-      0,    764,  765,  1,    0,    0,    0,    765,  767,  1,    0,    0,
-      0,    766,  768,  3,    114,  57,   0,    767,  766,  1,    0,    0,
-      0,    767,  768,  1,    0,    0,    0,    768,  113,  1,    0,    0,
-      0,    769,  774,  3,    168,  84,   0,    770,  772,  5,    7,    0,
-      0,    771,  773,  3,    114,  57,   0,    772,  771,  1,    0,    0,
-      0,    772,  773,  1,    0,    0,    0,    773,  775,  1,    0,    0,
-      0,    774,  770,  1,    0,    0,    0,    774,  775,  1,    0,    0,
-      0,    775,  115,  1,    0,    0,    0,    776,  785,  3,    140,  70,
-      0,    777,  785,  3,    118,  59,   0,    778,  785,  3,    138,  69,
-      0,    779,  785,  3,    120,  60,   0,    780,  785,  3,    122,  61,
-      0,    781,  785,  3,    142,  71,   0,    782,  785,  3,    124,  62,
-      0,    783,  785,  3,    126,  63,   0,    784,  776,  1,    0,    0,
-      0,    784,  777,  1,    0,    0,    0,    784,  778,  1,    0,    0,
-      0,    784,  779,  1,    0,    0,    0,    784,  780,  1,    0,    0,
-      0,    784,  781,  1,    0,    0,    0,    784,  782,  1,    0,    0,
-      0,    784,  783,  1,    0,    0,    0,    785,  117,  1,    0,    0,
-      0,    786,  787,  5,    71,   0,    0,    787,  788,  3,    108,  54,
-      0,    788,  119,  1,    0,    0,    0,    789,  790,  5,    69,   0,
-      0,    790,  791,  3,    226,  113,  0,    791,  792,  3,    108,  54,
-      0,    792,  121,  1,    0,    0,    0,    793,  795,  5,    72,   0,
-      0,    794,  796,  5,    54,   0,    0,    795,  794,  1,    0,    0,
-      0,    795,  796,  1,    0,    0,    0,    796,  797,  1,    0,    0,
-      0,    797,  798,  3,    226,  113,  0,    798,  799,  3,    108,  54,
-      0,    799,  123,  1,    0,    0,    0,    800,  801,  5,    73,   0,
-      0,    801,  802,  5,    2,    0,    0,    802,  803,  3,    232,  116,
-      0,    803,  804,  5,    35,   0,    0,    804,  805,  3,    228,  114,
-      0,    805,  806,  5,    3,    0,    0,    806,  125,  1,    0,    0,
-      0,    807,  808,  5,    52,   0,    0,    808,  809,  3,    128,  64,
-      0,    809,  127,  1,    0,    0,    0,    810,  813,  3,    130,  65,
-      0,    811,  813,  3,    132,  66,   0,    812,  810,  1,    0,    0,
-      0,    812,  811,  1,    0,    0,    0,    813,  129,  1,    0,    0,
-      0,    814,  815,  3,    228,  114,  0,    815,  819,  5,    4,    0,
-      0,    816,  818,  3,    136,  68,   0,    817,  816,  1,    0,    0,
-      0,    818,  821,  1,    0,    0,    0,    819,  817,  1,    0,    0,
-      0,    819,  820,  1,    0,    0,    0,    820,  822,  1,    0,    0,
-      0,    821,  819,  1,    0,    0,    0,    822,  823,  5,    5,    0,
-      0,    823,  131,  1,    0,    0,    0,    824,  834,  5,    165,  0,
-      0,    825,  829,  5,    2,    0,    0,    826,  828,  3,    228,  114,
-      0,    827,  826,  1,    0,    0,    0,    828,  831,  1,    0,    0,
-      0,    829,  827,  1,    0,    0,    0,    829,  830,  1,    0,    0,
-      0,    830,  832,  1,    0,    0,    0,    831,  829,  1,    0,    0,
-      0,    832,  834,  5,    3,    0,    0,    833,  824,  1,    0,    0,
-      0,    833,  825,  1,    0,    0,    0,    834,  835,  1,    0,    0,
-      0,    835,  839,  5,    4,    0,    0,    836,  838,  3,    134,  67,
-      0,    837,  836,  1,    0,    0,    0,    838,  841,  1,    0,    0,
-      0,    839,  837,  1,    0,    0,    0,    839,  840,  1,    0,    0,
-      0,    840,  842,  1,    0,    0,    0,    841,  839,  1,    0,    0,
-      0,    842,  843,  5,    5,    0,    0,    843,  133,  1,    0,    0,
-      0,    844,  848,  5,    2,    0,    0,    845,  847,  3,    136,  68,
-      0,    846,  845,  1,    0,    0,    0,    847,  850,  1,    0,    0,
-      0,    848,  846,  1,    0,    0,    0,    848,  849,  1,    0,    0,
-      0,    849,  851,  1,    0,    0,    0,    850,  848,  1,    0,    0,
-      0,    851,  854,  5,    3,    0,    0,    852,  854,  5,    165,  0,
-      0,    853,  844,  1,    0,    0,    0,    853,  852,  1,    0,    0,
-      0,    854,  135,  1,    0,    0,    0,    855,  861,  3,    300,  150,
-      0,    856,  861,  3,    286,  143,  0,    857,  861,  3,    288,  144,
-      0,    858,  861,  3,    296,  148,  0,    859,  861,  5,    74,   0,
-      0,    860,  855,  1,    0,    0,    0,    860,  856,  1,    0,    0,
-      0,    860,  857,  1,    0,    0,    0,    860,  858,  1,    0,    0,
-      0,    860,  859,  1,    0,    0,    0,    861,  137,  1,    0,    0,
-      0,    862,  863,  5,    75,   0,    0,    863,  864,  3,    108,  54,
-      0,    864,  139,  1,    0,    0,    0,    865,  870,  3,    108,  54,
-      0,    866,  867,  5,    76,   0,    0,    867,  869,  3,    108,  54,
-      0,    868,  866,  1,    0,    0,    0,    869,  872,  1,    0,    0,
-      0,    870,  868,  1,    0,    0,    0,    870,  871,  1,    0,    0,
-      0,    871,  141,  1,    0,    0,    0,    872,  870,  1,    0,    0,
-      0,    873,  874,  5,    77,   0,    0,    874,  875,  3,    144,  72,
-      0,    875,  143,  1,    0,    0,    0,    876,  880,  3,    266,  133,
-      0,    877,  880,  3,    268,  134,  0,    878,  880,  3,    146,  73,
-      0,    879,  876,  1,    0,    0,    0,    879,  877,  1,    0,    0,
-      0,    879,  878,  1,    0,    0,    0,    880,  145,  1,    0,    0,
-      0,    881,  882,  3,    300,  150,  0,    882,  883,  3,    148,  74,
-      0,    883,  147,  1,    0,    0,    0,    884,  900,  5,    165,  0,
-      0,    885,  887,  5,    2,    0,    0,    886,  888,  5,    33,   0,
-      0,    887,  886,  1,    0,    0,    0,    887,  888,  1,    0,    0,
-      0,    888,  889,  1,    0,    0,    0,    889,  894,  3,    232,  116,
-      0,    890,  891,  5,    8,    0,    0,    891,  893,  3,    232,  116,
-      0,    892,  890,  1,    0,    0,    0,    893,  896,  1,    0,    0,
-      0,    894,  892,  1,    0,    0,    0,    894,  895,  1,    0,    0,
-      0,    895,  897,  1,    0,    0,    0,    896,  894,  1,    0,    0,
-      0,    897,  898,  5,    3,    0,    0,    898,  900,  1,    0,    0,
-      0,    899,  884,  1,    0,    0,    0,    899,  885,  1,    0,    0,
-      0,    900,  149,  1,    0,    0,    0,    901,  914,  5,    165,  0,
-      0,    902,  903,  5,    2,    0,    0,    903,  908,  3,    232,  116,
-      0,    904,  905,  5,    8,    0,    0,    905,  907,  3,    232,  116,
-      0,    906,  904,  1,    0,    0,    0,    907,  910,  1,    0,    0,
-      0,    908,  906,  1,    0,    0,    0,    908,  909,  1,    0,    0,
-      0,    909,  911,  1,    0,    0,    0,    910,  908,  1,    0,    0,
-      0,    911,  912,  5,    3,    0,    0,    912,  914,  1,    0,    0,
-      0,    913,  901,  1,    0,    0,    0,    913,  902,  1,    0,    0,
-      0,    914,  151,  1,    0,    0,    0,    915,  917,  5,    4,    0,
-      0,    916,  918,  3,    154,  77,   0,    917,  916,  1,    0,    0,
-      0,    917,  918,  1,    0,    0,    0,    918,  919,  1,    0,    0,
-      0,    919,  920,  5,    5,    0,    0,    920,  153,  1,    0,    0,
-      0,    921,  926,  3,    156,  78,   0,    922,  924,  5,    7,    0,
-      0,    923,  925,  3,    154,  77,   0,    924,  923,  1,    0,    0,
-      0,    924,  925,  1,    0,    0,    0,    925,  927,  1,    0,    0,
-      0,    926,  922,  1,    0,    0,    0,    926,  927,  1,    0,    0,
-      0,    927,  155,  1,    0,    0,    0,    928,  929,  3,    224,  112,
-      0,    929,  930,  3,    160,  80,   0,    930,  935,  1,    0,    0,
-      0,    931,  932,  3,    208,  104,  0,    932,  933,  3,    158,  79,
-      0,    933,  935,  1,    0,    0,    0,    934,  928,  1,    0,    0,
-      0,    934,  931,  1,    0,    0,    0,    935,  157,  1,    0,    0,
-      0,    936,  938,  3,    160,  80,   0,    937,  936,  1,    0,    0,
-      0,    937,  938,  1,    0,    0,    0,    938,  159,  1,    0,    0,
-      0,    939,  940,  3,    162,  81,   0,    940,  949,  3,    164,  82,
-      0,    941,  945,  5,    6,    0,    0,    942,  943,  3,    162,  81,
-      0,    943,  944,  3,    164,  82,   0,    944,  946,  1,    0,    0,
-      0,    945,  942,  1,    0,    0,    0,    945,  946,  1,    0,    0,
-      0,    946,  948,  1,    0,    0,    0,    947,  941,  1,    0,    0,
-      0,    948,  951,  1,    0,    0,    0,    949,  947,  1,    0,    0,
-      0,    949,  950,  1,    0,    0,    0,    950,  161,  1,    0,    0,
-      0,    951,  949,  1,    0,    0,    0,    952,  955,  3,    226,  113,
-      0,    953,  955,  5,    9,    0,    0,    954,  952,  1,    0,    0,
-      0,    954,  953,  1,    0,    0,    0,    955,  163,  1,    0,    0,
-      0,    956,  961,  3,    166,  83,   0,    957,  958,  5,    8,    0,
-      0,    958,  960,  3,    166,  83,   0,    959,  957,  1,    0,    0,
-      0,    960,  963,  1,    0,    0,    0,    961,  959,  1,    0,    0,
-      0,    961,  962,  1,    0,    0,    0,    962,  165,  1,    0,    0,
-      0,    963,  961,  1,    0,    0,    0,    964,  965,  3,    220,  110,
-      0,    965,  167,  1,    0,    0,    0,    966,  967,  3,    224,  112,
-      0,    967,  968,  3,    172,  86,   0,    968,  973,  1,    0,    0,
-      0,    969,  970,  3,    212,  106,  0,    970,  971,  3,    170,  85,
-      0,    971,  973,  1,    0,    0,    0,    972,  966,  1,    0,    0,
-      0,    972,  969,  1,    0,    0,    0,    973,  169,  1,    0,    0,
-      0,    974,  976,  3,    172,  86,   0,    975,  974,  1,    0,    0,
-      0,    975,  976,  1,    0,    0,    0,    976,  171,  1,    0,    0,
-      0,    977,  984,  3,    180,  90,   0,    978,  980,  5,    6,    0,
-      0,    979,  981,  3,    178,  89,   0,    980,  979,  1,    0,    0,
-      0,    980,  981,  1,    0,    0,    0,    981,  983,  1,    0,    0,
-      0,    982,  978,  1,    0,    0,    0,    983,  986,  1,    0,    0,
-      0,    984,  982,  1,    0,    0,    0,    984,  985,  1,    0,    0,
-      0,    985,  173,  1,    0,    0,    0,    986,  984,  1,    0,    0,
-      0,    987,  988,  3,    188,  94,   0,    988,  175,  1,    0,    0,
-      0,    989,  990,  3,    228,  114,  0,    990,  177,  1,    0,    0,
-      0,    991,  992,  3,    182,  91,   0,    992,  993,  3,    164,  82,
-      0,    993,  179,  1,    0,    0,    0,    994,  995,  3,    182,  91,
-      0,    995,  996,  3,    184,  92,   0,    996,  181,  1,    0,    0,
-      0,    997,  1000, 3,    174,  87,   0,    998,  1000, 3,    176,  88,
-      0,    999,  997,  1,    0,    0,    0,    999,  998,  1,    0,    0,
-      0,    1000, 183,  1,    0,    0,    0,    1001, 1006, 3,    186,  93,
-      0,    1002, 1003, 5,    8,    0,    0,    1003, 1005, 3,    186,  93,
-      0,    1004, 1002, 1,    0,    0,    0,    1005, 1008, 1,    0,    0,
-      0,    1006, 1004, 1,    0,    0,    0,    1006, 1007, 1,    0,    0,
-      0,    1007, 185,  1,    0,    0,    0,    1008, 1006, 1,    0,    0,
-      0,    1009, 1010, 3,    222,  111,  0,    1010, 187,  1,    0,    0,
-      0,    1011, 1012, 3,    190,  95,   0,    1012, 189,  1,    0,    0,
-      0,    1013, 1018, 3,    192,  96,   0,    1014, 1015, 5,    10,   0,
-      0,    1015, 1017, 3,    192,  96,   0,    1016, 1014, 1,    0,    0,
-      0,    1017, 1020, 1,    0,    0,    0,    1018, 1016, 1,    0,    0,
-      0,    1018, 1019, 1,    0,    0,    0,    1019, 191,  1,    0,    0,
-      0,    1020, 1018, 1,    0,    0,    0,    1021, 1026, 3,    196,  98,
-      0,    1022, 1023, 5,    11,   0,    0,    1023, 1025, 3,    196,  98,
-      0,    1024, 1022, 1,    0,    0,    0,    1025, 1028, 1,    0,    0,
-      0,    1026, 1024, 1,    0,    0,    0,    1026, 1027, 1,    0,    0,
-      0,    1027, 193,  1,    0,    0,    0,    1028, 1026, 1,    0,    0,
-      0,    1029, 1031, 3,    200,  100,  0,    1030, 1032, 3,    198,  99,
-      0,    1031, 1030, 1,    0,    0,    0,    1031, 1032, 1,    0,    0,
-      0,    1032, 195,  1,    0,    0,    0,    1033, 1037, 3,    194,  97,
-      0,    1034, 1035, 5,    12,   0,    0,    1035, 1037, 3,    194,  97,
-      0,    1036, 1033, 1,    0,    0,    0,    1036, 1034, 1,    0,    0,
-      0,    1037, 197,  1,    0,    0,    0,    1038, 1039, 7,    2,    0,
-      0,    1039, 199,  1,    0,    0,    0,    1040, 1049, 3,    300,  150,
-      0,    1041, 1049, 5,    9,    0,    0,    1042, 1043, 5,    15,   0,
-      0,    1043, 1049, 3,    202,  101,  0,    1044, 1045, 5,    2,    0,
-      0,    1045, 1046, 3,    188,  94,   0,    1046, 1047, 5,    3,    0,
-      0,    1047, 1049, 1,    0,    0,    0,    1048, 1040, 1,    0,    0,
-      0,    1048, 1041, 1,    0,    0,    0,    1048, 1042, 1,    0,    0,
-      0,    1048, 1044, 1,    0,    0,    0,    1049, 201,  1,    0,    0,
-      0,    1050, 1064, 3,    204,  102,  0,    1051, 1060, 5,    2,    0,
-      0,    1052, 1057, 3,    204,  102,  0,    1053, 1054, 5,    10,   0,
-      0,    1054, 1056, 3,    204,  102,  0,    1055, 1053, 1,    0,    0,
-      0,    1056, 1059, 1,    0,    0,    0,    1057, 1055, 1,    0,    0,
-      0,    1057, 1058, 1,    0,    0,    0,    1058, 1061, 1,    0,    0,
-      0,    1059, 1057, 1,    0,    0,    0,    1060, 1052, 1,    0,    0,
-      0,    1060, 1061, 1,    0,    0,    0,    1061, 1062, 1,    0,    0,
-      0,    1062, 1064, 5,    3,    0,    0,    1063, 1050, 1,    0,    0,
-      0,    1063, 1051, 1,    0,    0,    0,    1064, 203,  1,    0,    0,
-      0,    1065, 1073, 3,    300,  150,  0,    1066, 1073, 5,    9,    0,
-      0,    1067, 1070, 5,    12,   0,    0,    1068, 1071, 3,    300,  150,
-      0,    1069, 1071, 5,    9,    0,    0,    1070, 1068, 1,    0,    0,
-      0,    1070, 1069, 1,    0,    0,    0,    1071, 1073, 1,    0,    0,
-      0,    1072, 1065, 1,    0,    0,    0,    1072, 1066, 1,    0,    0,
-      0,    1072, 1067, 1,    0,    0,    0,    1073, 205,  1,    0,    0,
-      0,    1074, 1075, 5,    150,  0,    0,    1075, 207,  1,    0,    0,
-      0,    1076, 1079, 3,    216,  108,  0,    1077, 1079, 3,    210,  105,
-      0,    1078, 1076, 1,    0,    0,    0,    1078, 1077, 1,    0,    0,
-      0,    1079, 209,  1,    0,    0,    0,    1080, 1081, 5,    16,   0,
-      0,    1081, 1082, 3,    160,  80,   0,    1082, 1083, 5,    17,   0,
-      0,    1083, 211,  1,    0,    0,    0,    1084, 1087, 3,    218,  109,
-      0,    1085, 1087, 3,    214,  107,  0,    1086, 1084, 1,    0,    0,
-      0,    1086, 1085, 1,    0,    0,    0,    1087, 213,  1,    0,    0,
-      0,    1088, 1089, 5,    16,   0,    0,    1089, 1090, 3,    172,  86,
-      0,    1090, 1091, 5,    17,   0,    0,    1091, 215,  1,    0,    0,
-      0,    1092, 1094, 5,    2,    0,    0,    1093, 1095, 3,    220,  110,
-      0,    1094, 1093, 1,    0,    0,    0,    1095, 1096, 1,    0,    0,
-      0,    1096, 1094, 1,    0,    0,    0,    1096, 1097, 1,    0,    0,
-      0,    1097, 1098, 1,    0,    0,    0,    1098, 1099, 5,    3,    0,
-      0,    1099, 217,  1,    0,    0,    0,    1100, 1102, 5,    2,    0,
-      0,    1101, 1103, 3,    222,  111,  0,    1102, 1101, 1,    0,    0,
-      0,    1103, 1104, 1,    0,    0,    0,    1104, 1102, 1,    0,    0,
-      0,    1104, 1105, 1,    0,    0,    0,    1105, 1106, 1,    0,    0,
-      0,    1106, 1107, 5,    3,    0,    0,    1107, 219,  1,    0,    0,
-      0,    1108, 1111, 3,    224,  112,  0,    1109, 1111, 3,    208,  104,
-      0,    1110, 1108, 1,    0,    0,    0,    1110, 1109, 1,    0,    0,
-      0,    1111, 221,  1,    0,    0,    0,    1112, 1115, 3,    224,  112,
-      0,    1113, 1115, 3,    212,  106,  0,    1114, 1112, 1,    0,    0,
-      0,    1114, 1113, 1,    0,    0,    0,    1115, 223,  1,    0,    0,
-      0,    1116, 1119, 3,    228,  114,  0,    1117, 1119, 3,    230,  115,
-      0,    1118, 1116, 1,    0,    0,    0,    1118, 1117, 1,    0,    0,
-      0,    1119, 225,  1,    0,    0,    0,    1120, 1123, 3,    228,  114,
-      0,    1121, 1123, 3,    300,  150,  0,    1122, 1120, 1,    0,    0,
-      0,    1122, 1121, 1,    0,    0,    0,    1123, 227,  1,    0,    0,
-      0,    1124, 1125, 7,    3,    0,    0,    1125, 229,  1,    0,    0,
-      0,    1126, 1133, 3,    300,  150,  0,    1127, 1133, 3,    286,  143,
-      0,    1128, 1133, 3,    288,  144,  0,    1129, 1133, 3,    296,  148,
-      0,    1130, 1133, 3,    304,  152,  0,    1131, 1133, 5,    165,  0,
-      0,    1132, 1126, 1,    0,    0,    0,    1132, 1127, 1,    0,    0,
-      0,    1132, 1128, 1,    0,    0,    0,    1132, 1129, 1,    0,    0,
-      0,    1132, 1130, 1,    0,    0,    0,    1132, 1131, 1,    0,    0,
-      0,    1133, 231,  1,    0,    0,    0,    1134, 1135, 3,    234,  117,
-      0,    1135, 233,  1,    0,    0,    0,    1136, 1141, 3,    236,  118,
-      0,    1137, 1138, 5,    18,   0,    0,    1138, 1140, 3,    236,  118,
-      0,    1139, 1137, 1,    0,    0,    0,    1140, 1143, 1,    0,    0,
-      0,    1141, 1139, 1,    0,    0,    0,    1141, 1142, 1,    0,    0,
-      0,    1142, 235,  1,    0,    0,    0,    1143, 1141, 1,    0,    0,
-      0,    1144, 1149, 3,    238,  119,  0,    1145, 1146, 5,    19,   0,
-      0,    1146, 1148, 3,    238,  119,  0,    1147, 1145, 1,    0,    0,
-      0,    1148, 1151, 1,    0,    0,    0,    1149, 1147, 1,    0,    0,
-      0,    1149, 1150, 1,    0,    0,    0,    1150, 237,  1,    0,    0,
-      0,    1151, 1149, 1,    0,    0,    0,    1152, 1153, 3,    240,  120,
-      0,    1153, 239,  1,    0,    0,    0,    1154, 1172, 3,    242,  121,
-      0,    1155, 1156, 5,    20,   0,    0,    1156, 1173, 3,    242,  121,
-      0,    1157, 1158, 5,    21,   0,    0,    1158, 1173, 3,    242,  121,
-      0,    1159, 1160, 5,    22,   0,    0,    1160, 1173, 3,    242,  121,
-      0,    1161, 1162, 5,    23,   0,    0,    1162, 1173, 3,    242,  121,
-      0,    1163, 1164, 5,    24,   0,    0,    1164, 1173, 3,    242,  121,
-      0,    1165, 1166, 5,    25,   0,    0,    1166, 1173, 3,    242,  121,
-      0,    1167, 1168, 5,    79,   0,    0,    1168, 1173, 3,    150,  75,
-      0,    1169, 1170, 5,    78,   0,    0,    1170, 1171, 5,    79,   0,
-      0,    1171, 1173, 3,    150,  75,   0,    1172, 1155, 1,    0,    0,
-      0,    1172, 1157, 1,    0,    0,    0,    1172, 1159, 1,    0,    0,
-      0,    1172, 1161, 1,    0,    0,    0,    1172, 1163, 1,    0,    0,
-      0,    1172, 1165, 1,    0,    0,    0,    1172, 1167, 1,    0,    0,
-      0,    1172, 1169, 1,    0,    0,    0,    1172, 1173, 1,    0,    0,
-      0,    1173, 241,  1,    0,    0,    0,    1174, 1175, 3,    244,  122,
-      0,    1175, 243,  1,    0,    0,    0,    1176, 1180, 3,    254,  127,
-      0,    1177, 1179, 3,    246,  123,  0,    1178, 1177, 1,    0,    0,
-      0,    1179, 1182, 1,    0,    0,    0,    1180, 1178, 1,    0,    0,
-      0,    1180, 1181, 1,    0,    0,    0,    1181, 245,  1,    0,    0,
-      0,    1182, 1180, 1,    0,    0,    0,    1183, 1184, 5,    13,   0,
-      0,    1184, 1189, 3,    248,  124,  0,    1185, 1186, 5,    26,   0,
-      0,    1186, 1189, 3,    250,  125,  0,    1187, 1189, 3,    252,  126,
-      0,    1188, 1183, 1,    0,    0,    0,    1188, 1185, 1,    0,    0,
-      0,    1188, 1187, 1,    0,    0,    0,    1189, 247,  1,    0,    0,
-      0,    1190, 1191, 3,    254,  127,  0,    1191, 249,  1,    0,    0,
-      0,    1192, 1193, 3,    254,  127,  0,    1193, 251,  1,    0,    0,
-      0,    1194, 1197, 3,    292,  146,  0,    1195, 1197, 3,    294,  147,
-      0,    1196, 1194, 1,    0,    0,    0,    1196, 1195, 1,    0,    0,
-      0,    1197, 1201, 1,    0,    0,    0,    1198, 1200, 3,    256,  128,
-      0,    1199, 1198, 1,    0,    0,    0,    1200, 1203, 1,    0,    0,
-      0,    1201, 1199, 1,    0,    0,    0,    1201, 1202, 1,    0,    0,
-      0,    1202, 253,  1,    0,    0,    0,    1203, 1201, 1,    0,    0,
-      0,    1204, 1208, 3,    262,  131,  0,    1205, 1207, 3,    256,  128,
-      0,    1206, 1205, 1,    0,    0,    0,    1207, 1210, 1,    0,    0,
-      0,    1208, 1206, 1,    0,    0,    0,    1208, 1209, 1,    0,    0,
-      0,    1209, 255,  1,    0,    0,    0,    1210, 1208, 1,    0,    0,
-      0,    1211, 1214, 3,    258,  129,  0,    1212, 1214, 3,    260,  130,
-      0,    1213, 1211, 1,    0,    0,    0,    1213, 1212, 1,    0,    0,
-      0,    1214, 257,  1,    0,    0,    0,    1215, 1216, 5,    1,    0,
-      0,    1216, 1217, 3,    262,  131,  0,    1217, 259,  1,    0,    0,
-      0,    1218, 1219, 5,    11,   0,    0,    1219, 1220, 3,    262,  131,
-      0,    1220, 261,  1,    0,    0,    0,    1221, 1222, 5,    15,   0,
-      0,    1222, 1229, 3,    264,  132,  0,    1223, 1224, 5,    13,   0,
-      0,    1224, 1229, 3,    264,  132,  0,    1225, 1226, 5,    26,   0,
-      0,    1226, 1229, 3,    264,  132,  0,    1227, 1229, 3,    264,  132,
-      0,    1228, 1221, 1,    0,    0,    0,    1228, 1223, 1,    0,    0,
-      0,    1228, 1225, 1,    0,    0,    0,    1228, 1227, 1,    0,    0,
-      0,    1229, 263,  1,    0,    0,    0,    1230, 1238, 3,    266,  133,
-      0,    1231, 1238, 3,    268,  134,  0,    1232, 1238, 3,    284,  142,
-      0,    1233, 1238, 3,    286,  143,  0,    1234, 1238, 3,    288,  144,
-      0,    1235, 1238, 3,    296,  148,  0,    1236, 1238, 3,    228,  114,
-      0,    1237, 1230, 1,    0,    0,    0,    1237, 1231, 1,    0,    0,
-      0,    1237, 1232, 1,    0,    0,    0,    1237, 1233, 1,    0,    0,
-      0,    1237, 1234, 1,    0,    0,    0,    1237, 1235, 1,    0,    0,
-      0,    1237, 1236, 1,    0,    0,    0,    1238, 265,  1,    0,    0,
-      0,    1239, 1240, 5,    2,    0,    0,    1240, 1241, 3,    232,  116,
-      0,    1241, 1242, 5,    3,    0,    0,    1242, 267,  1,    0,    0,
-      0,    1243, 1498, 3,    282,  141,  0,    1244, 1245, 5,    80,   0,
-      0,    1245, 1246, 5,    2,    0,    0,    1246, 1247, 3,    232,  116,
-      0,    1247, 1248, 5,    3,    0,    0,    1248, 1498, 1,    0,    0,
-      0,    1249, 1498, 3,    272,  136,  0,    1250, 1251, 5,    82,   0,
-      0,    1251, 1252, 5,    2,    0,    0,    1252, 1253, 3,    232,  116,
-      0,    1253, 1254, 5,    8,    0,    0,    1254, 1255, 3,    232,  116,
-      0,    1255, 1256, 5,    3,    0,    0,    1256, 1498, 1,    0,    0,
-      0,    1257, 1258, 5,    83,   0,    0,    1258, 1259, 5,    2,    0,
-      0,    1259, 1260, 3,    232,  116,  0,    1260, 1261, 5,    3,    0,
-      0,    1261, 1498, 1,    0,    0,    0,    1262, 1263, 5,    84,   0,
-      0,    1263, 1264, 5,    2,    0,    0,    1264, 1265, 3,    228,  114,
-      0,    1265, 1266, 5,    3,    0,    0,    1266, 1498, 1,    0,    0,
-      0,    1267, 1268, 5,    85,   0,    0,    1268, 1269, 5,    2,    0,
-      0,    1269, 1270, 3,    232,  116,  0,    1270, 1271, 5,    3,    0,
-      0,    1271, 1498, 1,    0,    0,    0,    1272, 1273, 5,    86,   0,
-      0,    1273, 1274, 5,    2,    0,    0,    1274, 1275, 3,    232,  116,
-      0,    1275, 1276, 5,    3,    0,    0,    1276, 1498, 1,    0,    0,
-      0,    1277, 1283, 5,    87,   0,    0,    1278, 1279, 5,    2,    0,
-      0,    1279, 1280, 3,    232,  116,  0,    1280, 1281, 5,    3,    0,
-      0,    1281, 1284, 1,    0,    0,    0,    1282, 1284, 5,    165,  0,
-      0,    1283, 1278, 1,    0,    0,    0,    1283, 1282, 1,    0,    0,
-      0,    1284, 1498, 1,    0,    0,    0,    1285, 1286, 5,    88,   0,
-      0,    1286, 1498, 5,    165,  0,    0,    1287, 1288, 5,    89,   0,
-      0,    1288, 1289, 5,    2,    0,    0,    1289, 1290, 3,    232,  116,
-      0,    1290, 1291, 5,    3,    0,    0,    1291, 1498, 1,    0,    0,
-      0,    1292, 1293, 5,    90,   0,    0,    1293, 1294, 5,    2,    0,
-      0,    1294, 1295, 3,    232,  116,  0,    1295, 1296, 5,    3,    0,
-      0,    1296, 1498, 1,    0,    0,    0,    1297, 1298, 5,    91,   0,
-      0,    1298, 1299, 5,    2,    0,    0,    1299, 1300, 3,    232,  116,
-      0,    1300, 1301, 5,    3,    0,    0,    1301, 1498, 1,    0,    0,
-      0,    1302, 1303, 5,    92,   0,    0,    1303, 1304, 5,    2,    0,
-      0,    1304, 1305, 3,    232,  116,  0,    1305, 1306, 5,    3,    0,
-      0,    1306, 1498, 1,    0,    0,    0,    1307, 1308, 5,    93,   0,
-      0,    1308, 1498, 3,    150,  75,   0,    1309, 1498, 3,    274,  137,
-      0,    1310, 1311, 5,    94,   0,    0,    1311, 1312, 5,    2,    0,
-      0,    1312, 1313, 3,    232,  116,  0,    1313, 1314, 5,    3,    0,
-      0,    1314, 1498, 1,    0,    0,    0,    1315, 1498, 3,    276,  138,
-      0,    1316, 1317, 5,    95,   0,    0,    1317, 1318, 5,    2,    0,
-      0,    1318, 1319, 3,    232,  116,  0,    1319, 1320, 5,    3,    0,
-      0,    1320, 1498, 1,    0,    0,    0,    1321, 1322, 5,    96,   0,
-      0,    1322, 1323, 5,    2,    0,    0,    1323, 1324, 3,    232,  116,
-      0,    1324, 1325, 5,    3,    0,    0,    1325, 1498, 1,    0,    0,
-      0,    1326, 1327, 5,    97,   0,    0,    1327, 1328, 5,    2,    0,
-      0,    1328, 1329, 3,    232,  116,  0,    1329, 1330, 5,    3,    0,
-      0,    1330, 1498, 1,    0,    0,    0,    1331, 1332, 5,    99,   0,
-      0,    1332, 1333, 5,    2,    0,    0,    1333, 1334, 3,    232,  116,
-      0,    1334, 1335, 5,    8,    0,    0,    1335, 1336, 3,    232,  116,
-      0,    1336, 1337, 5,    3,    0,    0,    1337, 1498, 1,    0,    0,
-      0,    1338, 1339, 5,    100,  0,    0,    1339, 1340, 5,    2,    0,
-      0,    1340, 1341, 3,    232,  116,  0,    1341, 1342, 5,    8,    0,
-      0,    1342, 1343, 3,    232,  116,  0,    1343, 1344, 5,    3,    0,
-      0,    1344, 1498, 1,    0,    0,    0,    1345, 1346, 5,    101,  0,
-      0,    1346, 1347, 5,    2,    0,    0,    1347, 1348, 3,    232,  116,
-      0,    1348, 1349, 5,    8,    0,    0,    1349, 1350, 3,    232,  116,
-      0,    1350, 1351, 5,    3,    0,    0,    1351, 1498, 1,    0,    0,
-      0,    1352, 1353, 5,    102,  0,    0,    1353, 1354, 5,    2,    0,
-      0,    1354, 1355, 3,    232,  116,  0,    1355, 1356, 5,    8,    0,
-      0,    1356, 1357, 3,    232,  116,  0,    1357, 1358, 5,    3,    0,
-      0,    1358, 1498, 1,    0,    0,    0,    1359, 1360, 5,    103,  0,
-      0,    1360, 1361, 5,    2,    0,    0,    1361, 1362, 3,    232,  116,
-      0,    1362, 1363, 5,    8,    0,    0,    1363, 1364, 3,    232,  116,
-      0,    1364, 1365, 5,    3,    0,    0,    1365, 1498, 1,    0,    0,
-      0,    1366, 1367, 5,    104,  0,    0,    1367, 1368, 5,    2,    0,
-      0,    1368, 1369, 3,    232,  116,  0,    1369, 1370, 5,    3,    0,
-      0,    1370, 1498, 1,    0,    0,    0,    1371, 1372, 5,    105,  0,
-      0,    1372, 1373, 5,    2,    0,    0,    1373, 1374, 3,    232,  116,
-      0,    1374, 1375, 5,    3,    0,    0,    1375, 1498, 1,    0,    0,
-      0,    1376, 1377, 5,    106,  0,    0,    1377, 1378, 5,    2,    0,
-      0,    1378, 1379, 3,    232,  116,  0,    1379, 1380, 5,    3,    0,
-      0,    1380, 1498, 1,    0,    0,    0,    1381, 1382, 5,    107,  0,
-      0,    1382, 1383, 5,    2,    0,    0,    1383, 1384, 3,    232,  116,
-      0,    1384, 1385, 5,    3,    0,    0,    1385, 1498, 1,    0,    0,
-      0,    1386, 1387, 5,    108,  0,    0,    1387, 1388, 5,    2,    0,
-      0,    1388, 1389, 3,    232,  116,  0,    1389, 1390, 5,    3,    0,
-      0,    1390, 1498, 1,    0,    0,    0,    1391, 1392, 5,    109,  0,
-      0,    1392, 1393, 5,    2,    0,    0,    1393, 1394, 3,    232,  116,
-      0,    1394, 1395, 5,    3,    0,    0,    1395, 1498, 1,    0,    0,
-      0,    1396, 1397, 5,    110,  0,    0,    1397, 1398, 5,    2,    0,
-      0,    1398, 1399, 3,    232,  116,  0,    1399, 1400, 5,    3,    0,
-      0,    1400, 1498, 1,    0,    0,    0,    1401, 1402, 5,    111,  0,
-      0,    1402, 1403, 5,    2,    0,    0,    1403, 1404, 3,    232,  116,
-      0,    1404, 1405, 5,    3,    0,    0,    1405, 1498, 1,    0,    0,
-      0,    1406, 1407, 5,    112,  0,    0,    1407, 1498, 5,    165,  0,
-      0,    1408, 1409, 5,    113,  0,    0,    1409, 1498, 5,    165,  0,
-      0,    1410, 1411, 5,    114,  0,    0,    1411, 1498, 5,    165,  0,
-      0,    1412, 1413, 5,    119,  0,    0,    1413, 1414, 5,    2,    0,
-      0,    1414, 1415, 3,    232,  116,  0,    1415, 1416, 5,    3,    0,
-      0,    1416, 1498, 1,    0,    0,    0,    1417, 1418, 5,    115,  0,
-      0,    1418, 1419, 5,    2,    0,    0,    1419, 1420, 3,    232,  116,
-      0,    1420, 1421, 5,    3,    0,    0,    1421, 1498, 1,    0,    0,
-      0,    1422, 1423, 5,    116,  0,    0,    1423, 1424, 5,    2,    0,
-      0,    1424, 1425, 3,    232,  116,  0,    1425, 1426, 5,    3,    0,
-      0,    1426, 1498, 1,    0,    0,    0,    1427, 1428, 5,    117,  0,
-      0,    1428, 1429, 5,    2,    0,    0,    1429, 1430, 3,    232,  116,
-      0,    1430, 1431, 5,    3,    0,    0,    1431, 1498, 1,    0,    0,
-      0,    1432, 1433, 5,    118,  0,    0,    1433, 1434, 5,    2,    0,
-      0,    1434, 1435, 3,    232,  116,  0,    1435, 1436, 5,    3,    0,
-      0,    1436, 1498, 1,    0,    0,    0,    1437, 1438, 5,    120,  0,
-      0,    1438, 1498, 3,    150,  75,   0,    1439, 1440, 5,    121,  0,
-      0,    1440, 1441, 5,    2,    0,    0,    1441, 1442, 3,    232,  116,
-      0,    1442, 1443, 5,    8,    0,    0,    1443, 1444, 3,    232,  116,
-      0,    1444, 1445, 5,    8,    0,    0,    1445, 1446, 3,    232,  116,
-      0,    1446, 1447, 5,    3,    0,    0,    1447, 1498, 1,    0,    0,
-      0,    1448, 1449, 5,    122,  0,    0,    1449, 1450, 5,    2,    0,
-      0,    1450, 1451, 3,    232,  116,  0,    1451, 1452, 5,    8,    0,
-      0,    1452, 1453, 3,    232,  116,  0,    1453, 1454, 5,    3,    0,
-      0,    1454, 1498, 1,    0,    0,    0,    1455, 1456, 5,    123,  0,
-      0,    1456, 1457, 5,    2,    0,    0,    1457, 1458, 3,    232,  116,
-      0,    1458, 1459, 5,    8,    0,    0,    1459, 1460, 3,    232,  116,
-      0,    1460, 1461, 5,    3,    0,    0,    1461, 1498, 1,    0,    0,
-      0,    1462, 1463, 5,    124,  0,    0,    1463, 1464, 5,    2,    0,
-      0,    1464, 1465, 3,    232,  116,  0,    1465, 1466, 5,    8,    0,
-      0,    1466, 1467, 3,    232,  116,  0,    1467, 1468, 5,    3,    0,
-      0,    1468, 1498, 1,    0,    0,    0,    1469, 1470, 5,    125,  0,
-      0,    1470, 1471, 5,    2,    0,    0,    1471, 1472, 3,    232,  116,
-      0,    1472, 1473, 5,    3,    0,    0,    1473, 1498, 1,    0,    0,
-      0,    1474, 1475, 5,    126,  0,    0,    1475, 1476, 5,    2,    0,
-      0,    1476, 1477, 3,    232,  116,  0,    1477, 1478, 5,    3,    0,
-      0,    1478, 1498, 1,    0,    0,    0,    1479, 1480, 5,    127,  0,
-      0,    1480, 1481, 5,    2,    0,    0,    1481, 1482, 3,    232,  116,
-      0,    1482, 1483, 5,    3,    0,    0,    1483, 1498, 1,    0,    0,
-      0,    1484, 1485, 5,    128,  0,    0,    1485, 1486, 5,    2,    0,
-      0,    1486, 1487, 3,    232,  116,  0,    1487, 1488, 5,    3,    0,
-      0,    1488, 1498, 1,    0,    0,    0,    1489, 1490, 5,    129,  0,
-      0,    1490, 1491, 5,    2,    0,    0,    1491, 1492, 3,    232,  116,
-      0,    1492, 1493, 5,    3,    0,    0,    1493, 1498, 1,    0,    0,
-      0,    1494, 1498, 3,    270,  135,  0,    1495, 1498, 3,    278,  139,
-      0,    1496, 1498, 3,    280,  140,  0,    1497, 1243, 1,    0,    0,
-      0,    1497, 1244, 1,    0,    0,    0,    1497, 1249, 1,    0,    0,
-      0,    1497, 1250, 1,    0,    0,    0,    1497, 1257, 1,    0,    0,
-      0,    1497, 1262, 1,    0,    0,    0,    1497, 1267, 1,    0,    0,
-      0,    1497, 1272, 1,    0,    0,    0,    1497, 1277, 1,    0,    0,
-      0,    1497, 1285, 1,    0,    0,    0,    1497, 1287, 1,    0,    0,
-      0,    1497, 1292, 1,    0,    0,    0,    1497, 1297, 1,    0,    0,
-      0,    1497, 1302, 1,    0,    0,    0,    1497, 1307, 1,    0,    0,
-      0,    1497, 1309, 1,    0,    0,    0,    1497, 1310, 1,    0,    0,
-      0,    1497, 1315, 1,    0,    0,    0,    1497, 1316, 1,    0,    0,
-      0,    1497, 1321, 1,    0,    0,    0,    1497, 1326, 1,    0,    0,
-      0,    1497, 1331, 1,    0,    0,    0,    1497, 1338, 1,    0,    0,
-      0,    1497, 1345, 1,    0,    0,    0,    1497, 1352, 1,    0,    0,
-      0,    1497, 1359, 1,    0,    0,    0,    1497, 1366, 1,    0,    0,
-      0,    1497, 1371, 1,    0,    0,    0,    1497, 1376, 1,    0,    0,
-      0,    1497, 1381, 1,    0,    0,    0,    1497, 1386, 1,    0,    0,
-      0,    1497, 1391, 1,    0,    0,    0,    1497, 1396, 1,    0,    0,
-      0,    1497, 1401, 1,    0,    0,    0,    1497, 1406, 1,    0,    0,
-      0,    1497, 1408, 1,    0,    0,    0,    1497, 1410, 1,    0,    0,
-      0,    1497, 1412, 1,    0,    0,    0,    1497, 1417, 1,    0,    0,
-      0,    1497, 1422, 1,    0,    0,    0,    1497, 1427, 1,    0,    0,
-      0,    1497, 1432, 1,    0,    0,    0,    1497, 1437, 1,    0,    0,
-      0,    1497, 1439, 1,    0,    0,    0,    1497, 1448, 1,    0,    0,
-      0,    1497, 1455, 1,    0,    0,    0,    1497, 1462, 1,    0,    0,
-      0,    1497, 1469, 1,    0,    0,    0,    1497, 1474, 1,    0,    0,
-      0,    1497, 1479, 1,    0,    0,    0,    1497, 1484, 1,    0,    0,
-      0,    1497, 1489, 1,    0,    0,    0,    1497, 1494, 1,    0,    0,
-      0,    1497, 1495, 1,    0,    0,    0,    1497, 1496, 1,    0,    0,
-      0,    1498, 269,  1,    0,    0,    0,    1499, 1500, 5,    130,  0,
-      0,    1500, 1501, 5,    2,    0,    0,    1501, 1502, 3,    232,  116,
-      0,    1502, 1503, 5,    8,    0,    0,    1503, 1506, 3,    232,  116,
-      0,    1504, 1505, 5,    8,    0,    0,    1505, 1507, 3,    232,  116,
-      0,    1506, 1504, 1,    0,    0,    0,    1506, 1507, 1,    0,    0,
-      0,    1507, 1508, 1,    0,    0,    0,    1508, 1509, 5,    3,    0,
-      0,    1509, 271,  1,    0,    0,    0,    1510, 1511, 5,    81,   0,
-      0,    1511, 1512, 5,    2,    0,    0,    1512, 1513, 3,    232,  116,
-      0,    1513, 1514, 5,    3,    0,    0,    1514, 273,  1,    0,    0,
-      0,    1515, 1516, 5,    131,  0,    0,    1516, 1517, 5,    2,    0,
-      0,    1517, 1518, 3,    232,  116,  0,    1518, 1519, 5,    8,    0,
-      0,    1519, 1522, 3,    232,  116,  0,    1520, 1521, 5,    8,    0,
-      0,    1521, 1523, 3,    232,  116,  0,    1522, 1520, 1,    0,    0,
-      0,    1522, 1523, 1,    0,    0,    0,    1523, 1524, 1,    0,    0,
-      0,    1524, 1525, 5,    3,    0,    0,    1525, 275,  1,    0,    0,
-      0,    1526, 1527, 5,    132,  0,    0,    1527, 1528, 5,    2,    0,
-      0,    1528, 1529, 3,    232,  116,  0,    1529, 1530, 5,    8,    0,
-      0,    1530, 1531, 3,    232,  116,  0,    1531, 1532, 5,    8,    0,
-      0,    1532, 1535, 3,    232,  116,  0,    1533, 1534, 5,    8,    0,
-      0,    1534, 1536, 3,    232,  116,  0,    1535, 1533, 1,    0,    0,
-      0,    1535, 1536, 1,    0,    0,    0,    1536, 1537, 1,    0,    0,
-      0,    1537, 1538, 5,    3,    0,    0,    1538, 277,  1,    0,    0,
-      0,    1539, 1540, 5,    133,  0,    0,    1540, 1541, 3,    108,  54,
-      0,    1541, 279,  1,    0,    0,    0,    1542, 1543, 5,    78,   0,
-      0,    1543, 1544, 5,    133,  0,    0,    1544, 1545, 3,    108,  54,
-      0,    1545, 281,  1,    0,    0,    0,    1546, 1547, 5,    134,  0,
-      0,    1547, 1549, 5,    2,    0,    0,    1548, 1550, 5,    33,   0,
-      0,    1549, 1548, 1,    0,    0,    0,    1549, 1550, 1,    0,    0,
-      0,    1550, 1553, 1,    0,    0,    0,    1551, 1554, 5,    1,    0,
-      0,    1552, 1554, 3,    232,  116,  0,    1553, 1551, 1,    0,    0,
-      0,    1553, 1552, 1,    0,    0,    0,    1554, 1555, 1,    0,    0,
-      0,    1555, 1619, 5,    3,    0,    0,    1556, 1557, 5,    135,  0,
-      0,    1557, 1559, 5,    2,    0,    0,    1558, 1560, 5,    33,   0,
-      0,    1559, 1558, 1,    0,    0,    0,    1559, 1560, 1,    0,    0,
-      0,    1560, 1561, 1,    0,    0,    0,    1561, 1562, 3,    232,  116,
-      0,    1562, 1563, 5,    3,    0,    0,    1563, 1619, 1,    0,    0,
-      0,    1564, 1565, 5,    136,  0,    0,    1565, 1567, 5,    2,    0,
-      0,    1566, 1568, 5,    33,   0,    0,    1567, 1566, 1,    0,    0,
-      0,    1567, 1568, 1,    0,    0,    0,    1568, 1569, 1,    0,    0,
-      0,    1569, 1570, 3,    232,  116,  0,    1570, 1571, 5,    3,    0,
-      0,    1571, 1619, 1,    0,    0,    0,    1572, 1573, 5,    137,  0,
-      0,    1573, 1575, 5,    2,    0,    0,    1574, 1576, 5,    33,   0,
-      0,    1575, 1574, 1,    0,    0,    0,    1575, 1576, 1,    0,    0,
-      0,    1576, 1577, 1,    0,    0,    0,    1577, 1578, 3,    232,  116,
-      0,    1578, 1579, 5,    3,    0,    0,    1579, 1619, 1,    0,    0,
-      0,    1580, 1581, 5,    138,  0,    0,    1581, 1583, 5,    2,    0,
-      0,    1582, 1584, 5,    33,   0,    0,    1583, 1582, 1,    0,    0,
-      0,    1583, 1584, 1,    0,    0,    0,    1584, 1585, 1,    0,    0,
-      0,    1585, 1586, 3,    232,  116,  0,    1586, 1587, 5,    3,    0,
-      0,    1587, 1619, 1,    0,    0,    0,    1588, 1589, 5,    139,  0,
-      0,    1589, 1591, 5,    2,    0,    0,    1590, 1592, 5,    33,   0,
-      0,    1591, 1590, 1,    0,    0,    0,    1591, 1592, 1,    0,    0,
-      0,    1592, 1593, 1,    0,    0,    0,    1593, 1594, 3,    232,  116,
-      0,    1594, 1595, 5,    3,    0,    0,    1595, 1619, 1,    0,    0,
-      0,    1596, 1597, 5,    140,  0,    0,    1597, 1599, 5,    2,    0,
-      0,    1598, 1600, 5,    33,   0,    0,    1599, 1598, 1,    0,    0,
-      0,    1599, 1600, 1,    0,    0,    0,    1600, 1601, 1,    0,    0,
-      0,    1601, 1602, 3,    232,  116,  0,    1602, 1603, 5,    3,    0,
-      0,    1603, 1619, 1,    0,    0,    0,    1604, 1605, 5,    43,   0,
-      0,    1605, 1607, 5,    2,    0,    0,    1606, 1608, 5,    33,   0,
-      0,    1607, 1606, 1,    0,    0,    0,    1607, 1608, 1,    0,    0,
-      0,    1608, 1609, 1,    0,    0,    0,    1609, 1614, 3,    232,  116,
-      0,    1610, 1611, 5,    6,    0,    0,    1611, 1612, 5,    141,  0,
-      0,    1612, 1613, 5,    20,   0,    0,    1613, 1615, 3,    298,  149,
-      0,    1614, 1610, 1,    0,    0,    0,    1614, 1615, 1,    0,    0,
-      0,    1615, 1616, 1,    0,    0,    0,    1616, 1617, 5,    3,    0,
-      0,    1617, 1619, 1,    0,    0,    0,    1618, 1546, 1,    0,    0,
-      0,    1618, 1556, 1,    0,    0,    0,    1618, 1564, 1,    0,    0,
-      0,    1618, 1572, 1,    0,    0,    0,    1618, 1580, 1,    0,    0,
-      0,    1618, 1588, 1,    0,    0,    0,    1618, 1596, 1,    0,    0,
-      0,    1618, 1604, 1,    0,    0,    0,    1619, 283,  1,    0,    0,
-      0,    1620, 1622, 3,    300,  150,  0,    1621, 1623, 3,    148,  74,
-      0,    1622, 1621, 1,    0,    0,    0,    1622, 1623, 1,    0,    0,
-      0,    1623, 285,  1,    0,    0,    0,    1624, 1628, 3,    298,  149,
-      0,    1625, 1629, 5,    148,  0,    0,    1626, 1627, 5,    27,   0,
-      0,    1627, 1629, 3,    300,  150,  0,    1628, 1625, 1,    0,    0,
-      0,    1628, 1626, 1,    0,    0,    0,    1628, 1629, 1,    0,    0,
-      0,    1629, 287,  1,    0,    0,    0,    1630, 1634, 3,    290,  145,
-      0,    1631, 1634, 3,    292,  146,  0,    1632, 1634, 3,    294,  147,
-      0,    1633, 1630, 1,    0,    0,    0,    1633, 1631, 1,    0,    0,
-      0,    1633, 1632, 1,    0,    0,    0,    1634, 289,  1,    0,    0,
-      0,    1635, 1636, 7,    4,    0,    0,    1636, 291,  1,    0,    0,
-      0,    1637, 1638, 7,    5,    0,    0,    1638, 293,  1,    0,    0,
-      0,    1639, 1640, 7,    6,    0,    0,    1640, 295,  1,    0,    0,
-      0,    1641, 1642, 7,    7,    0,    0,    1642, 297,  1,    0,    0,
-      0,    1643, 1644, 7,    8,    0,    0,    1644, 299,  1,    0,    0,
-      0,    1645, 1647, 5,    149,  0,    0,    1646, 1645, 1,    0,    0,
-      0,    1646, 1647, 1,    0,    0,    0,    1647, 1650, 1,    0,    0,
-      0,    1648, 1651, 3,    306,  153,  0,    1649, 1651, 3,    302,  151,
-      0,    1650, 1648, 1,    0,    0,    0,    1650, 1649, 1,    0,    0,
-      0,    1651, 301,  1,    0,    0,    0,    1652, 1655, 3,    308,  154,
-      0,    1653, 1655, 3,    310,  155,  0,    1654, 1652, 1,    0,    0,
-      0,    1654, 1653, 1,    0,    0,    0,    1655, 303,  1,    0,    0,
-      0,    1656, 1657, 7,    9,    0,    0,    1657, 305,  1,    0,    0,
-      0,    1658, 1659, 5,    142,  0,    0,    1659, 307,  1,    0,    0,
-      0,    1660, 1661, 5,    144,  0,    0,    1661, 309,  1,    0,    0,
-      0,    1662, 1663, 5,    143,  0,    0,    1663, 311,  1,    0,    0,
-      0,    163,  317,  324,  326,  340,  353,  358,  361,  365,  380,  389,
-      395,  399,  405,  408,  413,  417,  425,  434,  444,  449,  452,  455,
-      458,  464,  472,  477,  483,  489,  494,  500,  502,  506,  509,  513,
-      516,  520,  523,  527,  530,  534,  537,  541,  544,  546,  559,  569,
-      574,  576,  591,  595,  600,  604,  610,  616,  622,  630,  638,  658,
-      662,  665,  670,  686,  690,  693,  702,  713,  717,  720,  724,  731,
-      740,  744,  749,  754,  759,  764,  767,  772,  774,  784,  795,  812,
-      819,  829,  833,  839,  848,  853,  860,  870,  879,  887,  894,  899,
-      908,  913,  917,  924,  926,  934,  937,  945,  949,  954,  961,  972,
-      975,  980,  984,  999,  1006, 1018, 1026, 1031, 1036, 1048, 1057, 1060,
-      1063, 1070, 1072, 1078, 1086, 1096, 1104, 1110, 1114, 1118, 1122, 1132,
-      1141, 1149, 1172, 1180, 1188, 1196, 1201, 1208, 1213, 1228, 1237, 1283,
-      1497, 1506, 1522, 1535, 1549, 1553, 1559, 1567, 1575, 1583, 1591, 1599,
-      1607, 1614, 1618, 1622, 1628, 1633, 1646, 1650, 1654};
-  staticData->serializedATN = antlr4::atn::SerializedATNView(
-      serializedATNSegment,
-      sizeof(serializedATNSegment) / sizeof(serializedATNSegment[0]));
+  	4,1,176,1709,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,
+  	2,7,7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,2,14,
+  	7,14,2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,20,7,20,2,21,
+  	7,21,2,22,7,22,2,23,7,23,2,24,7,24,2,25,7,25,2,26,7,26,2,27,7,27,2,28,
+  	7,28,2,29,7,29,2,30,7,30,2,31,7,31,2,32,7,32,2,33,7,33,2,34,7,34,2,35,
+  	7,35,2,36,7,36,2,37,7,37,2,38,7,38,2,39,7,39,2,40,7,40,2,41,7,41,2,42,
+  	7,42,2,43,7,43,2,44,7,44,2,45,7,45,2,46,7,46,2,47,7,47,2,48,7,48,2,49,
+  	7,49,2,50,7,50,2,51,7,51,2,52,7,52,2,53,7,53,2,54,7,54,2,55,7,55,2,56,
+  	7,56,2,57,7,57,2,58,7,58,2,59,7,59,2,60,7,60,2,61,7,61,2,62,7,62,2,63,
+  	7,63,2,64,7,64,2,65,7,65,2,66,7,66,2,67,7,67,2,68,7,68,2,69,7,69,2,70,
+  	7,70,2,71,7,71,2,72,7,72,2,73,7,73,2,74,7,74,2,75,7,75,2,76,7,76,2,77,
+  	7,77,2,78,7,78,2,79,7,79,2,80,7,80,2,81,7,81,2,82,7,82,2,83,7,83,2,84,
+  	7,84,2,85,7,85,2,86,7,86,2,87,7,87,2,88,7,88,2,89,7,89,2,90,7,90,2,91,
+  	7,91,2,92,7,92,2,93,7,93,2,94,7,94,2,95,7,95,2,96,7,96,2,97,7,97,2,98,
+  	7,98,2,99,7,99,2,100,7,100,2,101,7,101,2,102,7,102,2,103,7,103,2,104,
+  	7,104,2,105,7,105,2,106,7,106,2,107,7,107,2,108,7,108,2,109,7,109,2,110,
+  	7,110,2,111,7,111,2,112,7,112,2,113,7,113,2,114,7,114,2,115,7,115,2,116,
+  	7,116,2,117,7,117,2,118,7,118,2,119,7,119,2,120,7,120,2,121,7,121,2,122,
+  	7,122,2,123,7,123,2,124,7,124,2,125,7,125,2,126,7,126,2,127,7,127,2,128,
+  	7,128,2,129,7,129,2,130,7,130,2,131,7,131,2,132,7,132,2,133,7,133,2,134,
+  	7,134,2,135,7,135,2,136,7,136,2,137,7,137,2,138,7,138,2,139,7,139,2,140,
+  	7,140,2,141,7,141,2,142,7,142,2,143,7,143,2,144,7,144,2,145,7,145,2,146,
+  	7,146,2,147,7,147,2,148,7,148,2,149,7,149,2,150,7,150,2,151,7,151,2,152,
+  	7,152,2,153,7,153,2,154,7,154,2,155,7,155,2,156,7,156,2,157,7,157,2,158,
+  	7,158,2,159,7,159,2,160,7,160,2,161,7,161,2,162,7,162,1,0,1,0,1,0,1,0,
+  	1,0,3,0,332,8,0,1,0,1,0,1,0,1,1,1,1,5,1,339,8,1,10,1,12,1,342,9,1,1,2,
+  	1,2,1,2,1,3,1,3,1,3,1,3,1,4,1,4,5,4,353,8,4,10,4,12,4,356,9,4,1,4,1,4,
+  	1,4,1,5,1,5,1,5,1,5,1,5,1,6,1,6,3,6,368,8,6,1,6,4,6,371,8,6,11,6,12,6,
+  	372,1,6,3,6,376,8,6,1,7,1,7,3,7,380,8,7,1,8,1,8,1,8,1,8,1,9,1,9,1,9,1,
+  	9,1,10,1,10,1,10,5,10,393,8,10,10,10,12,10,396,9,10,1,10,1,10,1,10,1,
+  	10,5,10,402,8,10,10,10,12,10,405,9,10,1,10,1,10,1,10,3,10,410,8,10,1,
+  	10,1,10,3,10,414,8,10,1,11,1,11,4,11,418,8,11,11,11,12,11,419,1,11,3,
+  	11,423,8,11,1,11,5,11,426,8,11,10,11,12,11,429,9,11,1,11,3,11,432,8,11,
+  	1,11,1,11,1,12,1,12,5,12,438,8,12,10,12,12,12,441,9,12,1,12,1,12,1,12,
+  	1,13,1,13,1,13,3,13,449,8,13,1,14,1,14,1,15,1,15,1,15,1,16,1,16,1,17,
+  	3,17,459,8,17,1,17,1,17,1,18,3,18,464,8,18,1,18,3,18,467,8,18,1,18,3,
+  	18,470,8,18,1,18,3,18,473,8,18,1,19,1,19,4,19,477,8,19,11,19,12,19,478,
+  	1,20,1,20,1,20,1,20,1,20,1,20,3,20,487,8,20,1,20,1,20,1,20,3,20,492,8,
+  	20,1,21,1,21,4,21,496,8,21,11,21,12,21,497,1,22,1,22,1,23,1,23,3,23,504,
+  	8,23,1,23,4,23,507,8,23,11,23,12,23,508,1,24,1,24,1,24,1,24,3,24,515,
+  	8,24,3,24,517,8,24,1,25,1,25,3,25,521,8,25,1,25,3,25,524,8,25,1,25,1,
+  	25,3,25,528,8,25,1,25,3,25,531,8,25,1,25,1,25,3,25,535,8,25,1,25,3,25,
+  	538,8,25,1,25,1,25,3,25,542,8,25,1,25,3,25,545,8,25,1,25,1,25,3,25,549,
+  	8,25,1,25,3,25,552,8,25,1,25,1,25,3,25,556,8,25,1,25,3,25,559,8,25,3,
+  	25,561,8,25,1,26,1,26,1,26,1,27,1,27,1,27,1,28,1,28,1,28,1,29,1,29,3,
+  	29,574,8,29,1,30,1,30,1,30,1,30,1,30,1,30,5,30,582,8,30,10,30,12,30,585,
+  	9,30,1,30,1,30,3,30,589,8,30,3,30,591,8,30,1,30,1,30,1,31,1,31,1,31,1,
+  	31,1,31,1,31,1,31,1,31,1,31,1,31,1,31,3,31,606,8,31,1,32,1,32,3,32,610,
+  	8,32,1,32,1,32,1,32,3,32,615,8,32,1,33,1,33,3,33,619,8,33,1,33,1,33,1,
+  	34,1,34,3,34,625,8,34,1,34,1,34,1,35,1,35,3,35,631,8,35,1,35,1,35,1,36,
+  	1,36,3,36,637,8,36,1,36,1,36,1,36,1,36,1,37,1,37,3,37,645,8,37,1,37,1,
+  	37,1,37,1,37,1,38,1,38,3,38,653,8,38,1,38,1,38,1,38,1,38,1,39,1,39,1,
+  	39,1,39,1,40,1,40,1,40,1,40,1,41,1,41,1,41,1,41,1,42,1,42,3,42,673,8,
+  	42,1,42,1,42,3,42,677,8,42,1,42,3,42,680,8,42,1,42,5,42,683,8,42,10,42,
+  	12,42,686,9,42,1,42,1,42,1,42,1,43,1,43,1,43,1,44,1,44,1,44,1,45,1,45,
+  	1,45,1,45,3,45,701,8,45,1,46,1,46,3,46,705,8,46,1,46,3,46,708,8,46,1,
+  	47,1,47,1,47,1,48,1,48,1,48,1,48,3,48,717,8,48,1,49,1,49,1,49,1,49,1,
+  	50,1,50,1,50,1,50,1,51,3,51,728,8,51,1,51,1,51,3,51,732,8,51,1,51,3,51,
+  	735,8,51,5,51,737,8,51,10,51,12,51,740,9,51,1,52,1,52,1,52,1,52,3,52,
+  	746,8,52,1,52,1,52,1,53,1,53,1,53,5,53,753,8,53,10,53,12,53,756,9,53,
+  	1,53,3,53,759,8,53,1,54,1,54,1,54,3,54,764,8,54,1,54,1,54,1,55,3,55,769,
+  	8,55,1,55,5,55,772,8,55,10,55,12,55,775,9,55,1,56,1,56,3,56,779,8,56,
+  	1,56,3,56,782,8,56,1,57,1,57,1,57,3,57,787,8,57,3,57,789,8,57,1,58,1,
+  	58,1,58,1,58,1,58,1,58,1,58,1,58,3,58,799,8,58,1,59,1,59,1,59,1,60,1,
+  	60,1,60,1,60,1,61,1,61,3,61,810,8,61,1,61,1,61,1,61,1,62,1,62,1,62,1,
+  	62,1,62,1,62,1,62,1,63,1,63,1,63,1,64,1,64,3,64,827,8,64,1,65,1,65,1,
+  	65,5,65,832,8,65,10,65,12,65,835,9,65,1,65,1,65,1,66,1,66,1,66,5,66,842,
+  	8,66,10,66,12,66,845,9,66,1,66,3,66,848,8,66,1,66,1,66,5,66,852,8,66,
+  	10,66,12,66,855,9,66,1,66,1,66,1,67,1,67,5,67,861,8,67,10,67,12,67,864,
+  	9,67,1,67,1,67,3,67,868,8,67,1,68,1,68,1,68,1,68,1,68,3,68,875,8,68,1,
+  	69,1,69,1,69,1,70,1,70,1,70,5,70,883,8,70,10,70,12,70,886,9,70,1,71,1,
+  	71,1,71,1,72,1,72,1,72,3,72,894,8,72,1,73,1,73,1,73,1,74,1,74,1,74,3,
+  	74,902,8,74,1,74,1,74,1,74,5,74,907,8,74,10,74,12,74,910,9,74,1,74,1,
+  	74,3,74,914,8,74,1,75,1,75,1,75,1,75,1,75,5,75,921,8,75,10,75,12,75,924,
+  	9,75,1,75,1,75,3,75,928,8,75,1,76,1,76,3,76,932,8,76,1,76,1,76,1,77,1,
+  	77,1,77,3,77,939,8,77,3,77,941,8,77,1,78,1,78,1,78,1,78,1,78,1,78,3,78,
+  	949,8,78,1,79,3,79,952,8,79,1,80,1,80,1,80,1,80,1,80,1,80,3,80,960,8,
+  	80,5,80,962,8,80,10,80,12,80,965,9,80,1,81,1,81,3,81,969,8,81,1,82,1,
+  	82,1,82,5,82,974,8,82,10,82,12,82,977,9,82,1,83,1,83,1,84,1,84,1,84,1,
+  	84,1,84,1,84,3,84,987,8,84,1,85,3,85,990,8,85,1,86,1,86,1,86,3,86,995,
+  	8,86,5,86,997,8,86,10,86,12,86,1000,9,86,1,87,1,87,1,88,1,88,1,89,1,89,
+  	1,89,1,90,1,90,1,90,1,91,1,91,3,91,1014,8,91,1,92,1,92,1,92,5,92,1019,
+  	8,92,10,92,12,92,1022,9,92,1,93,1,93,1,94,1,94,1,95,1,95,1,95,5,95,1031,
+  	8,95,10,95,12,95,1034,9,95,1,96,1,96,1,96,5,96,1039,8,96,10,96,12,96,
+  	1042,9,96,1,97,1,97,3,97,1046,8,97,1,98,1,98,1,98,3,98,1051,8,98,1,99,
+  	1,99,1,99,1,99,1,99,1,99,1,99,1,99,3,99,1061,8,99,1,99,1,99,3,99,1065,
+  	8,99,1,100,1,100,1,101,1,101,1,101,1,102,1,102,1,102,1,102,1,103,1,103,
+  	1,103,1,104,1,104,1,105,1,105,1,106,1,106,1,107,1,107,1,107,1,107,1,107,
+  	1,107,1,107,1,107,3,107,1093,8,107,1,108,1,108,1,108,1,108,1,108,5,108,
+  	1100,8,108,10,108,12,108,1103,9,108,3,108,1105,8,108,1,108,3,108,1108,
+  	8,108,1,109,1,109,1,109,1,109,1,109,3,109,1115,8,109,3,109,1117,8,109,
+  	1,110,1,110,1,111,1,111,3,111,1123,8,111,1,112,1,112,1,112,1,112,1,113,
+  	1,113,3,113,1131,8,113,1,114,1,114,1,114,1,114,1,115,1,115,4,115,1139,
+  	8,115,11,115,12,115,1140,1,115,1,115,1,116,1,116,4,116,1147,8,116,11,
+  	116,12,116,1148,1,116,1,116,1,117,1,117,3,117,1155,8,117,1,118,1,118,
+  	3,118,1159,8,118,1,119,1,119,3,119,1163,8,119,1,120,1,120,3,120,1167,
+  	8,120,1,121,1,121,1,122,1,122,1,122,1,122,1,122,1,122,3,122,1177,8,122,
+  	1,123,1,123,1,124,1,124,1,124,5,124,1184,8,124,10,124,12,124,1187,9,124,
+  	1,125,1,125,1,125,5,125,1192,8,125,10,125,12,125,1195,9,125,1,126,1,126,
+  	1,127,1,127,1,127,1,127,1,127,1,127,1,127,1,127,1,127,1,127,1,127,1,127,
+  	1,127,1,127,1,127,1,127,1,127,1,127,3,127,1217,8,127,1,128,1,128,1,129,
+  	1,129,5,129,1223,8,129,10,129,12,129,1226,9,129,1,130,1,130,1,130,1,130,
+  	1,130,3,130,1233,8,130,1,131,1,131,1,132,1,132,1,133,1,133,3,133,1241,
+  	8,133,1,133,5,133,1244,8,133,10,133,12,133,1247,9,133,1,134,1,134,5,134,
+  	1251,8,134,10,134,12,134,1254,9,134,1,135,1,135,3,135,1258,8,135,1,136,
+  	1,136,1,136,1,137,1,137,1,137,1,138,1,138,1,138,1,138,1,138,1,138,1,138,
+  	3,138,1273,8,138,1,139,1,139,1,139,1,139,1,139,1,139,1,139,3,139,1282,
+  	8,139,1,140,1,140,1,140,1,140,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,3,141,1328,8,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,
+  	1,141,1,141,1,141,1,141,1,141,1,141,1,141,1,141,3,141,1542,8,141,1,142,
+  	1,142,1,142,1,142,1,142,1,142,1,142,3,142,1551,8,142,1,142,1,142,1,143,
+  	1,143,1,143,1,143,1,143,1,144,1,144,1,144,1,144,1,144,1,144,1,144,3,144,
+  	1567,8,144,1,144,1,144,1,145,1,145,1,145,1,145,1,145,1,145,1,145,1,145,
+  	1,145,3,145,1580,8,145,1,145,1,145,1,146,1,146,1,146,1,147,1,147,1,147,
+  	1,147,1,148,1,148,1,148,3,148,1594,8,148,1,148,1,148,3,148,1598,8,148,
+  	1,148,1,148,1,148,1,148,3,148,1604,8,148,1,148,1,148,1,148,1,148,1,148,
+  	1,148,3,148,1612,8,148,1,148,1,148,1,148,1,148,1,148,1,148,3,148,1620,
+  	8,148,1,148,1,148,1,148,1,148,1,148,1,148,3,148,1628,8,148,1,148,1,148,
+  	1,148,1,148,1,148,1,148,3,148,1636,8,148,1,148,1,148,1,148,1,148,1,148,
+  	1,148,3,148,1644,8,148,1,148,1,148,1,148,1,148,1,148,1,148,3,148,1652,
+  	8,148,1,148,1,148,1,148,1,148,1,148,3,148,1659,8,148,1,148,1,148,3,148,
+  	1663,8,148,1,149,1,149,3,149,1667,8,149,1,150,1,150,1,150,1,150,3,150,
+  	1673,8,150,1,151,1,151,1,151,3,151,1678,8,151,1,152,1,152,1,153,1,153,
+  	1,154,1,154,1,155,1,155,1,156,1,156,1,157,3,157,1691,8,157,1,157,1,157,
+  	3,157,1695,8,157,1,158,1,158,3,158,1699,8,158,1,159,1,159,1,160,1,160,
+  	1,161,1,161,1,162,1,162,1,162,0,0,163,0,2,4,6,8,10,12,14,16,18,20,22,
+  	24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,
+  	70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,
+  	112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,
+  	148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,
+  	184,186,188,190,192,194,196,198,200,202,204,206,208,210,212,214,216,218,
+  	220,222,224,226,228,230,232,234,236,238,240,242,244,246,248,250,252,254,
+  	256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,
+  	292,294,296,298,300,302,304,306,308,310,312,314,316,318,320,322,324,0,
+  	9,1,0,33,34,1,0,47,48,1,0,146,147,1,0,150,152,1,0,153,155,1,0,156,158,
+  	1,0,28,29,1,0,160,163,2,0,145,145,166,166,1826,0,326,1,0,0,0,2,340,1,
+  	0,0,0,4,343,1,0,0,0,6,346,1,0,0,0,8,350,1,0,0,0,10,360,1,0,0,0,12,365,
+  	1,0,0,0,14,379,1,0,0,0,16,381,1,0,0,0,18,385,1,0,0,0,20,389,1,0,0,0,22,
+  	415,1,0,0,0,24,435,1,0,0,0,26,445,1,0,0,0,28,450,1,0,0,0,30,452,1,0,0,
+  	0,32,455,1,0,0,0,34,458,1,0,0,0,36,463,1,0,0,0,38,474,1,0,0,0,40,491,
+  	1,0,0,0,42,493,1,0,0,0,44,499,1,0,0,0,46,503,1,0,0,0,48,516,1,0,0,0,50,
+  	560,1,0,0,0,52,562,1,0,0,0,54,565,1,0,0,0,56,568,1,0,0,0,58,573,1,0,0,
+  	0,60,575,1,0,0,0,62,605,1,0,0,0,64,607,1,0,0,0,66,616,1,0,0,0,68,622,
+  	1,0,0,0,70,628,1,0,0,0,72,634,1,0,0,0,74,642,1,0,0,0,76,650,1,0,0,0,78,
+  	658,1,0,0,0,80,662,1,0,0,0,82,666,1,0,0,0,84,672,1,0,0,0,86,690,1,0,0,
+  	0,88,693,1,0,0,0,90,696,1,0,0,0,92,707,1,0,0,0,94,709,1,0,0,0,96,716,
+  	1,0,0,0,98,718,1,0,0,0,100,722,1,0,0,0,102,727,1,0,0,0,104,741,1,0,0,
+  	0,106,749,1,0,0,0,108,760,1,0,0,0,110,768,1,0,0,0,112,776,1,0,0,0,114,
+  	783,1,0,0,0,116,798,1,0,0,0,118,800,1,0,0,0,120,803,1,0,0,0,122,807,1,
+  	0,0,0,124,814,1,0,0,0,126,821,1,0,0,0,128,826,1,0,0,0,130,828,1,0,0,0,
+  	132,847,1,0,0,0,134,867,1,0,0,0,136,874,1,0,0,0,138,876,1,0,0,0,140,879,
+  	1,0,0,0,142,887,1,0,0,0,144,893,1,0,0,0,146,895,1,0,0,0,148,913,1,0,0,
+  	0,150,927,1,0,0,0,152,929,1,0,0,0,154,935,1,0,0,0,156,948,1,0,0,0,158,
+  	951,1,0,0,0,160,953,1,0,0,0,162,968,1,0,0,0,164,970,1,0,0,0,166,978,1,
+  	0,0,0,168,986,1,0,0,0,170,989,1,0,0,0,172,991,1,0,0,0,174,1001,1,0,0,
+  	0,176,1003,1,0,0,0,178,1005,1,0,0,0,180,1008,1,0,0,0,182,1013,1,0,0,0,
+  	184,1015,1,0,0,0,186,1023,1,0,0,0,188,1025,1,0,0,0,190,1027,1,0,0,0,192,
+  	1035,1,0,0,0,194,1043,1,0,0,0,196,1050,1,0,0,0,198,1064,1,0,0,0,200,1066,
+  	1,0,0,0,202,1068,1,0,0,0,204,1071,1,0,0,0,206,1075,1,0,0,0,208,1078,1,
+  	0,0,0,210,1080,1,0,0,0,212,1082,1,0,0,0,214,1092,1,0,0,0,216,1107,1,0,
+  	0,0,218,1116,1,0,0,0,220,1118,1,0,0,0,222,1122,1,0,0,0,224,1124,1,0,0,
+  	0,226,1130,1,0,0,0,228,1132,1,0,0,0,230,1136,1,0,0,0,232,1144,1,0,0,0,
+  	234,1154,1,0,0,0,236,1158,1,0,0,0,238,1162,1,0,0,0,240,1166,1,0,0,0,242,
+  	1168,1,0,0,0,244,1176,1,0,0,0,246,1178,1,0,0,0,248,1180,1,0,0,0,250,1188,
+  	1,0,0,0,252,1196,1,0,0,0,254,1198,1,0,0,0,256,1218,1,0,0,0,258,1220,1,
+  	0,0,0,260,1232,1,0,0,0,262,1234,1,0,0,0,264,1236,1,0,0,0,266,1240,1,0,
+  	0,0,268,1248,1,0,0,0,270,1257,1,0,0,0,272,1259,1,0,0,0,274,1262,1,0,0,
+  	0,276,1272,1,0,0,0,278,1281,1,0,0,0,280,1283,1,0,0,0,282,1541,1,0,0,0,
+  	284,1543,1,0,0,0,286,1554,1,0,0,0,288,1559,1,0,0,0,290,1570,1,0,0,0,292,
+  	1583,1,0,0,0,294,1586,1,0,0,0,296,1662,1,0,0,0,298,1664,1,0,0,0,300,1668,
+  	1,0,0,0,302,1677,1,0,0,0,304,1679,1,0,0,0,306,1681,1,0,0,0,308,1683,1,
+  	0,0,0,310,1685,1,0,0,0,312,1687,1,0,0,0,314,1690,1,0,0,0,316,1698,1,0,
+  	0,0,318,1700,1,0,0,0,320,1702,1,0,0,0,322,1704,1,0,0,0,324,1706,1,0,0,
+  	0,326,331,3,2,1,0,327,332,3,8,4,0,328,332,3,20,10,0,329,332,3,22,11,0,
+  	330,332,3,24,12,0,331,327,1,0,0,0,331,328,1,0,0,0,331,329,1,0,0,0,331,
+  	330,1,0,0,0,332,333,1,0,0,0,333,334,3,58,29,0,334,335,5,0,0,1,335,1,1,
+  	0,0,0,336,339,3,4,2,0,337,339,3,6,3,0,338,336,1,0,0,0,338,337,1,0,0,0,
+  	339,342,1,0,0,0,340,338,1,0,0,0,340,341,1,0,0,0,341,3,1,0,0,0,342,340,
+  	1,0,0,0,343,344,5,30,0,0,344,345,3,320,160,0,345,5,1,0,0,0,346,347,5,
+  	31,0,0,347,348,5,143,0,0,348,349,3,320,160,0,349,7,1,0,0,0,350,354,3,
+  	12,6,0,351,353,3,26,13,0,352,351,1,0,0,0,353,356,1,0,0,0,354,352,1,0,
+  	0,0,354,355,1,0,0,0,355,357,1,0,0,0,356,354,1,0,0,0,357,358,3,34,17,0,
+  	358,359,3,36,18,0,359,9,1,0,0,0,360,361,3,12,6,0,361,362,3,34,17,0,362,
+  	363,3,36,18,0,363,364,3,58,29,0,364,11,1,0,0,0,365,367,5,32,0,0,366,368,
+  	7,0,0,0,367,366,1,0,0,0,367,368,1,0,0,0,368,375,1,0,0,0,369,371,3,14,
+  	7,0,370,369,1,0,0,0,371,372,1,0,0,0,372,370,1,0,0,0,372,373,1,0,0,0,373,
+  	376,1,0,0,0,374,376,5,1,0,0,375,370,1,0,0,0,375,374,1,0,0,0,376,13,1,
+  	0,0,0,377,380,3,242,121,0,378,380,3,16,8,0,379,377,1,0,0,0,379,378,1,
+  	0,0,0,380,15,1,0,0,0,381,382,5,2,0,0,382,383,3,18,9,0,383,384,5,3,0,0,
+  	384,17,1,0,0,0,385,386,3,246,123,0,386,387,5,35,0,0,387,388,3,242,121,
+  	0,388,19,1,0,0,0,389,413,5,36,0,0,390,394,3,152,76,0,391,393,3,26,13,
+  	0,392,391,1,0,0,0,393,396,1,0,0,0,394,392,1,0,0,0,394,395,1,0,0,0,395,
+  	397,1,0,0,0,396,394,1,0,0,0,397,398,3,34,17,0,398,399,3,36,18,0,399,414,
+  	1,0,0,0,400,402,3,26,13,0,401,400,1,0,0,0,402,405,1,0,0,0,403,401,1,0,
+  	0,0,403,404,1,0,0,0,404,406,1,0,0,0,405,403,1,0,0,0,406,407,5,37,0,0,
+  	407,409,5,4,0,0,408,410,3,106,53,0,409,408,1,0,0,0,409,410,1,0,0,0,410,
+  	411,1,0,0,0,411,412,5,5,0,0,412,414,3,36,18,0,413,390,1,0,0,0,413,403,
+  	1,0,0,0,414,21,1,0,0,0,415,422,5,38,0,0,416,418,3,240,120,0,417,416,1,
+  	0,0,0,418,419,1,0,0,0,419,417,1,0,0,0,419,420,1,0,0,0,420,423,1,0,0,0,
+  	421,423,5,1,0,0,422,417,1,0,0,0,422,421,1,0,0,0,423,427,1,0,0,0,424,426,
+  	3,26,13,0,425,424,1,0,0,0,426,429,1,0,0,0,427,425,1,0,0,0,427,428,1,0,
+  	0,0,428,431,1,0,0,0,429,427,1,0,0,0,430,432,3,34,17,0,431,430,1,0,0,0,
+  	431,432,1,0,0,0,432,433,1,0,0,0,433,434,3,36,18,0,434,23,1,0,0,0,435,
+  	439,5,39,0,0,436,438,3,26,13,0,437,436,1,0,0,0,438,441,1,0,0,0,439,437,
+  	1,0,0,0,439,440,1,0,0,0,440,442,1,0,0,0,441,439,1,0,0,0,442,443,3,34,
+  	17,0,443,444,3,36,18,0,444,25,1,0,0,0,445,448,5,40,0,0,446,449,3,28,14,
+  	0,447,449,3,30,15,0,448,446,1,0,0,0,448,447,1,0,0,0,449,27,1,0,0,0,450,
+  	451,3,32,16,0,451,29,1,0,0,0,452,453,5,41,0,0,453,454,3,32,16,0,454,31,
+  	1,0,0,0,455,456,3,314,157,0,456,33,1,0,0,0,457,459,5,37,0,0,458,457,1,
+  	0,0,0,458,459,1,0,0,0,459,460,1,0,0,0,460,461,3,108,54,0,461,35,1,0,0,
+  	0,462,464,3,38,19,0,463,462,1,0,0,0,463,464,1,0,0,0,464,466,1,0,0,0,465,
+  	467,3,42,21,0,466,465,1,0,0,0,466,467,1,0,0,0,467,469,1,0,0,0,468,470,
+  	3,46,23,0,469,468,1,0,0,0,469,470,1,0,0,0,470,472,1,0,0,0,471,473,3,50,
+  	25,0,472,471,1,0,0,0,472,473,1,0,0,0,473,37,1,0,0,0,474,476,5,42,0,0,
+  	475,477,3,40,20,0,476,475,1,0,0,0,477,478,1,0,0,0,478,476,1,0,0,0,478,
+  	479,1,0,0,0,479,39,1,0,0,0,480,492,3,282,141,0,481,492,3,146,73,0,482,
+  	483,5,2,0,0,483,486,3,246,123,0,484,485,5,35,0,0,485,487,3,242,121,0,
+  	486,484,1,0,0,0,486,487,1,0,0,0,487,488,1,0,0,0,488,489,5,3,0,0,489,492,
+  	1,0,0,0,490,492,3,242,121,0,491,480,1,0,0,0,491,481,1,0,0,0,491,482,1,
+  	0,0,0,491,490,1,0,0,0,492,41,1,0,0,0,493,495,5,44,0,0,494,496,3,44,22,
+  	0,495,494,1,0,0,0,496,497,1,0,0,0,497,495,1,0,0,0,497,498,1,0,0,0,498,
+  	43,1,0,0,0,499,500,3,144,72,0,500,45,1,0,0,0,501,504,5,45,0,0,502,504,
+  	5,46,0,0,503,501,1,0,0,0,503,502,1,0,0,0,504,506,1,0,0,0,505,507,3,48,
+  	24,0,506,505,1,0,0,0,507,508,1,0,0,0,508,506,1,0,0,0,508,509,1,0,0,0,
+  	509,47,1,0,0,0,510,511,7,1,0,0,511,517,3,280,140,0,512,515,3,144,72,0,
+  	513,515,3,242,121,0,514,512,1,0,0,0,514,513,1,0,0,0,515,517,1,0,0,0,516,
+  	510,1,0,0,0,516,514,1,0,0,0,517,49,1,0,0,0,518,520,3,52,26,0,519,521,
+  	3,54,27,0,520,519,1,0,0,0,520,521,1,0,0,0,521,523,1,0,0,0,522,524,3,56,
+  	28,0,523,522,1,0,0,0,523,524,1,0,0,0,524,561,1,0,0,0,525,527,3,52,26,
+  	0,526,528,3,56,28,0,527,526,1,0,0,0,527,528,1,0,0,0,528,530,1,0,0,0,529,
+  	531,3,54,27,0,530,529,1,0,0,0,530,531,1,0,0,0,531,561,1,0,0,0,532,534,
+  	3,54,27,0,533,535,3,52,26,0,534,533,1,0,0,0,534,535,1,0,0,0,535,537,1,
+  	0,0,0,536,538,3,56,28,0,537,536,1,0,0,0,537,538,1,0,0,0,538,561,1,0,0,
+  	0,539,541,3,54,27,0,540,542,3,56,28,0,541,540,1,0,0,0,541,542,1,0,0,0,
+  	542,544,1,0,0,0,543,545,3,52,26,0,544,543,1,0,0,0,544,545,1,0,0,0,545,
+  	561,1,0,0,0,546,548,3,56,28,0,547,549,3,54,27,0,548,547,1,0,0,0,548,549,
+  	1,0,0,0,549,551,1,0,0,0,550,552,3,52,26,0,551,550,1,0,0,0,551,552,1,0,
+  	0,0,552,561,1,0,0,0,553,555,3,56,28,0,554,556,3,52,26,0,555,554,1,0,0,
+  	0,555,556,1,0,0,0,556,558,1,0,0,0,557,559,3,54,27,0,558,557,1,0,0,0,558,
+  	559,1,0,0,0,559,561,1,0,0,0,560,518,1,0,0,0,560,525,1,0,0,0,560,532,1,
+  	0,0,0,560,539,1,0,0,0,560,546,1,0,0,0,560,553,1,0,0,0,561,51,1,0,0,0,
+  	562,563,5,49,0,0,563,564,3,220,110,0,564,53,1,0,0,0,565,566,5,50,0,0,
+  	566,567,3,220,110,0,567,55,1,0,0,0,568,569,5,51,0,0,569,570,3,220,110,
+  	0,570,57,1,0,0,0,571,572,5,52,0,0,572,574,3,128,64,0,573,571,1,0,0,0,
+  	573,574,1,0,0,0,574,59,1,0,0,0,575,590,3,2,1,0,576,583,3,62,31,0,577,
+  	578,5,6,0,0,578,579,3,2,1,0,579,580,3,62,31,0,580,582,1,0,0,0,581,577,
+  	1,0,0,0,582,585,1,0,0,0,583,581,1,0,0,0,583,584,1,0,0,0,584,588,1,0,0,
+  	0,585,583,1,0,0,0,586,587,5,6,0,0,587,589,3,2,1,0,588,586,1,0,0,0,588,
+  	589,1,0,0,0,589,591,1,0,0,0,590,576,1,0,0,0,590,591,1,0,0,0,591,592,1,
+  	0,0,0,592,593,5,0,0,1,593,61,1,0,0,0,594,606,3,64,32,0,595,606,3,66,33,
+  	0,596,606,3,68,34,0,597,606,3,72,36,0,598,606,3,74,37,0,599,606,3,76,
+  	38,0,600,606,3,70,35,0,601,606,3,78,39,0,602,606,3,80,40,0,603,606,3,
+  	82,41,0,604,606,3,84,42,0,605,594,1,0,0,0,605,595,1,0,0,0,605,596,1,0,
+  	0,0,605,597,1,0,0,0,605,598,1,0,0,0,605,599,1,0,0,0,605,600,1,0,0,0,605,
+  	601,1,0,0,0,605,602,1,0,0,0,605,603,1,0,0,0,605,604,1,0,0,0,606,63,1,
+  	0,0,0,607,609,5,53,0,0,608,610,5,54,0,0,609,608,1,0,0,0,609,610,1,0,0,
+  	0,610,611,1,0,0,0,611,614,3,314,157,0,612,613,5,55,0,0,613,615,3,94,47,
+  	0,614,612,1,0,0,0,614,615,1,0,0,0,615,65,1,0,0,0,616,618,5,56,0,0,617,
+  	619,5,54,0,0,618,617,1,0,0,0,618,619,1,0,0,0,619,620,1,0,0,0,620,621,
+  	3,96,48,0,621,67,1,0,0,0,622,624,5,57,0,0,623,625,5,54,0,0,624,623,1,
+  	0,0,0,624,625,1,0,0,0,625,626,1,0,0,0,626,627,3,96,48,0,627,69,1,0,0,
+  	0,628,630,5,58,0,0,629,631,5,54,0,0,630,629,1,0,0,0,630,631,1,0,0,0,631,
+  	632,1,0,0,0,632,633,3,94,47,0,633,71,1,0,0,0,634,636,5,59,0,0,635,637,
+  	5,54,0,0,636,635,1,0,0,0,636,637,1,0,0,0,637,638,1,0,0,0,638,639,3,92,
+  	46,0,639,640,5,60,0,0,640,641,3,92,46,0,641,73,1,0,0,0,642,644,5,62,0,
+  	0,643,645,5,54,0,0,644,643,1,0,0,0,644,645,1,0,0,0,645,646,1,0,0,0,646,
+  	647,3,92,46,0,647,648,5,60,0,0,648,649,3,92,46,0,649,75,1,0,0,0,650,652,
+  	5,63,0,0,651,653,5,54,0,0,652,651,1,0,0,0,652,653,1,0,0,0,653,654,1,0,
+  	0,0,654,655,3,92,46,0,655,656,5,60,0,0,656,657,3,92,46,0,657,77,1,0,0,
+  	0,658,659,5,64,0,0,659,660,5,61,0,0,660,661,3,100,50,0,661,79,1,0,0,0,
+  	662,663,5,65,0,0,663,664,5,61,0,0,664,665,3,100,50,0,665,81,1,0,0,0,666,
+  	667,5,65,0,0,667,668,5,37,0,0,668,669,3,98,49,0,669,83,1,0,0,0,670,671,
+  	5,66,0,0,671,673,3,314,157,0,672,670,1,0,0,0,672,673,1,0,0,0,673,679,
+  	1,0,0,0,674,676,3,86,43,0,675,677,3,88,44,0,676,675,1,0,0,0,676,677,1,
+  	0,0,0,677,680,1,0,0,0,678,680,3,88,44,0,679,674,1,0,0,0,679,678,1,0,0,
+  	0,680,684,1,0,0,0,681,683,3,90,45,0,682,681,1,0,0,0,683,686,1,0,0,0,684,
+  	682,1,0,0,0,684,685,1,0,0,0,685,687,1,0,0,0,686,684,1,0,0,0,687,688,5,
+  	37,0,0,688,689,3,108,54,0,689,85,1,0,0,0,690,691,5,65,0,0,691,692,3,98,
+  	49,0,692,87,1,0,0,0,693,694,5,64,0,0,694,695,3,98,49,0,695,89,1,0,0,0,
+  	696,700,5,67,0,0,697,701,3,314,157,0,698,699,5,41,0,0,699,701,3,314,157,
+  	0,700,697,1,0,0,0,700,698,1,0,0,0,701,91,1,0,0,0,702,708,5,68,0,0,703,
+  	705,5,69,0,0,704,703,1,0,0,0,704,705,1,0,0,0,705,706,1,0,0,0,706,708,
+  	3,314,157,0,707,702,1,0,0,0,707,704,1,0,0,0,708,93,1,0,0,0,709,710,5,
+  	69,0,0,710,711,3,314,157,0,711,95,1,0,0,0,712,717,3,94,47,0,713,717,5,
+  	68,0,0,714,717,5,41,0,0,715,717,5,70,0,0,716,712,1,0,0,0,716,713,1,0,
+  	0,0,716,714,1,0,0,0,716,715,1,0,0,0,717,97,1,0,0,0,718,719,5,4,0,0,719,
+  	720,3,102,51,0,720,721,5,5,0,0,721,99,1,0,0,0,722,723,5,4,0,0,723,724,
+  	3,102,51,0,724,725,5,5,0,0,725,101,1,0,0,0,726,728,3,106,53,0,727,726,
+  	1,0,0,0,727,728,1,0,0,0,728,738,1,0,0,0,729,731,3,104,52,0,730,732,5,
+  	7,0,0,731,730,1,0,0,0,731,732,1,0,0,0,732,734,1,0,0,0,733,735,3,106,53,
+  	0,734,733,1,0,0,0,734,735,1,0,0,0,735,737,1,0,0,0,736,729,1,0,0,0,737,
+  	740,1,0,0,0,738,736,1,0,0,0,738,739,1,0,0,0,739,103,1,0,0,0,740,738,1,
+  	0,0,0,741,742,5,69,0,0,742,743,3,240,120,0,743,745,5,4,0,0,744,746,3,
+  	106,53,0,745,744,1,0,0,0,745,746,1,0,0,0,746,747,1,0,0,0,747,748,5,5,
+  	0,0,748,105,1,0,0,0,749,754,3,156,78,0,750,751,5,7,0,0,751,753,3,156,
+  	78,0,752,750,1,0,0,0,753,756,1,0,0,0,754,752,1,0,0,0,754,755,1,0,0,0,
+  	755,758,1,0,0,0,756,754,1,0,0,0,757,759,5,7,0,0,758,757,1,0,0,0,758,759,
+  	1,0,0,0,759,107,1,0,0,0,760,763,5,4,0,0,761,764,3,10,5,0,762,764,3,110,
+  	55,0,763,761,1,0,0,0,763,762,1,0,0,0,764,765,1,0,0,0,765,766,5,5,0,0,
+  	766,109,1,0,0,0,767,769,3,114,57,0,768,767,1,0,0,0,768,769,1,0,0,0,769,
+  	773,1,0,0,0,770,772,3,112,56,0,771,770,1,0,0,0,772,775,1,0,0,0,773,771,
+  	1,0,0,0,773,774,1,0,0,0,774,111,1,0,0,0,775,773,1,0,0,0,776,778,3,116,
+  	58,0,777,779,5,7,0,0,778,777,1,0,0,0,778,779,1,0,0,0,779,781,1,0,0,0,
+  	780,782,3,114,57,0,781,780,1,0,0,0,781,782,1,0,0,0,782,113,1,0,0,0,783,
+  	788,3,168,84,0,784,786,5,7,0,0,785,787,3,114,57,0,786,785,1,0,0,0,786,
+  	787,1,0,0,0,787,789,1,0,0,0,788,784,1,0,0,0,788,789,1,0,0,0,789,115,1,
+  	0,0,0,790,799,3,140,70,0,791,799,3,118,59,0,792,799,3,138,69,0,793,799,
+  	3,120,60,0,794,799,3,122,61,0,795,799,3,142,71,0,796,799,3,124,62,0,797,
+  	799,3,126,63,0,798,790,1,0,0,0,798,791,1,0,0,0,798,792,1,0,0,0,798,793,
+  	1,0,0,0,798,794,1,0,0,0,798,795,1,0,0,0,798,796,1,0,0,0,798,797,1,0,0,
+  	0,799,117,1,0,0,0,800,801,5,71,0,0,801,802,3,108,54,0,802,119,1,0,0,0,
+  	803,804,5,69,0,0,804,805,3,240,120,0,805,806,3,108,54,0,806,121,1,0,0,
+  	0,807,809,5,72,0,0,808,810,5,54,0,0,809,808,1,0,0,0,809,810,1,0,0,0,810,
+  	811,1,0,0,0,811,812,3,240,120,0,812,813,3,108,54,0,813,123,1,0,0,0,814,
+  	815,5,73,0,0,815,816,5,2,0,0,816,817,3,246,123,0,817,818,5,35,0,0,818,
+  	819,3,242,121,0,819,820,5,3,0,0,820,125,1,0,0,0,821,822,5,52,0,0,822,
+  	823,3,128,64,0,823,127,1,0,0,0,824,827,3,130,65,0,825,827,3,132,66,0,
+  	826,824,1,0,0,0,826,825,1,0,0,0,827,129,1,0,0,0,828,829,3,242,121,0,829,
+  	833,5,4,0,0,830,832,3,136,68,0,831,830,1,0,0,0,832,835,1,0,0,0,833,831,
+  	1,0,0,0,833,834,1,0,0,0,834,836,1,0,0,0,835,833,1,0,0,0,836,837,5,5,0,
+  	0,837,131,1,0,0,0,838,848,5,165,0,0,839,843,5,2,0,0,840,842,3,242,121,
+  	0,841,840,1,0,0,0,842,845,1,0,0,0,843,841,1,0,0,0,843,844,1,0,0,0,844,
+  	846,1,0,0,0,845,843,1,0,0,0,846,848,5,3,0,0,847,838,1,0,0,0,847,839,1,
+  	0,0,0,848,849,1,0,0,0,849,853,5,4,0,0,850,852,3,134,67,0,851,850,1,0,
+  	0,0,852,855,1,0,0,0,853,851,1,0,0,0,853,854,1,0,0,0,854,856,1,0,0,0,855,
+  	853,1,0,0,0,856,857,5,5,0,0,857,133,1,0,0,0,858,862,5,2,0,0,859,861,3,
+  	136,68,0,860,859,1,0,0,0,861,864,1,0,0,0,862,860,1,0,0,0,862,863,1,0,
+  	0,0,863,865,1,0,0,0,864,862,1,0,0,0,865,868,5,3,0,0,866,868,5,165,0,0,
+  	867,858,1,0,0,0,867,866,1,0,0,0,868,135,1,0,0,0,869,875,3,314,157,0,870,
+  	875,3,300,150,0,871,875,3,302,151,0,872,875,3,310,155,0,873,875,5,74,
+  	0,0,874,869,1,0,0,0,874,870,1,0,0,0,874,871,1,0,0,0,874,872,1,0,0,0,874,
+  	873,1,0,0,0,875,137,1,0,0,0,876,877,5,75,0,0,877,878,3,108,54,0,878,139,
+  	1,0,0,0,879,884,3,108,54,0,880,881,5,76,0,0,881,883,3,108,54,0,882,880,
+  	1,0,0,0,883,886,1,0,0,0,884,882,1,0,0,0,884,885,1,0,0,0,885,141,1,0,0,
+  	0,886,884,1,0,0,0,887,888,5,77,0,0,888,889,3,144,72,0,889,143,1,0,0,0,
+  	890,894,3,280,140,0,891,894,3,282,141,0,892,894,3,146,73,0,893,890,1,
+  	0,0,0,893,891,1,0,0,0,893,892,1,0,0,0,894,145,1,0,0,0,895,896,3,314,157,
+  	0,896,897,3,148,74,0,897,147,1,0,0,0,898,914,5,165,0,0,899,901,5,2,0,
+  	0,900,902,5,33,0,0,901,900,1,0,0,0,901,902,1,0,0,0,902,903,1,0,0,0,903,
+  	908,3,246,123,0,904,905,5,8,0,0,905,907,3,246,123,0,906,904,1,0,0,0,907,
+  	910,1,0,0,0,908,906,1,0,0,0,908,909,1,0,0,0,909,911,1,0,0,0,910,908,1,
+  	0,0,0,911,912,5,3,0,0,912,914,1,0,0,0,913,898,1,0,0,0,913,899,1,0,0,0,
+  	914,149,1,0,0,0,915,928,5,165,0,0,916,917,5,2,0,0,917,922,3,246,123,0,
+  	918,919,5,8,0,0,919,921,3,246,123,0,920,918,1,0,0,0,921,924,1,0,0,0,922,
+  	920,1,0,0,0,922,923,1,0,0,0,923,925,1,0,0,0,924,922,1,0,0,0,925,926,5,
+  	3,0,0,926,928,1,0,0,0,927,915,1,0,0,0,927,916,1,0,0,0,928,151,1,0,0,0,
+  	929,931,5,4,0,0,930,932,3,154,77,0,931,930,1,0,0,0,931,932,1,0,0,0,932,
+  	933,1,0,0,0,933,934,5,5,0,0,934,153,1,0,0,0,935,940,3,156,78,0,936,938,
+  	5,7,0,0,937,939,3,154,77,0,938,937,1,0,0,0,938,939,1,0,0,0,939,941,1,
+  	0,0,0,940,936,1,0,0,0,940,941,1,0,0,0,941,155,1,0,0,0,942,943,3,238,119,
+  	0,943,944,3,160,80,0,944,949,1,0,0,0,945,946,3,222,111,0,946,947,3,158,
+  	79,0,947,949,1,0,0,0,948,942,1,0,0,0,948,945,1,0,0,0,949,157,1,0,0,0,
+  	950,952,3,160,80,0,951,950,1,0,0,0,951,952,1,0,0,0,952,159,1,0,0,0,953,
+  	954,3,162,81,0,954,963,3,164,82,0,955,959,5,6,0,0,956,957,3,162,81,0,
+  	957,958,3,164,82,0,958,960,1,0,0,0,959,956,1,0,0,0,959,960,1,0,0,0,960,
+  	962,1,0,0,0,961,955,1,0,0,0,962,965,1,0,0,0,963,961,1,0,0,0,963,964,1,
+  	0,0,0,964,161,1,0,0,0,965,963,1,0,0,0,966,969,3,240,120,0,967,969,5,9,
+  	0,0,968,966,1,0,0,0,968,967,1,0,0,0,969,163,1,0,0,0,970,975,3,166,83,
+  	0,971,972,5,8,0,0,972,974,3,166,83,0,973,971,1,0,0,0,974,977,1,0,0,0,
+  	975,973,1,0,0,0,975,976,1,0,0,0,976,165,1,0,0,0,977,975,1,0,0,0,978,979,
+  	3,234,117,0,979,167,1,0,0,0,980,981,3,238,119,0,981,982,3,172,86,0,982,
+  	987,1,0,0,0,983,984,3,226,113,0,984,985,3,170,85,0,985,987,1,0,0,0,986,
+  	980,1,0,0,0,986,983,1,0,0,0,987,169,1,0,0,0,988,990,3,172,86,0,989,988,
+  	1,0,0,0,989,990,1,0,0,0,990,171,1,0,0,0,991,998,3,180,90,0,992,994,5,
+  	6,0,0,993,995,3,178,89,0,994,993,1,0,0,0,994,995,1,0,0,0,995,997,1,0,
+  	0,0,996,992,1,0,0,0,997,1000,1,0,0,0,998,996,1,0,0,0,998,999,1,0,0,0,
+  	999,173,1,0,0,0,1000,998,1,0,0,0,1001,1002,3,188,94,0,1002,175,1,0,0,
+  	0,1003,1004,3,242,121,0,1004,177,1,0,0,0,1005,1006,3,182,91,0,1006,1007,
+  	3,164,82,0,1007,179,1,0,0,0,1008,1009,3,182,91,0,1009,1010,3,184,92,0,
+  	1010,181,1,0,0,0,1011,1014,3,174,87,0,1012,1014,3,176,88,0,1013,1011,
+  	1,0,0,0,1013,1012,1,0,0,0,1014,183,1,0,0,0,1015,1020,3,186,93,0,1016,
+  	1017,5,8,0,0,1017,1019,3,186,93,0,1018,1016,1,0,0,0,1019,1022,1,0,0,0,
+  	1020,1018,1,0,0,0,1020,1021,1,0,0,0,1021,185,1,0,0,0,1022,1020,1,0,0,
+  	0,1023,1024,3,236,118,0,1024,187,1,0,0,0,1025,1026,3,190,95,0,1026,189,
+  	1,0,0,0,1027,1032,3,192,96,0,1028,1029,5,10,0,0,1029,1031,3,192,96,0,
+  	1030,1028,1,0,0,0,1031,1034,1,0,0,0,1032,1030,1,0,0,0,1032,1033,1,0,0,
+  	0,1033,191,1,0,0,0,1034,1032,1,0,0,0,1035,1040,3,196,98,0,1036,1037,5,
+  	11,0,0,1037,1039,3,196,98,0,1038,1036,1,0,0,0,1039,1042,1,0,0,0,1040,
+  	1038,1,0,0,0,1040,1041,1,0,0,0,1041,193,1,0,0,0,1042,1040,1,0,0,0,1043,
+  	1045,3,214,107,0,1044,1046,3,198,99,0,1045,1044,1,0,0,0,1045,1046,1,0,
+  	0,0,1046,195,1,0,0,0,1047,1051,3,194,97,0,1048,1049,5,12,0,0,1049,1051,
+  	3,194,97,0,1050,1047,1,0,0,0,1050,1048,1,0,0,0,1051,197,1,0,0,0,1052,
+  	1065,5,13,0,0,1053,1065,5,1,0,0,1054,1065,5,14,0,0,1055,1060,5,4,0,0,
+  	1056,1061,3,200,100,0,1057,1061,3,202,101,0,1058,1061,3,204,102,0,1059,
+  	1061,3,206,103,0,1060,1056,1,0,0,0,1060,1057,1,0,0,0,1060,1058,1,0,0,
+  	0,1060,1059,1,0,0,0,1061,1062,1,0,0,0,1062,1063,5,5,0,0,1063,1065,1,0,
+  	0,0,1064,1052,1,0,0,0,1064,1053,1,0,0,0,1064,1054,1,0,0,0,1064,1055,1,
+  	0,0,0,1065,199,1,0,0,0,1066,1067,3,208,104,0,1067,201,1,0,0,0,1068,1069,
+  	3,210,105,0,1069,1070,5,8,0,0,1070,203,1,0,0,0,1071,1072,3,210,105,0,
+  	1072,1073,5,8,0,0,1073,1074,3,212,106,0,1074,205,1,0,0,0,1075,1076,5,
+  	8,0,0,1076,1077,3,212,106,0,1077,207,1,0,0,0,1078,1079,3,220,110,0,1079,
+  	209,1,0,0,0,1080,1081,3,220,110,0,1081,211,1,0,0,0,1082,1083,3,220,110,
+  	0,1083,213,1,0,0,0,1084,1093,3,314,157,0,1085,1093,5,9,0,0,1086,1087,
+  	5,15,0,0,1087,1093,3,216,108,0,1088,1089,5,2,0,0,1089,1090,3,188,94,0,
+  	1090,1091,5,3,0,0,1091,1093,1,0,0,0,1092,1084,1,0,0,0,1092,1085,1,0,0,
+  	0,1092,1086,1,0,0,0,1092,1088,1,0,0,0,1093,215,1,0,0,0,1094,1108,3,218,
+  	109,0,1095,1104,5,2,0,0,1096,1101,3,218,109,0,1097,1098,5,10,0,0,1098,
+  	1100,3,218,109,0,1099,1097,1,0,0,0,1100,1103,1,0,0,0,1101,1099,1,0,0,
+  	0,1101,1102,1,0,0,0,1102,1105,1,0,0,0,1103,1101,1,0,0,0,1104,1096,1,0,
+  	0,0,1104,1105,1,0,0,0,1105,1106,1,0,0,0,1106,1108,5,3,0,0,1107,1094,1,
+  	0,0,0,1107,1095,1,0,0,0,1108,217,1,0,0,0,1109,1117,3,314,157,0,1110,1117,
+  	5,9,0,0,1111,1114,5,12,0,0,1112,1115,3,314,157,0,1113,1115,5,9,0,0,1114,
+  	1112,1,0,0,0,1114,1113,1,0,0,0,1115,1117,1,0,0,0,1116,1109,1,0,0,0,1116,
+  	1110,1,0,0,0,1116,1111,1,0,0,0,1117,219,1,0,0,0,1118,1119,5,150,0,0,1119,
+  	221,1,0,0,0,1120,1123,3,230,115,0,1121,1123,3,224,112,0,1122,1120,1,0,
+  	0,0,1122,1121,1,0,0,0,1123,223,1,0,0,0,1124,1125,5,16,0,0,1125,1126,3,
+  	160,80,0,1126,1127,5,17,0,0,1127,225,1,0,0,0,1128,1131,3,232,116,0,1129,
+  	1131,3,228,114,0,1130,1128,1,0,0,0,1130,1129,1,0,0,0,1131,227,1,0,0,0,
+  	1132,1133,5,16,0,0,1133,1134,3,172,86,0,1134,1135,5,17,0,0,1135,229,1,
+  	0,0,0,1136,1138,5,2,0,0,1137,1139,3,234,117,0,1138,1137,1,0,0,0,1139,
+  	1140,1,0,0,0,1140,1138,1,0,0,0,1140,1141,1,0,0,0,1141,1142,1,0,0,0,1142,
+  	1143,5,3,0,0,1143,231,1,0,0,0,1144,1146,5,2,0,0,1145,1147,3,236,118,0,
+  	1146,1145,1,0,0,0,1147,1148,1,0,0,0,1148,1146,1,0,0,0,1148,1149,1,0,0,
+  	0,1149,1150,1,0,0,0,1150,1151,5,3,0,0,1151,233,1,0,0,0,1152,1155,3,238,
+  	119,0,1153,1155,3,222,111,0,1154,1152,1,0,0,0,1154,1153,1,0,0,0,1155,
+  	235,1,0,0,0,1156,1159,3,238,119,0,1157,1159,3,226,113,0,1158,1156,1,0,
+  	0,0,1158,1157,1,0,0,0,1159,237,1,0,0,0,1160,1163,3,242,121,0,1161,1163,
+  	3,244,122,0,1162,1160,1,0,0,0,1162,1161,1,0,0,0,1163,239,1,0,0,0,1164,
+  	1167,3,242,121,0,1165,1167,3,314,157,0,1166,1164,1,0,0,0,1166,1165,1,
+  	0,0,0,1167,241,1,0,0,0,1168,1169,7,2,0,0,1169,243,1,0,0,0,1170,1177,3,
+  	314,157,0,1171,1177,3,300,150,0,1172,1177,3,302,151,0,1173,1177,3,310,
+  	155,0,1174,1177,3,318,159,0,1175,1177,5,165,0,0,1176,1170,1,0,0,0,1176,
+  	1171,1,0,0,0,1176,1172,1,0,0,0,1176,1173,1,0,0,0,1176,1174,1,0,0,0,1176,
+  	1175,1,0,0,0,1177,245,1,0,0,0,1178,1179,3,248,124,0,1179,247,1,0,0,0,
+  	1180,1185,3,250,125,0,1181,1182,5,18,0,0,1182,1184,3,250,125,0,1183,1181,
+  	1,0,0,0,1184,1187,1,0,0,0,1185,1183,1,0,0,0,1185,1186,1,0,0,0,1186,249,
+  	1,0,0,0,1187,1185,1,0,0,0,1188,1193,3,252,126,0,1189,1190,5,19,0,0,1190,
+  	1192,3,252,126,0,1191,1189,1,0,0,0,1192,1195,1,0,0,0,1193,1191,1,0,0,
+  	0,1193,1194,1,0,0,0,1194,251,1,0,0,0,1195,1193,1,0,0,0,1196,1197,3,254,
+  	127,0,1197,253,1,0,0,0,1198,1216,3,256,128,0,1199,1200,5,20,0,0,1200,
+  	1217,3,256,128,0,1201,1202,5,21,0,0,1202,1217,3,256,128,0,1203,1204,5,
+  	22,0,0,1204,1217,3,256,128,0,1205,1206,5,23,0,0,1206,1217,3,256,128,0,
+  	1207,1208,5,24,0,0,1208,1217,3,256,128,0,1209,1210,5,25,0,0,1210,1217,
+  	3,256,128,0,1211,1212,5,79,0,0,1212,1217,3,150,75,0,1213,1214,5,78,0,
+  	0,1214,1215,5,79,0,0,1215,1217,3,150,75,0,1216,1199,1,0,0,0,1216,1201,
+  	1,0,0,0,1216,1203,1,0,0,0,1216,1205,1,0,0,0,1216,1207,1,0,0,0,1216,1209,
+  	1,0,0,0,1216,1211,1,0,0,0,1216,1213,1,0,0,0,1216,1217,1,0,0,0,1217,255,
+  	1,0,0,0,1218,1219,3,258,129,0,1219,257,1,0,0,0,1220,1224,3,268,134,0,
+  	1221,1223,3,260,130,0,1222,1221,1,0,0,0,1223,1226,1,0,0,0,1224,1222,1,
+  	0,0,0,1224,1225,1,0,0,0,1225,259,1,0,0,0,1226,1224,1,0,0,0,1227,1228,
+  	5,13,0,0,1228,1233,3,262,131,0,1229,1230,5,26,0,0,1230,1233,3,264,132,
+  	0,1231,1233,3,266,133,0,1232,1227,1,0,0,0,1232,1229,1,0,0,0,1232,1231,
+  	1,0,0,0,1233,261,1,0,0,0,1234,1235,3,268,134,0,1235,263,1,0,0,0,1236,
+  	1237,3,268,134,0,1237,265,1,0,0,0,1238,1241,3,306,153,0,1239,1241,3,308,
+  	154,0,1240,1238,1,0,0,0,1240,1239,1,0,0,0,1241,1245,1,0,0,0,1242,1244,
+  	3,270,135,0,1243,1242,1,0,0,0,1244,1247,1,0,0,0,1245,1243,1,0,0,0,1245,
+  	1246,1,0,0,0,1246,267,1,0,0,0,1247,1245,1,0,0,0,1248,1252,3,276,138,0,
+  	1249,1251,3,270,135,0,1250,1249,1,0,0,0,1251,1254,1,0,0,0,1252,1250,1,
+  	0,0,0,1252,1253,1,0,0,0,1253,269,1,0,0,0,1254,1252,1,0,0,0,1255,1258,
+  	3,272,136,0,1256,1258,3,274,137,0,1257,1255,1,0,0,0,1257,1256,1,0,0,0,
+  	1258,271,1,0,0,0,1259,1260,5,1,0,0,1260,1261,3,276,138,0,1261,273,1,0,
+  	0,0,1262,1263,5,11,0,0,1263,1264,3,276,138,0,1264,275,1,0,0,0,1265,1266,
+  	5,15,0,0,1266,1273,3,278,139,0,1267,1268,5,13,0,0,1268,1273,3,278,139,
+  	0,1269,1270,5,26,0,0,1270,1273,3,278,139,0,1271,1273,3,278,139,0,1272,
+  	1265,1,0,0,0,1272,1267,1,0,0,0,1272,1269,1,0,0,0,1272,1271,1,0,0,0,1273,
+  	277,1,0,0,0,1274,1282,3,280,140,0,1275,1282,3,282,141,0,1276,1282,3,298,
+  	149,0,1277,1282,3,300,150,0,1278,1282,3,302,151,0,1279,1282,3,310,155,
+  	0,1280,1282,3,242,121,0,1281,1274,1,0,0,0,1281,1275,1,0,0,0,1281,1276,
+  	1,0,0,0,1281,1277,1,0,0,0,1281,1278,1,0,0,0,1281,1279,1,0,0,0,1281,1280,
+  	1,0,0,0,1282,279,1,0,0,0,1283,1284,5,2,0,0,1284,1285,3,246,123,0,1285,
+  	1286,5,3,0,0,1286,281,1,0,0,0,1287,1542,3,296,148,0,1288,1289,5,80,0,
+  	0,1289,1290,5,2,0,0,1290,1291,3,246,123,0,1291,1292,5,3,0,0,1292,1542,
+  	1,0,0,0,1293,1542,3,286,143,0,1294,1295,5,82,0,0,1295,1296,5,2,0,0,1296,
+  	1297,3,246,123,0,1297,1298,5,8,0,0,1298,1299,3,246,123,0,1299,1300,5,
+  	3,0,0,1300,1542,1,0,0,0,1301,1302,5,83,0,0,1302,1303,5,2,0,0,1303,1304,
+  	3,246,123,0,1304,1305,5,3,0,0,1305,1542,1,0,0,0,1306,1307,5,84,0,0,1307,
+  	1308,5,2,0,0,1308,1309,3,242,121,0,1309,1310,5,3,0,0,1310,1542,1,0,0,
+  	0,1311,1312,5,85,0,0,1312,1313,5,2,0,0,1313,1314,3,246,123,0,1314,1315,
+  	5,3,0,0,1315,1542,1,0,0,0,1316,1317,5,86,0,0,1317,1318,5,2,0,0,1318,1319,
+  	3,246,123,0,1319,1320,5,3,0,0,1320,1542,1,0,0,0,1321,1327,5,87,0,0,1322,
+  	1323,5,2,0,0,1323,1324,3,246,123,0,1324,1325,5,3,0,0,1325,1328,1,0,0,
+  	0,1326,1328,5,165,0,0,1327,1322,1,0,0,0,1327,1326,1,0,0,0,1328,1542,1,
+  	0,0,0,1329,1330,5,88,0,0,1330,1542,5,165,0,0,1331,1332,5,89,0,0,1332,
+  	1333,5,2,0,0,1333,1334,3,246,123,0,1334,1335,5,3,0,0,1335,1542,1,0,0,
+  	0,1336,1337,5,90,0,0,1337,1338,5,2,0,0,1338,1339,3,246,123,0,1339,1340,
+  	5,3,0,0,1340,1542,1,0,0,0,1341,1342,5,91,0,0,1342,1343,5,2,0,0,1343,1344,
+  	3,246,123,0,1344,1345,5,3,0,0,1345,1542,1,0,0,0,1346,1347,5,92,0,0,1347,
+  	1348,5,2,0,0,1348,1349,3,246,123,0,1349,1350,5,3,0,0,1350,1542,1,0,0,
+  	0,1351,1352,5,93,0,0,1352,1542,3,150,75,0,1353,1542,3,288,144,0,1354,
+  	1355,5,94,0,0,1355,1356,5,2,0,0,1356,1357,3,246,123,0,1357,1358,5,3,0,
+  	0,1358,1542,1,0,0,0,1359,1542,3,290,145,0,1360,1361,5,95,0,0,1361,1362,
+  	5,2,0,0,1362,1363,3,246,123,0,1363,1364,5,3,0,0,1364,1542,1,0,0,0,1365,
+  	1366,5,96,0,0,1366,1367,5,2,0,0,1367,1368,3,246,123,0,1368,1369,5,3,0,
+  	0,1369,1542,1,0,0,0,1370,1371,5,97,0,0,1371,1372,5,2,0,0,1372,1373,3,
+  	246,123,0,1373,1374,5,3,0,0,1374,1542,1,0,0,0,1375,1376,5,99,0,0,1376,
+  	1377,5,2,0,0,1377,1378,3,246,123,0,1378,1379,5,8,0,0,1379,1380,3,246,
+  	123,0,1380,1381,5,3,0,0,1381,1542,1,0,0,0,1382,1383,5,100,0,0,1383,1384,
+  	5,2,0,0,1384,1385,3,246,123,0,1385,1386,5,8,0,0,1386,1387,3,246,123,0,
+  	1387,1388,5,3,0,0,1388,1542,1,0,0,0,1389,1390,5,101,0,0,1390,1391,5,2,
+  	0,0,1391,1392,3,246,123,0,1392,1393,5,8,0,0,1393,1394,3,246,123,0,1394,
+  	1395,5,3,0,0,1395,1542,1,0,0,0,1396,1397,5,102,0,0,1397,1398,5,2,0,0,
+  	1398,1399,3,246,123,0,1399,1400,5,8,0,0,1400,1401,3,246,123,0,1401,1402,
+  	5,3,0,0,1402,1542,1,0,0,0,1403,1404,5,103,0,0,1404,1405,5,2,0,0,1405,
+  	1406,3,246,123,0,1406,1407,5,8,0,0,1407,1408,3,246,123,0,1408,1409,5,
+  	3,0,0,1409,1542,1,0,0,0,1410,1411,5,104,0,0,1411,1412,5,2,0,0,1412,1413,
+  	3,246,123,0,1413,1414,5,3,0,0,1414,1542,1,0,0,0,1415,1416,5,105,0,0,1416,
+  	1417,5,2,0,0,1417,1418,3,246,123,0,1418,1419,5,3,0,0,1419,1542,1,0,0,
+  	0,1420,1421,5,106,0,0,1421,1422,5,2,0,0,1422,1423,3,246,123,0,1423,1424,
+  	5,3,0,0,1424,1542,1,0,0,0,1425,1426,5,107,0,0,1426,1427,5,2,0,0,1427,
+  	1428,3,246,123,0,1428,1429,5,3,0,0,1429,1542,1,0,0,0,1430,1431,5,108,
+  	0,0,1431,1432,5,2,0,0,1432,1433,3,246,123,0,1433,1434,5,3,0,0,1434,1542,
+  	1,0,0,0,1435,1436,5,109,0,0,1436,1437,5,2,0,0,1437,1438,3,246,123,0,1438,
+  	1439,5,3,0,0,1439,1542,1,0,0,0,1440,1441,5,110,0,0,1441,1442,5,2,0,0,
+  	1442,1443,3,246,123,0,1443,1444,5,3,0,0,1444,1542,1,0,0,0,1445,1446,5,
+  	111,0,0,1446,1447,5,2,0,0,1447,1448,3,246,123,0,1448,1449,5,3,0,0,1449,
+  	1542,1,0,0,0,1450,1451,5,112,0,0,1451,1542,5,165,0,0,1452,1453,5,113,
+  	0,0,1453,1542,5,165,0,0,1454,1455,5,114,0,0,1455,1542,5,165,0,0,1456,
+  	1457,5,119,0,0,1457,1458,5,2,0,0,1458,1459,3,246,123,0,1459,1460,5,3,
+  	0,0,1460,1542,1,0,0,0,1461,1462,5,115,0,0,1462,1463,5,2,0,0,1463,1464,
+  	3,246,123,0,1464,1465,5,3,0,0,1465,1542,1,0,0,0,1466,1467,5,116,0,0,1467,
+  	1468,5,2,0,0,1468,1469,3,246,123,0,1469,1470,5,3,0,0,1470,1542,1,0,0,
+  	0,1471,1472,5,117,0,0,1472,1473,5,2,0,0,1473,1474,3,246,123,0,1474,1475,
+  	5,3,0,0,1475,1542,1,0,0,0,1476,1477,5,118,0,0,1477,1478,5,2,0,0,1478,
+  	1479,3,246,123,0,1479,1480,5,3,0,0,1480,1542,1,0,0,0,1481,1482,5,120,
+  	0,0,1482,1542,3,150,75,0,1483,1484,5,121,0,0,1484,1485,5,2,0,0,1485,1486,
+  	3,246,123,0,1486,1487,5,8,0,0,1487,1488,3,246,123,0,1488,1489,5,8,0,0,
+  	1489,1490,3,246,123,0,1490,1491,5,3,0,0,1491,1542,1,0,0,0,1492,1493,5,
+  	122,0,0,1493,1494,5,2,0,0,1494,1495,3,246,123,0,1495,1496,5,8,0,0,1496,
+  	1497,3,246,123,0,1497,1498,5,3,0,0,1498,1542,1,0,0,0,1499,1500,5,123,
+  	0,0,1500,1501,5,2,0,0,1501,1502,3,246,123,0,1502,1503,5,8,0,0,1503,1504,
+  	3,246,123,0,1504,1505,5,3,0,0,1505,1542,1,0,0,0,1506,1507,5,124,0,0,1507,
+  	1508,5,2,0,0,1508,1509,3,246,123,0,1509,1510,5,8,0,0,1510,1511,3,246,
+  	123,0,1511,1512,5,3,0,0,1512,1542,1,0,0,0,1513,1514,5,125,0,0,1514,1515,
+  	5,2,0,0,1515,1516,3,246,123,0,1516,1517,5,3,0,0,1517,1542,1,0,0,0,1518,
+  	1519,5,126,0,0,1519,1520,5,2,0,0,1520,1521,3,246,123,0,1521,1522,5,3,
+  	0,0,1522,1542,1,0,0,0,1523,1524,5,127,0,0,1524,1525,5,2,0,0,1525,1526,
+  	3,246,123,0,1526,1527,5,3,0,0,1527,1542,1,0,0,0,1528,1529,5,128,0,0,1529,
+  	1530,5,2,0,0,1530,1531,3,246,123,0,1531,1532,5,3,0,0,1532,1542,1,0,0,
+  	0,1533,1534,5,129,0,0,1534,1535,5,2,0,0,1535,1536,3,246,123,0,1536,1537,
+  	5,3,0,0,1537,1542,1,0,0,0,1538,1542,3,284,142,0,1539,1542,3,292,146,0,
+  	1540,1542,3,294,147,0,1541,1287,1,0,0,0,1541,1288,1,0,0,0,1541,1293,1,
+  	0,0,0,1541,1294,1,0,0,0,1541,1301,1,0,0,0,1541,1306,1,0,0,0,1541,1311,
+  	1,0,0,0,1541,1316,1,0,0,0,1541,1321,1,0,0,0,1541,1329,1,0,0,0,1541,1331,
+  	1,0,0,0,1541,1336,1,0,0,0,1541,1341,1,0,0,0,1541,1346,1,0,0,0,1541,1351,
+  	1,0,0,0,1541,1353,1,0,0,0,1541,1354,1,0,0,0,1541,1359,1,0,0,0,1541,1360,
+  	1,0,0,0,1541,1365,1,0,0,0,1541,1370,1,0,0,0,1541,1375,1,0,0,0,1541,1382,
+  	1,0,0,0,1541,1389,1,0,0,0,1541,1396,1,0,0,0,1541,1403,1,0,0,0,1541,1410,
+  	1,0,0,0,1541,1415,1,0,0,0,1541,1420,1,0,0,0,1541,1425,1,0,0,0,1541,1430,
+  	1,0,0,0,1541,1435,1,0,0,0,1541,1440,1,0,0,0,1541,1445,1,0,0,0,1541,1450,
+  	1,0,0,0,1541,1452,1,0,0,0,1541,1454,1,0,0,0,1541,1456,1,0,0,0,1541,1461,
+  	1,0,0,0,1541,1466,1,0,0,0,1541,1471,1,0,0,0,1541,1476,1,0,0,0,1541,1481,
+  	1,0,0,0,1541,1483,1,0,0,0,1541,1492,1,0,0,0,1541,1499,1,0,0,0,1541,1506,
+  	1,0,0,0,1541,1513,1,0,0,0,1541,1518,1,0,0,0,1541,1523,1,0,0,0,1541,1528,
+  	1,0,0,0,1541,1533,1,0,0,0,1541,1538,1,0,0,0,1541,1539,1,0,0,0,1541,1540,
+  	1,0,0,0,1542,283,1,0,0,0,1543,1544,5,130,0,0,1544,1545,5,2,0,0,1545,1546,
+  	3,246,123,0,1546,1547,5,8,0,0,1547,1550,3,246,123,0,1548,1549,5,8,0,0,
+  	1549,1551,3,246,123,0,1550,1548,1,0,0,0,1550,1551,1,0,0,0,1551,1552,1,
+  	0,0,0,1552,1553,5,3,0,0,1553,285,1,0,0,0,1554,1555,5,81,0,0,1555,1556,
+  	5,2,0,0,1556,1557,3,246,123,0,1557,1558,5,3,0,0,1558,287,1,0,0,0,1559,
+  	1560,5,131,0,0,1560,1561,5,2,0,0,1561,1562,3,246,123,0,1562,1563,5,8,
+  	0,0,1563,1566,3,246,123,0,1564,1565,5,8,0,0,1565,1567,3,246,123,0,1566,
+  	1564,1,0,0,0,1566,1567,1,0,0,0,1567,1568,1,0,0,0,1568,1569,5,3,0,0,1569,
+  	289,1,0,0,0,1570,1571,5,132,0,0,1571,1572,5,2,0,0,1572,1573,3,246,123,
+  	0,1573,1574,5,8,0,0,1574,1575,3,246,123,0,1575,1576,5,8,0,0,1576,1579,
+  	3,246,123,0,1577,1578,5,8,0,0,1578,1580,3,246,123,0,1579,1577,1,0,0,0,
+  	1579,1580,1,0,0,0,1580,1581,1,0,0,0,1581,1582,5,3,0,0,1582,291,1,0,0,
+  	0,1583,1584,5,133,0,0,1584,1585,3,108,54,0,1585,293,1,0,0,0,1586,1587,
+  	5,78,0,0,1587,1588,5,133,0,0,1588,1589,3,108,54,0,1589,295,1,0,0,0,1590,
+  	1591,5,134,0,0,1591,1593,5,2,0,0,1592,1594,5,33,0,0,1593,1592,1,0,0,0,
+  	1593,1594,1,0,0,0,1594,1597,1,0,0,0,1595,1598,5,1,0,0,1596,1598,3,246,
+  	123,0,1597,1595,1,0,0,0,1597,1596,1,0,0,0,1598,1599,1,0,0,0,1599,1663,
+  	5,3,0,0,1600,1601,5,135,0,0,1601,1603,5,2,0,0,1602,1604,5,33,0,0,1603,
+  	1602,1,0,0,0,1603,1604,1,0,0,0,1604,1605,1,0,0,0,1605,1606,3,246,123,
+  	0,1606,1607,5,3,0,0,1607,1663,1,0,0,0,1608,1609,5,136,0,0,1609,1611,5,
+  	2,0,0,1610,1612,5,33,0,0,1611,1610,1,0,0,0,1611,1612,1,0,0,0,1612,1613,
+  	1,0,0,0,1613,1614,3,246,123,0,1614,1615,5,3,0,0,1615,1663,1,0,0,0,1616,
+  	1617,5,137,0,0,1617,1619,5,2,0,0,1618,1620,5,33,0,0,1619,1618,1,0,0,0,
+  	1619,1620,1,0,0,0,1620,1621,1,0,0,0,1621,1622,3,246,123,0,1622,1623,5,
+  	3,0,0,1623,1663,1,0,0,0,1624,1625,5,138,0,0,1625,1627,5,2,0,0,1626,1628,
+  	5,33,0,0,1627,1626,1,0,0,0,1627,1628,1,0,0,0,1628,1629,1,0,0,0,1629,1630,
+  	3,246,123,0,1630,1631,5,3,0,0,1631,1663,1,0,0,0,1632,1633,5,139,0,0,1633,
+  	1635,5,2,0,0,1634,1636,5,33,0,0,1635,1634,1,0,0,0,1635,1636,1,0,0,0,1636,
+  	1637,1,0,0,0,1637,1638,3,246,123,0,1638,1639,5,3,0,0,1639,1663,1,0,0,
+  	0,1640,1641,5,140,0,0,1641,1643,5,2,0,0,1642,1644,5,33,0,0,1643,1642,
+  	1,0,0,0,1643,1644,1,0,0,0,1644,1645,1,0,0,0,1645,1646,3,246,123,0,1646,
+  	1647,5,3,0,0,1647,1663,1,0,0,0,1648,1649,5,43,0,0,1649,1651,5,2,0,0,1650,
+  	1652,5,33,0,0,1651,1650,1,0,0,0,1651,1652,1,0,0,0,1652,1653,1,0,0,0,1653,
+  	1658,3,246,123,0,1654,1655,5,6,0,0,1655,1656,5,141,0,0,1656,1657,5,20,
+  	0,0,1657,1659,3,312,156,0,1658,1654,1,0,0,0,1658,1659,1,0,0,0,1659,1660,
+  	1,0,0,0,1660,1661,5,3,0,0,1661,1663,1,0,0,0,1662,1590,1,0,0,0,1662,1600,
+  	1,0,0,0,1662,1608,1,0,0,0,1662,1616,1,0,0,0,1662,1624,1,0,0,0,1662,1632,
+  	1,0,0,0,1662,1640,1,0,0,0,1662,1648,1,0,0,0,1663,297,1,0,0,0,1664,1666,
+  	3,314,157,0,1665,1667,3,148,74,0,1666,1665,1,0,0,0,1666,1667,1,0,0,0,
+  	1667,299,1,0,0,0,1668,1672,3,312,156,0,1669,1673,5,148,0,0,1670,1671,
+  	5,27,0,0,1671,1673,3,314,157,0,1672,1669,1,0,0,0,1672,1670,1,0,0,0,1672,
+  	1673,1,0,0,0,1673,301,1,0,0,0,1674,1678,3,304,152,0,1675,1678,3,306,153,
+  	0,1676,1678,3,308,154,0,1677,1674,1,0,0,0,1677,1675,1,0,0,0,1677,1676,
+  	1,0,0,0,1678,303,1,0,0,0,1679,1680,7,3,0,0,1680,305,1,0,0,0,1681,1682,
+  	7,4,0,0,1682,307,1,0,0,0,1683,1684,7,5,0,0,1684,309,1,0,0,0,1685,1686,
+  	7,6,0,0,1686,311,1,0,0,0,1687,1688,7,7,0,0,1688,313,1,0,0,0,1689,1691,
+  	5,149,0,0,1690,1689,1,0,0,0,1690,1691,1,0,0,0,1691,1694,1,0,0,0,1692,
+  	1695,3,320,160,0,1693,1695,3,316,158,0,1694,1692,1,0,0,0,1694,1693,1,
+  	0,0,0,1695,315,1,0,0,0,1696,1699,3,322,161,0,1697,1699,3,324,162,0,1698,
+  	1696,1,0,0,0,1698,1697,1,0,0,0,1699,317,1,0,0,0,1700,1701,7,8,0,0,1701,
+  	319,1,0,0,0,1702,1703,5,142,0,0,1703,321,1,0,0,0,1704,1705,5,144,0,0,
+  	1705,323,1,0,0,0,1706,1707,5,143,0,0,1707,325,1,0,0,0,165,331,338,340,
+  	354,367,372,375,379,394,403,409,413,419,422,427,431,439,448,458,463,466,
+  	469,472,478,486,491,497,503,508,514,516,520,523,527,530,534,537,541,544,
+  	548,551,555,558,560,573,583,588,590,605,609,614,618,624,630,636,644,652,
+  	672,676,679,684,700,704,707,716,727,731,734,738,745,754,758,763,768,773,
+  	778,781,786,788,798,809,826,833,843,847,853,862,867,874,884,893,901,908,
+  	913,922,927,931,938,940,948,951,959,963,968,975,986,989,994,998,1013,
+  	1020,1032,1040,1045,1050,1060,1064,1092,1101,1104,1107,1114,1116,1122,
+  	1130,1140,1148,1154,1158,1162,1166,1176,1185,1193,1216,1224,1232,1240,
+  	1245,1252,1257,1272,1281,1327,1541,1550,1566,1579,1593,1597,1603,1611,
+  	1619,1627,1635,1643,1651,1658,1662,1666,1672,1677,1690,1694,1698
+  };
+  staticData->serializedATN = antlr4::atn::SerializedATNView(serializedATNSegment, sizeof(serializedATNSegment) / sizeof(serializedATNSegment[0]));
 
   antlr4::atn::ATNDeserializer deserializer;
   staticData->atn = deserializer.deserialize(staticData->serializedATN);
 
   const size_t count = staticData->atn->getNumberOfDecisions();
   staticData->decisionToDFA.reserve(count);
-  for (size_t i = 0; i < count; i++) {
-    staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i),
-                                           i);
+  for (size_t i = 0; i < count; i++) { 
+    staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i), i);
   }
   sparqlautomaticParserStaticData = std::move(staticData);
 }
 
-}  // namespace
-
-SparqlAutomaticParser::SparqlAutomaticParser(TokenStream* input)
-    : SparqlAutomaticParser(input, antlr4::atn::ParserATNSimulatorOptions()) {}
-
-SparqlAutomaticParser::SparqlAutomaticParser(
-    TokenStream* input, const antlr4::atn::ParserATNSimulatorOptions& options)
-    : Parser(input) {
-  SparqlAutomaticParser::initialize();
-  _interpreter = new atn::ParserATNSimulator(
-      this, *sparqlautomaticParserStaticData->atn,
-      sparqlautomaticParserStaticData->decisionToDFA,
-      sparqlautomaticParserStaticData->sharedContextCache, options);
 }
 
-SparqlAutomaticParser::~SparqlAutomaticParser() { delete _interpreter; }
+SparqlAutomaticParser::SparqlAutomaticParser(TokenStream *input) : SparqlAutomaticParser(input, antlr4::atn::ParserATNSimulatorOptions()) {}
+
+SparqlAutomaticParser::SparqlAutomaticParser(TokenStream *input, const antlr4::atn::ParserATNSimulatorOptions &options) : Parser(input) {
+  SparqlAutomaticParser::initialize();
+  _interpreter = new atn::ParserATNSimulator(this, *sparqlautomaticParserStaticData->atn, sparqlautomaticParserStaticData->decisionToDFA, sparqlautomaticParserStaticData->sharedContextCache, options);
+}
+
+SparqlAutomaticParser::~SparqlAutomaticParser() {
+  delete _interpreter;
+}
 
 const atn::ATN& SparqlAutomaticParser::getATN() const {
   return *sparqlautomaticParserStaticData->atn;
@@ -1665,20 +796,18 @@ antlr4::atn::SerializedATNView SparqlAutomaticParser::getSerializedATN() const {
   return sparqlautomaticParserStaticData->serializedATN;
 }
 
-//----------------- QueryContext
-//------------------------------------------------------------------
 
-SparqlAutomaticParser::QueryContext::QueryContext(ParserRuleContext* parent,
-                                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+//----------------- QueryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PrologueContext*
-SparqlAutomaticParser::QueryContext::prologue() {
+SparqlAutomaticParser::QueryContext::QueryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::QueryContext::prologue() {
   return getRuleContext<SparqlAutomaticParser::PrologueContext>(0);
 }
 
-SparqlAutomaticParser::ValuesClauseContext*
-SparqlAutomaticParser::QueryContext::valuesClause() {
+SparqlAutomaticParser::ValuesClauseContext* SparqlAutomaticParser::QueryContext::valuesClause() {
   return getRuleContext<SparqlAutomaticParser::ValuesClauseContext>(0);
 }
 
@@ -1686,45 +815,41 @@ tree::TerminalNode* SparqlAutomaticParser::QueryContext::EOF() {
   return getToken(SparqlAutomaticParser::EOF, 0);
 }
 
-SparqlAutomaticParser::SelectQueryContext*
-SparqlAutomaticParser::QueryContext::selectQuery() {
+SparqlAutomaticParser::SelectQueryContext* SparqlAutomaticParser::QueryContext::selectQuery() {
   return getRuleContext<SparqlAutomaticParser::SelectQueryContext>(0);
 }
 
-SparqlAutomaticParser::ConstructQueryContext*
-SparqlAutomaticParser::QueryContext::constructQuery() {
+SparqlAutomaticParser::ConstructQueryContext* SparqlAutomaticParser::QueryContext::constructQuery() {
   return getRuleContext<SparqlAutomaticParser::ConstructQueryContext>(0);
 }
 
-SparqlAutomaticParser::DescribeQueryContext*
-SparqlAutomaticParser::QueryContext::describeQuery() {
+SparqlAutomaticParser::DescribeQueryContext* SparqlAutomaticParser::QueryContext::describeQuery() {
   return getRuleContext<SparqlAutomaticParser::DescribeQueryContext>(0);
 }
 
-SparqlAutomaticParser::AskQueryContext*
-SparqlAutomaticParser::QueryContext::askQuery() {
+SparqlAutomaticParser::AskQueryContext* SparqlAutomaticParser::QueryContext::askQuery() {
   return getRuleContext<SparqlAutomaticParser::AskQueryContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::QueryContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleQuery;
 }
 
-void SparqlAutomaticParser::QueryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterQuery(this);
+void SparqlAutomaticParser::QueryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterQuery(this);
 }
 
-void SparqlAutomaticParser::QueryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitQuery(this);
+void SparqlAutomaticParser::QueryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitQuery(this);
 }
 
 SparqlAutomaticParser::QueryContext* SparqlAutomaticParser::query() {
-  QueryContext* _localctx =
-      _tracker.createInstance<QueryContext>(_ctx, getState());
+  QueryContext *_localctx = _tracker.createInstance<QueryContext>(_ctx, getState());
   enterRule(_localctx, 0, SparqlAutomaticParser::RuleQuery);
 
 #if __cplusplus > 201703L
@@ -1736,44 +861,45 @@ SparqlAutomaticParser::QueryContext* SparqlAutomaticParser::query() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(312);
+    setState(326);
     prologue();
-    setState(317);
+    setState(331);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::SELECT: {
-        setState(313);
+        setState(327);
         selectQuery();
         break;
       }
 
       case SparqlAutomaticParser::CONSTRUCT: {
-        setState(314);
+        setState(328);
         constructQuery();
         break;
       }
 
       case SparqlAutomaticParser::DESCRIBE: {
-        setState(315);
+        setState(329);
         describeQuery();
         break;
       }
 
       case SparqlAutomaticParser::ASK: {
-        setState(316);
+        setState(330);
         askQuery();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(319);
+    setState(333);
     valuesClause();
-    setState(320);
+    setState(334);
     match(SparqlAutomaticParser::EOF);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -1782,52 +908,47 @@ SparqlAutomaticParser::QueryContext* SparqlAutomaticParser::query() {
   return _localctx;
 }
 
-//----------------- PrologueContext
-//------------------------------------------------------------------
+//----------------- PrologueContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PrologueContext::PrologueContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PrologueContext::PrologueContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::BaseDeclContext*>
-SparqlAutomaticParser::PrologueContext::baseDecl() {
+std::vector<SparqlAutomaticParser::BaseDeclContext *> SparqlAutomaticParser::PrologueContext::baseDecl() {
   return getRuleContexts<SparqlAutomaticParser::BaseDeclContext>();
 }
 
-SparqlAutomaticParser::BaseDeclContext*
-SparqlAutomaticParser::PrologueContext::baseDecl(size_t i) {
+SparqlAutomaticParser::BaseDeclContext* SparqlAutomaticParser::PrologueContext::baseDecl(size_t i) {
   return getRuleContext<SparqlAutomaticParser::BaseDeclContext>(i);
 }
 
-std::vector<SparqlAutomaticParser::PrefixDeclContext*>
-SparqlAutomaticParser::PrologueContext::prefixDecl() {
+std::vector<SparqlAutomaticParser::PrefixDeclContext *> SparqlAutomaticParser::PrologueContext::prefixDecl() {
   return getRuleContexts<SparqlAutomaticParser::PrefixDeclContext>();
 }
 
-SparqlAutomaticParser::PrefixDeclContext*
-SparqlAutomaticParser::PrologueContext::prefixDecl(size_t i) {
+SparqlAutomaticParser::PrefixDeclContext* SparqlAutomaticParser::PrologueContext::prefixDecl(size_t i) {
   return getRuleContext<SparqlAutomaticParser::PrefixDeclContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::PrologueContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePrologue;
 }
 
-void SparqlAutomaticParser::PrologueContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPrologue(this);
+void SparqlAutomaticParser::PrologueContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPrologue(this);
 }
 
-void SparqlAutomaticParser::PrologueContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPrologue(this);
+void SparqlAutomaticParser::PrologueContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPrologue(this);
 }
 
 SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::prologue() {
-  PrologueContext* _localctx =
-      _tracker.createInstance<PrologueContext>(_ctx, getState());
+  PrologueContext *_localctx = _tracker.createInstance<PrologueContext>(_ctx, getState());
   enterRule(_localctx, 2, SparqlAutomaticParser::RulePrologue);
   size_t _la = 0;
 
@@ -1840,36 +961,37 @@ SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::prologue() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(326);
+    setState(340);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::BASE
 
-           || _la == SparqlAutomaticParser::PREFIX) {
-      setState(324);
+    || _la == SparqlAutomaticParser::PREFIX) {
+      setState(338);
       _errHandler->sync(this);
       switch (_input->LA(1)) {
         case SparqlAutomaticParser::BASE: {
-          setState(322);
+          setState(336);
           baseDecl();
           break;
         }
 
         case SparqlAutomaticParser::PREFIX: {
-          setState(323);
+          setState(337);
           prefixDecl();
           break;
         }
 
-        default:
-          throw NoViableAltException(this);
+      default:
+        throw NoViableAltException(this);
       }
-      setState(328);
+      setState(342);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -1878,41 +1000,39 @@ SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::prologue() {
   return _localctx;
 }
 
-//----------------- BaseDeclContext
-//------------------------------------------------------------------
+//----------------- BaseDeclContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BaseDeclContext::BaseDeclContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BaseDeclContext::BaseDeclContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::BaseDeclContext::BASE() {
   return getToken(SparqlAutomaticParser::BASE, 0);
 }
 
-SparqlAutomaticParser::IrirefContext*
-SparqlAutomaticParser::BaseDeclContext::iriref() {
+SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::BaseDeclContext::iriref() {
   return getRuleContext<SparqlAutomaticParser::IrirefContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::BaseDeclContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBaseDecl;
 }
 
-void SparqlAutomaticParser::BaseDeclContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterBaseDecl(this);
+void SparqlAutomaticParser::BaseDeclContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBaseDecl(this);
 }
 
-void SparqlAutomaticParser::BaseDeclContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBaseDecl(this);
+void SparqlAutomaticParser::BaseDeclContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBaseDecl(this);
 }
 
 SparqlAutomaticParser::BaseDeclContext* SparqlAutomaticParser::baseDecl() {
-  BaseDeclContext* _localctx =
-      _tracker.createInstance<BaseDeclContext>(_ctx, getState());
+  BaseDeclContext *_localctx = _tracker.createInstance<BaseDeclContext>(_ctx, getState());
   enterRule(_localctx, 4, SparqlAutomaticParser::RuleBaseDecl);
 
 #if __cplusplus > 201703L
@@ -1924,12 +1044,13 @@ SparqlAutomaticParser::BaseDeclContext* SparqlAutomaticParser::baseDecl() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(329);
+    setState(343);
     match(SparqlAutomaticParser::BASE);
-    setState(330);
+    setState(344);
     iriref();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -1938,12 +1059,11 @@ SparqlAutomaticParser::BaseDeclContext* SparqlAutomaticParser::baseDecl() {
   return _localctx;
 }
 
-//----------------- PrefixDeclContext
-//------------------------------------------------------------------
+//----------------- PrefixDeclContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PrefixDeclContext::PrefixDeclContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PrefixDeclContext::PrefixDeclContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::PrefixDeclContext::PREFIX() {
   return getToken(SparqlAutomaticParser::PREFIX, 0);
@@ -1953,30 +1073,29 @@ tree::TerminalNode* SparqlAutomaticParser::PrefixDeclContext::PNAME_NS() {
   return getToken(SparqlAutomaticParser::PNAME_NS, 0);
 }
 
-SparqlAutomaticParser::IrirefContext*
-SparqlAutomaticParser::PrefixDeclContext::iriref() {
+SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::PrefixDeclContext::iriref() {
   return getRuleContext<SparqlAutomaticParser::IrirefContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PrefixDeclContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePrefixDecl;
 }
 
-void SparqlAutomaticParser::PrefixDeclContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPrefixDecl(this);
+void SparqlAutomaticParser::PrefixDeclContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPrefixDecl(this);
 }
 
-void SparqlAutomaticParser::PrefixDeclContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPrefixDecl(this);
+void SparqlAutomaticParser::PrefixDeclContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPrefixDecl(this);
 }
 
 SparqlAutomaticParser::PrefixDeclContext* SparqlAutomaticParser::prefixDecl() {
-  PrefixDeclContext* _localctx =
-      _tracker.createInstance<PrefixDeclContext>(_ctx, getState());
+  PrefixDeclContext *_localctx = _tracker.createInstance<PrefixDeclContext>(_ctx, getState());
   enterRule(_localctx, 6, SparqlAutomaticParser::RulePrefixDecl);
 
 #if __cplusplus > 201703L
@@ -1988,14 +1107,15 @@ SparqlAutomaticParser::PrefixDeclContext* SparqlAutomaticParser::prefixDecl() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(332);
+    setState(346);
     match(SparqlAutomaticParser::PREFIX);
-    setState(333);
+    setState(347);
     match(SparqlAutomaticParser::PNAME_NS);
-    setState(334);
+    setState(348);
     iriref();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2004,58 +1124,51 @@ SparqlAutomaticParser::PrefixDeclContext* SparqlAutomaticParser::prefixDecl() {
   return _localctx;
 }
 
-//----------------- SelectQueryContext
-//------------------------------------------------------------------
+//----------------- SelectQueryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SelectQueryContext::SelectQueryContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SelectQueryContext::SelectQueryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::SelectClauseContext*
-SparqlAutomaticParser::SelectQueryContext::selectClause() {
+SparqlAutomaticParser::SelectClauseContext* SparqlAutomaticParser::SelectQueryContext::selectClause() {
   return getRuleContext<SparqlAutomaticParser::SelectClauseContext>(0);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::SelectQueryContext::whereClause() {
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::SelectQueryContext::whereClause() {
   return getRuleContext<SparqlAutomaticParser::WhereClauseContext>(0);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::SelectQueryContext::solutionModifier() {
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::SelectQueryContext::solutionModifier() {
   return getRuleContext<SparqlAutomaticParser::SolutionModifierContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::DatasetClauseContext*>
-SparqlAutomaticParser::SelectQueryContext::datasetClause() {
+std::vector<SparqlAutomaticParser::DatasetClauseContext *> SparqlAutomaticParser::SelectQueryContext::datasetClause() {
   return getRuleContexts<SparqlAutomaticParser::DatasetClauseContext>();
 }
 
-SparqlAutomaticParser::DatasetClauseContext*
-SparqlAutomaticParser::SelectQueryContext::datasetClause(size_t i) {
+SparqlAutomaticParser::DatasetClauseContext* SparqlAutomaticParser::SelectQueryContext::datasetClause(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DatasetClauseContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::SelectQueryContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSelectQuery;
 }
 
-void SparqlAutomaticParser::SelectQueryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSelectQuery(this);
+void SparqlAutomaticParser::SelectQueryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSelectQuery(this);
 }
 
-void SparqlAutomaticParser::SelectQueryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSelectQuery(this);
+void SparqlAutomaticParser::SelectQueryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSelectQuery(this);
 }
 
-SparqlAutomaticParser::SelectQueryContext*
-SparqlAutomaticParser::selectQuery() {
-  SelectQueryContext* _localctx =
-      _tracker.createInstance<SelectQueryContext>(_ctx, getState());
+SparqlAutomaticParser::SelectQueryContext* SparqlAutomaticParser::selectQuery() {
+  SelectQueryContext *_localctx = _tracker.createInstance<SelectQueryContext>(_ctx, getState());
   enterRule(_localctx, 8, SparqlAutomaticParser::RuleSelectQuery);
   size_t _la = 0;
 
@@ -2068,24 +1181,25 @@ SparqlAutomaticParser::selectQuery() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(336);
+    setState(350);
     selectClause();
-    setState(340);
+    setState(354);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::FROM) {
-      setState(337);
+      setState(351);
       datasetClause();
-      setState(342);
+      setState(356);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(343);
+    setState(357);
     whereClause();
-    setState(344);
+    setState(358);
     solutionModifier();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2094,52 +1208,47 @@ SparqlAutomaticParser::selectQuery() {
   return _localctx;
 }
 
-//----------------- SubSelectContext
-//------------------------------------------------------------------
+//----------------- SubSelectContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SubSelectContext::SubSelectContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SubSelectContext::SubSelectContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::SelectClauseContext*
-SparqlAutomaticParser::SubSelectContext::selectClause() {
+SparqlAutomaticParser::SelectClauseContext* SparqlAutomaticParser::SubSelectContext::selectClause() {
   return getRuleContext<SparqlAutomaticParser::SelectClauseContext>(0);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::SubSelectContext::whereClause() {
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::SubSelectContext::whereClause() {
   return getRuleContext<SparqlAutomaticParser::WhereClauseContext>(0);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::SubSelectContext::solutionModifier() {
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::SubSelectContext::solutionModifier() {
   return getRuleContext<SparqlAutomaticParser::SolutionModifierContext>(0);
 }
 
-SparqlAutomaticParser::ValuesClauseContext*
-SparqlAutomaticParser::SubSelectContext::valuesClause() {
+SparqlAutomaticParser::ValuesClauseContext* SparqlAutomaticParser::SubSelectContext::valuesClause() {
   return getRuleContext<SparqlAutomaticParser::ValuesClauseContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::SubSelectContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSubSelect;
 }
 
-void SparqlAutomaticParser::SubSelectContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSubSelect(this);
+void SparqlAutomaticParser::SubSelectContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSubSelect(this);
 }
 
-void SparqlAutomaticParser::SubSelectContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSubSelect(this);
+void SparqlAutomaticParser::SubSelectContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSubSelect(this);
 }
 
 SparqlAutomaticParser::SubSelectContext* SparqlAutomaticParser::subSelect() {
-  SubSelectContext* _localctx =
-      _tracker.createInstance<SubSelectContext>(_ctx, getState());
+  SubSelectContext *_localctx = _tracker.createInstance<SubSelectContext>(_ctx, getState());
   enterRule(_localctx, 10, SparqlAutomaticParser::RuleSubSelect);
 
 #if __cplusplus > 201703L
@@ -2151,16 +1260,17 @@ SparqlAutomaticParser::SubSelectContext* SparqlAutomaticParser::subSelect() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(346);
+    setState(360);
     selectClause();
-    setState(347);
+    setState(361);
     whereClause();
-    setState(348);
+    setState(362);
     solutionModifier();
-    setState(349);
+    setState(363);
     valuesClause();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2169,12 +1279,11 @@ SparqlAutomaticParser::SubSelectContext* SparqlAutomaticParser::subSelect() {
   return _localctx;
 }
 
-//----------------- SelectClauseContext
-//------------------------------------------------------------------
+//----------------- SelectClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SelectClauseContext::SelectClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SelectClauseContext::SelectClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::SelectClauseContext::SELECT() {
   return getToken(SparqlAutomaticParser::SELECT, 0);
@@ -2188,36 +1297,33 @@ tree::TerminalNode* SparqlAutomaticParser::SelectClauseContext::REDUCED() {
   return getToken(SparqlAutomaticParser::REDUCED, 0);
 }
 
-std::vector<SparqlAutomaticParser::VarOrAliasContext*>
-SparqlAutomaticParser::SelectClauseContext::varOrAlias() {
+std::vector<SparqlAutomaticParser::VarOrAliasContext *> SparqlAutomaticParser::SelectClauseContext::varOrAlias() {
   return getRuleContexts<SparqlAutomaticParser::VarOrAliasContext>();
 }
 
-SparqlAutomaticParser::VarOrAliasContext*
-SparqlAutomaticParser::SelectClauseContext::varOrAlias(size_t i) {
+SparqlAutomaticParser::VarOrAliasContext* SparqlAutomaticParser::SelectClauseContext::varOrAlias(size_t i) {
   return getRuleContext<SparqlAutomaticParser::VarOrAliasContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::SelectClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSelectClause;
 }
 
-void SparqlAutomaticParser::SelectClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSelectClause(this);
+void SparqlAutomaticParser::SelectClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSelectClause(this);
 }
 
-void SparqlAutomaticParser::SelectClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSelectClause(this);
+void SparqlAutomaticParser::SelectClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSelectClause(this);
 }
 
-SparqlAutomaticParser::SelectClauseContext*
-SparqlAutomaticParser::selectClause() {
-  SelectClauseContext* _localctx =
-      _tracker.createInstance<SelectClauseContext>(_ctx, getState());
+SparqlAutomaticParser::SelectClauseContext* SparqlAutomaticParser::selectClause() {
+  SelectClauseContext *_localctx = _tracker.createInstance<SelectClauseContext>(_ctx, getState());
   enterRule(_localctx, 12, SparqlAutomaticParser::RuleSelectClause);
   size_t _la = 0;
 
@@ -2230,60 +1336,60 @@ SparqlAutomaticParser::selectClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(351);
+    setState(365);
     match(SparqlAutomaticParser::SELECT);
-    setState(353);
+    setState(367);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::DISTINCT
 
-        || _la == SparqlAutomaticParser::REDUCED) {
-      setState(352);
+    || _la == SparqlAutomaticParser::REDUCED) {
+      setState(366);
       _la = _input->LA(1);
       if (!(_la == SparqlAutomaticParser::DISTINCT
 
-            || _la == SparqlAutomaticParser::REDUCED)) {
-        _errHandler->recoverInline(this);
-      } else {
+      || _la == SparqlAutomaticParser::REDUCED)) {
+      _errHandler->recoverInline(this);
+      }
+      else {
         _errHandler->reportMatch(this);
         consume();
       }
     }
-    setState(361);
+    setState(375);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1:
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
-        setState(356);
+        setState(370); 
         _errHandler->sync(this);
         _la = _input->LA(1);
         do {
-          setState(355);
+          setState(369);
           varOrAlias();
-          setState(358);
+          setState(372); 
           _errHandler->sync(this);
           _la = _input->LA(1);
-        } while (_la == SparqlAutomaticParser::T__1 ||
-                 _la == SparqlAutomaticParser::VAR1
+        } while (_la == SparqlAutomaticParser::T__1 || _la == SparqlAutomaticParser::VAR1
 
-                 || _la == SparqlAutomaticParser::VAR2);
+        || _la == SparqlAutomaticParser::VAR2);
         break;
       }
 
       case SparqlAutomaticParser::T__0: {
-        setState(360);
-        antlrcpp::downCast<SelectClauseContext*>(_localctx)->asterisk =
-            match(SparqlAutomaticParser::T__0);
+        setState(374);
+        antlrcpp::downCast<SelectClauseContext *>(_localctx)->asterisk = match(SparqlAutomaticParser::T__0);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2292,42 +1398,39 @@ SparqlAutomaticParser::selectClause() {
   return _localctx;
 }
 
-//----------------- VarOrAliasContext
-//------------------------------------------------------------------
+//----------------- VarOrAliasContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VarOrAliasContext::VarOrAliasContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::VarOrAliasContext::VarOrAliasContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::VarOrAliasContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::VarOrAliasContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
-SparqlAutomaticParser::AliasContext*
-SparqlAutomaticParser::VarOrAliasContext::alias() {
+SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::VarOrAliasContext::alias() {
   return getRuleContext<SparqlAutomaticParser::AliasContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::VarOrAliasContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleVarOrAlias;
 }
 
-void SparqlAutomaticParser::VarOrAliasContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVarOrAlias(this);
+void SparqlAutomaticParser::VarOrAliasContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVarOrAlias(this);
 }
 
-void SparqlAutomaticParser::VarOrAliasContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVarOrAlias(this);
+void SparqlAutomaticParser::VarOrAliasContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVarOrAlias(this);
 }
 
 SparqlAutomaticParser::VarOrAliasContext* SparqlAutomaticParser::varOrAlias() {
-  VarOrAliasContext* _localctx =
-      _tracker.createInstance<VarOrAliasContext>(_ctx, getState());
+  VarOrAliasContext *_localctx = _tracker.createInstance<VarOrAliasContext>(_ctx, getState());
   enterRule(_localctx, 14, SparqlAutomaticParser::RuleVarOrAlias);
 
 #if __cplusplus > 201703L
@@ -2338,29 +1441,30 @@ SparqlAutomaticParser::VarOrAliasContext* SparqlAutomaticParser::varOrAlias() {
     exitRule();
   });
   try {
-    setState(365);
+    setState(379);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
         enterOuterAlt(_localctx, 1);
-        setState(363);
+        setState(377);
         var();
         break;
       }
 
       case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 2);
-        setState(364);
+        setState(378);
         alias();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2369,37 +1473,35 @@ SparqlAutomaticParser::VarOrAliasContext* SparqlAutomaticParser::varOrAlias() {
   return _localctx;
 }
 
-//----------------- AliasContext
-//------------------------------------------------------------------
+//----------------- AliasContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::AliasContext::AliasContext(ParserRuleContext* parent,
-                                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::AliasContext::AliasContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::AliasWithoutBracketsContext*
-SparqlAutomaticParser::AliasContext::aliasWithoutBrackets() {
+SparqlAutomaticParser::AliasWithoutBracketsContext* SparqlAutomaticParser::AliasContext::aliasWithoutBrackets() {
   return getRuleContext<SparqlAutomaticParser::AliasWithoutBracketsContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::AliasContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleAlias;
 }
 
-void SparqlAutomaticParser::AliasContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAlias(this);
+void SparqlAutomaticParser::AliasContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterAlias(this);
 }
 
-void SparqlAutomaticParser::AliasContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAlias(this);
+void SparqlAutomaticParser::AliasContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAlias(this);
 }
 
 SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
-  AliasContext* _localctx =
-      _tracker.createInstance<AliasContext>(_ctx, getState());
+  AliasContext *_localctx = _tracker.createInstance<AliasContext>(_ctx, getState());
   enterRule(_localctx, 16, SparqlAutomaticParser::RuleAlias);
 
 #if __cplusplus > 201703L
@@ -2411,14 +1513,15 @@ SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(367);
+    setState(381);
     match(SparqlAutomaticParser::T__1);
-    setState(368);
+    setState(382);
     aliasWithoutBrackets();
-    setState(369);
+    setState(383);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2427,15 +1530,13 @@ SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
   return _localctx;
 }
 
-//----------------- AliasWithoutBracketsContext
-//------------------------------------------------------------------
+//----------------- AliasWithoutBracketsContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::AliasWithoutBracketsContext::AliasWithoutBracketsContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::AliasWithoutBracketsContext::AliasWithoutBracketsContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::AliasWithoutBracketsContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::AliasWithoutBracketsContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
@@ -2443,33 +1544,29 @@ tree::TerminalNode* SparqlAutomaticParser::AliasWithoutBracketsContext::AS() {
   return getToken(SparqlAutomaticParser::AS, 0);
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::AliasWithoutBracketsContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::AliasWithoutBracketsContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
-size_t SparqlAutomaticParser::AliasWithoutBracketsContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::AliasWithoutBracketsContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleAliasWithoutBrackets;
 }
 
-void SparqlAutomaticParser::AliasWithoutBracketsContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::AliasWithoutBracketsContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterAliasWithoutBrackets(this);
 }
 
-void SparqlAutomaticParser::AliasWithoutBracketsContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAliasWithoutBrackets(this);
+void SparqlAutomaticParser::AliasWithoutBracketsContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAliasWithoutBrackets(this);
 }
 
-SparqlAutomaticParser::AliasWithoutBracketsContext*
-SparqlAutomaticParser::aliasWithoutBrackets() {
-  AliasWithoutBracketsContext* _localctx =
-      _tracker.createInstance<AliasWithoutBracketsContext>(_ctx, getState());
+SparqlAutomaticParser::AliasWithoutBracketsContext* SparqlAutomaticParser::aliasWithoutBrackets() {
+  AliasWithoutBracketsContext *_localctx = _tracker.createInstance<AliasWithoutBracketsContext>(_ctx, getState());
   enterRule(_localctx, 18, SparqlAutomaticParser::RuleAliasWithoutBrackets);
 
 #if __cplusplus > 201703L
@@ -2481,14 +1578,15 @@ SparqlAutomaticParser::aliasWithoutBrackets() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(371);
+    setState(385);
     expression();
-    setState(372);
+    setState(386);
     match(SparqlAutomaticParser::AS);
-    setState(373);
+    setState(387);
     var();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2497,29 +1595,25 @@ SparqlAutomaticParser::aliasWithoutBrackets() {
   return _localctx;
 }
 
-//----------------- ConstructQueryContext
-//------------------------------------------------------------------
+//----------------- ConstructQueryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConstructQueryContext::ConstructQueryContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ConstructQueryContext::ConstructQueryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ConstructQueryContext::CONSTRUCT() {
   return getToken(SparqlAutomaticParser::CONSTRUCT, 0);
 }
 
-SparqlAutomaticParser::ConstructTemplateContext*
-SparqlAutomaticParser::ConstructQueryContext::constructTemplate() {
+SparqlAutomaticParser::ConstructTemplateContext* SparqlAutomaticParser::ConstructQueryContext::constructTemplate() {
   return getRuleContext<SparqlAutomaticParser::ConstructTemplateContext>(0);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::ConstructQueryContext::whereClause() {
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::ConstructQueryContext::whereClause() {
   return getRuleContext<SparqlAutomaticParser::WhereClauseContext>(0);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::ConstructQueryContext::solutionModifier() {
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::ConstructQueryContext::solutionModifier() {
   return getRuleContext<SparqlAutomaticParser::SolutionModifierContext>(0);
 }
 
@@ -2527,41 +1621,37 @@ tree::TerminalNode* SparqlAutomaticParser::ConstructQueryContext::WHERE() {
   return getToken(SparqlAutomaticParser::WHERE, 0);
 }
 
-std::vector<SparqlAutomaticParser::DatasetClauseContext*>
-SparqlAutomaticParser::ConstructQueryContext::datasetClause() {
+std::vector<SparqlAutomaticParser::DatasetClauseContext *> SparqlAutomaticParser::ConstructQueryContext::datasetClause() {
   return getRuleContexts<SparqlAutomaticParser::DatasetClauseContext>();
 }
 
-SparqlAutomaticParser::DatasetClauseContext*
-SparqlAutomaticParser::ConstructQueryContext::datasetClause(size_t i) {
+SparqlAutomaticParser::DatasetClauseContext* SparqlAutomaticParser::ConstructQueryContext::datasetClause(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DatasetClauseContext>(i);
 }
 
-SparqlAutomaticParser::TriplesTemplateContext*
-SparqlAutomaticParser::ConstructQueryContext::triplesTemplate() {
+SparqlAutomaticParser::TriplesTemplateContext* SparqlAutomaticParser::ConstructQueryContext::triplesTemplate() {
   return getRuleContext<SparqlAutomaticParser::TriplesTemplateContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ConstructQueryContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConstructQuery;
 }
 
-void SparqlAutomaticParser::ConstructQueryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterConstructQuery(this);
+void SparqlAutomaticParser::ConstructQueryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterConstructQuery(this);
 }
 
-void SparqlAutomaticParser::ConstructQueryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitConstructQuery(this);
+void SparqlAutomaticParser::ConstructQueryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitConstructQuery(this);
 }
 
-SparqlAutomaticParser::ConstructQueryContext*
-SparqlAutomaticParser::constructQuery() {
-  ConstructQueryContext* _localctx =
-      _tracker.createInstance<ConstructQueryContext>(_ctx, getState());
+SparqlAutomaticParser::ConstructQueryContext* SparqlAutomaticParser::constructQuery() {
+  ConstructQueryContext *_localctx = _tracker.createInstance<ConstructQueryContext>(_ctx, getState());
   enterRule(_localctx, 20, SparqlAutomaticParser::RuleConstructQuery);
   size_t _la = 0;
 
@@ -2574,69 +1664,70 @@ SparqlAutomaticParser::constructQuery() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(375);
+    setState(389);
     match(SparqlAutomaticParser::CONSTRUCT);
-    setState(399);
+    setState(413);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__3: {
-        setState(376);
+        setState(390);
         constructTemplate();
-        setState(380);
+        setState(394);
         _errHandler->sync(this);
         _la = _input->LA(1);
         while (_la == SparqlAutomaticParser::FROM) {
-          setState(377);
+          setState(391);
           datasetClause();
-          setState(382);
+          setState(396);
           _errHandler->sync(this);
           _la = _input->LA(1);
         }
-        setState(383);
+        setState(397);
         whereClause();
-        setState(384);
+        setState(398);
         solutionModifier();
         break;
       }
 
       case SparqlAutomaticParser::WHERE:
       case SparqlAutomaticParser::FROM: {
-        setState(389);
+        setState(403);
         _errHandler->sync(this);
         _la = _input->LA(1);
         while (_la == SparqlAutomaticParser::FROM) {
-          setState(386);
+          setState(400);
           datasetClause();
-          setState(391);
+          setState(405);
           _errHandler->sync(this);
           _la = _input->LA(1);
         }
-        setState(392);
+        setState(406);
         match(SparqlAutomaticParser::WHERE);
-        setState(393);
+        setState(407);
         match(SparqlAutomaticParser::T__3);
-        setState(395);
+        setState(409);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
-        if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-            ((((_la - 142) & ~0x3fULL) == 0) &&
-             ((1ULL << (_la - 142)) & 29228991) != 0)) {
-          setState(394);
+        if ((((_la & ~ 0x3fULL) == 0) &&
+          ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 142)) & 29228991) != 0)) {
+          setState(408);
           triplesTemplate();
         }
-        setState(397);
+        setState(411);
         match(SparqlAutomaticParser::T__4);
-        setState(398);
+        setState(412);
         solutionModifier();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2645,67 +1736,59 @@ SparqlAutomaticParser::constructQuery() {
   return _localctx;
 }
 
-//----------------- DescribeQueryContext
-//------------------------------------------------------------------
+//----------------- DescribeQueryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DescribeQueryContext::DescribeQueryContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DescribeQueryContext::DescribeQueryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DescribeQueryContext::DESCRIBE() {
   return getToken(SparqlAutomaticParser::DESCRIBE, 0);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::DescribeQueryContext::solutionModifier() {
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::DescribeQueryContext::solutionModifier() {
   return getRuleContext<SparqlAutomaticParser::SolutionModifierContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::DatasetClauseContext*>
-SparqlAutomaticParser::DescribeQueryContext::datasetClause() {
+std::vector<SparqlAutomaticParser::DatasetClauseContext *> SparqlAutomaticParser::DescribeQueryContext::datasetClause() {
   return getRuleContexts<SparqlAutomaticParser::DatasetClauseContext>();
 }
 
-SparqlAutomaticParser::DatasetClauseContext*
-SparqlAutomaticParser::DescribeQueryContext::datasetClause(size_t i) {
+SparqlAutomaticParser::DatasetClauseContext* SparqlAutomaticParser::DescribeQueryContext::datasetClause(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DatasetClauseContext>(i);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::DescribeQueryContext::whereClause() {
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::DescribeQueryContext::whereClause() {
   return getRuleContext<SparqlAutomaticParser::WhereClauseContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::VarOrIriContext*>
-SparqlAutomaticParser::DescribeQueryContext::varOrIri() {
+std::vector<SparqlAutomaticParser::VarOrIriContext *> SparqlAutomaticParser::DescribeQueryContext::varOrIri() {
   return getRuleContexts<SparqlAutomaticParser::VarOrIriContext>();
 }
 
-SparqlAutomaticParser::VarOrIriContext*
-SparqlAutomaticParser::DescribeQueryContext::varOrIri(size_t i) {
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::DescribeQueryContext::varOrIri(size_t i) {
   return getRuleContext<SparqlAutomaticParser::VarOrIriContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::DescribeQueryContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDescribeQuery;
 }
 
-void SparqlAutomaticParser::DescribeQueryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDescribeQuery(this);
+void SparqlAutomaticParser::DescribeQueryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDescribeQuery(this);
 }
 
-void SparqlAutomaticParser::DescribeQueryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDescribeQuery(this);
+void SparqlAutomaticParser::DescribeQueryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDescribeQuery(this);
 }
 
-SparqlAutomaticParser::DescribeQueryContext*
-SparqlAutomaticParser::describeQuery() {
-  DescribeQueryContext* _localctx =
-      _tracker.createInstance<DescribeQueryContext>(_ctx, getState());
+SparqlAutomaticParser::DescribeQueryContext* SparqlAutomaticParser::describeQuery() {
+  DescribeQueryContext *_localctx = _tracker.createInstance<DescribeQueryContext>(_ctx, getState());
   enterRule(_localctx, 22, SparqlAutomaticParser::RuleDescribeQuery);
   size_t _la = 0;
 
@@ -2718,9 +1801,9 @@ SparqlAutomaticParser::describeQuery() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(401);
+    setState(415);
     match(SparqlAutomaticParser::DESCRIBE);
-    setState(408);
+    setState(422);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
@@ -2729,53 +1812,54 @@ SparqlAutomaticParser::describeQuery() {
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        setState(403);
+        setState(417); 
         _errHandler->sync(this);
         _la = _input->LA(1);
         do {
-          setState(402);
+          setState(416);
           varOrIri();
-          setState(405);
+          setState(419); 
           _errHandler->sync(this);
           _la = _input->LA(1);
-        } while (((((_la - 142) & ~0x3fULL) == 0) &&
-                  ((1ULL << (_la - 142)) & 183) != 0));
+        } while (((((_la - 142) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 142)) & 183) != 0));
         break;
       }
 
       case SparqlAutomaticParser::T__0: {
-        setState(407);
+        setState(421);
         match(SparqlAutomaticParser::T__0);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(413);
+    setState(427);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::FROM) {
-      setState(410);
+      setState(424);
       datasetClause();
-      setState(415);
+      setState(429);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(417);
+    setState(431);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__3
 
-        || _la == SparqlAutomaticParser::WHERE) {
-      setState(416);
+    || _la == SparqlAutomaticParser::WHERE) {
+      setState(430);
       whereClause();
     }
-    setState(419);
+    setState(433);
     solutionModifier();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2784,56 +1868,51 @@ SparqlAutomaticParser::describeQuery() {
   return _localctx;
 }
 
-//----------------- AskQueryContext
-//------------------------------------------------------------------
+//----------------- AskQueryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::AskQueryContext::AskQueryContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::AskQueryContext::AskQueryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::AskQueryContext::ASK() {
   return getToken(SparqlAutomaticParser::ASK, 0);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::AskQueryContext::whereClause() {
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::AskQueryContext::whereClause() {
   return getRuleContext<SparqlAutomaticParser::WhereClauseContext>(0);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::AskQueryContext::solutionModifier() {
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::AskQueryContext::solutionModifier() {
   return getRuleContext<SparqlAutomaticParser::SolutionModifierContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::DatasetClauseContext*>
-SparqlAutomaticParser::AskQueryContext::datasetClause() {
+std::vector<SparqlAutomaticParser::DatasetClauseContext *> SparqlAutomaticParser::AskQueryContext::datasetClause() {
   return getRuleContexts<SparqlAutomaticParser::DatasetClauseContext>();
 }
 
-SparqlAutomaticParser::DatasetClauseContext*
-SparqlAutomaticParser::AskQueryContext::datasetClause(size_t i) {
+SparqlAutomaticParser::DatasetClauseContext* SparqlAutomaticParser::AskQueryContext::datasetClause(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DatasetClauseContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::AskQueryContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleAskQuery;
 }
 
-void SparqlAutomaticParser::AskQueryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAskQuery(this);
+void SparqlAutomaticParser::AskQueryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterAskQuery(this);
 }
 
-void SparqlAutomaticParser::AskQueryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAskQuery(this);
+void SparqlAutomaticParser::AskQueryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAskQuery(this);
 }
 
 SparqlAutomaticParser::AskQueryContext* SparqlAutomaticParser::askQuery() {
-  AskQueryContext* _localctx =
-      _tracker.createInstance<AskQueryContext>(_ctx, getState());
+  AskQueryContext *_localctx = _tracker.createInstance<AskQueryContext>(_ctx, getState());
   enterRule(_localctx, 24, SparqlAutomaticParser::RuleAskQuery);
   size_t _la = 0;
 
@@ -2846,24 +1925,25 @@ SparqlAutomaticParser::AskQueryContext* SparqlAutomaticParser::askQuery() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(421);
+    setState(435);
     match(SparqlAutomaticParser::ASK);
-    setState(425);
+    setState(439);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::FROM) {
-      setState(422);
+      setState(436);
       datasetClause();
-      setState(427);
+      setState(441);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(428);
+    setState(442);
     whereClause();
-    setState(429);
+    setState(443);
     solutionModifier();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2872,47 +1952,43 @@ SparqlAutomaticParser::AskQueryContext* SparqlAutomaticParser::askQuery() {
   return _localctx;
 }
 
-//----------------- DatasetClauseContext
-//------------------------------------------------------------------
+//----------------- DatasetClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DatasetClauseContext::DatasetClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DatasetClauseContext::DatasetClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DatasetClauseContext::FROM() {
   return getToken(SparqlAutomaticParser::FROM, 0);
 }
 
-SparqlAutomaticParser::DefaultGraphClauseContext*
-SparqlAutomaticParser::DatasetClauseContext::defaultGraphClause() {
+SparqlAutomaticParser::DefaultGraphClauseContext* SparqlAutomaticParser::DatasetClauseContext::defaultGraphClause() {
   return getRuleContext<SparqlAutomaticParser::DefaultGraphClauseContext>(0);
 }
 
-SparqlAutomaticParser::NamedGraphClauseContext*
-SparqlAutomaticParser::DatasetClauseContext::namedGraphClause() {
+SparqlAutomaticParser::NamedGraphClauseContext* SparqlAutomaticParser::DatasetClauseContext::namedGraphClause() {
   return getRuleContext<SparqlAutomaticParser::NamedGraphClauseContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DatasetClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDatasetClause;
 }
 
-void SparqlAutomaticParser::DatasetClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDatasetClause(this);
+void SparqlAutomaticParser::DatasetClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDatasetClause(this);
 }
 
-void SparqlAutomaticParser::DatasetClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDatasetClause(this);
+void SparqlAutomaticParser::DatasetClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDatasetClause(this);
 }
 
-SparqlAutomaticParser::DatasetClauseContext*
-SparqlAutomaticParser::datasetClause() {
-  DatasetClauseContext* _localctx =
-      _tracker.createInstance<DatasetClauseContext>(_ctx, getState());
+SparqlAutomaticParser::DatasetClauseContext* SparqlAutomaticParser::datasetClause() {
+  DatasetClauseContext *_localctx = _tracker.createInstance<DatasetClauseContext>(_ctx, getState());
   enterRule(_localctx, 26, SparqlAutomaticParser::RuleDatasetClause);
 
 #if __cplusplus > 201703L
@@ -2924,31 +2000,32 @@ SparqlAutomaticParser::datasetClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(431);
+    setState(445);
     match(SparqlAutomaticParser::FROM);
-    setState(434);
+    setState(448);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        setState(432);
+        setState(446);
         defaultGraphClause();
         break;
       }
 
       case SparqlAutomaticParser::NAMED: {
-        setState(433);
+        setState(447);
         namedGraphClause();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -2957,38 +2034,35 @@ SparqlAutomaticParser::datasetClause() {
   return _localctx;
 }
 
-//----------------- DefaultGraphClauseContext
-//------------------------------------------------------------------
+//----------------- DefaultGraphClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DefaultGraphClauseContext::DefaultGraphClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DefaultGraphClauseContext::DefaultGraphClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::SourceSelectorContext*
-SparqlAutomaticParser::DefaultGraphClauseContext::sourceSelector() {
+SparqlAutomaticParser::SourceSelectorContext* SparqlAutomaticParser::DefaultGraphClauseContext::sourceSelector() {
   return getRuleContext<SparqlAutomaticParser::SourceSelectorContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DefaultGraphClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDefaultGraphClause;
 }
 
-void SparqlAutomaticParser::DefaultGraphClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDefaultGraphClause(this);
+void SparqlAutomaticParser::DefaultGraphClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDefaultGraphClause(this);
 }
 
-void SparqlAutomaticParser::DefaultGraphClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDefaultGraphClause(this);
+void SparqlAutomaticParser::DefaultGraphClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDefaultGraphClause(this);
 }
 
-SparqlAutomaticParser::DefaultGraphClauseContext*
-SparqlAutomaticParser::defaultGraphClause() {
-  DefaultGraphClauseContext* _localctx =
-      _tracker.createInstance<DefaultGraphClauseContext>(_ctx, getState());
+SparqlAutomaticParser::DefaultGraphClauseContext* SparqlAutomaticParser::defaultGraphClause() {
+  DefaultGraphClauseContext *_localctx = _tracker.createInstance<DefaultGraphClauseContext>(_ctx, getState());
   enterRule(_localctx, 28, SparqlAutomaticParser::RuleDefaultGraphClause);
 
 #if __cplusplus > 201703L
@@ -3000,10 +2074,11 @@ SparqlAutomaticParser::defaultGraphClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(436);
+    setState(450);
     sourceSelector();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3012,42 +2087,39 @@ SparqlAutomaticParser::defaultGraphClause() {
   return _localctx;
 }
 
-//----------------- NamedGraphClauseContext
-//------------------------------------------------------------------
+//----------------- NamedGraphClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NamedGraphClauseContext::NamedGraphClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NamedGraphClauseContext::NamedGraphClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::NamedGraphClauseContext::NAMED() {
   return getToken(SparqlAutomaticParser::NAMED, 0);
 }
 
-SparqlAutomaticParser::SourceSelectorContext*
-SparqlAutomaticParser::NamedGraphClauseContext::sourceSelector() {
+SparqlAutomaticParser::SourceSelectorContext* SparqlAutomaticParser::NamedGraphClauseContext::sourceSelector() {
   return getRuleContext<SparqlAutomaticParser::SourceSelectorContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::NamedGraphClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNamedGraphClause;
 }
 
-void SparqlAutomaticParser::NamedGraphClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterNamedGraphClause(this);
+void SparqlAutomaticParser::NamedGraphClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterNamedGraphClause(this);
 }
 
-void SparqlAutomaticParser::NamedGraphClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitNamedGraphClause(this);
+void SparqlAutomaticParser::NamedGraphClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitNamedGraphClause(this);
 }
 
-SparqlAutomaticParser::NamedGraphClauseContext*
-SparqlAutomaticParser::namedGraphClause() {
-  NamedGraphClauseContext* _localctx =
-      _tracker.createInstance<NamedGraphClauseContext>(_ctx, getState());
+SparqlAutomaticParser::NamedGraphClauseContext* SparqlAutomaticParser::namedGraphClause() {
+  NamedGraphClauseContext *_localctx = _tracker.createInstance<NamedGraphClauseContext>(_ctx, getState());
   enterRule(_localctx, 30, SparqlAutomaticParser::RuleNamedGraphClause);
 
 #if __cplusplus > 201703L
@@ -3059,12 +2131,13 @@ SparqlAutomaticParser::namedGraphClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(438);
+    setState(452);
     match(SparqlAutomaticParser::NAMED);
-    setState(439);
+    setState(453);
     sourceSelector();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3073,38 +2146,35 @@ SparqlAutomaticParser::namedGraphClause() {
   return _localctx;
 }
 
-//----------------- SourceSelectorContext
-//------------------------------------------------------------------
+//----------------- SourceSelectorContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SourceSelectorContext::SourceSelectorContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SourceSelectorContext::SourceSelectorContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::SourceSelectorContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::SourceSelectorContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::SourceSelectorContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSourceSelector;
 }
 
-void SparqlAutomaticParser::SourceSelectorContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSourceSelector(this);
+void SparqlAutomaticParser::SourceSelectorContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSourceSelector(this);
 }
 
-void SparqlAutomaticParser::SourceSelectorContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSourceSelector(this);
+void SparqlAutomaticParser::SourceSelectorContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSourceSelector(this);
 }
 
-SparqlAutomaticParser::SourceSelectorContext*
-SparqlAutomaticParser::sourceSelector() {
-  SourceSelectorContext* _localctx =
-      _tracker.createInstance<SourceSelectorContext>(_ctx, getState());
+SparqlAutomaticParser::SourceSelectorContext* SparqlAutomaticParser::sourceSelector() {
+  SourceSelectorContext *_localctx = _tracker.createInstance<SourceSelectorContext>(_ctx, getState());
   enterRule(_localctx, 32, SparqlAutomaticParser::RuleSourceSelector);
 
 #if __cplusplus > 201703L
@@ -3116,10 +2186,11 @@ SparqlAutomaticParser::sourceSelector() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(441);
+    setState(455);
     iri();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3128,15 +2199,13 @@ SparqlAutomaticParser::sourceSelector() {
   return _localctx;
 }
 
-//----------------- WhereClauseContext
-//------------------------------------------------------------------
+//----------------- WhereClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::WhereClauseContext::WhereClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::WhereClauseContext::WhereClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::WhereClauseContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::WhereClauseContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
 
@@ -3144,26 +2213,25 @@ tree::TerminalNode* SparqlAutomaticParser::WhereClauseContext::WHERE() {
   return getToken(SparqlAutomaticParser::WHERE, 0);
 }
 
+
 size_t SparqlAutomaticParser::WhereClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleWhereClause;
 }
 
-void SparqlAutomaticParser::WhereClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterWhereClause(this);
+void SparqlAutomaticParser::WhereClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterWhereClause(this);
 }
 
-void SparqlAutomaticParser::WhereClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitWhereClause(this);
+void SparqlAutomaticParser::WhereClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitWhereClause(this);
 }
 
-SparqlAutomaticParser::WhereClauseContext*
-SparqlAutomaticParser::whereClause() {
-  WhereClauseContext* _localctx =
-      _tracker.createInstance<WhereClauseContext>(_ctx, getState());
+SparqlAutomaticParser::WhereClauseContext* SparqlAutomaticParser::whereClause() {
+  WhereClauseContext *_localctx = _tracker.createInstance<WhereClauseContext>(_ctx, getState());
   enterRule(_localctx, 34, SparqlAutomaticParser::RuleWhereClause);
   size_t _la = 0;
 
@@ -3176,18 +2244,19 @@ SparqlAutomaticParser::whereClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(444);
+    setState(458);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::WHERE) {
-      setState(443);
+      setState(457);
       match(SparqlAutomaticParser::WHERE);
     }
-    setState(446);
+    setState(460);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3196,53 +2265,47 @@ SparqlAutomaticParser::whereClause() {
   return _localctx;
 }
 
-//----------------- SolutionModifierContext
-//------------------------------------------------------------------
+//----------------- SolutionModifierContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SolutionModifierContext::SolutionModifierContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SolutionModifierContext::SolutionModifierContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::GroupClauseContext*
-SparqlAutomaticParser::SolutionModifierContext::groupClause() {
+SparqlAutomaticParser::GroupClauseContext* SparqlAutomaticParser::SolutionModifierContext::groupClause() {
   return getRuleContext<SparqlAutomaticParser::GroupClauseContext>(0);
 }
 
-SparqlAutomaticParser::HavingClauseContext*
-SparqlAutomaticParser::SolutionModifierContext::havingClause() {
+SparqlAutomaticParser::HavingClauseContext* SparqlAutomaticParser::SolutionModifierContext::havingClause() {
   return getRuleContext<SparqlAutomaticParser::HavingClauseContext>(0);
 }
 
-SparqlAutomaticParser::OrderClauseContext*
-SparqlAutomaticParser::SolutionModifierContext::orderClause() {
+SparqlAutomaticParser::OrderClauseContext* SparqlAutomaticParser::SolutionModifierContext::orderClause() {
   return getRuleContext<SparqlAutomaticParser::OrderClauseContext>(0);
 }
 
-SparqlAutomaticParser::LimitOffsetClausesContext*
-SparqlAutomaticParser::SolutionModifierContext::limitOffsetClauses() {
+SparqlAutomaticParser::LimitOffsetClausesContext* SparqlAutomaticParser::SolutionModifierContext::limitOffsetClauses() {
   return getRuleContext<SparqlAutomaticParser::LimitOffsetClausesContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::SolutionModifierContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSolutionModifier;
 }
 
-void SparqlAutomaticParser::SolutionModifierContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSolutionModifier(this);
+void SparqlAutomaticParser::SolutionModifierContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSolutionModifier(this);
 }
 
-void SparqlAutomaticParser::SolutionModifierContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSolutionModifier(this);
+void SparqlAutomaticParser::SolutionModifierContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSolutionModifier(this);
 }
 
-SparqlAutomaticParser::SolutionModifierContext*
-SparqlAutomaticParser::solutionModifier() {
-  SolutionModifierContext* _localctx =
-      _tracker.createInstance<SolutionModifierContext>(_ctx, getState());
+SparqlAutomaticParser::SolutionModifierContext* SparqlAutomaticParser::solutionModifier() {
+  SolutionModifierContext *_localctx = _tracker.createInstance<SolutionModifierContext>(_ctx, getState());
   enterRule(_localctx, 36, SparqlAutomaticParser::RuleSolutionModifier);
   size_t _la = 0;
 
@@ -3255,42 +2318,44 @@ SparqlAutomaticParser::solutionModifier() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(449);
+    setState(463);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::GROUPBY) {
-      setState(448);
+      setState(462);
       groupClause();
     }
-    setState(452);
+    setState(466);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::HAVING) {
-      setState(451);
+      setState(465);
       havingClause();
     }
-    setState(455);
+    setState(469);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::ORDERBY
 
-        || _la == SparqlAutomaticParser::INTERNALSORTBY) {
-      setState(454);
+    || _la == SparqlAutomaticParser::INTERNALSORTBY) {
+      setState(468);
       orderClause();
     }
-    setState(458);
+    setState(472);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 3940649673949184) != 0)) {
-      setState(457);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 3940649673949184) != 0)) {
+      setState(471);
       limitOffsetClauses();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3299,47 +2364,43 @@ SparqlAutomaticParser::solutionModifier() {
   return _localctx;
 }
 
-//----------------- GroupClauseContext
-//------------------------------------------------------------------
+//----------------- GroupClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GroupClauseContext::GroupClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GroupClauseContext::GroupClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::GroupClauseContext::GROUPBY() {
   return getToken(SparqlAutomaticParser::GROUPBY, 0);
 }
 
-std::vector<SparqlAutomaticParser::GroupConditionContext*>
-SparqlAutomaticParser::GroupClauseContext::groupCondition() {
+std::vector<SparqlAutomaticParser::GroupConditionContext *> SparqlAutomaticParser::GroupClauseContext::groupCondition() {
   return getRuleContexts<SparqlAutomaticParser::GroupConditionContext>();
 }
 
-SparqlAutomaticParser::GroupConditionContext*
-SparqlAutomaticParser::GroupClauseContext::groupCondition(size_t i) {
+SparqlAutomaticParser::GroupConditionContext* SparqlAutomaticParser::GroupClauseContext::groupCondition(size_t i) {
   return getRuleContext<SparqlAutomaticParser::GroupConditionContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::GroupClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGroupClause;
 }
 
-void SparqlAutomaticParser::GroupClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGroupClause(this);
+void SparqlAutomaticParser::GroupClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGroupClause(this);
 }
 
-void SparqlAutomaticParser::GroupClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGroupClause(this);
+void SparqlAutomaticParser::GroupClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGroupClause(this);
 }
 
-SparqlAutomaticParser::GroupClauseContext*
-SparqlAutomaticParser::groupClause() {
-  GroupClauseContext* _localctx =
-      _tracker.createInstance<GroupClauseContext>(_ctx, getState());
+SparqlAutomaticParser::GroupClauseContext* SparqlAutomaticParser::groupClause() {
+  GroupClauseContext *_localctx = _tracker.createInstance<GroupClauseContext>(_ctx, getState());
   enterRule(_localctx, 38, SparqlAutomaticParser::RuleGroupClause);
   size_t _la = 0;
 
@@ -3352,26 +2413,25 @@ SparqlAutomaticParser::groupClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(460);
+    setState(474);
     match(SparqlAutomaticParser::GROUPBY);
-    setState(462);
+    setState(476); 
     _errHandler->sync(this);
     _la = _input->LA(1);
     do {
-      setState(461);
+      setState(475);
       groupCondition();
-      setState(464);
+      setState(478); 
       _errHandler->sync(this);
       _la = _input->LA(1);
     } while (_la == SparqlAutomaticParser::T__1
 
-             || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             ((((_la - 78) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
-             ((((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 183) != 0));
-
-  } catch (RecognitionException& e) {
+    || _la == SparqlAutomaticParser::GROUP_CONCAT || ((((_la - 78) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 78)) & 9223372036853727229) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 183) != 0));
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3380,25 +2440,21 @@ SparqlAutomaticParser::groupClause() {
   return _localctx;
 }
 
-//----------------- GroupConditionContext
-//------------------------------------------------------------------
+//----------------- GroupConditionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GroupConditionContext::GroupConditionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GroupConditionContext::GroupConditionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::BuiltInCallContext*
-SparqlAutomaticParser::GroupConditionContext::builtInCall() {
+SparqlAutomaticParser::BuiltInCallContext* SparqlAutomaticParser::GroupConditionContext::builtInCall() {
   return getRuleContext<SparqlAutomaticParser::BuiltInCallContext>(0);
 }
 
-SparqlAutomaticParser::FunctionCallContext*
-SparqlAutomaticParser::GroupConditionContext::functionCall() {
+SparqlAutomaticParser::FunctionCallContext* SparqlAutomaticParser::GroupConditionContext::functionCall() {
   return getRuleContext<SparqlAutomaticParser::FunctionCallContext>(0);
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::GroupConditionContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::GroupConditionContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
@@ -3406,31 +2462,29 @@ tree::TerminalNode* SparqlAutomaticParser::GroupConditionContext::AS() {
   return getToken(SparqlAutomaticParser::AS, 0);
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::GroupConditionContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::GroupConditionContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::GroupConditionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGroupCondition;
 }
 
-void SparqlAutomaticParser::GroupConditionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGroupCondition(this);
+void SparqlAutomaticParser::GroupConditionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGroupCondition(this);
 }
 
-void SparqlAutomaticParser::GroupConditionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGroupCondition(this);
+void SparqlAutomaticParser::GroupConditionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGroupCondition(this);
 }
 
-SparqlAutomaticParser::GroupConditionContext*
-SparqlAutomaticParser::groupCondition() {
-  GroupConditionContext* _localctx =
-      _tracker.createInstance<GroupConditionContext>(_ctx, getState());
+SparqlAutomaticParser::GroupConditionContext* SparqlAutomaticParser::groupCondition() {
+  GroupConditionContext *_localctx = _tracker.createInstance<GroupConditionContext>(_ctx, getState());
   enterRule(_localctx, 40, SparqlAutomaticParser::RuleGroupCondition);
   size_t _la = 0;
 
@@ -3442,7 +2496,7 @@ SparqlAutomaticParser::groupCondition() {
     exitRule();
   });
   try {
-    setState(477);
+    setState(491);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::GROUP_CONCAT:
@@ -3508,7 +2562,7 @@ SparqlAutomaticParser::groupCondition() {
       case SparqlAutomaticParser::STDEV:
       case SparqlAutomaticParser::SAMPLE: {
         enterOuterAlt(_localctx, 1);
-        setState(466);
+        setState(480);
         builtInCall();
         break;
       }
@@ -3518,28 +2572,28 @@ SparqlAutomaticParser::groupCondition() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 2);
-        setState(467);
+        setState(481);
         functionCall();
         break;
       }
 
       case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 3);
-        setState(468);
+        setState(482);
         match(SparqlAutomaticParser::T__1);
-        setState(469);
+        setState(483);
         expression();
-        setState(472);
+        setState(486);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::AS) {
-          setState(470);
+          setState(484);
           match(SparqlAutomaticParser::AS);
-          setState(471);
+          setState(485);
           var();
         }
-        setState(474);
+        setState(488);
         match(SparqlAutomaticParser::T__2);
         break;
       }
@@ -3547,16 +2601,17 @@ SparqlAutomaticParser::groupCondition() {
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
         enterOuterAlt(_localctx, 4);
-        setState(476);
+        setState(490);
         var();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3565,47 +2620,43 @@ SparqlAutomaticParser::groupCondition() {
   return _localctx;
 }
 
-//----------------- HavingClauseContext
-//------------------------------------------------------------------
+//----------------- HavingClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::HavingClauseContext::HavingClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::HavingClauseContext::HavingClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::HavingClauseContext::HAVING() {
   return getToken(SparqlAutomaticParser::HAVING, 0);
 }
 
-std::vector<SparqlAutomaticParser::HavingConditionContext*>
-SparqlAutomaticParser::HavingClauseContext::havingCondition() {
+std::vector<SparqlAutomaticParser::HavingConditionContext *> SparqlAutomaticParser::HavingClauseContext::havingCondition() {
   return getRuleContexts<SparqlAutomaticParser::HavingConditionContext>();
 }
 
-SparqlAutomaticParser::HavingConditionContext*
-SparqlAutomaticParser::HavingClauseContext::havingCondition(size_t i) {
+SparqlAutomaticParser::HavingConditionContext* SparqlAutomaticParser::HavingClauseContext::havingCondition(size_t i) {
   return getRuleContext<SparqlAutomaticParser::HavingConditionContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::HavingClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleHavingClause;
 }
 
-void SparqlAutomaticParser::HavingClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterHavingClause(this);
+void SparqlAutomaticParser::HavingClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterHavingClause(this);
 }
 
-void SparqlAutomaticParser::HavingClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitHavingClause(this);
+void SparqlAutomaticParser::HavingClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitHavingClause(this);
 }
 
-SparqlAutomaticParser::HavingClauseContext*
-SparqlAutomaticParser::havingClause() {
-  HavingClauseContext* _localctx =
-      _tracker.createInstance<HavingClauseContext>(_ctx, getState());
+SparqlAutomaticParser::HavingClauseContext* SparqlAutomaticParser::havingClause() {
+  HavingClauseContext *_localctx = _tracker.createInstance<HavingClauseContext>(_ctx, getState());
   enterRule(_localctx, 42, SparqlAutomaticParser::RuleHavingClause);
   size_t _la = 0;
 
@@ -3618,26 +2669,25 @@ SparqlAutomaticParser::havingClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(479);
+    setState(493);
     match(SparqlAutomaticParser::HAVING);
-    setState(481);
+    setState(495); 
     _errHandler->sync(this);
     _la = _input->LA(1);
     do {
-      setState(480);
+      setState(494);
       havingCondition();
-      setState(483);
+      setState(497); 
       _errHandler->sync(this);
       _la = _input->LA(1);
     } while (_la == SparqlAutomaticParser::T__1
 
-             || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             ((((_la - 78) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
-             ((((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 135) != 0));
-
-  } catch (RecognitionException& e) {
+    || _la == SparqlAutomaticParser::GROUP_CONCAT || ((((_la - 78) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 78)) & 9223372036853727229) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 135) != 0));
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3646,38 +2696,35 @@ SparqlAutomaticParser::havingClause() {
   return _localctx;
 }
 
-//----------------- HavingConditionContext
-//------------------------------------------------------------------
+//----------------- HavingConditionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::HavingConditionContext::HavingConditionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::HavingConditionContext::HavingConditionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::ConstraintContext*
-SparqlAutomaticParser::HavingConditionContext::constraint() {
+SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::HavingConditionContext::constraint() {
   return getRuleContext<SparqlAutomaticParser::ConstraintContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::HavingConditionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleHavingCondition;
 }
 
-void SparqlAutomaticParser::HavingConditionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterHavingCondition(this);
+void SparqlAutomaticParser::HavingConditionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterHavingCondition(this);
 }
 
-void SparqlAutomaticParser::HavingConditionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitHavingCondition(this);
+void SparqlAutomaticParser::HavingConditionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitHavingCondition(this);
 }
 
-SparqlAutomaticParser::HavingConditionContext*
-SparqlAutomaticParser::havingCondition() {
-  HavingConditionContext* _localctx =
-      _tracker.createInstance<HavingConditionContext>(_ctx, getState());
+SparqlAutomaticParser::HavingConditionContext* SparqlAutomaticParser::havingCondition() {
+  HavingConditionContext *_localctx = _tracker.createInstance<HavingConditionContext>(_ctx, getState());
   enterRule(_localctx, 44, SparqlAutomaticParser::RuleHavingCondition);
 
 #if __cplusplus > 201703L
@@ -3689,10 +2736,11 @@ SparqlAutomaticParser::havingCondition() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(485);
+    setState(499);
     constraint();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3701,52 +2749,47 @@ SparqlAutomaticParser::havingCondition() {
   return _localctx;
 }
 
-//----------------- OrderClauseContext
-//------------------------------------------------------------------
+//----------------- OrderClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::OrderClauseContext::OrderClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::OrderClauseContext::OrderClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::OrderClauseContext::ORDERBY() {
   return getToken(SparqlAutomaticParser::ORDERBY, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::OrderClauseContext::INTERNALSORTBY() {
+tree::TerminalNode* SparqlAutomaticParser::OrderClauseContext::INTERNALSORTBY() {
   return getToken(SparqlAutomaticParser::INTERNALSORTBY, 0);
 }
 
-std::vector<SparqlAutomaticParser::OrderConditionContext*>
-SparqlAutomaticParser::OrderClauseContext::orderCondition() {
+std::vector<SparqlAutomaticParser::OrderConditionContext *> SparqlAutomaticParser::OrderClauseContext::orderCondition() {
   return getRuleContexts<SparqlAutomaticParser::OrderConditionContext>();
 }
 
-SparqlAutomaticParser::OrderConditionContext*
-SparqlAutomaticParser::OrderClauseContext::orderCondition(size_t i) {
+SparqlAutomaticParser::OrderConditionContext* SparqlAutomaticParser::OrderClauseContext::orderCondition(size_t i) {
   return getRuleContext<SparqlAutomaticParser::OrderConditionContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::OrderClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleOrderClause;
 }
 
-void SparqlAutomaticParser::OrderClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterOrderClause(this);
+void SparqlAutomaticParser::OrderClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterOrderClause(this);
 }
 
-void SparqlAutomaticParser::OrderClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitOrderClause(this);
+void SparqlAutomaticParser::OrderClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOrderClause(this);
 }
 
-SparqlAutomaticParser::OrderClauseContext*
-SparqlAutomaticParser::orderClause() {
-  OrderClauseContext* _localctx =
-      _tracker.createInstance<OrderClauseContext>(_ctx, getState());
+SparqlAutomaticParser::OrderClauseContext* SparqlAutomaticParser::orderClause() {
+  OrderClauseContext *_localctx = _tracker.createInstance<OrderClauseContext>(_ctx, getState());
   enterRule(_localctx, 46, SparqlAutomaticParser::RuleOrderClause);
   size_t _la = 0;
 
@@ -3759,43 +2802,40 @@ SparqlAutomaticParser::orderClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(489);
+    setState(503);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::ORDERBY: {
-        setState(487);
-        antlrcpp::downCast<OrderClauseContext*>(_localctx)->orderBy =
-            match(SparqlAutomaticParser::ORDERBY);
+        setState(501);
+        antlrcpp::downCast<OrderClauseContext *>(_localctx)->orderBy = match(SparqlAutomaticParser::ORDERBY);
         break;
       }
 
       case SparqlAutomaticParser::INTERNALSORTBY: {
-        setState(488);
-        antlrcpp::downCast<OrderClauseContext*>(_localctx)->internalSortBy =
-            match(SparqlAutomaticParser::INTERNALSORTBY);
+        setState(502);
+        antlrcpp::downCast<OrderClauseContext *>(_localctx)->internalSortBy = match(SparqlAutomaticParser::INTERNALSORTBY);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(492);
+    setState(506); 
     _errHandler->sync(this);
     _la = _input->LA(1);
     do {
-      setState(491);
+      setState(505);
       orderCondition();
-      setState(494);
+      setState(508); 
       _errHandler->sync(this);
       _la = _input->LA(1);
-    } while (
-        (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 431008558088196) != 0) ||
-        ((((_la - 78) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 183) != 0));
-
-  } catch (RecognitionException& e) {
+    } while ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 431008558088196) != 0) || ((((_la - 78) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 78)) & 9223372036853727229) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 183) != 0));
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -3804,15 +2844,13 @@ SparqlAutomaticParser::orderClause() {
   return _localctx;
 }
 
-//----------------- OrderConditionContext
-//------------------------------------------------------------------
+//----------------- OrderConditionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::OrderConditionContext::OrderConditionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::OrderConditionContext::OrderConditionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::BrackettedExpressionContext*
-SparqlAutomaticParser::OrderConditionContext::brackettedExpression() {
+SparqlAutomaticParser::BrackettedExpressionContext* SparqlAutomaticParser::OrderConditionContext::brackettedExpression() {
   return getRuleContext<SparqlAutomaticParser::BrackettedExpressionContext>(0);
 }
 
@@ -3824,36 +2862,33 @@ tree::TerminalNode* SparqlAutomaticParser::OrderConditionContext::DESC() {
   return getToken(SparqlAutomaticParser::DESC, 0);
 }
 
-SparqlAutomaticParser::ConstraintContext*
-SparqlAutomaticParser::OrderConditionContext::constraint() {
+SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::OrderConditionContext::constraint() {
   return getRuleContext<SparqlAutomaticParser::ConstraintContext>(0);
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::OrderConditionContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::OrderConditionContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::OrderConditionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleOrderCondition;
 }
 
-void SparqlAutomaticParser::OrderConditionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterOrderCondition(this);
+void SparqlAutomaticParser::OrderConditionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterOrderCondition(this);
 }
 
-void SparqlAutomaticParser::OrderConditionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitOrderCondition(this);
+void SparqlAutomaticParser::OrderConditionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOrderCondition(this);
 }
 
-SparqlAutomaticParser::OrderConditionContext*
-SparqlAutomaticParser::orderCondition() {
-  OrderConditionContext* _localctx =
-      _tracker.createInstance<OrderConditionContext>(_ctx, getState());
+SparqlAutomaticParser::OrderConditionContext* SparqlAutomaticParser::orderCondition() {
+  OrderConditionContext *_localctx = _tracker.createInstance<OrderConditionContext>(_ctx, getState());
   enterRule(_localctx, 48, SparqlAutomaticParser::RuleOrderCondition);
   size_t _la = 0;
 
@@ -3865,23 +2900,24 @@ SparqlAutomaticParser::orderCondition() {
     exitRule();
   });
   try {
-    setState(502);
+    setState(516);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::ASC:
       case SparqlAutomaticParser::DESC: {
         enterOuterAlt(_localctx, 1);
-        setState(496);
+        setState(510);
         _la = _input->LA(1);
         if (!(_la == SparqlAutomaticParser::ASC
 
-              || _la == SparqlAutomaticParser::DESC)) {
-          _errHandler->recoverInline(this);
-        } else {
+        || _la == SparqlAutomaticParser::DESC)) {
+        _errHandler->recoverInline(this);
+        }
+        else {
           _errHandler->reportMatch(this);
           consume();
         }
-        setState(497);
+        setState(511);
         brackettedExpression();
         break;
       }
@@ -3956,7 +2992,7 @@ SparqlAutomaticParser::orderCondition() {
       case SparqlAutomaticParser::VAR2:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 2);
-        setState(500);
+        setState(514);
         _errHandler->sync(this);
         switch (_input->LA(1)) {
           case SparqlAutomaticParser::T__1:
@@ -4026,29 +3062,30 @@ SparqlAutomaticParser::orderCondition() {
           case SparqlAutomaticParser::PNAME_NS:
           case SparqlAutomaticParser::PNAME_LN:
           case SparqlAutomaticParser::PREFIX_LANGTAG: {
-            setState(498);
+            setState(512);
             constraint();
             break;
           }
 
           case SparqlAutomaticParser::VAR1:
           case SparqlAutomaticParser::VAR2: {
-            setState(499);
+            setState(513);
             var();
             break;
           }
 
-          default:
-            throw NoViableAltException(this);
+        default:
+          throw NoViableAltException(this);
         }
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4057,48 +3094,43 @@ SparqlAutomaticParser::orderCondition() {
   return _localctx;
 }
 
-//----------------- LimitOffsetClausesContext
-//------------------------------------------------------------------
+//----------------- LimitOffsetClausesContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::LimitOffsetClausesContext::LimitOffsetClausesContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::LimitOffsetClausesContext::LimitOffsetClausesContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::LimitClauseContext*
-SparqlAutomaticParser::LimitOffsetClausesContext::limitClause() {
+SparqlAutomaticParser::LimitClauseContext* SparqlAutomaticParser::LimitOffsetClausesContext::limitClause() {
   return getRuleContext<SparqlAutomaticParser::LimitClauseContext>(0);
 }
 
-SparqlAutomaticParser::OffsetClauseContext*
-SparqlAutomaticParser::LimitOffsetClausesContext::offsetClause() {
+SparqlAutomaticParser::OffsetClauseContext* SparqlAutomaticParser::LimitOffsetClausesContext::offsetClause() {
   return getRuleContext<SparqlAutomaticParser::OffsetClauseContext>(0);
 }
 
-SparqlAutomaticParser::TextLimitClauseContext*
-SparqlAutomaticParser::LimitOffsetClausesContext::textLimitClause() {
+SparqlAutomaticParser::TextLimitClauseContext* SparqlAutomaticParser::LimitOffsetClausesContext::textLimitClause() {
   return getRuleContext<SparqlAutomaticParser::TextLimitClauseContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::LimitOffsetClausesContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleLimitOffsetClauses;
 }
 
-void SparqlAutomaticParser::LimitOffsetClausesContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterLimitOffsetClauses(this);
+void SparqlAutomaticParser::LimitOffsetClausesContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterLimitOffsetClauses(this);
 }
 
-void SparqlAutomaticParser::LimitOffsetClausesContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitLimitOffsetClauses(this);
+void SparqlAutomaticParser::LimitOffsetClausesContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitLimitOffsetClauses(this);
 }
 
-SparqlAutomaticParser::LimitOffsetClausesContext*
-SparqlAutomaticParser::limitOffsetClauses() {
-  LimitOffsetClausesContext* _localctx =
-      _tracker.createInstance<LimitOffsetClausesContext>(_ctx, getState());
+SparqlAutomaticParser::LimitOffsetClausesContext* SparqlAutomaticParser::limitOffsetClauses() {
+  LimitOffsetClausesContext *_localctx = _tracker.createInstance<LimitOffsetClausesContext>(_ctx, getState());
   enterRule(_localctx, 50, SparqlAutomaticParser::RuleLimitOffsetClauses);
   size_t _la = 0;
 
@@ -4110,153 +3142,153 @@ SparqlAutomaticParser::limitOffsetClauses() {
     exitRule();
   });
   try {
-    setState(546);
+    setState(560);
     _errHandler->sync(this);
-    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
-        _input, 43, _ctx)) {
-      case 1: {
-        enterOuterAlt(_localctx, 1);
-        setState(504);
-        limitClause();
-        setState(506);
-        _errHandler->sync(this);
+    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 43, _ctx)) {
+    case 1: {
+      enterOuterAlt(_localctx, 1);
+      setState(518);
+      limitClause();
+      setState(520);
+      _errHandler->sync(this);
 
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::OFFSET) {
-          setState(505);
-          offsetClause();
-        }
-        setState(509);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::TEXTLIMIT) {
-          setState(508);
-          textLimitClause();
-        }
-        break;
-      }
-
-      case 2: {
-        enterOuterAlt(_localctx, 2);
-        setState(511);
-        limitClause();
-        setState(513);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::TEXTLIMIT) {
-          setState(512);
-          textLimitClause();
-        }
-        setState(516);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::OFFSET) {
-          setState(515);
-          offsetClause();
-        }
-        break;
-      }
-
-      case 3: {
-        enterOuterAlt(_localctx, 3);
-        setState(518);
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::OFFSET) {
+        setState(519);
         offsetClause();
-        setState(520);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::LIMIT) {
-          setState(519);
-          limitClause();
-        }
-        setState(523);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::TEXTLIMIT) {
-          setState(522);
-          textLimitClause();
-        }
-        break;
       }
+      setState(523);
+      _errHandler->sync(this);
 
-      case 4: {
-        enterOuterAlt(_localctx, 4);
-        setState(525);
-        offsetClause();
-        setState(527);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::TEXTLIMIT) {
-          setState(526);
-          textLimitClause();
-        }
-        setState(530);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::LIMIT) {
-          setState(529);
-          limitClause();
-        }
-        break;
-      }
-
-      case 5: {
-        enterOuterAlt(_localctx, 5);
-        setState(532);
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::TEXTLIMIT) {
+        setState(522);
         textLimitClause();
-        setState(534);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::OFFSET) {
-          setState(533);
-          offsetClause();
-        }
-        setState(537);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::LIMIT) {
-          setState(536);
-          limitClause();
-        }
-        break;
       }
-
-      case 6: {
-        enterOuterAlt(_localctx, 6);
-        setState(539);
-        textLimitClause();
-        setState(541);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::LIMIT) {
-          setState(540);
-          limitClause();
-        }
-        setState(544);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::OFFSET) {
-          setState(543);
-          offsetClause();
-        }
-        break;
-      }
-
-      default:
-        break;
+      break;
     }
 
-  } catch (RecognitionException& e) {
+    case 2: {
+      enterOuterAlt(_localctx, 2);
+      setState(525);
+      limitClause();
+      setState(527);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::TEXTLIMIT) {
+        setState(526);
+        textLimitClause();
+      }
+      setState(530);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::OFFSET) {
+        setState(529);
+        offsetClause();
+      }
+      break;
+    }
+
+    case 3: {
+      enterOuterAlt(_localctx, 3);
+      setState(532);
+      offsetClause();
+      setState(534);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::LIMIT) {
+        setState(533);
+        limitClause();
+      }
+      setState(537);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::TEXTLIMIT) {
+        setState(536);
+        textLimitClause();
+      }
+      break;
+    }
+
+    case 4: {
+      enterOuterAlt(_localctx, 4);
+      setState(539);
+      offsetClause();
+      setState(541);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::TEXTLIMIT) {
+        setState(540);
+        textLimitClause();
+      }
+      setState(544);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::LIMIT) {
+        setState(543);
+        limitClause();
+      }
+      break;
+    }
+
+    case 5: {
+      enterOuterAlt(_localctx, 5);
+      setState(546);
+      textLimitClause();
+      setState(548);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::OFFSET) {
+        setState(547);
+        offsetClause();
+      }
+      setState(551);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::LIMIT) {
+        setState(550);
+        limitClause();
+      }
+      break;
+    }
+
+    case 6: {
+      enterOuterAlt(_localctx, 6);
+      setState(553);
+      textLimitClause();
+      setState(555);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::LIMIT) {
+        setState(554);
+        limitClause();
+      }
+      setState(558);
+      _errHandler->sync(this);
+
+      _la = _input->LA(1);
+      if (_la == SparqlAutomaticParser::OFFSET) {
+        setState(557);
+        offsetClause();
+      }
+      break;
+    }
+
+    default:
+      break;
+    }
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4265,42 +3297,39 @@ SparqlAutomaticParser::limitOffsetClauses() {
   return _localctx;
 }
 
-//----------------- LimitClauseContext
-//------------------------------------------------------------------
+//----------------- LimitClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::LimitClauseContext::LimitClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::LimitClauseContext::LimitClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::LimitClauseContext::LIMIT() {
   return getToken(SparqlAutomaticParser::LIMIT, 0);
 }
 
-SparqlAutomaticParser::IntegerContext*
-SparqlAutomaticParser::LimitClauseContext::integer() {
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::LimitClauseContext::integer() {
   return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::LimitClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleLimitClause;
 }
 
-void SparqlAutomaticParser::LimitClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterLimitClause(this);
+void SparqlAutomaticParser::LimitClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterLimitClause(this);
 }
 
-void SparqlAutomaticParser::LimitClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitLimitClause(this);
+void SparqlAutomaticParser::LimitClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitLimitClause(this);
 }
 
-SparqlAutomaticParser::LimitClauseContext*
-SparqlAutomaticParser::limitClause() {
-  LimitClauseContext* _localctx =
-      _tracker.createInstance<LimitClauseContext>(_ctx, getState());
+SparqlAutomaticParser::LimitClauseContext* SparqlAutomaticParser::limitClause() {
+  LimitClauseContext *_localctx = _tracker.createInstance<LimitClauseContext>(_ctx, getState());
   enterRule(_localctx, 52, SparqlAutomaticParser::RuleLimitClause);
 
 #if __cplusplus > 201703L
@@ -4312,12 +3341,13 @@ SparqlAutomaticParser::limitClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(548);
+    setState(562);
     match(SparqlAutomaticParser::LIMIT);
-    setState(549);
+    setState(563);
     integer();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4326,42 +3356,39 @@ SparqlAutomaticParser::limitClause() {
   return _localctx;
 }
 
-//----------------- OffsetClauseContext
-//------------------------------------------------------------------
+//----------------- OffsetClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::OffsetClauseContext::OffsetClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::OffsetClauseContext::OffsetClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::OffsetClauseContext::OFFSET() {
   return getToken(SparqlAutomaticParser::OFFSET, 0);
 }
 
-SparqlAutomaticParser::IntegerContext*
-SparqlAutomaticParser::OffsetClauseContext::integer() {
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::OffsetClauseContext::integer() {
   return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::OffsetClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleOffsetClause;
 }
 
-void SparqlAutomaticParser::OffsetClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterOffsetClause(this);
+void SparqlAutomaticParser::OffsetClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterOffsetClause(this);
 }
 
-void SparqlAutomaticParser::OffsetClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitOffsetClause(this);
+void SparqlAutomaticParser::OffsetClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOffsetClause(this);
 }
 
-SparqlAutomaticParser::OffsetClauseContext*
-SparqlAutomaticParser::offsetClause() {
-  OffsetClauseContext* _localctx =
-      _tracker.createInstance<OffsetClauseContext>(_ctx, getState());
+SparqlAutomaticParser::OffsetClauseContext* SparqlAutomaticParser::offsetClause() {
+  OffsetClauseContext *_localctx = _tracker.createInstance<OffsetClauseContext>(_ctx, getState());
   enterRule(_localctx, 54, SparqlAutomaticParser::RuleOffsetClause);
 
 #if __cplusplus > 201703L
@@ -4373,12 +3400,13 @@ SparqlAutomaticParser::offsetClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(551);
+    setState(565);
     match(SparqlAutomaticParser::OFFSET);
-    setState(552);
+    setState(566);
     integer();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4387,42 +3415,39 @@ SparqlAutomaticParser::offsetClause() {
   return _localctx;
 }
 
-//----------------- TextLimitClauseContext
-//------------------------------------------------------------------
+//----------------- TextLimitClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TextLimitClauseContext::TextLimitClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TextLimitClauseContext::TextLimitClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::TextLimitClauseContext::TEXTLIMIT() {
   return getToken(SparqlAutomaticParser::TEXTLIMIT, 0);
 }
 
-SparqlAutomaticParser::IntegerContext*
-SparqlAutomaticParser::TextLimitClauseContext::integer() {
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::TextLimitClauseContext::integer() {
   return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::TextLimitClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTextLimitClause;
 }
 
-void SparqlAutomaticParser::TextLimitClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTextLimitClause(this);
+void SparqlAutomaticParser::TextLimitClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTextLimitClause(this);
 }
 
-void SparqlAutomaticParser::TextLimitClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTextLimitClause(this);
+void SparqlAutomaticParser::TextLimitClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTextLimitClause(this);
 }
 
-SparqlAutomaticParser::TextLimitClauseContext*
-SparqlAutomaticParser::textLimitClause() {
-  TextLimitClauseContext* _localctx =
-      _tracker.createInstance<TextLimitClauseContext>(_ctx, getState());
+SparqlAutomaticParser::TextLimitClauseContext* SparqlAutomaticParser::textLimitClause() {
+  TextLimitClauseContext *_localctx = _tracker.createInstance<TextLimitClauseContext>(_ctx, getState());
   enterRule(_localctx, 56, SparqlAutomaticParser::RuleTextLimitClause);
 
 #if __cplusplus > 201703L
@@ -4434,12 +3459,13 @@ SparqlAutomaticParser::textLimitClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(554);
+    setState(568);
     match(SparqlAutomaticParser::TEXTLIMIT);
-    setState(555);
+    setState(569);
     integer();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4448,42 +3474,39 @@ SparqlAutomaticParser::textLimitClause() {
   return _localctx;
 }
 
-//----------------- ValuesClauseContext
-//------------------------------------------------------------------
+//----------------- ValuesClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ValuesClauseContext::ValuesClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ValuesClauseContext::ValuesClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ValuesClauseContext::VALUES() {
   return getToken(SparqlAutomaticParser::VALUES, 0);
 }
 
-SparqlAutomaticParser::DataBlockContext*
-SparqlAutomaticParser::ValuesClauseContext::dataBlock() {
+SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::ValuesClauseContext::dataBlock() {
   return getRuleContext<SparqlAutomaticParser::DataBlockContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ValuesClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleValuesClause;
 }
 
-void SparqlAutomaticParser::ValuesClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterValuesClause(this);
+void SparqlAutomaticParser::ValuesClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterValuesClause(this);
 }
 
-void SparqlAutomaticParser::ValuesClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitValuesClause(this);
+void SparqlAutomaticParser::ValuesClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitValuesClause(this);
 }
 
-SparqlAutomaticParser::ValuesClauseContext*
-SparqlAutomaticParser::valuesClause() {
-  ValuesClauseContext* _localctx =
-      _tracker.createInstance<ValuesClauseContext>(_ctx, getState());
+SparqlAutomaticParser::ValuesClauseContext* SparqlAutomaticParser::valuesClause() {
+  ValuesClauseContext *_localctx = _tracker.createInstance<ValuesClauseContext>(_ctx, getState());
   enterRule(_localctx, 58, SparqlAutomaticParser::RuleValuesClause);
   size_t _la = 0;
 
@@ -4496,18 +3519,19 @@ SparqlAutomaticParser::valuesClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(559);
+    setState(573);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::VALUES) {
-      setState(557);
+      setState(571);
       match(SparqlAutomaticParser::VALUES);
-      setState(558);
+      setState(572);
       dataBlock();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4516,20 +3540,17 @@ SparqlAutomaticParser::valuesClause() {
   return _localctx;
 }
 
-//----------------- UpdateContext
-//------------------------------------------------------------------
+//----------------- UpdateContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::UpdateContext::UpdateContext(ParserRuleContext* parent,
-                                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::UpdateContext::UpdateContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::PrologueContext*>
-SparqlAutomaticParser::UpdateContext::prologue() {
+std::vector<SparqlAutomaticParser::PrologueContext *> SparqlAutomaticParser::UpdateContext::prologue() {
   return getRuleContexts<SparqlAutomaticParser::PrologueContext>();
 }
 
-SparqlAutomaticParser::PrologueContext*
-SparqlAutomaticParser::UpdateContext::prologue(size_t i) {
+SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::UpdateContext::prologue(size_t i) {
   return getRuleContext<SparqlAutomaticParser::PrologueContext>(i);
 }
 
@@ -4537,35 +3558,33 @@ tree::TerminalNode* SparqlAutomaticParser::UpdateContext::EOF() {
   return getToken(SparqlAutomaticParser::EOF, 0);
 }
 
-std::vector<SparqlAutomaticParser::Update1Context*>
-SparqlAutomaticParser::UpdateContext::update1() {
+std::vector<SparqlAutomaticParser::Update1Context *> SparqlAutomaticParser::UpdateContext::update1() {
   return getRuleContexts<SparqlAutomaticParser::Update1Context>();
 }
 
-SparqlAutomaticParser::Update1Context*
-SparqlAutomaticParser::UpdateContext::update1(size_t i) {
+SparqlAutomaticParser::Update1Context* SparqlAutomaticParser::UpdateContext::update1(size_t i) {
   return getRuleContext<SparqlAutomaticParser::Update1Context>(i);
 }
+
 
 size_t SparqlAutomaticParser::UpdateContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleUpdate;
 }
 
-void SparqlAutomaticParser::UpdateContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterUpdate(this);
+void SparqlAutomaticParser::UpdateContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterUpdate(this);
 }
 
-void SparqlAutomaticParser::UpdateContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitUpdate(this);
+void SparqlAutomaticParser::UpdateContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitUpdate(this);
 }
 
 SparqlAutomaticParser::UpdateContext* SparqlAutomaticParser::update() {
-  UpdateContext* _localctx =
-      _tracker.createInstance<UpdateContext>(_ctx, getState());
+  UpdateContext *_localctx = _tracker.createInstance<UpdateContext>(_ctx, getState());
   enterRule(_localctx, 60, SparqlAutomaticParser::RuleUpdate);
   size_t _la = 0;
 
@@ -4579,49 +3598,48 @@ SparqlAutomaticParser::UpdateContext* SparqlAutomaticParser::update() {
   try {
     size_t alt;
     enterOuterAlt(_localctx, 1);
-    setState(561);
+    setState(575);
     prologue();
-    setState(576);
+    setState(590);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((((_la - 53) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 53)) & 15993) != 0)) {
-      setState(562);
+    if (((((_la - 53) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 53)) & 15993) != 0)) {
+      setState(576);
       update1();
-      setState(569);
+      setState(583);
       _errHandler->sync(this);
-      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
-          _input, 45, _ctx);
+      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 45, _ctx);
       while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
         if (alt == 1) {
-          setState(563);
+          setState(577);
           match(SparqlAutomaticParser::T__5);
-          setState(564);
+          setState(578);
           prologue();
-          setState(565);
-          update1();
+          setState(579);
+          update1(); 
         }
-        setState(571);
+        setState(585);
         _errHandler->sync(this);
-        alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
-            _input, 45, _ctx);
+        alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 45, _ctx);
       }
-      setState(574);
+      setState(588);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
       if (_la == SparqlAutomaticParser::T__5) {
-        setState(572);
+        setState(586);
         match(SparqlAutomaticParser::T__5);
-        setState(573);
+        setState(587);
         prologue();
       }
     }
-    setState(578);
+    setState(592);
     match(SparqlAutomaticParser::EOF);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4630,87 +3648,75 @@ SparqlAutomaticParser::UpdateContext* SparqlAutomaticParser::update() {
   return _localctx;
 }
 
-//----------------- Update1Context
-//------------------------------------------------------------------
+//----------------- Update1Context ------------------------------------------------------------------
 
-SparqlAutomaticParser::Update1Context::Update1Context(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::Update1Context::Update1Context(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::LoadContext*
-SparqlAutomaticParser::Update1Context::load() {
+SparqlAutomaticParser::LoadContext* SparqlAutomaticParser::Update1Context::load() {
   return getRuleContext<SparqlAutomaticParser::LoadContext>(0);
 }
 
-SparqlAutomaticParser::ClearContext*
-SparqlAutomaticParser::Update1Context::clear() {
+SparqlAutomaticParser::ClearContext* SparqlAutomaticParser::Update1Context::clear() {
   return getRuleContext<SparqlAutomaticParser::ClearContext>(0);
 }
 
-SparqlAutomaticParser::DropContext*
-SparqlAutomaticParser::Update1Context::drop() {
+SparqlAutomaticParser::DropContext* SparqlAutomaticParser::Update1Context::drop() {
   return getRuleContext<SparqlAutomaticParser::DropContext>(0);
 }
 
-SparqlAutomaticParser::AddContext*
-SparqlAutomaticParser::Update1Context::add() {
+SparqlAutomaticParser::AddContext* SparqlAutomaticParser::Update1Context::add() {
   return getRuleContext<SparqlAutomaticParser::AddContext>(0);
 }
 
-SparqlAutomaticParser::MoveContext*
-SparqlAutomaticParser::Update1Context::move() {
+SparqlAutomaticParser::MoveContext* SparqlAutomaticParser::Update1Context::move() {
   return getRuleContext<SparqlAutomaticParser::MoveContext>(0);
 }
 
-SparqlAutomaticParser::CopyContext*
-SparqlAutomaticParser::Update1Context::copy() {
+SparqlAutomaticParser::CopyContext* SparqlAutomaticParser::Update1Context::copy() {
   return getRuleContext<SparqlAutomaticParser::CopyContext>(0);
 }
 
-SparqlAutomaticParser::CreateContext*
-SparqlAutomaticParser::Update1Context::create() {
+SparqlAutomaticParser::CreateContext* SparqlAutomaticParser::Update1Context::create() {
   return getRuleContext<SparqlAutomaticParser::CreateContext>(0);
 }
 
-SparqlAutomaticParser::InsertDataContext*
-SparqlAutomaticParser::Update1Context::insertData() {
+SparqlAutomaticParser::InsertDataContext* SparqlAutomaticParser::Update1Context::insertData() {
   return getRuleContext<SparqlAutomaticParser::InsertDataContext>(0);
 }
 
-SparqlAutomaticParser::DeleteDataContext*
-SparqlAutomaticParser::Update1Context::deleteData() {
+SparqlAutomaticParser::DeleteDataContext* SparqlAutomaticParser::Update1Context::deleteData() {
   return getRuleContext<SparqlAutomaticParser::DeleteDataContext>(0);
 }
 
-SparqlAutomaticParser::DeleteWhereContext*
-SparqlAutomaticParser::Update1Context::deleteWhere() {
+SparqlAutomaticParser::DeleteWhereContext* SparqlAutomaticParser::Update1Context::deleteWhere() {
   return getRuleContext<SparqlAutomaticParser::DeleteWhereContext>(0);
 }
 
-SparqlAutomaticParser::ModifyContext*
-SparqlAutomaticParser::Update1Context::modify() {
+SparqlAutomaticParser::ModifyContext* SparqlAutomaticParser::Update1Context::modify() {
   return getRuleContext<SparqlAutomaticParser::ModifyContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::Update1Context::getRuleIndex() const {
   return SparqlAutomaticParser::RuleUpdate1;
 }
 
-void SparqlAutomaticParser::Update1Context::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterUpdate1(this);
+void SparqlAutomaticParser::Update1Context::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterUpdate1(this);
 }
 
-void SparqlAutomaticParser::Update1Context::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitUpdate1(this);
+void SparqlAutomaticParser::Update1Context::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitUpdate1(this);
 }
 
 SparqlAutomaticParser::Update1Context* SparqlAutomaticParser::update1() {
-  Update1Context* _localctx =
-      _tracker.createInstance<Update1Context>(_ctx, getState());
+  Update1Context *_localctx = _tracker.createInstance<Update1Context>(_ctx, getState());
   enterRule(_localctx, 62, SparqlAutomaticParser::RuleUpdate1);
 
 #if __cplusplus > 201703L
@@ -4721,92 +3727,92 @@ SparqlAutomaticParser::Update1Context* SparqlAutomaticParser::update1() {
     exitRule();
   });
   try {
-    setState(591);
+    setState(605);
     _errHandler->sync(this);
-    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
-        _input, 48, _ctx)) {
-      case 1: {
-        enterOuterAlt(_localctx, 1);
-        setState(580);
-        load();
-        break;
-      }
-
-      case 2: {
-        enterOuterAlt(_localctx, 2);
-        setState(581);
-        clear();
-        break;
-      }
-
-      case 3: {
-        enterOuterAlt(_localctx, 3);
-        setState(582);
-        drop();
-        break;
-      }
-
-      case 4: {
-        enterOuterAlt(_localctx, 4);
-        setState(583);
-        add();
-        break;
-      }
-
-      case 5: {
-        enterOuterAlt(_localctx, 5);
-        setState(584);
-        move();
-        break;
-      }
-
-      case 6: {
-        enterOuterAlt(_localctx, 6);
-        setState(585);
-        copy();
-        break;
-      }
-
-      case 7: {
-        enterOuterAlt(_localctx, 7);
-        setState(586);
-        create();
-        break;
-      }
-
-      case 8: {
-        enterOuterAlt(_localctx, 8);
-        setState(587);
-        insertData();
-        break;
-      }
-
-      case 9: {
-        enterOuterAlt(_localctx, 9);
-        setState(588);
-        deleteData();
-        break;
-      }
-
-      case 10: {
-        enterOuterAlt(_localctx, 10);
-        setState(589);
-        deleteWhere();
-        break;
-      }
-
-      case 11: {
-        enterOuterAlt(_localctx, 11);
-        setState(590);
-        modify();
-        break;
-      }
-
-      default:
-        break;
+    switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 48, _ctx)) {
+    case 1: {
+      enterOuterAlt(_localctx, 1);
+      setState(594);
+      load();
+      break;
     }
 
-  } catch (RecognitionException& e) {
+    case 2: {
+      enterOuterAlt(_localctx, 2);
+      setState(595);
+      clear();
+      break;
+    }
+
+    case 3: {
+      enterOuterAlt(_localctx, 3);
+      setState(596);
+      drop();
+      break;
+    }
+
+    case 4: {
+      enterOuterAlt(_localctx, 4);
+      setState(597);
+      add();
+      break;
+    }
+
+    case 5: {
+      enterOuterAlt(_localctx, 5);
+      setState(598);
+      move();
+      break;
+    }
+
+    case 6: {
+      enterOuterAlt(_localctx, 6);
+      setState(599);
+      copy();
+      break;
+    }
+
+    case 7: {
+      enterOuterAlt(_localctx, 7);
+      setState(600);
+      create();
+      break;
+    }
+
+    case 8: {
+      enterOuterAlt(_localctx, 8);
+      setState(601);
+      insertData();
+      break;
+    }
+
+    case 9: {
+      enterOuterAlt(_localctx, 9);
+      setState(602);
+      deleteData();
+      break;
+    }
+
+    case 10: {
+      enterOuterAlt(_localctx, 10);
+      setState(603);
+      deleteWhere();
+      break;
+    }
+
+    case 11: {
+      enterOuterAlt(_localctx, 11);
+      setState(604);
+      modify();
+      break;
+    }
+
+    default:
+      break;
+    }
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4815,12 +3821,11 @@ SparqlAutomaticParser::Update1Context* SparqlAutomaticParser::update1() {
   return _localctx;
 }
 
-//----------------- LoadContext
-//------------------------------------------------------------------
+//----------------- LoadContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::LoadContext::LoadContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::LoadContext::LoadContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::LoadContext::LOAD() {
   return getToken(SparqlAutomaticParser::LOAD, 0);
@@ -4838,30 +3843,29 @@ tree::TerminalNode* SparqlAutomaticParser::LoadContext::INTO() {
   return getToken(SparqlAutomaticParser::INTO, 0);
 }
 
-SparqlAutomaticParser::GraphRefContext*
-SparqlAutomaticParser::LoadContext::graphRef() {
+SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::LoadContext::graphRef() {
   return getRuleContext<SparqlAutomaticParser::GraphRefContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::LoadContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleLoad;
 }
 
-void SparqlAutomaticParser::LoadContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterLoad(this);
+void SparqlAutomaticParser::LoadContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterLoad(this);
 }
 
-void SparqlAutomaticParser::LoadContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitLoad(this);
+void SparqlAutomaticParser::LoadContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitLoad(this);
 }
 
 SparqlAutomaticParser::LoadContext* SparqlAutomaticParser::load() {
-  LoadContext* _localctx =
-      _tracker.createInstance<LoadContext>(_ctx, getState());
+  LoadContext *_localctx = _tracker.createInstance<LoadContext>(_ctx, getState());
   enterRule(_localctx, 64, SparqlAutomaticParser::RuleLoad);
   size_t _la = 0;
 
@@ -4874,30 +3878,31 @@ SparqlAutomaticParser::LoadContext* SparqlAutomaticParser::load() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(593);
+    setState(607);
     match(SparqlAutomaticParser::LOAD);
-    setState(595);
+    setState(609);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(594);
+      setState(608);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(597);
+    setState(611);
     iri();
-    setState(600);
+    setState(614);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::INTO) {
-      setState(598);
+      setState(612);
       match(SparqlAutomaticParser::INTO);
-      setState(599);
+      setState(613);
       graphRef();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4906,19 +3911,17 @@ SparqlAutomaticParser::LoadContext* SparqlAutomaticParser::load() {
   return _localctx;
 }
 
-//----------------- ClearContext
-//------------------------------------------------------------------
+//----------------- ClearContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ClearContext::ClearContext(ParserRuleContext* parent,
-                                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ClearContext::ClearContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ClearContext::CLEAR() {
   return getToken(SparqlAutomaticParser::CLEAR, 0);
 }
 
-SparqlAutomaticParser::GraphRefAllContext*
-SparqlAutomaticParser::ClearContext::graphRefAll() {
+SparqlAutomaticParser::GraphRefAllContext* SparqlAutomaticParser::ClearContext::graphRefAll() {
   return getRuleContext<SparqlAutomaticParser::GraphRefAllContext>(0);
 }
 
@@ -4926,25 +3929,25 @@ tree::TerminalNode* SparqlAutomaticParser::ClearContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::ClearContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleClear;
 }
 
-void SparqlAutomaticParser::ClearContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterClear(this);
+void SparqlAutomaticParser::ClearContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterClear(this);
 }
 
-void SparqlAutomaticParser::ClearContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitClear(this);
+void SparqlAutomaticParser::ClearContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitClear(this);
 }
 
 SparqlAutomaticParser::ClearContext* SparqlAutomaticParser::clear() {
-  ClearContext* _localctx =
-      _tracker.createInstance<ClearContext>(_ctx, getState());
+  ClearContext *_localctx = _tracker.createInstance<ClearContext>(_ctx, getState());
   enterRule(_localctx, 66, SparqlAutomaticParser::RuleClear);
   size_t _la = 0;
 
@@ -4957,20 +3960,21 @@ SparqlAutomaticParser::ClearContext* SparqlAutomaticParser::clear() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(602);
+    setState(616);
     match(SparqlAutomaticParser::CLEAR);
-    setState(604);
+    setState(618);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(603);
+      setState(617);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(606);
+    setState(620);
     graphRefAll();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -4979,19 +3983,17 @@ SparqlAutomaticParser::ClearContext* SparqlAutomaticParser::clear() {
   return _localctx;
 }
 
-//----------------- DropContext
-//------------------------------------------------------------------
+//----------------- DropContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DropContext::DropContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DropContext::DropContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DropContext::DROP() {
   return getToken(SparqlAutomaticParser::DROP, 0);
 }
 
-SparqlAutomaticParser::GraphRefAllContext*
-SparqlAutomaticParser::DropContext::graphRefAll() {
+SparqlAutomaticParser::GraphRefAllContext* SparqlAutomaticParser::DropContext::graphRefAll() {
   return getRuleContext<SparqlAutomaticParser::GraphRefAllContext>(0);
 }
 
@@ -4999,25 +4001,25 @@ tree::TerminalNode* SparqlAutomaticParser::DropContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::DropContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDrop;
 }
 
-void SparqlAutomaticParser::DropContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDrop(this);
+void SparqlAutomaticParser::DropContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDrop(this);
 }
 
-void SparqlAutomaticParser::DropContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDrop(this);
+void SparqlAutomaticParser::DropContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDrop(this);
 }
 
 SparqlAutomaticParser::DropContext* SparqlAutomaticParser::drop() {
-  DropContext* _localctx =
-      _tracker.createInstance<DropContext>(_ctx, getState());
+  DropContext *_localctx = _tracker.createInstance<DropContext>(_ctx, getState());
   enterRule(_localctx, 68, SparqlAutomaticParser::RuleDrop);
   size_t _la = 0;
 
@@ -5030,20 +4032,21 @@ SparqlAutomaticParser::DropContext* SparqlAutomaticParser::drop() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(608);
+    setState(622);
     match(SparqlAutomaticParser::DROP);
-    setState(610);
+    setState(624);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(609);
+      setState(623);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(612);
+    setState(626);
     graphRefAll();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5052,19 +4055,17 @@ SparqlAutomaticParser::DropContext* SparqlAutomaticParser::drop() {
   return _localctx;
 }
 
-//----------------- CreateContext
-//------------------------------------------------------------------
+//----------------- CreateContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::CreateContext::CreateContext(ParserRuleContext* parent,
-                                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::CreateContext::CreateContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::CreateContext::CREATE() {
   return getToken(SparqlAutomaticParser::CREATE, 0);
 }
 
-SparqlAutomaticParser::GraphRefContext*
-SparqlAutomaticParser::CreateContext::graphRef() {
+SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::CreateContext::graphRef() {
   return getRuleContext<SparqlAutomaticParser::GraphRefContext>(0);
 }
 
@@ -5072,25 +4073,25 @@ tree::TerminalNode* SparqlAutomaticParser::CreateContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::CreateContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleCreate;
 }
 
-void SparqlAutomaticParser::CreateContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterCreate(this);
+void SparqlAutomaticParser::CreateContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterCreate(this);
 }
 
-void SparqlAutomaticParser::CreateContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitCreate(this);
+void SparqlAutomaticParser::CreateContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitCreate(this);
 }
 
 SparqlAutomaticParser::CreateContext* SparqlAutomaticParser::create() {
-  CreateContext* _localctx =
-      _tracker.createInstance<CreateContext>(_ctx, getState());
+  CreateContext *_localctx = _tracker.createInstance<CreateContext>(_ctx, getState());
   enterRule(_localctx, 70, SparqlAutomaticParser::RuleCreate);
   size_t _la = 0;
 
@@ -5103,20 +4104,21 @@ SparqlAutomaticParser::CreateContext* SparqlAutomaticParser::create() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(614);
+    setState(628);
     match(SparqlAutomaticParser::CREATE);
-    setState(616);
+    setState(630);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(615);
+      setState(629);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(618);
+    setState(632);
     graphRef();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5125,24 +4127,21 @@ SparqlAutomaticParser::CreateContext* SparqlAutomaticParser::create() {
   return _localctx;
 }
 
-//----------------- AddContext
-//------------------------------------------------------------------
+//----------------- AddContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::AddContext::AddContext(ParserRuleContext* parent,
-                                              size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::AddContext::AddContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::AddContext::ADD() {
   return getToken(SparqlAutomaticParser::ADD, 0);
 }
 
-std::vector<SparqlAutomaticParser::GraphOrDefaultContext*>
-SparqlAutomaticParser::AddContext::graphOrDefault() {
+std::vector<SparqlAutomaticParser::GraphOrDefaultContext *> SparqlAutomaticParser::AddContext::graphOrDefault() {
   return getRuleContexts<SparqlAutomaticParser::GraphOrDefaultContext>();
 }
 
-SparqlAutomaticParser::GraphOrDefaultContext*
-SparqlAutomaticParser::AddContext::graphOrDefault(size_t i) {
+SparqlAutomaticParser::GraphOrDefaultContext* SparqlAutomaticParser::AddContext::graphOrDefault(size_t i) {
   return getRuleContext<SparqlAutomaticParser::GraphOrDefaultContext>(i);
 }
 
@@ -5154,24 +4153,25 @@ tree::TerminalNode* SparqlAutomaticParser::AddContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::AddContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleAdd;
 }
 
-void SparqlAutomaticParser::AddContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAdd(this);
+void SparqlAutomaticParser::AddContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterAdd(this);
 }
 
-void SparqlAutomaticParser::AddContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAdd(this);
+void SparqlAutomaticParser::AddContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAdd(this);
 }
 
 SparqlAutomaticParser::AddContext* SparqlAutomaticParser::add() {
-  AddContext* _localctx = _tracker.createInstance<AddContext>(_ctx, getState());
+  AddContext *_localctx = _tracker.createInstance<AddContext>(_ctx, getState());
   enterRule(_localctx, 72, SparqlAutomaticParser::RuleAdd);
   size_t _la = 0;
 
@@ -5184,24 +4184,25 @@ SparqlAutomaticParser::AddContext* SparqlAutomaticParser::add() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(620);
+    setState(634);
     match(SparqlAutomaticParser::ADD);
-    setState(622);
+    setState(636);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(621);
+      setState(635);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(624);
+    setState(638);
     graphOrDefault();
-    setState(625);
+    setState(639);
     match(SparqlAutomaticParser::TO);
-    setState(626);
+    setState(640);
     graphOrDefault();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5210,24 +4211,21 @@ SparqlAutomaticParser::AddContext* SparqlAutomaticParser::add() {
   return _localctx;
 }
 
-//----------------- MoveContext
-//------------------------------------------------------------------
+//----------------- MoveContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::MoveContext::MoveContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::MoveContext::MoveContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::MoveContext::MOVE() {
   return getToken(SparqlAutomaticParser::MOVE, 0);
 }
 
-std::vector<SparqlAutomaticParser::GraphOrDefaultContext*>
-SparqlAutomaticParser::MoveContext::graphOrDefault() {
+std::vector<SparqlAutomaticParser::GraphOrDefaultContext *> SparqlAutomaticParser::MoveContext::graphOrDefault() {
   return getRuleContexts<SparqlAutomaticParser::GraphOrDefaultContext>();
 }
 
-SparqlAutomaticParser::GraphOrDefaultContext*
-SparqlAutomaticParser::MoveContext::graphOrDefault(size_t i) {
+SparqlAutomaticParser::GraphOrDefaultContext* SparqlAutomaticParser::MoveContext::graphOrDefault(size_t i) {
   return getRuleContext<SparqlAutomaticParser::GraphOrDefaultContext>(i);
 }
 
@@ -5239,25 +4237,25 @@ tree::TerminalNode* SparqlAutomaticParser::MoveContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::MoveContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleMove;
 }
 
-void SparqlAutomaticParser::MoveContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterMove(this);
+void SparqlAutomaticParser::MoveContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMove(this);
 }
 
-void SparqlAutomaticParser::MoveContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitMove(this);
+void SparqlAutomaticParser::MoveContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMove(this);
 }
 
 SparqlAutomaticParser::MoveContext* SparqlAutomaticParser::move() {
-  MoveContext* _localctx =
-      _tracker.createInstance<MoveContext>(_ctx, getState());
+  MoveContext *_localctx = _tracker.createInstance<MoveContext>(_ctx, getState());
   enterRule(_localctx, 74, SparqlAutomaticParser::RuleMove);
   size_t _la = 0;
 
@@ -5270,24 +4268,25 @@ SparqlAutomaticParser::MoveContext* SparqlAutomaticParser::move() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(628);
+    setState(642);
     match(SparqlAutomaticParser::MOVE);
-    setState(630);
+    setState(644);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(629);
+      setState(643);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(632);
+    setState(646);
     graphOrDefault();
-    setState(633);
+    setState(647);
     match(SparqlAutomaticParser::TO);
-    setState(634);
+    setState(648);
     graphOrDefault();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5296,24 +4295,21 @@ SparqlAutomaticParser::MoveContext* SparqlAutomaticParser::move() {
   return _localctx;
 }
 
-//----------------- CopyContext
-//------------------------------------------------------------------
+//----------------- CopyContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::CopyContext::CopyContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::CopyContext::CopyContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::CopyContext::COPY() {
   return getToken(SparqlAutomaticParser::COPY, 0);
 }
 
-std::vector<SparqlAutomaticParser::GraphOrDefaultContext*>
-SparqlAutomaticParser::CopyContext::graphOrDefault() {
+std::vector<SparqlAutomaticParser::GraphOrDefaultContext *> SparqlAutomaticParser::CopyContext::graphOrDefault() {
   return getRuleContexts<SparqlAutomaticParser::GraphOrDefaultContext>();
 }
 
-SparqlAutomaticParser::GraphOrDefaultContext*
-SparqlAutomaticParser::CopyContext::graphOrDefault(size_t i) {
+SparqlAutomaticParser::GraphOrDefaultContext* SparqlAutomaticParser::CopyContext::graphOrDefault(size_t i) {
   return getRuleContext<SparqlAutomaticParser::GraphOrDefaultContext>(i);
 }
 
@@ -5325,25 +4321,25 @@ tree::TerminalNode* SparqlAutomaticParser::CopyContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
 
+
 size_t SparqlAutomaticParser::CopyContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleCopy;
 }
 
-void SparqlAutomaticParser::CopyContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterCopy(this);
+void SparqlAutomaticParser::CopyContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterCopy(this);
 }
 
-void SparqlAutomaticParser::CopyContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitCopy(this);
+void SparqlAutomaticParser::CopyContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitCopy(this);
 }
 
 SparqlAutomaticParser::CopyContext* SparqlAutomaticParser::copy() {
-  CopyContext* _localctx =
-      _tracker.createInstance<CopyContext>(_ctx, getState());
+  CopyContext *_localctx = _tracker.createInstance<CopyContext>(_ctx, getState());
   enterRule(_localctx, 76, SparqlAutomaticParser::RuleCopy);
   size_t _la = 0;
 
@@ -5356,24 +4352,25 @@ SparqlAutomaticParser::CopyContext* SparqlAutomaticParser::copy() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(636);
+    setState(650);
     match(SparqlAutomaticParser::COPY);
-    setState(638);
+    setState(652);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(637);
+      setState(651);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(640);
+    setState(654);
     graphOrDefault();
-    setState(641);
+    setState(655);
     match(SparqlAutomaticParser::TO);
-    setState(642);
+    setState(656);
     graphOrDefault();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5382,12 +4379,11 @@ SparqlAutomaticParser::CopyContext* SparqlAutomaticParser::copy() {
   return _localctx;
 }
 
-//----------------- InsertDataContext
-//------------------------------------------------------------------
+//----------------- InsertDataContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::InsertDataContext::InsertDataContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::InsertDataContext::InsertDataContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::InsertDataContext::INSERT() {
   return getToken(SparqlAutomaticParser::INSERT, 0);
@@ -5397,30 +4393,29 @@ tree::TerminalNode* SparqlAutomaticParser::InsertDataContext::DATA() {
   return getToken(SparqlAutomaticParser::DATA, 0);
 }
 
-SparqlAutomaticParser::QuadDataContext*
-SparqlAutomaticParser::InsertDataContext::quadData() {
+SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::InsertDataContext::quadData() {
   return getRuleContext<SparqlAutomaticParser::QuadDataContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::InsertDataContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleInsertData;
 }
 
-void SparqlAutomaticParser::InsertDataContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInsertData(this);
+void SparqlAutomaticParser::InsertDataContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInsertData(this);
 }
 
-void SparqlAutomaticParser::InsertDataContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInsertData(this);
+void SparqlAutomaticParser::InsertDataContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInsertData(this);
 }
 
 SparqlAutomaticParser::InsertDataContext* SparqlAutomaticParser::insertData() {
-  InsertDataContext* _localctx =
-      _tracker.createInstance<InsertDataContext>(_ctx, getState());
+  InsertDataContext *_localctx = _tracker.createInstance<InsertDataContext>(_ctx, getState());
   enterRule(_localctx, 78, SparqlAutomaticParser::RuleInsertData);
 
 #if __cplusplus > 201703L
@@ -5432,14 +4427,15 @@ SparqlAutomaticParser::InsertDataContext* SparqlAutomaticParser::insertData() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(644);
+    setState(658);
     match(SparqlAutomaticParser::INSERT);
-    setState(645);
+    setState(659);
     match(SparqlAutomaticParser::DATA);
-    setState(646);
+    setState(660);
     quadData();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5448,12 +4444,11 @@ SparqlAutomaticParser::InsertDataContext* SparqlAutomaticParser::insertData() {
   return _localctx;
 }
 
-//----------------- DeleteDataContext
-//------------------------------------------------------------------
+//----------------- DeleteDataContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DeleteDataContext::DeleteDataContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DeleteDataContext::DeleteDataContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DeleteDataContext::DELETE() {
   return getToken(SparqlAutomaticParser::DELETE, 0);
@@ -5463,30 +4458,29 @@ tree::TerminalNode* SparqlAutomaticParser::DeleteDataContext::DATA() {
   return getToken(SparqlAutomaticParser::DATA, 0);
 }
 
-SparqlAutomaticParser::QuadDataContext*
-SparqlAutomaticParser::DeleteDataContext::quadData() {
+SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::DeleteDataContext::quadData() {
   return getRuleContext<SparqlAutomaticParser::QuadDataContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DeleteDataContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDeleteData;
 }
 
-void SparqlAutomaticParser::DeleteDataContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDeleteData(this);
+void SparqlAutomaticParser::DeleteDataContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDeleteData(this);
 }
 
-void SparqlAutomaticParser::DeleteDataContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDeleteData(this);
+void SparqlAutomaticParser::DeleteDataContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDeleteData(this);
 }
 
 SparqlAutomaticParser::DeleteDataContext* SparqlAutomaticParser::deleteData() {
-  DeleteDataContext* _localctx =
-      _tracker.createInstance<DeleteDataContext>(_ctx, getState());
+  DeleteDataContext *_localctx = _tracker.createInstance<DeleteDataContext>(_ctx, getState());
   enterRule(_localctx, 80, SparqlAutomaticParser::RuleDeleteData);
 
 #if __cplusplus > 201703L
@@ -5498,14 +4492,15 @@ SparqlAutomaticParser::DeleteDataContext* SparqlAutomaticParser::deleteData() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(648);
+    setState(662);
     match(SparqlAutomaticParser::DELETE);
-    setState(649);
+    setState(663);
     match(SparqlAutomaticParser::DATA);
-    setState(650);
+    setState(664);
     quadData();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5514,12 +4509,11 @@ SparqlAutomaticParser::DeleteDataContext* SparqlAutomaticParser::deleteData() {
   return _localctx;
 }
 
-//----------------- DeleteWhereContext
-//------------------------------------------------------------------
+//----------------- DeleteWhereContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DeleteWhereContext::DeleteWhereContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DeleteWhereContext::DeleteWhereContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DeleteWhereContext::DELETE() {
   return getToken(SparqlAutomaticParser::DELETE, 0);
@@ -5529,31 +4523,29 @@ tree::TerminalNode* SparqlAutomaticParser::DeleteWhereContext::WHERE() {
   return getToken(SparqlAutomaticParser::WHERE, 0);
 }
 
-SparqlAutomaticParser::QuadPatternContext*
-SparqlAutomaticParser::DeleteWhereContext::quadPattern() {
+SparqlAutomaticParser::QuadPatternContext* SparqlAutomaticParser::DeleteWhereContext::quadPattern() {
   return getRuleContext<SparqlAutomaticParser::QuadPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DeleteWhereContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDeleteWhere;
 }
 
-void SparqlAutomaticParser::DeleteWhereContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDeleteWhere(this);
+void SparqlAutomaticParser::DeleteWhereContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDeleteWhere(this);
 }
 
-void SparqlAutomaticParser::DeleteWhereContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDeleteWhere(this);
+void SparqlAutomaticParser::DeleteWhereContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDeleteWhere(this);
 }
 
-SparqlAutomaticParser::DeleteWhereContext*
-SparqlAutomaticParser::deleteWhere() {
-  DeleteWhereContext* _localctx =
-      _tracker.createInstance<DeleteWhereContext>(_ctx, getState());
+SparqlAutomaticParser::DeleteWhereContext* SparqlAutomaticParser::deleteWhere() {
+  DeleteWhereContext *_localctx = _tracker.createInstance<DeleteWhereContext>(_ctx, getState());
   enterRule(_localctx, 82, SparqlAutomaticParser::RuleDeleteWhere);
 
 #if __cplusplus > 201703L
@@ -5565,14 +4557,15 @@ SparqlAutomaticParser::deleteWhere() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(652);
+    setState(666);
     match(SparqlAutomaticParser::DELETE);
-    setState(653);
+    setState(667);
     match(SparqlAutomaticParser::WHERE);
-    setState(654);
+    setState(668);
     quadPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5581,29 +4574,25 @@ SparqlAutomaticParser::deleteWhere() {
   return _localctx;
 }
 
-//----------------- ModifyContext
-//------------------------------------------------------------------
+//----------------- ModifyContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ModifyContext::ModifyContext(ParserRuleContext* parent,
-                                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ModifyContext::ModifyContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ModifyContext::WHERE() {
   return getToken(SparqlAutomaticParser::WHERE, 0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::ModifyContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::ModifyContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
 
-SparqlAutomaticParser::DeleteClauseContext*
-SparqlAutomaticParser::ModifyContext::deleteClause() {
+SparqlAutomaticParser::DeleteClauseContext* SparqlAutomaticParser::ModifyContext::deleteClause() {
   return getRuleContext<SparqlAutomaticParser::DeleteClauseContext>(0);
 }
 
-SparqlAutomaticParser::InsertClauseContext*
-SparqlAutomaticParser::ModifyContext::insertClause() {
+SparqlAutomaticParser::InsertClauseContext* SparqlAutomaticParser::ModifyContext::insertClause() {
   return getRuleContext<SparqlAutomaticParser::InsertClauseContext>(0);
 }
 
@@ -5615,35 +4604,33 @@ SparqlAutomaticParser::IriContext* SparqlAutomaticParser::ModifyContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::UsingClauseContext*>
-SparqlAutomaticParser::ModifyContext::usingClause() {
+std::vector<SparqlAutomaticParser::UsingClauseContext *> SparqlAutomaticParser::ModifyContext::usingClause() {
   return getRuleContexts<SparqlAutomaticParser::UsingClauseContext>();
 }
 
-SparqlAutomaticParser::UsingClauseContext*
-SparqlAutomaticParser::ModifyContext::usingClause(size_t i) {
+SparqlAutomaticParser::UsingClauseContext* SparqlAutomaticParser::ModifyContext::usingClause(size_t i) {
   return getRuleContext<SparqlAutomaticParser::UsingClauseContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::ModifyContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleModify;
 }
 
-void SparqlAutomaticParser::ModifyContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterModify(this);
+void SparqlAutomaticParser::ModifyContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterModify(this);
 }
 
-void SparqlAutomaticParser::ModifyContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitModify(this);
+void SparqlAutomaticParser::ModifyContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitModify(this);
 }
 
 SparqlAutomaticParser::ModifyContext* SparqlAutomaticParser::modify() {
-  ModifyContext* _localctx =
-      _tracker.createInstance<ModifyContext>(_ctx, getState());
+  ModifyContext *_localctx = _tracker.createInstance<ModifyContext>(_ctx, getState());
   enterRule(_localctx, 84, SparqlAutomaticParser::RuleModify);
   size_t _la = 0;
 
@@ -5656,58 +4643,59 @@ SparqlAutomaticParser::ModifyContext* SparqlAutomaticParser::modify() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(658);
+    setState(672);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::WITH) {
-      setState(656);
+      setState(670);
       match(SparqlAutomaticParser::WITH);
-      setState(657);
+      setState(671);
       iri();
     }
-    setState(665);
+    setState(679);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::DELETE: {
-        setState(660);
+        setState(674);
         deleteClause();
-        setState(662);
+        setState(676);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::INSERT) {
-          setState(661);
+          setState(675);
           insertClause();
         }
         break;
       }
 
       case SparqlAutomaticParser::INSERT: {
-        setState(664);
+        setState(678);
         insertClause();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(670);
+    setState(684);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::USING) {
-      setState(667);
+      setState(681);
       usingClause();
-      setState(672);
+      setState(686);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(673);
+    setState(687);
     match(SparqlAutomaticParser::WHERE);
-    setState(674);
+    setState(688);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5716,42 +4704,39 @@ SparqlAutomaticParser::ModifyContext* SparqlAutomaticParser::modify() {
   return _localctx;
 }
 
-//----------------- DeleteClauseContext
-//------------------------------------------------------------------
+//----------------- DeleteClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DeleteClauseContext::DeleteClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DeleteClauseContext::DeleteClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DeleteClauseContext::DELETE() {
   return getToken(SparqlAutomaticParser::DELETE, 0);
 }
 
-SparqlAutomaticParser::QuadPatternContext*
-SparqlAutomaticParser::DeleteClauseContext::quadPattern() {
+SparqlAutomaticParser::QuadPatternContext* SparqlAutomaticParser::DeleteClauseContext::quadPattern() {
   return getRuleContext<SparqlAutomaticParser::QuadPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DeleteClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDeleteClause;
 }
 
-void SparqlAutomaticParser::DeleteClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDeleteClause(this);
+void SparqlAutomaticParser::DeleteClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDeleteClause(this);
 }
 
-void SparqlAutomaticParser::DeleteClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDeleteClause(this);
+void SparqlAutomaticParser::DeleteClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDeleteClause(this);
 }
 
-SparqlAutomaticParser::DeleteClauseContext*
-SparqlAutomaticParser::deleteClause() {
-  DeleteClauseContext* _localctx =
-      _tracker.createInstance<DeleteClauseContext>(_ctx, getState());
+SparqlAutomaticParser::DeleteClauseContext* SparqlAutomaticParser::deleteClause() {
+  DeleteClauseContext *_localctx = _tracker.createInstance<DeleteClauseContext>(_ctx, getState());
   enterRule(_localctx, 86, SparqlAutomaticParser::RuleDeleteClause);
 
 #if __cplusplus > 201703L
@@ -5763,12 +4748,13 @@ SparqlAutomaticParser::deleteClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(676);
+    setState(690);
     match(SparqlAutomaticParser::DELETE);
-    setState(677);
+    setState(691);
     quadPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5777,42 +4763,39 @@ SparqlAutomaticParser::deleteClause() {
   return _localctx;
 }
 
-//----------------- InsertClauseContext
-//------------------------------------------------------------------
+//----------------- InsertClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::InsertClauseContext::InsertClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::InsertClauseContext::InsertClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::InsertClauseContext::INSERT() {
   return getToken(SparqlAutomaticParser::INSERT, 0);
 }
 
-SparqlAutomaticParser::QuadPatternContext*
-SparqlAutomaticParser::InsertClauseContext::quadPattern() {
+SparqlAutomaticParser::QuadPatternContext* SparqlAutomaticParser::InsertClauseContext::quadPattern() {
   return getRuleContext<SparqlAutomaticParser::QuadPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::InsertClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleInsertClause;
 }
 
-void SparqlAutomaticParser::InsertClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInsertClause(this);
+void SparqlAutomaticParser::InsertClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInsertClause(this);
 }
 
-void SparqlAutomaticParser::InsertClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInsertClause(this);
+void SparqlAutomaticParser::InsertClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInsertClause(this);
 }
 
-SparqlAutomaticParser::InsertClauseContext*
-SparqlAutomaticParser::insertClause() {
-  InsertClauseContext* _localctx =
-      _tracker.createInstance<InsertClauseContext>(_ctx, getState());
+SparqlAutomaticParser::InsertClauseContext* SparqlAutomaticParser::insertClause() {
+  InsertClauseContext *_localctx = _tracker.createInstance<InsertClauseContext>(_ctx, getState());
   enterRule(_localctx, 88, SparqlAutomaticParser::RuleInsertClause);
 
 #if __cplusplus > 201703L
@@ -5824,12 +4807,13 @@ SparqlAutomaticParser::insertClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(679);
+    setState(693);
     match(SparqlAutomaticParser::INSERT);
-    setState(680);
+    setState(694);
     quadPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5838,19 +4822,17 @@ SparqlAutomaticParser::insertClause() {
   return _localctx;
 }
 
-//----------------- UsingClauseContext
-//------------------------------------------------------------------
+//----------------- UsingClauseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::UsingClauseContext::UsingClauseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::UsingClauseContext::UsingClauseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::UsingClauseContext::USING() {
   return getToken(SparqlAutomaticParser::USING, 0);
 }
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::UsingClauseContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::UsingClauseContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
@@ -5858,26 +4840,25 @@ tree::TerminalNode* SparqlAutomaticParser::UsingClauseContext::NAMED() {
   return getToken(SparqlAutomaticParser::NAMED, 0);
 }
 
+
 size_t SparqlAutomaticParser::UsingClauseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleUsingClause;
 }
 
-void SparqlAutomaticParser::UsingClauseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterUsingClause(this);
+void SparqlAutomaticParser::UsingClauseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterUsingClause(this);
 }
 
-void SparqlAutomaticParser::UsingClauseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitUsingClause(this);
+void SparqlAutomaticParser::UsingClauseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitUsingClause(this);
 }
 
-SparqlAutomaticParser::UsingClauseContext*
-SparqlAutomaticParser::usingClause() {
-  UsingClauseContext* _localctx =
-      _tracker.createInstance<UsingClauseContext>(_ctx, getState());
+SparqlAutomaticParser::UsingClauseContext* SparqlAutomaticParser::usingClause() {
+  UsingClauseContext *_localctx = _tracker.createInstance<UsingClauseContext>(_ctx, getState());
   enterRule(_localctx, 90, SparqlAutomaticParser::RuleUsingClause);
 
 #if __cplusplus > 201703L
@@ -5889,33 +4870,34 @@ SparqlAutomaticParser::usingClause() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(682);
+    setState(696);
     match(SparqlAutomaticParser::USING);
-    setState(686);
+    setState(700);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        setState(683);
+        setState(697);
         iri();
         break;
       }
 
       case SparqlAutomaticParser::NAMED: {
-        setState(684);
+        setState(698);
         match(SparqlAutomaticParser::NAMED);
-        setState(685);
+        setState(699);
         iri();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -5924,19 +4906,17 @@ SparqlAutomaticParser::usingClause() {
   return _localctx;
 }
 
-//----------------- GraphOrDefaultContext
-//------------------------------------------------------------------
+//----------------- GraphOrDefaultContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphOrDefaultContext::GraphOrDefaultContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GraphOrDefaultContext::GraphOrDefaultContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::GraphOrDefaultContext::DEFAULT() {
   return getToken(SparqlAutomaticParser::DEFAULT, 0);
 }
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::GraphOrDefaultContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::GraphOrDefaultContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
@@ -5944,26 +4924,25 @@ tree::TerminalNode* SparqlAutomaticParser::GraphOrDefaultContext::GRAPH() {
   return getToken(SparqlAutomaticParser::GRAPH, 0);
 }
 
+
 size_t SparqlAutomaticParser::GraphOrDefaultContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphOrDefault;
 }
 
-void SparqlAutomaticParser::GraphOrDefaultContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphOrDefault(this);
+void SparqlAutomaticParser::GraphOrDefaultContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphOrDefault(this);
 }
 
-void SparqlAutomaticParser::GraphOrDefaultContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphOrDefault(this);
+void SparqlAutomaticParser::GraphOrDefaultContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphOrDefault(this);
 }
 
-SparqlAutomaticParser::GraphOrDefaultContext*
-SparqlAutomaticParser::graphOrDefault() {
-  GraphOrDefaultContext* _localctx =
-      _tracker.createInstance<GraphOrDefaultContext>(_ctx, getState());
+SparqlAutomaticParser::GraphOrDefaultContext* SparqlAutomaticParser::graphOrDefault() {
+  GraphOrDefaultContext *_localctx = _tracker.createInstance<GraphOrDefaultContext>(_ctx, getState());
   enterRule(_localctx, 92, SparqlAutomaticParser::RuleGraphOrDefault);
   size_t _la = 0;
 
@@ -5975,12 +4954,12 @@ SparqlAutomaticParser::graphOrDefault() {
     exitRule();
   });
   try {
-    setState(693);
+    setState(707);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::DEFAULT: {
         enterOuterAlt(_localctx, 1);
-        setState(688);
+        setState(702);
         match(SparqlAutomaticParser::DEFAULT);
         break;
       }
@@ -5991,24 +4970,25 @@ SparqlAutomaticParser::graphOrDefault() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 2);
-        setState(690);
+        setState(704);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::GRAPH) {
-          setState(689);
+          setState(703);
           match(SparqlAutomaticParser::GRAPH);
         }
-        setState(692);
+        setState(706);
         iri();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6017,41 +4997,39 @@ SparqlAutomaticParser::graphOrDefault() {
   return _localctx;
 }
 
-//----------------- GraphRefContext
-//------------------------------------------------------------------
+//----------------- GraphRefContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphRefContext::GraphRefContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GraphRefContext::GraphRefContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::GraphRefContext::GRAPH() {
   return getToken(SparqlAutomaticParser::GRAPH, 0);
 }
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::GraphRefContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::GraphRefContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::GraphRefContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphRef;
 }
 
-void SparqlAutomaticParser::GraphRefContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphRef(this);
+void SparqlAutomaticParser::GraphRefContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphRef(this);
 }
 
-void SparqlAutomaticParser::GraphRefContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphRef(this);
+void SparqlAutomaticParser::GraphRefContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphRef(this);
 }
 
 SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::graphRef() {
-  GraphRefContext* _localctx =
-      _tracker.createInstance<GraphRefContext>(_ctx, getState());
+  GraphRefContext *_localctx = _tracker.createInstance<GraphRefContext>(_ctx, getState());
   enterRule(_localctx, 94, SparqlAutomaticParser::RuleGraphRef);
 
 #if __cplusplus > 201703L
@@ -6063,12 +5041,13 @@ SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::graphRef() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(695);
+    setState(709);
     match(SparqlAutomaticParser::GRAPH);
-    setState(696);
+    setState(710);
     iri();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6077,15 +5056,13 @@ SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::graphRef() {
   return _localctx;
 }
 
-//----------------- GraphRefAllContext
-//------------------------------------------------------------------
+//----------------- GraphRefAllContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphRefAllContext::GraphRefAllContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GraphRefAllContext::GraphRefAllContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::GraphRefContext*
-SparqlAutomaticParser::GraphRefAllContext::graphRef() {
+SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::GraphRefAllContext::graphRef() {
   return getRuleContext<SparqlAutomaticParser::GraphRefContext>(0);
 }
 
@@ -6101,26 +5078,25 @@ tree::TerminalNode* SparqlAutomaticParser::GraphRefAllContext::ALL() {
   return getToken(SparqlAutomaticParser::ALL, 0);
 }
 
+
 size_t SparqlAutomaticParser::GraphRefAllContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphRefAll;
 }
 
-void SparqlAutomaticParser::GraphRefAllContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphRefAll(this);
+void SparqlAutomaticParser::GraphRefAllContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphRefAll(this);
 }
 
-void SparqlAutomaticParser::GraphRefAllContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphRefAll(this);
+void SparqlAutomaticParser::GraphRefAllContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphRefAll(this);
 }
 
-SparqlAutomaticParser::GraphRefAllContext*
-SparqlAutomaticParser::graphRefAll() {
-  GraphRefAllContext* _localctx =
-      _tracker.createInstance<GraphRefAllContext>(_ctx, getState());
+SparqlAutomaticParser::GraphRefAllContext* SparqlAutomaticParser::graphRefAll() {
+  GraphRefAllContext *_localctx = _tracker.createInstance<GraphRefAllContext>(_ctx, getState());
   enterRule(_localctx, 96, SparqlAutomaticParser::RuleGraphRefAll);
 
 #if __cplusplus > 201703L
@@ -6131,42 +5107,43 @@ SparqlAutomaticParser::graphRefAll() {
     exitRule();
   });
   try {
-    setState(702);
+    setState(716);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::GRAPH: {
         enterOuterAlt(_localctx, 1);
-        setState(698);
+        setState(712);
         graphRef();
         break;
       }
 
       case SparqlAutomaticParser::DEFAULT: {
         enterOuterAlt(_localctx, 2);
-        setState(699);
+        setState(713);
         match(SparqlAutomaticParser::DEFAULT);
         break;
       }
 
       case SparqlAutomaticParser::NAMED: {
         enterOuterAlt(_localctx, 3);
-        setState(700);
+        setState(714);
         match(SparqlAutomaticParser::NAMED);
         break;
       }
 
       case SparqlAutomaticParser::ALL: {
         enterOuterAlt(_localctx, 4);
-        setState(701);
+        setState(715);
         match(SparqlAutomaticParser::ALL);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6175,38 +5152,35 @@ SparqlAutomaticParser::graphRefAll() {
   return _localctx;
 }
 
-//----------------- QuadPatternContext
-//------------------------------------------------------------------
+//----------------- QuadPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::QuadPatternContext::QuadPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::QuadPatternContext::QuadPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::QuadsContext*
-SparqlAutomaticParser::QuadPatternContext::quads() {
+SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::QuadPatternContext::quads() {
   return getRuleContext<SparqlAutomaticParser::QuadsContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::QuadPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleQuadPattern;
 }
 
-void SparqlAutomaticParser::QuadPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterQuadPattern(this);
+void SparqlAutomaticParser::QuadPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterQuadPattern(this);
 }
 
-void SparqlAutomaticParser::QuadPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitQuadPattern(this);
+void SparqlAutomaticParser::QuadPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitQuadPattern(this);
 }
 
-SparqlAutomaticParser::QuadPatternContext*
-SparqlAutomaticParser::quadPattern() {
-  QuadPatternContext* _localctx =
-      _tracker.createInstance<QuadPatternContext>(_ctx, getState());
+SparqlAutomaticParser::QuadPatternContext* SparqlAutomaticParser::quadPattern() {
+  QuadPatternContext *_localctx = _tracker.createInstance<QuadPatternContext>(_ctx, getState());
   enterRule(_localctx, 98, SparqlAutomaticParser::RuleQuadPattern);
 
 #if __cplusplus > 201703L
@@ -6218,14 +5192,15 @@ SparqlAutomaticParser::quadPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(704);
+    setState(718);
     match(SparqlAutomaticParser::T__3);
-    setState(705);
+    setState(719);
     quads();
-    setState(706);
+    setState(720);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6234,37 +5209,35 @@ SparqlAutomaticParser::quadPattern() {
   return _localctx;
 }
 
-//----------------- QuadDataContext
-//------------------------------------------------------------------
+//----------------- QuadDataContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::QuadDataContext::QuadDataContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::QuadDataContext::QuadDataContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::QuadsContext*
-SparqlAutomaticParser::QuadDataContext::quads() {
+SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::QuadDataContext::quads() {
   return getRuleContext<SparqlAutomaticParser::QuadsContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::QuadDataContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleQuadData;
 }
 
-void SparqlAutomaticParser::QuadDataContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterQuadData(this);
+void SparqlAutomaticParser::QuadDataContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterQuadData(this);
 }
 
-void SparqlAutomaticParser::QuadDataContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitQuadData(this);
+void SparqlAutomaticParser::QuadDataContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitQuadData(this);
 }
 
 SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::quadData() {
-  QuadDataContext* _localctx =
-      _tracker.createInstance<QuadDataContext>(_ctx, getState());
+  QuadDataContext *_localctx = _tracker.createInstance<QuadDataContext>(_ctx, getState());
   enterRule(_localctx, 100, SparqlAutomaticParser::RuleQuadData);
 
 #if __cplusplus > 201703L
@@ -6276,14 +5249,15 @@ SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::quadData() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(708);
+    setState(722);
     match(SparqlAutomaticParser::T__3);
-    setState(709);
+    setState(723);
     quads();
-    setState(710);
+    setState(724);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6292,52 +5266,47 @@ SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::quadData() {
   return _localctx;
 }
 
-//----------------- QuadsContext
-//------------------------------------------------------------------
+//----------------- QuadsContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::QuadsContext::QuadsContext(ParserRuleContext* parent,
-                                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::QuadsContext::QuadsContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::TriplesTemplateContext*>
-SparqlAutomaticParser::QuadsContext::triplesTemplate() {
+std::vector<SparqlAutomaticParser::TriplesTemplateContext *> SparqlAutomaticParser::QuadsContext::triplesTemplate() {
   return getRuleContexts<SparqlAutomaticParser::TriplesTemplateContext>();
 }
 
-SparqlAutomaticParser::TriplesTemplateContext*
-SparqlAutomaticParser::QuadsContext::triplesTemplate(size_t i) {
+SparqlAutomaticParser::TriplesTemplateContext* SparqlAutomaticParser::QuadsContext::triplesTemplate(size_t i) {
   return getRuleContext<SparqlAutomaticParser::TriplesTemplateContext>(i);
 }
 
-std::vector<SparqlAutomaticParser::QuadsNotTriplesContext*>
-SparqlAutomaticParser::QuadsContext::quadsNotTriples() {
+std::vector<SparqlAutomaticParser::QuadsNotTriplesContext *> SparqlAutomaticParser::QuadsContext::quadsNotTriples() {
   return getRuleContexts<SparqlAutomaticParser::QuadsNotTriplesContext>();
 }
 
-SparqlAutomaticParser::QuadsNotTriplesContext*
-SparqlAutomaticParser::QuadsContext::quadsNotTriples(size_t i) {
+SparqlAutomaticParser::QuadsNotTriplesContext* SparqlAutomaticParser::QuadsContext::quadsNotTriples(size_t i) {
   return getRuleContext<SparqlAutomaticParser::QuadsNotTriplesContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::QuadsContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleQuads;
 }
 
-void SparqlAutomaticParser::QuadsContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterQuads(this);
+void SparqlAutomaticParser::QuadsContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterQuads(this);
 }
 
-void SparqlAutomaticParser::QuadsContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitQuads(this);
+void SparqlAutomaticParser::QuadsContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitQuads(this);
 }
 
 SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
-  QuadsContext* _localctx =
-      _tracker.createInstance<QuadsContext>(_ctx, getState());
+  QuadsContext *_localctx = _tracker.createInstance<QuadsContext>(_ctx, getState());
   enterRule(_localctx, 102, SparqlAutomaticParser::RuleQuads);
   size_t _la = 0;
 
@@ -6350,46 +5319,47 @@ SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(713);
+    setState(727);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 29228991) != 0)) {
-      setState(712);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0)) {
+      setState(726);
       triplesTemplate();
     }
-    setState(724);
+    setState(738);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::GRAPH) {
-      setState(715);
+      setState(729);
       quadsNotTriples();
-      setState(717);
+      setState(731);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
       if (_la == SparqlAutomaticParser::T__6) {
-        setState(716);
+        setState(730);
         match(SparqlAutomaticParser::T__6);
       }
-      setState(720);
+      setState(734);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-          ((((_la - 142) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 142)) & 29228991) != 0)) {
-        setState(719);
+      if ((((_la & ~ 0x3fULL) == 0) &&
+        ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+        ((1ULL << (_la - 142)) & 29228991) != 0)) {
+        setState(733);
         triplesTemplate();
       }
-      setState(726);
+      setState(740);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6398,47 +5368,43 @@ SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
   return _localctx;
 }
 
-//----------------- QuadsNotTriplesContext
-//------------------------------------------------------------------
+//----------------- QuadsNotTriplesContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::QuadsNotTriplesContext::QuadsNotTriplesContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::QuadsNotTriplesContext::QuadsNotTriplesContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::QuadsNotTriplesContext::GRAPH() {
   return getToken(SparqlAutomaticParser::GRAPH, 0);
 }
 
-SparqlAutomaticParser::VarOrIriContext*
-SparqlAutomaticParser::QuadsNotTriplesContext::varOrIri() {
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::QuadsNotTriplesContext::varOrIri() {
   return getRuleContext<SparqlAutomaticParser::VarOrIriContext>(0);
 }
 
-SparqlAutomaticParser::TriplesTemplateContext*
-SparqlAutomaticParser::QuadsNotTriplesContext::triplesTemplate() {
+SparqlAutomaticParser::TriplesTemplateContext* SparqlAutomaticParser::QuadsNotTriplesContext::triplesTemplate() {
   return getRuleContext<SparqlAutomaticParser::TriplesTemplateContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::QuadsNotTriplesContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleQuadsNotTriples;
 }
 
-void SparqlAutomaticParser::QuadsNotTriplesContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterQuadsNotTriples(this);
+void SparqlAutomaticParser::QuadsNotTriplesContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterQuadsNotTriples(this);
 }
 
-void SparqlAutomaticParser::QuadsNotTriplesContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitQuadsNotTriples(this);
+void SparqlAutomaticParser::QuadsNotTriplesContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitQuadsNotTriples(this);
 }
 
-SparqlAutomaticParser::QuadsNotTriplesContext*
-SparqlAutomaticParser::quadsNotTriples() {
-  QuadsNotTriplesContext* _localctx =
-      _tracker.createInstance<QuadsNotTriplesContext>(_ctx, getState());
+SparqlAutomaticParser::QuadsNotTriplesContext* SparqlAutomaticParser::quadsNotTriples() {
+  QuadsNotTriplesContext *_localctx = _tracker.createInstance<QuadsNotTriplesContext>(_ctx, getState());
   enterRule(_localctx, 104, SparqlAutomaticParser::RuleQuadsNotTriples);
   size_t _la = 0;
 
@@ -6451,26 +5417,27 @@ SparqlAutomaticParser::quadsNotTriples() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(727);
+    setState(741);
     match(SparqlAutomaticParser::GRAPH);
-    setState(728);
+    setState(742);
     varOrIri();
-    setState(729);
+    setState(743);
     match(SparqlAutomaticParser::T__3);
-    setState(731);
+    setState(745);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 29228991) != 0)) {
-      setState(730);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0)) {
+      setState(744);
       triplesTemplate();
     }
-    setState(733);
+    setState(747);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6479,43 +5446,39 @@ SparqlAutomaticParser::quadsNotTriples() {
   return _localctx;
 }
 
-//----------------- TriplesTemplateContext
-//------------------------------------------------------------------
+//----------------- TriplesTemplateContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesTemplateContext::TriplesTemplateContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TriplesTemplateContext::TriplesTemplateContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::TriplesSameSubjectContext*>
-SparqlAutomaticParser::TriplesTemplateContext::triplesSameSubject() {
+std::vector<SparqlAutomaticParser::TriplesSameSubjectContext *> SparqlAutomaticParser::TriplesTemplateContext::triplesSameSubject() {
   return getRuleContexts<SparqlAutomaticParser::TriplesSameSubjectContext>();
 }
 
-SparqlAutomaticParser::TriplesSameSubjectContext*
-SparqlAutomaticParser::TriplesTemplateContext::triplesSameSubject(size_t i) {
+SparqlAutomaticParser::TriplesSameSubjectContext* SparqlAutomaticParser::TriplesTemplateContext::triplesSameSubject(size_t i) {
   return getRuleContext<SparqlAutomaticParser::TriplesSameSubjectContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::TriplesTemplateContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTriplesTemplate;
 }
 
-void SparqlAutomaticParser::TriplesTemplateContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTriplesTemplate(this);
+void SparqlAutomaticParser::TriplesTemplateContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTriplesTemplate(this);
 }
 
-void SparqlAutomaticParser::TriplesTemplateContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTriplesTemplate(this);
+void SparqlAutomaticParser::TriplesTemplateContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTriplesTemplate(this);
 }
 
-SparqlAutomaticParser::TriplesTemplateContext*
-SparqlAutomaticParser::triplesTemplate() {
-  TriplesTemplateContext* _localctx =
-      _tracker.createInstance<TriplesTemplateContext>(_ctx, getState());
+SparqlAutomaticParser::TriplesTemplateContext* SparqlAutomaticParser::triplesTemplate() {
+  TriplesTemplateContext *_localctx = _tracker.createInstance<TriplesTemplateContext>(_ctx, getState());
   enterRule(_localctx, 106, SparqlAutomaticParser::RuleTriplesTemplate);
   size_t _la = 0;
 
@@ -6529,34 +5492,33 @@ SparqlAutomaticParser::triplesTemplate() {
   try {
     size_t alt;
     enterOuterAlt(_localctx, 1);
-    setState(735);
+    setState(749);
     triplesSameSubject();
-    setState(740);
+    setState(754);
     _errHandler->sync(this);
-    alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 70,
-                                                                     _ctx);
+    alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 70, _ctx);
     while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
       if (alt == 1) {
-        setState(736);
+        setState(750);
         match(SparqlAutomaticParser::T__6);
-        setState(737);
-        triplesSameSubject();
+        setState(751);
+        triplesSameSubject(); 
       }
-      setState(742);
+      setState(756);
       _errHandler->sync(this);
-      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
-          _input, 70, _ctx);
+      alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 70, _ctx);
     }
-    setState(744);
+    setState(758);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__6) {
-      setState(743);
+      setState(757);
       match(SparqlAutomaticParser::T__6);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6565,43 +5527,39 @@ SparqlAutomaticParser::triplesTemplate() {
   return _localctx;
 }
 
-//----------------- GroupGraphPatternContext
-//------------------------------------------------------------------
+//----------------- GroupGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GroupGraphPatternContext::GroupGraphPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GroupGraphPatternContext::GroupGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::SubSelectContext*
-SparqlAutomaticParser::GroupGraphPatternContext::subSelect() {
+SparqlAutomaticParser::SubSelectContext* SparqlAutomaticParser::GroupGraphPatternContext::subSelect() {
   return getRuleContext<SparqlAutomaticParser::SubSelectContext>(0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternSubContext*
-SparqlAutomaticParser::GroupGraphPatternContext::groupGraphPatternSub() {
+SparqlAutomaticParser::GroupGraphPatternSubContext* SparqlAutomaticParser::GroupGraphPatternContext::groupGraphPatternSub() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternSubContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::GroupGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGroupGraphPattern;
 }
 
-void SparqlAutomaticParser::GroupGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGroupGraphPattern(this);
+void SparqlAutomaticParser::GroupGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGroupGraphPattern(this);
 }
 
-void SparqlAutomaticParser::GroupGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGroupGraphPattern(this);
+void SparqlAutomaticParser::GroupGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGroupGraphPattern(this);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::groupGraphPattern() {
-  GroupGraphPatternContext* _localctx =
-      _tracker.createInstance<GroupGraphPatternContext>(_ctx, getState());
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::groupGraphPattern() {
+  GroupGraphPatternContext *_localctx = _tracker.createInstance<GroupGraphPatternContext>(_ctx, getState());
   enterRule(_localctx, 108, SparqlAutomaticParser::RuleGroupGraphPattern);
 
 #if __cplusplus > 201703L
@@ -6613,13 +5571,13 @@ SparqlAutomaticParser::groupGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(746);
+    setState(760);
     match(SparqlAutomaticParser::T__3);
-    setState(749);
+    setState(763);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::SELECT: {
-        setState(747);
+        setState(761);
         subSelect();
         break;
       }
@@ -6659,18 +5617,19 @@ SparqlAutomaticParser::groupGraphPattern() {
       case SparqlAutomaticParser::STRING_LITERAL_LONG2:
       case SparqlAutomaticParser::NIL:
       case SparqlAutomaticParser::ANON: {
-        setState(748);
+        setState(762);
         groupGraphPatternSub();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(751);
+    setState(765);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6679,55 +5638,43 @@ SparqlAutomaticParser::groupGraphPattern() {
   return _localctx;
 }
 
-//----------------- GroupGraphPatternSubContext
-//------------------------------------------------------------------
+//----------------- GroupGraphPatternSubContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GroupGraphPatternSubContext::GroupGraphPatternSubContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GroupGraphPatternSubContext::GroupGraphPatternSubContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::TriplesBlockContext*
-SparqlAutomaticParser::GroupGraphPatternSubContext::triplesBlock() {
+SparqlAutomaticParser::TriplesBlockContext* SparqlAutomaticParser::GroupGraphPatternSubContext::triplesBlock() {
   return getRuleContext<SparqlAutomaticParser::TriplesBlockContext>(0);
 }
 
-std::vector<
-    SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*>
-SparqlAutomaticParser::GroupGraphPatternSubContext::
-    graphPatternNotTriplesAndMaybeTriples() {
-  return getRuleContexts<
-      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext>();
+std::vector<SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext *> SparqlAutomaticParser::GroupGraphPatternSubContext::graphPatternNotTriplesAndMaybeTriples() {
+  return getRuleContexts<SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext>();
 }
 
-SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
-SparqlAutomaticParser::GroupGraphPatternSubContext::
-    graphPatternNotTriplesAndMaybeTriples(size_t i) {
-  return getRuleContext<
-      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext>(i);
+SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext* SparqlAutomaticParser::GroupGraphPatternSubContext::graphPatternNotTriplesAndMaybeTriples(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext>(i);
 }
 
-size_t SparqlAutomaticParser::GroupGraphPatternSubContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::GroupGraphPatternSubContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGroupGraphPatternSub;
 }
 
-void SparqlAutomaticParser::GroupGraphPatternSubContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GroupGraphPatternSubContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterGroupGraphPatternSub(this);
 }
 
-void SparqlAutomaticParser::GroupGraphPatternSubContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGroupGraphPatternSub(this);
+void SparqlAutomaticParser::GroupGraphPatternSubContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGroupGraphPatternSub(this);
 }
 
-SparqlAutomaticParser::GroupGraphPatternSubContext*
-SparqlAutomaticParser::groupGraphPatternSub() {
-  GroupGraphPatternSubContext* _localctx =
-      _tracker.createInstance<GroupGraphPatternSubContext>(_ctx, getState());
+SparqlAutomaticParser::GroupGraphPatternSubContext* SparqlAutomaticParser::groupGraphPatternSub() {
+  GroupGraphPatternSubContext *_localctx = _tracker.createInstance<GroupGraphPatternSubContext>(_ctx, getState());
   enterRule(_localctx, 110, SparqlAutomaticParser::RuleGroupGraphPatternSub);
   size_t _la = 0;
 
@@ -6740,32 +5687,32 @@ SparqlAutomaticParser::groupGraphPatternSub() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(754);
+    setState(768);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 29228991) != 0)) {
-      setState(753);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0)) {
+      setState(767);
       triplesBlock();
     }
-    setState(759);
+    setState(773);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (
-        _la == SparqlAutomaticParser::T__3
+    while (_la == SparqlAutomaticParser::T__3
 
-        || _la == SparqlAutomaticParser::VALUES ||
-        ((((_la - 69) & ~0x3fULL) == 0) && ((1ULL << (_la - 69)) & 349) != 0)) {
-      setState(756);
+    || _la == SparqlAutomaticParser::VALUES || ((((_la - 69) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 69)) & 349) != 0)) {
+      setState(770);
       graphPatternNotTriplesAndMaybeTriples();
-      setState(761);
+      setState(775);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6774,51 +5721,40 @@ SparqlAutomaticParser::groupGraphPatternSub() {
   return _localctx;
 }
 
-//----------------- GraphPatternNotTriplesAndMaybeTriplesContext
-//------------------------------------------------------------------
+//----------------- GraphPatternNotTriplesAndMaybeTriplesContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::
-    GraphPatternNotTriplesAndMaybeTriplesContext(ParserRuleContext* parent,
-                                                 size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::GraphPatternNotTriplesContext* SparqlAutomaticParser::
-    GraphPatternNotTriplesAndMaybeTriplesContext::graphPatternNotTriples() {
-  return getRuleContext<SparqlAutomaticParser::GraphPatternNotTriplesContext>(
-      0);
+SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::GraphPatternNotTriplesAndMaybeTriplesContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::TriplesBlockContext* SparqlAutomaticParser::
-    GraphPatternNotTriplesAndMaybeTriplesContext::triplesBlock() {
+SparqlAutomaticParser::GraphPatternNotTriplesContext* SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::graphPatternNotTriples() {
+  return getRuleContext<SparqlAutomaticParser::GraphPatternNotTriplesContext>(0);
+}
+
+SparqlAutomaticParser::TriplesBlockContext* SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::triplesBlock() {
   return getRuleContext<SparqlAutomaticParser::TriplesBlockContext>(0);
 }
 
-size_t SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::
-    getRuleIndex() const {
+
+size_t SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphPatternNotTriplesAndMaybeTriples;
 }
 
-void SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::
-    enterRule(tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterGraphPatternNotTriplesAndMaybeTriples(this);
 }
 
-void SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::
-    exitRule(tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitGraphPatternNotTriplesAndMaybeTriples(this);
 }
 
-SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
-SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
-  GraphPatternNotTriplesAndMaybeTriplesContext* _localctx =
-      _tracker.createInstance<GraphPatternNotTriplesAndMaybeTriplesContext>(
-          _ctx, getState());
-  enterRule(_localctx, 112,
-            SparqlAutomaticParser::RuleGraphPatternNotTriplesAndMaybeTriples);
+SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext* SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
+  GraphPatternNotTriplesAndMaybeTriplesContext *_localctx = _tracker.createInstance<GraphPatternNotTriplesAndMaybeTriplesContext>(_ctx, getState());
+  enterRule(_localctx, 112, SparqlAutomaticParser::RuleGraphPatternNotTriplesAndMaybeTriples);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -6830,28 +5766,29 @@ SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(762);
+    setState(776);
     graphPatternNotTriples();
-    setState(764);
+    setState(778);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__6) {
-      setState(763);
+      setState(777);
       match(SparqlAutomaticParser::T__6);
     }
-    setState(767);
+    setState(781);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 29228991) != 0)) {
-      setState(766);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0)) {
+      setState(780);
       triplesBlock();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6860,44 +5797,39 @@ SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
   return _localctx;
 }
 
-//----------------- TriplesBlockContext
-//------------------------------------------------------------------
+//----------------- TriplesBlockContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesBlockContext::TriplesBlockContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::TriplesSameSubjectPathContext*
-SparqlAutomaticParser::TriplesBlockContext::triplesSameSubjectPath() {
-  return getRuleContext<SparqlAutomaticParser::TriplesSameSubjectPathContext>(
-      0);
+SparqlAutomaticParser::TriplesBlockContext::TriplesBlockContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::TriplesBlockContext*
-SparqlAutomaticParser::TriplesBlockContext::triplesBlock() {
+SparqlAutomaticParser::TriplesSameSubjectPathContext* SparqlAutomaticParser::TriplesBlockContext::triplesSameSubjectPath() {
+  return getRuleContext<SparqlAutomaticParser::TriplesSameSubjectPathContext>(0);
+}
+
+SparqlAutomaticParser::TriplesBlockContext* SparqlAutomaticParser::TriplesBlockContext::triplesBlock() {
   return getRuleContext<SparqlAutomaticParser::TriplesBlockContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::TriplesBlockContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTriplesBlock;
 }
 
-void SparqlAutomaticParser::TriplesBlockContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTriplesBlock(this);
+void SparqlAutomaticParser::TriplesBlockContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTriplesBlock(this);
 }
 
-void SparqlAutomaticParser::TriplesBlockContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTriplesBlock(this);
+void SparqlAutomaticParser::TriplesBlockContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTriplesBlock(this);
 }
 
-SparqlAutomaticParser::TriplesBlockContext*
-SparqlAutomaticParser::triplesBlock() {
-  TriplesBlockContext* _localctx =
-      _tracker.createInstance<TriplesBlockContext>(_ctx, getState());
+SparqlAutomaticParser::TriplesBlockContext* SparqlAutomaticParser::triplesBlock() {
+  TriplesBlockContext *_localctx = _tracker.createInstance<TriplesBlockContext>(_ctx, getState());
   enterRule(_localctx, 114, SparqlAutomaticParser::RuleTriplesBlock);
   size_t _la = 0;
 
@@ -6910,28 +5842,29 @@ SparqlAutomaticParser::triplesBlock() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(769);
+    setState(783);
     triplesSameSubjectPath();
-    setState(774);
+    setState(788);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__6) {
-      setState(770);
+      setState(784);
       match(SparqlAutomaticParser::T__6);
-      setState(772);
+      setState(786);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-          ((((_la - 142) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 142)) & 29228991) != 0)) {
-        setState(771);
+      if ((((_la & ~ 0x3fULL) == 0) &&
+        ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+        ((1ULL << (_la - 142)) & 29228991) != 0)) {
+        setState(785);
         triplesBlock();
       }
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -6940,78 +5873,63 @@ SparqlAutomaticParser::triplesBlock() {
   return _localctx;
 }
 
-//----------------- GraphPatternNotTriplesContext
-//------------------------------------------------------------------
+//----------------- GraphPatternNotTriplesContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphPatternNotTriplesContext::
-    GraphPatternNotTriplesContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext* SparqlAutomaticParser::
-    GraphPatternNotTriplesContext::groupOrUnionGraphPattern() {
-  return getRuleContext<SparqlAutomaticParser::GroupOrUnionGraphPatternContext>(
-      0);
+SparqlAutomaticParser::GraphPatternNotTriplesContext::GraphPatternNotTriplesContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::OptionalGraphPatternContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::optionalGraphPattern() {
+SparqlAutomaticParser::GroupOrUnionGraphPatternContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::groupOrUnionGraphPattern() {
+  return getRuleContext<SparqlAutomaticParser::GroupOrUnionGraphPatternContext>(0);
+}
+
+SparqlAutomaticParser::OptionalGraphPatternContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::optionalGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::OptionalGraphPatternContext>(0);
 }
 
-SparqlAutomaticParser::MinusGraphPatternContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::minusGraphPattern() {
+SparqlAutomaticParser::MinusGraphPatternContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::minusGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::MinusGraphPatternContext>(0);
 }
 
-SparqlAutomaticParser::GraphGraphPatternContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::graphGraphPattern() {
+SparqlAutomaticParser::GraphGraphPatternContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::graphGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GraphGraphPatternContext>(0);
 }
 
-SparqlAutomaticParser::ServiceGraphPatternContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::serviceGraphPattern() {
+SparqlAutomaticParser::ServiceGraphPatternContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::serviceGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::ServiceGraphPatternContext>(0);
 }
 
-SparqlAutomaticParser::FilterRContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::filterR() {
+SparqlAutomaticParser::FilterRContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::filterR() {
   return getRuleContext<SparqlAutomaticParser::FilterRContext>(0);
 }
 
-SparqlAutomaticParser::BindContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::bind() {
+SparqlAutomaticParser::BindContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::bind() {
   return getRuleContext<SparqlAutomaticParser::BindContext>(0);
 }
 
-SparqlAutomaticParser::InlineDataContext*
-SparqlAutomaticParser::GraphPatternNotTriplesContext::inlineData() {
+SparqlAutomaticParser::InlineDataContext* SparqlAutomaticParser::GraphPatternNotTriplesContext::inlineData() {
   return getRuleContext<SparqlAutomaticParser::InlineDataContext>(0);
 }
 
-size_t SparqlAutomaticParser::GraphPatternNotTriplesContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::GraphPatternNotTriplesContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphPatternNotTriples;
 }
 
-void SparqlAutomaticParser::GraphPatternNotTriplesContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GraphPatternNotTriplesContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterGraphPatternNotTriples(this);
 }
 
-void SparqlAutomaticParser::GraphPatternNotTriplesContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GraphPatternNotTriplesContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitGraphPatternNotTriples(this);
 }
 
-SparqlAutomaticParser::GraphPatternNotTriplesContext*
-SparqlAutomaticParser::graphPatternNotTriples() {
-  GraphPatternNotTriplesContext* _localctx =
-      _tracker.createInstance<GraphPatternNotTriplesContext>(_ctx, getState());
+SparqlAutomaticParser::GraphPatternNotTriplesContext* SparqlAutomaticParser::graphPatternNotTriples() {
+  GraphPatternNotTriplesContext *_localctx = _tracker.createInstance<GraphPatternNotTriplesContext>(_ctx, getState());
   enterRule(_localctx, 116, SparqlAutomaticParser::RuleGraphPatternNotTriples);
 
 #if __cplusplus > 201703L
@@ -7022,70 +5940,71 @@ SparqlAutomaticParser::graphPatternNotTriples() {
     exitRule();
   });
   try {
-    setState(784);
+    setState(798);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__3: {
         enterOuterAlt(_localctx, 1);
-        setState(776);
+        setState(790);
         groupOrUnionGraphPattern();
         break;
       }
 
       case SparqlAutomaticParser::OPTIONAL: {
         enterOuterAlt(_localctx, 2);
-        setState(777);
+        setState(791);
         optionalGraphPattern();
         break;
       }
 
       case SparqlAutomaticParser::MINUS: {
         enterOuterAlt(_localctx, 3);
-        setState(778);
+        setState(792);
         minusGraphPattern();
         break;
       }
 
       case SparqlAutomaticParser::GRAPH: {
         enterOuterAlt(_localctx, 4);
-        setState(779);
+        setState(793);
         graphGraphPattern();
         break;
       }
 
       case SparqlAutomaticParser::SERVICE: {
         enterOuterAlt(_localctx, 5);
-        setState(780);
+        setState(794);
         serviceGraphPattern();
         break;
       }
 
       case SparqlAutomaticParser::FILTER: {
         enterOuterAlt(_localctx, 6);
-        setState(781);
+        setState(795);
         filterR();
         break;
       }
 
       case SparqlAutomaticParser::BIND: {
         enterOuterAlt(_localctx, 7);
-        setState(782);
+        setState(796);
         bind();
         break;
       }
 
       case SparqlAutomaticParser::VALUES: {
         enterOuterAlt(_localctx, 8);
-        setState(783);
+        setState(797);
         inlineData();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7094,45 +6013,39 @@ SparqlAutomaticParser::graphPatternNotTriples() {
   return _localctx;
 }
 
-//----------------- OptionalGraphPatternContext
-//------------------------------------------------------------------
+//----------------- OptionalGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::OptionalGraphPatternContext::OptionalGraphPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::OptionalGraphPatternContext::OptionalGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::OptionalGraphPatternContext::OPTIONAL() {
+tree::TerminalNode* SparqlAutomaticParser::OptionalGraphPatternContext::OPTIONAL() {
   return getToken(SparqlAutomaticParser::OPTIONAL, 0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::OptionalGraphPatternContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::OptionalGraphPatternContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
 
-size_t SparqlAutomaticParser::OptionalGraphPatternContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::OptionalGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleOptionalGraphPattern;
 }
 
-void SparqlAutomaticParser::OptionalGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::OptionalGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterOptionalGraphPattern(this);
 }
 
-void SparqlAutomaticParser::OptionalGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitOptionalGraphPattern(this);
+void SparqlAutomaticParser::OptionalGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOptionalGraphPattern(this);
 }
 
-SparqlAutomaticParser::OptionalGraphPatternContext*
-SparqlAutomaticParser::optionalGraphPattern() {
-  OptionalGraphPatternContext* _localctx =
-      _tracker.createInstance<OptionalGraphPatternContext>(_ctx, getState());
+SparqlAutomaticParser::OptionalGraphPatternContext* SparqlAutomaticParser::optionalGraphPattern() {
+  OptionalGraphPatternContext *_localctx = _tracker.createInstance<OptionalGraphPatternContext>(_ctx, getState());
   enterRule(_localctx, 118, SparqlAutomaticParser::RuleOptionalGraphPattern);
 
 #if __cplusplus > 201703L
@@ -7144,12 +6057,13 @@ SparqlAutomaticParser::optionalGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(786);
+    setState(800);
     match(SparqlAutomaticParser::OPTIONAL);
-    setState(787);
+    setState(801);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7158,47 +6072,43 @@ SparqlAutomaticParser::optionalGraphPattern() {
   return _localctx;
 }
 
-//----------------- GraphGraphPatternContext
-//------------------------------------------------------------------
+//----------------- GraphGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphGraphPatternContext::GraphGraphPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GraphGraphPatternContext::GraphGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::GraphGraphPatternContext::GRAPH() {
   return getToken(SparqlAutomaticParser::GRAPH, 0);
 }
 
-SparqlAutomaticParser::VarOrIriContext*
-SparqlAutomaticParser::GraphGraphPatternContext::varOrIri() {
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::GraphGraphPatternContext::varOrIri() {
   return getRuleContext<SparqlAutomaticParser::VarOrIriContext>(0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::GraphGraphPatternContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::GraphGraphPatternContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::GraphGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGraphGraphPattern;
 }
 
-void SparqlAutomaticParser::GraphGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphGraphPattern(this);
+void SparqlAutomaticParser::GraphGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphGraphPattern(this);
 }
 
-void SparqlAutomaticParser::GraphGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphGraphPattern(this);
+void SparqlAutomaticParser::GraphGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphGraphPattern(this);
 }
 
-SparqlAutomaticParser::GraphGraphPatternContext*
-SparqlAutomaticParser::graphGraphPattern() {
-  GraphGraphPatternContext* _localctx =
-      _tracker.createInstance<GraphGraphPatternContext>(_ctx, getState());
+SparqlAutomaticParser::GraphGraphPatternContext* SparqlAutomaticParser::graphGraphPattern() {
+  GraphGraphPatternContext *_localctx = _tracker.createInstance<GraphGraphPatternContext>(_ctx, getState());
   enterRule(_localctx, 120, SparqlAutomaticParser::RuleGraphGraphPattern);
 
 #if __cplusplus > 201703L
@@ -7210,14 +6120,15 @@ SparqlAutomaticParser::graphGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(789);
+    setState(803);
     match(SparqlAutomaticParser::GRAPH);
-    setState(790);
+    setState(804);
     varOrIri();
-    setState(791);
+    setState(805);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7226,53 +6137,47 @@ SparqlAutomaticParser::graphGraphPattern() {
   return _localctx;
 }
 
-//----------------- ServiceGraphPatternContext
-//------------------------------------------------------------------
+//----------------- ServiceGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ServiceGraphPatternContext::ServiceGraphPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ServiceGraphPatternContext::ServiceGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::ServiceGraphPatternContext::SERVICE() {
+tree::TerminalNode* SparqlAutomaticParser::ServiceGraphPatternContext::SERVICE() {
   return getToken(SparqlAutomaticParser::SERVICE, 0);
 }
 
-SparqlAutomaticParser::VarOrIriContext*
-SparqlAutomaticParser::ServiceGraphPatternContext::varOrIri() {
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::ServiceGraphPatternContext::varOrIri() {
   return getRuleContext<SparqlAutomaticParser::VarOrIriContext>(0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::ServiceGraphPatternContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::ServiceGraphPatternContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::ServiceGraphPatternContext::SILENT() {
+tree::TerminalNode* SparqlAutomaticParser::ServiceGraphPatternContext::SILENT() {
   return getToken(SparqlAutomaticParser::SILENT, 0);
 }
+
 
 size_t SparqlAutomaticParser::ServiceGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleServiceGraphPattern;
 }
 
-void SparqlAutomaticParser::ServiceGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterServiceGraphPattern(this);
+void SparqlAutomaticParser::ServiceGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterServiceGraphPattern(this);
 }
 
-void SparqlAutomaticParser::ServiceGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitServiceGraphPattern(this);
+void SparqlAutomaticParser::ServiceGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitServiceGraphPattern(this);
 }
 
-SparqlAutomaticParser::ServiceGraphPatternContext*
-SparqlAutomaticParser::serviceGraphPattern() {
-  ServiceGraphPatternContext* _localctx =
-      _tracker.createInstance<ServiceGraphPatternContext>(_ctx, getState());
+SparqlAutomaticParser::ServiceGraphPatternContext* SparqlAutomaticParser::serviceGraphPattern() {
+  ServiceGraphPatternContext *_localctx = _tracker.createInstance<ServiceGraphPatternContext>(_ctx, getState());
   enterRule(_localctx, 122, SparqlAutomaticParser::RuleServiceGraphPattern);
   size_t _la = 0;
 
@@ -7285,22 +6190,23 @@ SparqlAutomaticParser::serviceGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(793);
+    setState(807);
     match(SparqlAutomaticParser::SERVICE);
-    setState(795);
+    setState(809);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::SILENT) {
-      setState(794);
+      setState(808);
       match(SparqlAutomaticParser::SILENT);
     }
-    setState(797);
+    setState(811);
     varOrIri();
-    setState(798);
+    setState(812);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7309,19 +6215,17 @@ SparqlAutomaticParser::serviceGraphPattern() {
   return _localctx;
 }
 
-//----------------- BindContext
-//------------------------------------------------------------------
+//----------------- BindContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BindContext::BindContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BindContext::BindContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::BindContext::BIND() {
   return getToken(SparqlAutomaticParser::BIND, 0);
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::BindContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::BindContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
@@ -7333,25 +6237,25 @@ SparqlAutomaticParser::VarContext* SparqlAutomaticParser::BindContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
+
 size_t SparqlAutomaticParser::BindContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBind;
 }
 
-void SparqlAutomaticParser::BindContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterBind(this);
+void SparqlAutomaticParser::BindContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBind(this);
 }
 
-void SparqlAutomaticParser::BindContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBind(this);
+void SparqlAutomaticParser::BindContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBind(this);
 }
 
 SparqlAutomaticParser::BindContext* SparqlAutomaticParser::bind() {
-  BindContext* _localctx =
-      _tracker.createInstance<BindContext>(_ctx, getState());
+  BindContext *_localctx = _tracker.createInstance<BindContext>(_ctx, getState());
   enterRule(_localctx, 124, SparqlAutomaticParser::RuleBind);
 
 #if __cplusplus > 201703L
@@ -7363,20 +6267,21 @@ SparqlAutomaticParser::BindContext* SparqlAutomaticParser::bind() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(800);
+    setState(814);
     match(SparqlAutomaticParser::BIND);
-    setState(801);
+    setState(815);
     match(SparqlAutomaticParser::T__1);
-    setState(802);
+    setState(816);
     expression();
-    setState(803);
+    setState(817);
     match(SparqlAutomaticParser::AS);
-    setState(804);
+    setState(818);
     var();
-    setState(805);
+    setState(819);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7385,41 +6290,39 @@ SparqlAutomaticParser::BindContext* SparqlAutomaticParser::bind() {
   return _localctx;
 }
 
-//----------------- InlineDataContext
-//------------------------------------------------------------------
+//----------------- InlineDataContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::InlineDataContext::InlineDataContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::InlineDataContext::InlineDataContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::InlineDataContext::VALUES() {
   return getToken(SparqlAutomaticParser::VALUES, 0);
 }
 
-SparqlAutomaticParser::DataBlockContext*
-SparqlAutomaticParser::InlineDataContext::dataBlock() {
+SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::InlineDataContext::dataBlock() {
   return getRuleContext<SparqlAutomaticParser::DataBlockContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::InlineDataContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleInlineData;
 }
 
-void SparqlAutomaticParser::InlineDataContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInlineData(this);
+void SparqlAutomaticParser::InlineDataContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInlineData(this);
 }
 
-void SparqlAutomaticParser::InlineDataContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInlineData(this);
+void SparqlAutomaticParser::InlineDataContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInlineData(this);
 }
 
 SparqlAutomaticParser::InlineDataContext* SparqlAutomaticParser::inlineData() {
-  InlineDataContext* _localctx =
-      _tracker.createInstance<InlineDataContext>(_ctx, getState());
+  InlineDataContext *_localctx = _tracker.createInstance<InlineDataContext>(_ctx, getState());
   enterRule(_localctx, 126, SparqlAutomaticParser::RuleInlineData);
 
 #if __cplusplus > 201703L
@@ -7431,12 +6334,13 @@ SparqlAutomaticParser::InlineDataContext* SparqlAutomaticParser::inlineData() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(807);
+    setState(821);
     match(SparqlAutomaticParser::VALUES);
-    setState(808);
+    setState(822);
     dataBlock();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7445,42 +6349,39 @@ SparqlAutomaticParser::InlineDataContext* SparqlAutomaticParser::inlineData() {
   return _localctx;
 }
 
-//----------------- DataBlockContext
-//------------------------------------------------------------------
+//----------------- DataBlockContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DataBlockContext::DataBlockContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DataBlockContext::DataBlockContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::InlineDataOneVarContext*
-SparqlAutomaticParser::DataBlockContext::inlineDataOneVar() {
+SparqlAutomaticParser::InlineDataOneVarContext* SparqlAutomaticParser::DataBlockContext::inlineDataOneVar() {
   return getRuleContext<SparqlAutomaticParser::InlineDataOneVarContext>(0);
 }
 
-SparqlAutomaticParser::InlineDataFullContext*
-SparqlAutomaticParser::DataBlockContext::inlineDataFull() {
+SparqlAutomaticParser::InlineDataFullContext* SparqlAutomaticParser::DataBlockContext::inlineDataFull() {
   return getRuleContext<SparqlAutomaticParser::InlineDataFullContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::DataBlockContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDataBlock;
 }
 
-void SparqlAutomaticParser::DataBlockContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDataBlock(this);
+void SparqlAutomaticParser::DataBlockContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDataBlock(this);
 }
 
-void SparqlAutomaticParser::DataBlockContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDataBlock(this);
+void SparqlAutomaticParser::DataBlockContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDataBlock(this);
 }
 
 SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::dataBlock() {
-  DataBlockContext* _localctx =
-      _tracker.createInstance<DataBlockContext>(_ctx, getState());
+  DataBlockContext *_localctx = _tracker.createInstance<DataBlockContext>(_ctx, getState());
   enterRule(_localctx, 128, SparqlAutomaticParser::RuleDataBlock);
 
 #if __cplusplus > 201703L
@@ -7491,13 +6392,13 @@ SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::dataBlock() {
     exitRule();
   });
   try {
-    setState(812);
+    setState(826);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
         enterOuterAlt(_localctx, 1);
-        setState(810);
+        setState(824);
         inlineDataOneVar();
         break;
       }
@@ -7505,16 +6406,17 @@ SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::dataBlock() {
       case SparqlAutomaticParser::T__1:
       case SparqlAutomaticParser::NIL: {
         enterOuterAlt(_localctx, 2);
-        setState(811);
+        setState(825);
         inlineDataFull();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7523,48 +6425,43 @@ SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::dataBlock() {
   return _localctx;
 }
 
-//----------------- InlineDataOneVarContext
-//------------------------------------------------------------------
+//----------------- InlineDataOneVarContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::InlineDataOneVarContext::InlineDataOneVarContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::InlineDataOneVarContext::InlineDataOneVarContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::InlineDataOneVarContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::InlineDataOneVarContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::DataBlockValueContext*>
-SparqlAutomaticParser::InlineDataOneVarContext::dataBlockValue() {
+std::vector<SparqlAutomaticParser::DataBlockValueContext *> SparqlAutomaticParser::InlineDataOneVarContext::dataBlockValue() {
   return getRuleContexts<SparqlAutomaticParser::DataBlockValueContext>();
 }
 
-SparqlAutomaticParser::DataBlockValueContext*
-SparqlAutomaticParser::InlineDataOneVarContext::dataBlockValue(size_t i) {
+SparqlAutomaticParser::DataBlockValueContext* SparqlAutomaticParser::InlineDataOneVarContext::dataBlockValue(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DataBlockValueContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::InlineDataOneVarContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleInlineDataOneVar;
 }
 
-void SparqlAutomaticParser::InlineDataOneVarContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInlineDataOneVar(this);
+void SparqlAutomaticParser::InlineDataOneVarContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInlineDataOneVar(this);
 }
 
-void SparqlAutomaticParser::InlineDataOneVarContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInlineDataOneVar(this);
+void SparqlAutomaticParser::InlineDataOneVarContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInlineDataOneVar(this);
 }
 
-SparqlAutomaticParser::InlineDataOneVarContext*
-SparqlAutomaticParser::inlineDataOneVar() {
-  InlineDataOneVarContext* _localctx =
-      _tracker.createInstance<InlineDataOneVarContext>(_ctx, getState());
+SparqlAutomaticParser::InlineDataOneVarContext* SparqlAutomaticParser::inlineDataOneVar() {
+  InlineDataOneVarContext *_localctx = _tracker.createInstance<InlineDataOneVarContext>(_ctx, getState());
   enterRule(_localctx, 130, SparqlAutomaticParser::RuleInlineDataOneVar);
   size_t _la = 0;
 
@@ -7577,27 +6474,27 @@ SparqlAutomaticParser::inlineDataOneVar() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(814);
+    setState(828);
     var();
-    setState(815);
+    setState(829);
     match(SparqlAutomaticParser::T__3);
-    setState(819);
+    setState(833);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (((((_la - 28) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 28)) & 70368744177667) != 0) ||
-           ((((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 4063111) != 0)) {
-      setState(816);
+    while (((((_la - 28) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 28)) & 70368744177667) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 4063111) != 0)) {
+      setState(830);
       dataBlockValue();
-      setState(821);
+      setState(835);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(822);
+    setState(836);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7606,57 +6503,51 @@ SparqlAutomaticParser::inlineDataOneVar() {
   return _localctx;
 }
 
-//----------------- InlineDataFullContext
-//------------------------------------------------------------------
+//----------------- InlineDataFullContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::InlineDataFullContext::InlineDataFullContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::InlineDataFullContext::InlineDataFullContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::InlineDataFullContext::NIL() {
   return getToken(SparqlAutomaticParser::NIL, 0);
 }
 
-std::vector<SparqlAutomaticParser::DataBlockSingleContext*>
-SparqlAutomaticParser::InlineDataFullContext::dataBlockSingle() {
+std::vector<SparqlAutomaticParser::DataBlockSingleContext *> SparqlAutomaticParser::InlineDataFullContext::dataBlockSingle() {
   return getRuleContexts<SparqlAutomaticParser::DataBlockSingleContext>();
 }
 
-SparqlAutomaticParser::DataBlockSingleContext*
-SparqlAutomaticParser::InlineDataFullContext::dataBlockSingle(size_t i) {
+SparqlAutomaticParser::DataBlockSingleContext* SparqlAutomaticParser::InlineDataFullContext::dataBlockSingle(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DataBlockSingleContext>(i);
 }
 
-std::vector<SparqlAutomaticParser::VarContext*>
-SparqlAutomaticParser::InlineDataFullContext::var() {
+std::vector<SparqlAutomaticParser::VarContext *> SparqlAutomaticParser::InlineDataFullContext::var() {
   return getRuleContexts<SparqlAutomaticParser::VarContext>();
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::InlineDataFullContext::var(size_t i) {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::InlineDataFullContext::var(size_t i) {
   return getRuleContext<SparqlAutomaticParser::VarContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::InlineDataFullContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleInlineDataFull;
 }
 
-void SparqlAutomaticParser::InlineDataFullContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInlineDataFull(this);
+void SparqlAutomaticParser::InlineDataFullContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInlineDataFull(this);
 }
 
-void SparqlAutomaticParser::InlineDataFullContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInlineDataFull(this);
+void SparqlAutomaticParser::InlineDataFullContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInlineDataFull(this);
 }
 
-SparqlAutomaticParser::InlineDataFullContext*
-SparqlAutomaticParser::inlineDataFull() {
-  InlineDataFullContext* _localctx =
-      _tracker.createInstance<InlineDataFullContext>(_ctx, getState());
+SparqlAutomaticParser::InlineDataFullContext* SparqlAutomaticParser::inlineDataFull() {
+  InlineDataFullContext *_localctx = _tracker.createInstance<InlineDataFullContext>(_ctx, getState());
   enterRule(_localctx, 132, SparqlAutomaticParser::RuleInlineDataFull);
   size_t _la = 0;
 
@@ -7669,55 +6560,55 @@ SparqlAutomaticParser::inlineDataFull() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(833);
+    setState(847);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::NIL: {
-        setState(824);
+        setState(838);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
       case SparqlAutomaticParser::T__1: {
-        setState(825);
+        setState(839);
         match(SparqlAutomaticParser::T__1);
-        setState(829);
+        setState(843);
         _errHandler->sync(this);
         _la = _input->LA(1);
         while (_la == SparqlAutomaticParser::VAR1
 
-               || _la == SparqlAutomaticParser::VAR2) {
-          setState(826);
+        || _la == SparqlAutomaticParser::VAR2) {
+          setState(840);
           var();
-          setState(831);
+          setState(845);
           _errHandler->sync(this);
           _la = _input->LA(1);
         }
-        setState(832);
+        setState(846);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-    setState(835);
+    setState(849);
     match(SparqlAutomaticParser::T__3);
-    setState(839);
+    setState(853);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__1 ||
-           _la == SparqlAutomaticParser::NIL) {
-      setState(836);
+    while (_la == SparqlAutomaticParser::T__1 || _la == SparqlAutomaticParser::NIL) {
+      setState(850);
       dataBlockSingle();
-      setState(841);
+      setState(855);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-    setState(842);
+    setState(856);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7726,47 +6617,43 @@ SparqlAutomaticParser::inlineDataFull() {
   return _localctx;
 }
 
-//----------------- DataBlockSingleContext
-//------------------------------------------------------------------
+//----------------- DataBlockSingleContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DataBlockSingleContext::DataBlockSingleContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DataBlockSingleContext::DataBlockSingleContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::DataBlockSingleContext::NIL() {
   return getToken(SparqlAutomaticParser::NIL, 0);
 }
 
-std::vector<SparqlAutomaticParser::DataBlockValueContext*>
-SparqlAutomaticParser::DataBlockSingleContext::dataBlockValue() {
+std::vector<SparqlAutomaticParser::DataBlockValueContext *> SparqlAutomaticParser::DataBlockSingleContext::dataBlockValue() {
   return getRuleContexts<SparqlAutomaticParser::DataBlockValueContext>();
 }
 
-SparqlAutomaticParser::DataBlockValueContext*
-SparqlAutomaticParser::DataBlockSingleContext::dataBlockValue(size_t i) {
+SparqlAutomaticParser::DataBlockValueContext* SparqlAutomaticParser::DataBlockSingleContext::dataBlockValue(size_t i) {
   return getRuleContext<SparqlAutomaticParser::DataBlockValueContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::DataBlockSingleContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDataBlockSingle;
 }
 
-void SparqlAutomaticParser::DataBlockSingleContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDataBlockSingle(this);
+void SparqlAutomaticParser::DataBlockSingleContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDataBlockSingle(this);
 }
 
-void SparqlAutomaticParser::DataBlockSingleContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDataBlockSingle(this);
+void SparqlAutomaticParser::DataBlockSingleContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDataBlockSingle(this);
 }
 
-SparqlAutomaticParser::DataBlockSingleContext*
-SparqlAutomaticParser::dataBlockSingle() {
-  DataBlockSingleContext* _localctx =
-      _tracker.createInstance<DataBlockSingleContext>(_ctx, getState());
+SparqlAutomaticParser::DataBlockSingleContext* SparqlAutomaticParser::dataBlockSingle() {
+  DataBlockSingleContext *_localctx = _tracker.createInstance<DataBlockSingleContext>(_ctx, getState());
   enterRule(_localctx, 134, SparqlAutomaticParser::RuleDataBlockSingle);
   size_t _la = 0;
 
@@ -7779,41 +6666,41 @@ SparqlAutomaticParser::dataBlockSingle() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(853);
+    setState(867);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1: {
-        setState(844);
+        setState(858);
         match(SparqlAutomaticParser::T__1);
-        setState(848);
+        setState(862);
         _errHandler->sync(this);
         _la = _input->LA(1);
-        while (((((_la - 28) & ~0x3fULL) == 0) &&
-                ((1ULL << (_la - 28)) & 70368744177667) != 0) ||
-               ((((_la - 142) & ~0x3fULL) == 0) &&
-                ((1ULL << (_la - 142)) & 4063111) != 0)) {
-          setState(845);
+        while (((((_la - 28) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 28)) & 70368744177667) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 142)) & 4063111) != 0)) {
+          setState(859);
           dataBlockValue();
-          setState(850);
+          setState(864);
           _errHandler->sync(this);
           _la = _input->LA(1);
         }
-        setState(851);
+        setState(865);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::NIL: {
-        setState(852);
+        setState(866);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7822,30 +6709,25 @@ SparqlAutomaticParser::dataBlockSingle() {
   return _localctx;
 }
 
-//----------------- DataBlockValueContext
-//------------------------------------------------------------------
+//----------------- DataBlockValueContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::DataBlockValueContext::DataBlockValueContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::DataBlockValueContext::DataBlockValueContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::DataBlockValueContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::DataBlockValueContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
-SparqlAutomaticParser::RdfLiteralContext*
-SparqlAutomaticParser::DataBlockValueContext::rdfLiteral() {
+SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::DataBlockValueContext::rdfLiteral() {
   return getRuleContext<SparqlAutomaticParser::RdfLiteralContext>(0);
 }
 
-SparqlAutomaticParser::NumericLiteralContext*
-SparqlAutomaticParser::DataBlockValueContext::numericLiteral() {
+SparqlAutomaticParser::NumericLiteralContext* SparqlAutomaticParser::DataBlockValueContext::numericLiteral() {
   return getRuleContext<SparqlAutomaticParser::NumericLiteralContext>(0);
 }
 
-SparqlAutomaticParser::BooleanLiteralContext*
-SparqlAutomaticParser::DataBlockValueContext::booleanLiteral() {
+SparqlAutomaticParser::BooleanLiteralContext* SparqlAutomaticParser::DataBlockValueContext::booleanLiteral() {
   return getRuleContext<SparqlAutomaticParser::BooleanLiteralContext>(0);
 }
 
@@ -7853,26 +6735,25 @@ tree::TerminalNode* SparqlAutomaticParser::DataBlockValueContext::UNDEF() {
   return getToken(SparqlAutomaticParser::UNDEF, 0);
 }
 
+
 size_t SparqlAutomaticParser::DataBlockValueContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleDataBlockValue;
 }
 
-void SparqlAutomaticParser::DataBlockValueContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDataBlockValue(this);
+void SparqlAutomaticParser::DataBlockValueContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDataBlockValue(this);
 }
 
-void SparqlAutomaticParser::DataBlockValueContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDataBlockValue(this);
+void SparqlAutomaticParser::DataBlockValueContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDataBlockValue(this);
 }
 
-SparqlAutomaticParser::DataBlockValueContext*
-SparqlAutomaticParser::dataBlockValue() {
-  DataBlockValueContext* _localctx =
-      _tracker.createInstance<DataBlockValueContext>(_ctx, getState());
+SparqlAutomaticParser::DataBlockValueContext* SparqlAutomaticParser::dataBlockValue() {
+  DataBlockValueContext *_localctx = _tracker.createInstance<DataBlockValueContext>(_ctx, getState());
   enterRule(_localctx, 136, SparqlAutomaticParser::RuleDataBlockValue);
 
 #if __cplusplus > 201703L
@@ -7883,7 +6764,7 @@ SparqlAutomaticParser::dataBlockValue() {
     exitRule();
   });
   try {
-    setState(860);
+    setState(874);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
@@ -7891,7 +6772,7 @@ SparqlAutomaticParser::dataBlockValue() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 1);
-        setState(855);
+        setState(869);
         iri();
         break;
       }
@@ -7901,7 +6782,7 @@ SparqlAutomaticParser::dataBlockValue() {
       case SparqlAutomaticParser::STRING_LITERAL_LONG1:
       case SparqlAutomaticParser::STRING_LITERAL_LONG2: {
         enterOuterAlt(_localctx, 2);
-        setState(856);
+        setState(870);
         rdfLiteral();
         break;
       }
@@ -7916,7 +6797,7 @@ SparqlAutomaticParser::dataBlockValue() {
       case SparqlAutomaticParser::DECIMAL_NEGATIVE:
       case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
         enterOuterAlt(_localctx, 3);
-        setState(857);
+        setState(871);
         numericLiteral();
         break;
       }
@@ -7924,23 +6805,24 @@ SparqlAutomaticParser::dataBlockValue() {
       case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 4);
-        setState(858);
+        setState(872);
         booleanLiteral();
         break;
       }
 
       case SparqlAutomaticParser::UNDEF: {
         enterOuterAlt(_localctx, 5);
-        setState(859);
+        setState(873);
         match(SparqlAutomaticParser::UNDEF);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -7949,42 +6831,39 @@ SparqlAutomaticParser::dataBlockValue() {
   return _localctx;
 }
 
-//----------------- MinusGraphPatternContext
-//------------------------------------------------------------------
+//----------------- MinusGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::MinusGraphPatternContext::MinusGraphPatternContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::MinusGraphPatternContext::MinusGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::MinusGraphPatternContext::MINUS() {
   return getToken(SparqlAutomaticParser::MINUS, 0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::MinusGraphPatternContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::MinusGraphPatternContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::MinusGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleMinusGraphPattern;
 }
 
-void SparqlAutomaticParser::MinusGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterMinusGraphPattern(this);
+void SparqlAutomaticParser::MinusGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMinusGraphPattern(this);
 }
 
-void SparqlAutomaticParser::MinusGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitMinusGraphPattern(this);
+void SparqlAutomaticParser::MinusGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMinusGraphPattern(this);
 }
 
-SparqlAutomaticParser::MinusGraphPatternContext*
-SparqlAutomaticParser::minusGraphPattern() {
-  MinusGraphPatternContext* _localctx =
-      _tracker.createInstance<MinusGraphPatternContext>(_ctx, getState());
+SparqlAutomaticParser::MinusGraphPatternContext* SparqlAutomaticParser::minusGraphPattern() {
+  MinusGraphPatternContext *_localctx = _tracker.createInstance<MinusGraphPatternContext>(_ctx, getState());
   enterRule(_localctx, 138, SparqlAutomaticParser::RuleMinusGraphPattern);
 
 #if __cplusplus > 201703L
@@ -7996,12 +6875,13 @@ SparqlAutomaticParser::minusGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(862);
+    setState(876);
     match(SparqlAutomaticParser::MINUS);
-    setState(863);
+    setState(877);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8010,61 +6890,48 @@ SparqlAutomaticParser::minusGraphPattern() {
   return _localctx;
 }
 
-//----------------- GroupOrUnionGraphPatternContext
-//------------------------------------------------------------------
+//----------------- GroupOrUnionGraphPatternContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext::
-    GroupOrUnionGraphPatternContext(ParserRuleContext* parent,
-                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::GroupOrUnionGraphPatternContext::GroupOrUnionGraphPatternContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::GroupGraphPatternContext*>
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext::groupGraphPattern() {
+std::vector<SparqlAutomaticParser::GroupGraphPatternContext *> SparqlAutomaticParser::GroupOrUnionGraphPatternContext::groupGraphPattern() {
   return getRuleContexts<SparqlAutomaticParser::GroupGraphPatternContext>();
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext::groupGraphPattern(
-    size_t i) {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::GroupOrUnionGraphPatternContext::groupGraphPattern(size_t i) {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(i);
 }
 
-std::vector<tree::TerminalNode*>
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext::UNION() {
+std::vector<tree::TerminalNode *> SparqlAutomaticParser::GroupOrUnionGraphPatternContext::UNION() {
   return getTokens(SparqlAutomaticParser::UNION);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext::UNION(size_t i) {
+tree::TerminalNode* SparqlAutomaticParser::GroupOrUnionGraphPatternContext::UNION(size_t i) {
   return getToken(SparqlAutomaticParser::UNION, i);
 }
 
-size_t SparqlAutomaticParser::GroupOrUnionGraphPatternContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::GroupOrUnionGraphPatternContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleGroupOrUnionGraphPattern;
 }
 
-void SparqlAutomaticParser::GroupOrUnionGraphPatternContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GroupOrUnionGraphPatternContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterGroupOrUnionGraphPattern(this);
 }
 
-void SparqlAutomaticParser::GroupOrUnionGraphPatternContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::GroupOrUnionGraphPatternContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitGroupOrUnionGraphPattern(this);
 }
 
-SparqlAutomaticParser::GroupOrUnionGraphPatternContext*
-SparqlAutomaticParser::groupOrUnionGraphPattern() {
-  GroupOrUnionGraphPatternContext* _localctx =
-      _tracker.createInstance<GroupOrUnionGraphPatternContext>(_ctx,
-                                                               getState());
-  enterRule(_localctx, 140,
-            SparqlAutomaticParser::RuleGroupOrUnionGraphPattern);
+SparqlAutomaticParser::GroupOrUnionGraphPatternContext* SparqlAutomaticParser::groupOrUnionGraphPattern() {
+  GroupOrUnionGraphPatternContext *_localctx = _tracker.createInstance<GroupOrUnionGraphPatternContext>(_ctx, getState());
+  enterRule(_localctx, 140, SparqlAutomaticParser::RuleGroupOrUnionGraphPattern);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -8076,22 +6943,23 @@ SparqlAutomaticParser::groupOrUnionGraphPattern() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(865);
+    setState(879);
     groupGraphPattern();
-    setState(870);
+    setState(884);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::UNION) {
-      setState(866);
+      setState(880);
       match(SparqlAutomaticParser::UNION);
-      setState(867);
+      setState(881);
       groupGraphPattern();
-      setState(872);
+      setState(886);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8100,41 +6968,39 @@ SparqlAutomaticParser::groupOrUnionGraphPattern() {
   return _localctx;
 }
 
-//----------------- FilterRContext
-//------------------------------------------------------------------
+//----------------- FilterRContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::FilterRContext::FilterRContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::FilterRContext::FilterRContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::FilterRContext::FILTER() {
   return getToken(SparqlAutomaticParser::FILTER, 0);
 }
 
-SparqlAutomaticParser::ConstraintContext*
-SparqlAutomaticParser::FilterRContext::constraint() {
+SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::FilterRContext::constraint() {
   return getRuleContext<SparqlAutomaticParser::ConstraintContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::FilterRContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleFilterR;
 }
 
-void SparqlAutomaticParser::FilterRContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterFilterR(this);
+void SparqlAutomaticParser::FilterRContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterFilterR(this);
 }
 
-void SparqlAutomaticParser::FilterRContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitFilterR(this);
+void SparqlAutomaticParser::FilterRContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitFilterR(this);
 }
 
 SparqlAutomaticParser::FilterRContext* SparqlAutomaticParser::filterR() {
-  FilterRContext* _localctx =
-      _tracker.createInstance<FilterRContext>(_ctx, getState());
+  FilterRContext *_localctx = _tracker.createInstance<FilterRContext>(_ctx, getState());
   enterRule(_localctx, 142, SparqlAutomaticParser::RuleFilterR);
 
 #if __cplusplus > 201703L
@@ -8146,12 +7012,13 @@ SparqlAutomaticParser::FilterRContext* SparqlAutomaticParser::filterR() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(873);
+    setState(887);
     match(SparqlAutomaticParser::FILTER);
-    setState(874);
+    setState(888);
     constraint();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8160,47 +7027,43 @@ SparqlAutomaticParser::FilterRContext* SparqlAutomaticParser::filterR() {
   return _localctx;
 }
 
-//----------------- ConstraintContext
-//------------------------------------------------------------------
+//----------------- ConstraintContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConstraintContext::ConstraintContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ConstraintContext::ConstraintContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::BrackettedExpressionContext*
-SparqlAutomaticParser::ConstraintContext::brackettedExpression() {
+SparqlAutomaticParser::BrackettedExpressionContext* SparqlAutomaticParser::ConstraintContext::brackettedExpression() {
   return getRuleContext<SparqlAutomaticParser::BrackettedExpressionContext>(0);
 }
 
-SparqlAutomaticParser::BuiltInCallContext*
-SparqlAutomaticParser::ConstraintContext::builtInCall() {
+SparqlAutomaticParser::BuiltInCallContext* SparqlAutomaticParser::ConstraintContext::builtInCall() {
   return getRuleContext<SparqlAutomaticParser::BuiltInCallContext>(0);
 }
 
-SparqlAutomaticParser::FunctionCallContext*
-SparqlAutomaticParser::ConstraintContext::functionCall() {
+SparqlAutomaticParser::FunctionCallContext* SparqlAutomaticParser::ConstraintContext::functionCall() {
   return getRuleContext<SparqlAutomaticParser::FunctionCallContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ConstraintContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConstraint;
 }
 
-void SparqlAutomaticParser::ConstraintContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterConstraint(this);
+void SparqlAutomaticParser::ConstraintContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterConstraint(this);
 }
 
-void SparqlAutomaticParser::ConstraintContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitConstraint(this);
+void SparqlAutomaticParser::ConstraintContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitConstraint(this);
 }
 
 SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
-  ConstraintContext* _localctx =
-      _tracker.createInstance<ConstraintContext>(_ctx, getState());
+  ConstraintContext *_localctx = _tracker.createInstance<ConstraintContext>(_ctx, getState());
   enterRule(_localctx, 144, SparqlAutomaticParser::RuleConstraint);
 
 #if __cplusplus > 201703L
@@ -8211,12 +7074,12 @@ SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
     exitRule();
   });
   try {
-    setState(879);
+    setState(893);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 1);
-        setState(876);
+        setState(890);
         brackettedExpression();
         break;
       }
@@ -8284,7 +7147,7 @@ SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
       case SparqlAutomaticParser::STDEV:
       case SparqlAutomaticParser::SAMPLE: {
         enterOuterAlt(_localctx, 2);
-        setState(877);
+        setState(891);
         builtInCall();
         break;
       }
@@ -8294,16 +7157,17 @@ SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 3);
-        setState(878);
+        setState(892);
         functionCall();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8312,43 +7176,39 @@ SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
   return _localctx;
 }
 
-//----------------- FunctionCallContext
-//------------------------------------------------------------------
+//----------------- FunctionCallContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::FunctionCallContext::FunctionCallContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::FunctionCallContext::FunctionCallContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::FunctionCallContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::FunctionCallContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
-SparqlAutomaticParser::ArgListContext*
-SparqlAutomaticParser::FunctionCallContext::argList() {
+SparqlAutomaticParser::ArgListContext* SparqlAutomaticParser::FunctionCallContext::argList() {
   return getRuleContext<SparqlAutomaticParser::ArgListContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::FunctionCallContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleFunctionCall;
 }
 
-void SparqlAutomaticParser::FunctionCallContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterFunctionCall(this);
+void SparqlAutomaticParser::FunctionCallContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterFunctionCall(this);
 }
 
-void SparqlAutomaticParser::FunctionCallContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitFunctionCall(this);
+void SparqlAutomaticParser::FunctionCallContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitFunctionCall(this);
 }
 
-SparqlAutomaticParser::FunctionCallContext*
-SparqlAutomaticParser::functionCall() {
-  FunctionCallContext* _localctx =
-      _tracker.createInstance<FunctionCallContext>(_ctx, getState());
+SparqlAutomaticParser::FunctionCallContext* SparqlAutomaticParser::functionCall() {
+  FunctionCallContext *_localctx = _tracker.createInstance<FunctionCallContext>(_ctx, getState());
   enterRule(_localctx, 146, SparqlAutomaticParser::RuleFunctionCall);
 
 #if __cplusplus > 201703L
@@ -8360,12 +7220,13 @@ SparqlAutomaticParser::functionCall() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(881);
+    setState(895);
     iri();
-    setState(882);
+    setState(896);
     argList();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8374,24 +7235,21 @@ SparqlAutomaticParser::functionCall() {
   return _localctx;
 }
 
-//----------------- ArgListContext
-//------------------------------------------------------------------
+//----------------- ArgListContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ArgListContext::ArgListContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ArgListContext::ArgListContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ArgListContext::NIL() {
   return getToken(SparqlAutomaticParser::NIL, 0);
 }
 
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::ArgListContext::expression() {
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::ArgListContext::expression() {
   return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::ArgListContext::expression(size_t i) {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::ArgListContext::expression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
 }
 
@@ -8399,132 +7257,26 @@ tree::TerminalNode* SparqlAutomaticParser::ArgListContext::DISTINCT() {
   return getToken(SparqlAutomaticParser::DISTINCT, 0);
 }
 
+
 size_t SparqlAutomaticParser::ArgListContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleArgList;
 }
 
-void SparqlAutomaticParser::ArgListContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterArgList(this);
+void SparqlAutomaticParser::ArgListContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterArgList(this);
 }
 
-void SparqlAutomaticParser::ArgListContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitArgList(this);
+void SparqlAutomaticParser::ArgListContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitArgList(this);
 }
 
 SparqlAutomaticParser::ArgListContext* SparqlAutomaticParser::argList() {
-  ArgListContext* _localctx =
-      _tracker.createInstance<ArgListContext>(_ctx, getState());
+  ArgListContext *_localctx = _tracker.createInstance<ArgListContext>(_ctx, getState());
   enterRule(_localctx, 148, SparqlAutomaticParser::RuleArgList);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(899);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::NIL: {
-        enterOuterAlt(_localctx, 1);
-        setState(884);
-        match(SparqlAutomaticParser::NIL);
-        break;
-      }
-
-      case SparqlAutomaticParser::T__1: {
-        enterOuterAlt(_localctx, 2);
-        setState(885);
-        match(SparqlAutomaticParser::T__1);
-        setState(887);
-        _errHandler->sync(this);
-
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(886);
-          match(SparqlAutomaticParser::DISTINCT);
-        }
-        setState(889);
-        expression();
-        setState(894);
-        _errHandler->sync(this);
-        _la = _input->LA(1);
-        while (_la == SparqlAutomaticParser::T__7) {
-          setState(890);
-          match(SparqlAutomaticParser::T__7);
-          setState(891);
-          expression();
-          setState(896);
-          _errHandler->sync(this);
-          _la = _input->LA(1);
-        }
-        setState(897);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- ExpressionListContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::ExpressionListContext::ExpressionListContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-tree::TerminalNode* SparqlAutomaticParser::ExpressionListContext::NIL() {
-  return getToken(SparqlAutomaticParser::NIL, 0);
-}
-
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::ExpressionListContext::expression() {
-  return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
-}
-
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::ExpressionListContext::expression(size_t i) {
-  return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
-}
-
-size_t SparqlAutomaticParser::ExpressionListContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleExpressionList;
-}
-
-void SparqlAutomaticParser::ExpressionListContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterExpressionList(this);
-}
-
-void SparqlAutomaticParser::ExpressionListContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitExpressionList(this);
-}
-
-SparqlAutomaticParser::ExpressionListContext*
-SparqlAutomaticParser::expressionList() {
-  ExpressionListContext* _localctx =
-      _tracker.createInstance<ExpressionListContext>(_ctx, getState());
-  enterRule(_localctx, 150, SparqlAutomaticParser::RuleExpressionList);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -8540,15 +7292,23 @@ SparqlAutomaticParser::expressionList() {
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::NIL: {
         enterOuterAlt(_localctx, 1);
-        setState(901);
+        setState(898);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
       case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 2);
-        setState(902);
+        setState(899);
         match(SparqlAutomaticParser::T__1);
+        setState(901);
+        _errHandler->sync(this);
+
+        _la = _input->LA(1);
+        if (_la == SparqlAutomaticParser::DISTINCT) {
+          setState(900);
+          match(SparqlAutomaticParser::DISTINCT);
+        }
         setState(903);
         expression();
         setState(908);
@@ -8568,11 +7328,12 @@ SparqlAutomaticParser::expressionList() {
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8581,38 +7342,130 @@ SparqlAutomaticParser::expressionList() {
   return _localctx;
 }
 
-//----------------- ConstructTemplateContext
-//------------------------------------------------------------------
+//----------------- ExpressionListContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConstructTemplateContext::ConstructTemplateContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ExpressionListContext::ExpressionListContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::ConstructTriplesContext*
-SparqlAutomaticParser::ConstructTemplateContext::constructTriples() {
+tree::TerminalNode* SparqlAutomaticParser::ExpressionListContext::NIL() {
+  return getToken(SparqlAutomaticParser::NIL, 0);
+}
+
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::ExpressionListContext::expression() {
+  return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
+}
+
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::ExpressionListContext::expression(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::ExpressionListContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleExpressionList;
+}
+
+void SparqlAutomaticParser::ExpressionListContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterExpressionList(this);
+}
+
+void SparqlAutomaticParser::ExpressionListContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitExpressionList(this);
+}
+
+SparqlAutomaticParser::ExpressionListContext* SparqlAutomaticParser::expressionList() {
+  ExpressionListContext *_localctx = _tracker.createInstance<ExpressionListContext>(_ctx, getState());
+  enterRule(_localctx, 150, SparqlAutomaticParser::RuleExpressionList);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(927);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::NIL: {
+        enterOuterAlt(_localctx, 1);
+        setState(915);
+        match(SparqlAutomaticParser::NIL);
+        break;
+      }
+
+      case SparqlAutomaticParser::T__1: {
+        enterOuterAlt(_localctx, 2);
+        setState(916);
+        match(SparqlAutomaticParser::T__1);
+        setState(917);
+        expression();
+        setState(922);
+        _errHandler->sync(this);
+        _la = _input->LA(1);
+        while (_la == SparqlAutomaticParser::T__7) {
+          setState(918);
+          match(SparqlAutomaticParser::T__7);
+          setState(919);
+          expression();
+          setState(924);
+          _errHandler->sync(this);
+          _la = _input->LA(1);
+        }
+        setState(925);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- ConstructTemplateContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::ConstructTemplateContext::ConstructTemplateContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::ConstructTriplesContext* SparqlAutomaticParser::ConstructTemplateContext::constructTriples() {
   return getRuleContext<SparqlAutomaticParser::ConstructTriplesContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ConstructTemplateContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConstructTemplate;
 }
 
-void SparqlAutomaticParser::ConstructTemplateContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterConstructTemplate(this);
+void SparqlAutomaticParser::ConstructTemplateContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterConstructTemplate(this);
 }
 
-void SparqlAutomaticParser::ConstructTemplateContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitConstructTemplate(this);
+void SparqlAutomaticParser::ConstructTemplateContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitConstructTemplate(this);
 }
 
-SparqlAutomaticParser::ConstructTemplateContext*
-SparqlAutomaticParser::constructTemplate() {
-  ConstructTemplateContext* _localctx =
-      _tracker.createInstance<ConstructTemplateContext>(_ctx, getState());
+SparqlAutomaticParser::ConstructTemplateContext* SparqlAutomaticParser::constructTemplate() {
+  ConstructTemplateContext *_localctx = _tracker.createInstance<ConstructTemplateContext>(_ctx, getState());
   enterRule(_localctx, 152, SparqlAutomaticParser::RuleConstructTemplate);
   size_t _la = 0;
 
@@ -8625,22 +7478,23 @@ SparqlAutomaticParser::constructTemplate() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(915);
+    setState(929);
     match(SparqlAutomaticParser::T__3);
-    setState(917);
+    setState(931);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 29228991) != 0)) {
-      setState(916);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0)) {
+      setState(930);
       constructTriples();
     }
-    setState(919);
+    setState(933);
     match(SparqlAutomaticParser::T__4);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8649,43 +7503,39 @@ SparqlAutomaticParser::constructTemplate() {
   return _localctx;
 }
 
-//----------------- ConstructTriplesContext
-//------------------------------------------------------------------
+//----------------- ConstructTriplesContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConstructTriplesContext::ConstructTriplesContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ConstructTriplesContext::ConstructTriplesContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::TriplesSameSubjectContext*
-SparqlAutomaticParser::ConstructTriplesContext::triplesSameSubject() {
+SparqlAutomaticParser::TriplesSameSubjectContext* SparqlAutomaticParser::ConstructTriplesContext::triplesSameSubject() {
   return getRuleContext<SparqlAutomaticParser::TriplesSameSubjectContext>(0);
 }
 
-SparqlAutomaticParser::ConstructTriplesContext*
-SparqlAutomaticParser::ConstructTriplesContext::constructTriples() {
+SparqlAutomaticParser::ConstructTriplesContext* SparqlAutomaticParser::ConstructTriplesContext::constructTriples() {
   return getRuleContext<SparqlAutomaticParser::ConstructTriplesContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ConstructTriplesContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConstructTriples;
 }
 
-void SparqlAutomaticParser::ConstructTriplesContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterConstructTriples(this);
+void SparqlAutomaticParser::ConstructTriplesContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterConstructTriples(this);
 }
 
-void SparqlAutomaticParser::ConstructTriplesContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitConstructTriples(this);
+void SparqlAutomaticParser::ConstructTriplesContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitConstructTriples(this);
 }
 
-SparqlAutomaticParser::ConstructTriplesContext*
-SparqlAutomaticParser::constructTriples() {
-  ConstructTriplesContext* _localctx =
-      _tracker.createInstance<ConstructTriplesContext>(_ctx, getState());
+SparqlAutomaticParser::ConstructTriplesContext* SparqlAutomaticParser::constructTriples() {
+  ConstructTriplesContext *_localctx = _tracker.createInstance<ConstructTriplesContext>(_ctx, getState());
   enterRule(_localctx, 154, SparqlAutomaticParser::RuleConstructTriples);
   size_t _la = 0;
 
@@ -8698,28 +7548,29 @@ SparqlAutomaticParser::constructTriples() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(921);
+    setState(935);
     triplesSameSubject();
-    setState(926);
+    setState(940);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__6) {
-      setState(922);
+      setState(936);
       match(SparqlAutomaticParser::T__6);
-      setState(924);
+      setState(938);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-          ((((_la - 142) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 142)) & 29228991) != 0)) {
-        setState(923);
+      if ((((_la & ~ 0x3fULL) == 0) &&
+        ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+        ((1ULL << (_la - 142)) & 29228991) != 0)) {
+        setState(937);
         constructTriples();
       }
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8728,53 +7579,47 @@ SparqlAutomaticParser::constructTriples() {
   return _localctx;
 }
 
-//----------------- TriplesSameSubjectContext
-//------------------------------------------------------------------
+//----------------- TriplesSameSubjectContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesSameSubjectContext::TriplesSameSubjectContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TriplesSameSubjectContext::TriplesSameSubjectContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarOrTermContext*
-SparqlAutomaticParser::TriplesSameSubjectContext::varOrTerm() {
+SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::TriplesSameSubjectContext::varOrTerm() {
   return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
 }
 
-SparqlAutomaticParser::PropertyListNotEmptyContext*
-SparqlAutomaticParser::TriplesSameSubjectContext::propertyListNotEmpty() {
+SparqlAutomaticParser::PropertyListNotEmptyContext* SparqlAutomaticParser::TriplesSameSubjectContext::propertyListNotEmpty() {
   return getRuleContext<SparqlAutomaticParser::PropertyListNotEmptyContext>(0);
 }
 
-SparqlAutomaticParser::TriplesNodeContext*
-SparqlAutomaticParser::TriplesSameSubjectContext::triplesNode() {
+SparqlAutomaticParser::TriplesNodeContext* SparqlAutomaticParser::TriplesSameSubjectContext::triplesNode() {
   return getRuleContext<SparqlAutomaticParser::TriplesNodeContext>(0);
 }
 
-SparqlAutomaticParser::PropertyListContext*
-SparqlAutomaticParser::TriplesSameSubjectContext::propertyList() {
+SparqlAutomaticParser::PropertyListContext* SparqlAutomaticParser::TriplesSameSubjectContext::propertyList() {
   return getRuleContext<SparqlAutomaticParser::PropertyListContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::TriplesSameSubjectContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTriplesSameSubject;
 }
 
-void SparqlAutomaticParser::TriplesSameSubjectContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTriplesSameSubject(this);
+void SparqlAutomaticParser::TriplesSameSubjectContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTriplesSameSubject(this);
 }
 
-void SparqlAutomaticParser::TriplesSameSubjectContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTriplesSameSubject(this);
+void SparqlAutomaticParser::TriplesSameSubjectContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTriplesSameSubject(this);
 }
 
-SparqlAutomaticParser::TriplesSameSubjectContext*
-SparqlAutomaticParser::triplesSameSubject() {
-  TriplesSameSubjectContext* _localctx =
-      _tracker.createInstance<TriplesSameSubjectContext>(_ctx, getState());
+SparqlAutomaticParser::TriplesSameSubjectContext* SparqlAutomaticParser::triplesSameSubject() {
+  TriplesSameSubjectContext *_localctx = _tracker.createInstance<TriplesSameSubjectContext>(_ctx, getState());
   enterRule(_localctx, 156, SparqlAutomaticParser::RuleTriplesSameSubject);
 
 #if __cplusplus > 201703L
@@ -8785,7 +7630,7 @@ SparqlAutomaticParser::triplesSameSubject() {
     exitRule();
   });
   try {
-    setState(934);
+    setState(948);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__27:
@@ -8813,9 +7658,9 @@ SparqlAutomaticParser::triplesSameSubject() {
       case SparqlAutomaticParser::NIL:
       case SparqlAutomaticParser::ANON: {
         enterOuterAlt(_localctx, 1);
-        setState(928);
+        setState(942);
         varOrTerm();
-        setState(929);
+        setState(943);
         propertyListNotEmpty();
         break;
       }
@@ -8823,18 +7668,19 @@ SparqlAutomaticParser::triplesSameSubject() {
       case SparqlAutomaticParser::T__1:
       case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
-        setState(931);
+        setState(945);
         triplesNode();
-        setState(932);
+        setState(946);
         propertyList();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8843,38 +7689,35 @@ SparqlAutomaticParser::triplesSameSubject() {
   return _localctx;
 }
 
-//----------------- PropertyListContext
-//------------------------------------------------------------------
+//----------------- PropertyListContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PropertyListContext::PropertyListContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PropertyListContext::PropertyListContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PropertyListNotEmptyContext*
-SparqlAutomaticParser::PropertyListContext::propertyListNotEmpty() {
+SparqlAutomaticParser::PropertyListNotEmptyContext* SparqlAutomaticParser::PropertyListContext::propertyListNotEmpty() {
   return getRuleContext<SparqlAutomaticParser::PropertyListNotEmptyContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PropertyListContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePropertyList;
 }
 
-void SparqlAutomaticParser::PropertyListContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPropertyList(this);
+void SparqlAutomaticParser::PropertyListContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPropertyList(this);
 }
 
-void SparqlAutomaticParser::PropertyListContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPropertyList(this);
+void SparqlAutomaticParser::PropertyListContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPropertyList(this);
 }
 
-SparqlAutomaticParser::PropertyListContext*
-SparqlAutomaticParser::propertyList() {
-  PropertyListContext* _localctx =
-      _tracker.createInstance<PropertyListContext>(_ctx, getState());
+SparqlAutomaticParser::PropertyListContext* SparqlAutomaticParser::propertyList() {
+  PropertyListContext *_localctx = _tracker.createInstance<PropertyListContext>(_ctx, getState());
   enterRule(_localctx, 158, SparqlAutomaticParser::RulePropertyList);
   size_t _la = 0;
 
@@ -8887,18 +7730,18 @@ SparqlAutomaticParser::propertyList() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(937);
+    setState(951);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__8 ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 183) != 0)) {
-      setState(936);
+    if (_la == SparqlAutomaticParser::T__8 || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 183) != 0)) {
+      setState(950);
       propertyListNotEmpty();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -8907,55 +7750,47 @@ SparqlAutomaticParser::propertyList() {
   return _localctx;
 }
 
-//----------------- PropertyListNotEmptyContext
-//------------------------------------------------------------------
+//----------------- PropertyListNotEmptyContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PropertyListNotEmptyContext::PropertyListNotEmptyContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PropertyListNotEmptyContext::PropertyListNotEmptyContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::VerbContext*>
-SparqlAutomaticParser::PropertyListNotEmptyContext::verb() {
+std::vector<SparqlAutomaticParser::VerbContext *> SparqlAutomaticParser::PropertyListNotEmptyContext::verb() {
   return getRuleContexts<SparqlAutomaticParser::VerbContext>();
 }
 
-SparqlAutomaticParser::VerbContext*
-SparqlAutomaticParser::PropertyListNotEmptyContext::verb(size_t i) {
+SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::PropertyListNotEmptyContext::verb(size_t i) {
   return getRuleContext<SparqlAutomaticParser::VerbContext>(i);
 }
 
-std::vector<SparqlAutomaticParser::ObjectListContext*>
-SparqlAutomaticParser::PropertyListNotEmptyContext::objectList() {
+std::vector<SparqlAutomaticParser::ObjectListContext *> SparqlAutomaticParser::PropertyListNotEmptyContext::objectList() {
   return getRuleContexts<SparqlAutomaticParser::ObjectListContext>();
 }
 
-SparqlAutomaticParser::ObjectListContext*
-SparqlAutomaticParser::PropertyListNotEmptyContext::objectList(size_t i) {
+SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::PropertyListNotEmptyContext::objectList(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ObjectListContext>(i);
 }
 
-size_t SparqlAutomaticParser::PropertyListNotEmptyContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::PropertyListNotEmptyContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePropertyListNotEmpty;
 }
 
-void SparqlAutomaticParser::PropertyListNotEmptyContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::PropertyListNotEmptyContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterPropertyListNotEmpty(this);
 }
 
-void SparqlAutomaticParser::PropertyListNotEmptyContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPropertyListNotEmpty(this);
+void SparqlAutomaticParser::PropertyListNotEmptyContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPropertyListNotEmpty(this);
 }
 
-SparqlAutomaticParser::PropertyListNotEmptyContext*
-SparqlAutomaticParser::propertyListNotEmpty() {
-  PropertyListNotEmptyContext* _localctx =
-      _tracker.createInstance<PropertyListNotEmptyContext>(_ctx, getState());
+SparqlAutomaticParser::PropertyListNotEmptyContext* SparqlAutomaticParser::propertyListNotEmpty() {
+  PropertyListNotEmptyContext *_localctx = _tracker.createInstance<PropertyListNotEmptyContext>(_ctx, getState());
   enterRule(_localctx, 160, SparqlAutomaticParser::RulePropertyListNotEmpty);
   size_t _la = 0;
 
@@ -8968,34 +7803,34 @@ SparqlAutomaticParser::propertyListNotEmpty() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(939);
+    setState(953);
     verb();
-    setState(940);
+    setState(954);
     objectList();
-    setState(949);
+    setState(963);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__5) {
-      setState(941);
+      setState(955);
       match(SparqlAutomaticParser::T__5);
-      setState(945);
+      setState(959);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (_la == SparqlAutomaticParser::T__8 ||
-          ((((_la - 142) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 142)) & 183) != 0)) {
-        setState(942);
+      if (_la == SparqlAutomaticParser::T__8 || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+        ((1ULL << (_la - 142)) & 183) != 0)) {
+        setState(956);
         verb();
-        setState(943);
+        setState(957);
         objectList();
       }
-      setState(951);
+      setState(965);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9004,37 +7839,35 @@ SparqlAutomaticParser::propertyListNotEmpty() {
   return _localctx;
 }
 
-//----------------- VerbContext
-//------------------------------------------------------------------
+//----------------- VerbContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VerbContext::VerbContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::VerbContext::VerbContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarOrIriContext*
-SparqlAutomaticParser::VerbContext::varOrIri() {
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::VerbContext::varOrIri() {
   return getRuleContext<SparqlAutomaticParser::VarOrIriContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::VerbContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleVerb;
 }
 
-void SparqlAutomaticParser::VerbContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVerb(this);
+void SparqlAutomaticParser::VerbContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVerb(this);
 }
 
-void SparqlAutomaticParser::VerbContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVerb(this);
+void SparqlAutomaticParser::VerbContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVerb(this);
 }
 
 SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
-  VerbContext* _localctx =
-      _tracker.createInstance<VerbContext>(_ctx, getState());
+  VerbContext *_localctx = _tracker.createInstance<VerbContext>(_ctx, getState());
   enterRule(_localctx, 162, SparqlAutomaticParser::RuleVerb);
 
 #if __cplusplus > 201703L
@@ -9045,7 +7878,7 @@ SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
     exitRule();
   });
   try {
-    setState(954);
+    setState(968);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
@@ -9055,23 +7888,24 @@ SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
       case SparqlAutomaticParser::VAR2:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 1);
-        setState(952);
+        setState(966);
         varOrIri();
         break;
       }
 
       case SparqlAutomaticParser::T__8: {
         enterOuterAlt(_localctx, 2);
-        setState(953);
+        setState(967);
         match(SparqlAutomaticParser::T__8);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9080,42 +7914,39 @@ SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
   return _localctx;
 }
 
-//----------------- ObjectListContext
-//------------------------------------------------------------------
+//----------------- ObjectListContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ObjectListContext::ObjectListContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ObjectListContext::ObjectListContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::ObjectRContext*>
-SparqlAutomaticParser::ObjectListContext::objectR() {
+std::vector<SparqlAutomaticParser::ObjectRContext *> SparqlAutomaticParser::ObjectListContext::objectR() {
   return getRuleContexts<SparqlAutomaticParser::ObjectRContext>();
 }
 
-SparqlAutomaticParser::ObjectRContext*
-SparqlAutomaticParser::ObjectListContext::objectR(size_t i) {
+SparqlAutomaticParser::ObjectRContext* SparqlAutomaticParser::ObjectListContext::objectR(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ObjectRContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::ObjectListContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleObjectList;
 }
 
-void SparqlAutomaticParser::ObjectListContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterObjectList(this);
+void SparqlAutomaticParser::ObjectListContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterObjectList(this);
 }
 
-void SparqlAutomaticParser::ObjectListContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitObjectList(this);
+void SparqlAutomaticParser::ObjectListContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitObjectList(this);
 }
 
 SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::objectList() {
-  ObjectListContext* _localctx =
-      _tracker.createInstance<ObjectListContext>(_ctx, getState());
+  ObjectListContext *_localctx = _tracker.createInstance<ObjectListContext>(_ctx, getState());
   enterRule(_localctx, 164, SparqlAutomaticParser::RuleObjectList);
   size_t _la = 0;
 
@@ -9128,22 +7959,23 @@ SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::objectList() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(956);
+    setState(970);
     objectR();
-    setState(961);
+    setState(975);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__7) {
-      setState(957);
+      setState(971);
       match(SparqlAutomaticParser::T__7);
-      setState(958);
+      setState(972);
       objectR();
-      setState(963);
+      setState(977);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9152,37 +7984,35 @@ SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::objectList() {
   return _localctx;
 }
 
-//----------------- ObjectRContext
-//------------------------------------------------------------------
+//----------------- ObjectRContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ObjectRContext::ObjectRContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ObjectRContext::ObjectRContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::GraphNodeContext*
-SparqlAutomaticParser::ObjectRContext::graphNode() {
+SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::ObjectRContext::graphNode() {
   return getRuleContext<SparqlAutomaticParser::GraphNodeContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ObjectRContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleObjectR;
 }
 
-void SparqlAutomaticParser::ObjectRContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterObjectR(this);
+void SparqlAutomaticParser::ObjectRContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterObjectR(this);
 }
 
-void SparqlAutomaticParser::ObjectRContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitObjectR(this);
+void SparqlAutomaticParser::ObjectRContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitObjectR(this);
 }
 
 SparqlAutomaticParser::ObjectRContext* SparqlAutomaticParser::objectR() {
-  ObjectRContext* _localctx =
-      _tracker.createInstance<ObjectRContext>(_ctx, getState());
+  ObjectRContext *_localctx = _tracker.createInstance<ObjectRContext>(_ctx, getState());
   enterRule(_localctx, 166, SparqlAutomaticParser::RuleObjectR);
 
 #if __cplusplus > 201703L
@@ -9194,10 +8024,11 @@ SparqlAutomaticParser::ObjectRContext* SparqlAutomaticParser::objectR() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(964);
+    setState(978);
     graphNode();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9206,58 +8037,47 @@ SparqlAutomaticParser::ObjectRContext* SparqlAutomaticParser::objectR() {
   return _localctx;
 }
 
-//----------------- TriplesSameSubjectPathContext
-//------------------------------------------------------------------
+//----------------- TriplesSameSubjectPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesSameSubjectPathContext::
-    TriplesSameSubjectPathContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TriplesSameSubjectPathContext::TriplesSameSubjectPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarOrTermContext*
-SparqlAutomaticParser::TriplesSameSubjectPathContext::varOrTerm() {
+SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::TriplesSameSubjectPathContext::varOrTerm() {
   return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
 }
 
-SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::
-    TriplesSameSubjectPathContext::propertyListPathNotEmpty() {
-  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(
-      0);
+SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::TriplesSameSubjectPathContext::propertyListPathNotEmpty() {
+  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(0);
 }
 
-SparqlAutomaticParser::TriplesNodePathContext*
-SparqlAutomaticParser::TriplesSameSubjectPathContext::triplesNodePath() {
+SparqlAutomaticParser::TriplesNodePathContext* SparqlAutomaticParser::TriplesSameSubjectPathContext::triplesNodePath() {
   return getRuleContext<SparqlAutomaticParser::TriplesNodePathContext>(0);
 }
 
-SparqlAutomaticParser::PropertyListPathContext*
-SparqlAutomaticParser::TriplesSameSubjectPathContext::propertyListPath() {
+SparqlAutomaticParser::PropertyListPathContext* SparqlAutomaticParser::TriplesSameSubjectPathContext::propertyListPath() {
   return getRuleContext<SparqlAutomaticParser::PropertyListPathContext>(0);
 }
 
-size_t SparqlAutomaticParser::TriplesSameSubjectPathContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::TriplesSameSubjectPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTriplesSameSubjectPath;
 }
 
-void SparqlAutomaticParser::TriplesSameSubjectPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::TriplesSameSubjectPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterTriplesSameSubjectPath(this);
 }
 
-void SparqlAutomaticParser::TriplesSameSubjectPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::TriplesSameSubjectPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitTriplesSameSubjectPath(this);
 }
 
-SparqlAutomaticParser::TriplesSameSubjectPathContext*
-SparqlAutomaticParser::triplesSameSubjectPath() {
-  TriplesSameSubjectPathContext* _localctx =
-      _tracker.createInstance<TriplesSameSubjectPathContext>(_ctx, getState());
+SparqlAutomaticParser::TriplesSameSubjectPathContext* SparqlAutomaticParser::triplesSameSubjectPath() {
+  TriplesSameSubjectPathContext *_localctx = _tracker.createInstance<TriplesSameSubjectPathContext>(_ctx, getState());
   enterRule(_localctx, 168, SparqlAutomaticParser::RuleTriplesSameSubjectPath);
 
 #if __cplusplus > 201703L
@@ -9268,7 +8088,7 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
     exitRule();
   });
   try {
-    setState(972);
+    setState(986);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__27:
@@ -9296,9 +8116,9 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
       case SparqlAutomaticParser::NIL:
       case SparqlAutomaticParser::ANON: {
         enterOuterAlt(_localctx, 1);
-        setState(966);
+        setState(980);
         varOrTerm();
-        setState(967);
+        setState(981);
         propertyListPathNotEmpty();
         break;
       }
@@ -9306,18 +8126,19 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
       case SparqlAutomaticParser::T__1:
       case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
-        setState(969);
+        setState(983);
         triplesNodePath();
-        setState(970);
+        setState(984);
         propertyListPath();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9326,39 +8147,35 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
   return _localctx;
 }
 
-//----------------- PropertyListPathContext
-//------------------------------------------------------------------
+//----------------- PropertyListPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PropertyListPathContext::PropertyListPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::PropertyListPathNotEmptyContext*
-SparqlAutomaticParser::PropertyListPathContext::propertyListPathNotEmpty() {
-  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(
-      0);
+SparqlAutomaticParser::PropertyListPathContext::PropertyListPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
+
+SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::PropertyListPathContext::propertyListPathNotEmpty() {
+  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(0);
+}
+
 
 size_t SparqlAutomaticParser::PropertyListPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePropertyListPath;
 }
 
-void SparqlAutomaticParser::PropertyListPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPropertyListPath(this);
+void SparqlAutomaticParser::PropertyListPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPropertyListPath(this);
 }
 
-void SparqlAutomaticParser::PropertyListPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPropertyListPath(this);
+void SparqlAutomaticParser::PropertyListPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPropertyListPath(this);
 }
 
-SparqlAutomaticParser::PropertyListPathContext*
-SparqlAutomaticParser::propertyListPath() {
-  PropertyListPathContext* _localctx =
-      _tracker.createInstance<PropertyListPathContext>(_ctx, getState());
+SparqlAutomaticParser::PropertyListPathContext* SparqlAutomaticParser::propertyListPath() {
+  PropertyListPathContext *_localctx = _tracker.createInstance<PropertyListPathContext>(_ctx, getState());
   enterRule(_localctx, 170, SparqlAutomaticParser::RulePropertyListPath);
   size_t _la = 0;
 
@@ -9371,18 +8188,19 @@ SparqlAutomaticParser::propertyListPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(975);
+    setState(989);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0) ||
-        ((((_la - 142) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 142)) & 183) != 0)) {
-      setState(974);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 37380) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 183) != 0)) {
+      setState(988);
       propertyListPathNotEmpty();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9391,56 +8209,44 @@ SparqlAutomaticParser::propertyListPath() {
   return _localctx;
 }
 
-//----------------- PropertyListPathNotEmptyContext
-//------------------------------------------------------------------
+//----------------- PropertyListPathNotEmptyContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PropertyListPathNotEmptyContext::
-    PropertyListPathNotEmptyContext(ParserRuleContext* parent,
-                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PropertyListPathNotEmptyContext::PropertyListPathNotEmptyContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::TupleWithPathContext*
-SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithPath() {
+SparqlAutomaticParser::TupleWithPathContext* SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithPath() {
   return getRuleContext<SparqlAutomaticParser::TupleWithPathContext>(0);
 }
 
-std::vector<SparqlAutomaticParser::TupleWithoutPathContext*>
-SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithoutPath() {
+std::vector<SparqlAutomaticParser::TupleWithoutPathContext *> SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithoutPath() {
   return getRuleContexts<SparqlAutomaticParser::TupleWithoutPathContext>();
 }
 
-SparqlAutomaticParser::TupleWithoutPathContext*
-SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithoutPath(
-    size_t i) {
+SparqlAutomaticParser::TupleWithoutPathContext* SparqlAutomaticParser::PropertyListPathNotEmptyContext::tupleWithoutPath(size_t i) {
   return getRuleContext<SparqlAutomaticParser::TupleWithoutPathContext>(i);
 }
 
-size_t SparqlAutomaticParser::PropertyListPathNotEmptyContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::PropertyListPathNotEmptyContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePropertyListPathNotEmpty;
 }
 
-void SparqlAutomaticParser::PropertyListPathNotEmptyContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::PropertyListPathNotEmptyContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterPropertyListPathNotEmpty(this);
 }
 
-void SparqlAutomaticParser::PropertyListPathNotEmptyContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::PropertyListPathNotEmptyContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitPropertyListPathNotEmpty(this);
 }
 
-SparqlAutomaticParser::PropertyListPathNotEmptyContext*
-SparqlAutomaticParser::propertyListPathNotEmpty() {
-  PropertyListPathNotEmptyContext* _localctx =
-      _tracker.createInstance<PropertyListPathNotEmptyContext>(_ctx,
-                                                               getState());
-  enterRule(_localctx, 172,
-            SparqlAutomaticParser::RulePropertyListPathNotEmpty);
+SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::propertyListPathNotEmpty() {
+  PropertyListPathNotEmptyContext *_localctx = _tracker.createInstance<PropertyListPathNotEmptyContext>(_ctx, getState());
+  enterRule(_localctx, 172, SparqlAutomaticParser::RulePropertyListPathNotEmpty);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -9452,30 +8258,31 @@ SparqlAutomaticParser::propertyListPathNotEmpty() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(977);
+    setState(991);
     tupleWithPath();
-    setState(984);
+    setState(998);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__5) {
-      setState(978);
+      setState(992);
       match(SparqlAutomaticParser::T__5);
-      setState(980);
+      setState(994);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0) ||
-          ((((_la - 142) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 142)) & 183) != 0)) {
-        setState(979);
+      if ((((_la & ~ 0x3fULL) == 0) &&
+        ((1ULL << _la) & 37380) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+        ((1ULL << (_la - 142)) & 183) != 0)) {
+        setState(993);
         tupleWithoutPath();
       }
-      setState(986);
+      setState(1000);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9484,37 +8291,35 @@ SparqlAutomaticParser::propertyListPathNotEmpty() {
   return _localctx;
 }
 
-//----------------- VerbPathContext
-//------------------------------------------------------------------
+//----------------- VerbPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VerbPathContext::VerbPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::VerbPathContext::VerbPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PathContext*
-SparqlAutomaticParser::VerbPathContext::path() {
+SparqlAutomaticParser::PathContext* SparqlAutomaticParser::VerbPathContext::path() {
   return getRuleContext<SparqlAutomaticParser::PathContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::VerbPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleVerbPath;
 }
 
-void SparqlAutomaticParser::VerbPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVerbPath(this);
+void SparqlAutomaticParser::VerbPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVerbPath(this);
 }
 
-void SparqlAutomaticParser::VerbPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVerbPath(this);
+void SparqlAutomaticParser::VerbPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVerbPath(this);
 }
 
 SparqlAutomaticParser::VerbPathContext* SparqlAutomaticParser::verbPath() {
-  VerbPathContext* _localctx =
-      _tracker.createInstance<VerbPathContext>(_ctx, getState());
+  VerbPathContext *_localctx = _tracker.createInstance<VerbPathContext>(_ctx, getState());
   enterRule(_localctx, 174, SparqlAutomaticParser::RuleVerbPath);
 
 #if __cplusplus > 201703L
@@ -9526,10 +8331,11 @@ SparqlAutomaticParser::VerbPathContext* SparqlAutomaticParser::verbPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(987);
+    setState(1001);
     path();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9538,37 +8344,35 @@ SparqlAutomaticParser::VerbPathContext* SparqlAutomaticParser::verbPath() {
   return _localctx;
 }
 
-//----------------- VerbSimpleContext
-//------------------------------------------------------------------
+//----------------- VerbSimpleContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VerbSimpleContext::VerbSimpleContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::VerbSimpleContext::VerbSimpleContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::VerbSimpleContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::VerbSimpleContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::VerbSimpleContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleVerbSimple;
 }
 
-void SparqlAutomaticParser::VerbSimpleContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVerbSimple(this);
+void SparqlAutomaticParser::VerbSimpleContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVerbSimple(this);
 }
 
-void SparqlAutomaticParser::VerbSimpleContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVerbSimple(this);
+void SparqlAutomaticParser::VerbSimpleContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVerbSimple(this);
 }
 
 SparqlAutomaticParser::VerbSimpleContext* SparqlAutomaticParser::verbSimple() {
-  VerbSimpleContext* _localctx =
-      _tracker.createInstance<VerbSimpleContext>(_ctx, getState());
+  VerbSimpleContext *_localctx = _tracker.createInstance<VerbSimpleContext>(_ctx, getState());
   enterRule(_localctx, 176, SparqlAutomaticParser::RuleVerbSimple);
 
 #if __cplusplus > 201703L
@@ -9580,10 +8384,11 @@ SparqlAutomaticParser::VerbSimpleContext* SparqlAutomaticParser::verbSimple() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(989);
+    setState(1003);
     var();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9592,43 +8397,39 @@ SparqlAutomaticParser::VerbSimpleContext* SparqlAutomaticParser::verbSimple() {
   return _localctx;
 }
 
-//----------------- TupleWithoutPathContext
-//------------------------------------------------------------------
+//----------------- TupleWithoutPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TupleWithoutPathContext::TupleWithoutPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TupleWithoutPathContext::TupleWithoutPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VerbPathOrSimpleContext*
-SparqlAutomaticParser::TupleWithoutPathContext::verbPathOrSimple() {
+SparqlAutomaticParser::VerbPathOrSimpleContext* SparqlAutomaticParser::TupleWithoutPathContext::verbPathOrSimple() {
   return getRuleContext<SparqlAutomaticParser::VerbPathOrSimpleContext>(0);
 }
 
-SparqlAutomaticParser::ObjectListContext*
-SparqlAutomaticParser::TupleWithoutPathContext::objectList() {
+SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::TupleWithoutPathContext::objectList() {
   return getRuleContext<SparqlAutomaticParser::ObjectListContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::TupleWithoutPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTupleWithoutPath;
 }
 
-void SparqlAutomaticParser::TupleWithoutPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTupleWithoutPath(this);
+void SparqlAutomaticParser::TupleWithoutPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTupleWithoutPath(this);
 }
 
-void SparqlAutomaticParser::TupleWithoutPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTupleWithoutPath(this);
+void SparqlAutomaticParser::TupleWithoutPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTupleWithoutPath(this);
 }
 
-SparqlAutomaticParser::TupleWithoutPathContext*
-SparqlAutomaticParser::tupleWithoutPath() {
-  TupleWithoutPathContext* _localctx =
-      _tracker.createInstance<TupleWithoutPathContext>(_ctx, getState());
+SparqlAutomaticParser::TupleWithoutPathContext* SparqlAutomaticParser::tupleWithoutPath() {
+  TupleWithoutPathContext *_localctx = _tracker.createInstance<TupleWithoutPathContext>(_ctx, getState());
   enterRule(_localctx, 178, SparqlAutomaticParser::RuleTupleWithoutPath);
 
 #if __cplusplus > 201703L
@@ -9640,12 +8441,13 @@ SparqlAutomaticParser::tupleWithoutPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(991);
+    setState(1005);
     verbPathOrSimple();
-    setState(992);
+    setState(1006);
     objectList();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9654,43 +8456,39 @@ SparqlAutomaticParser::tupleWithoutPath() {
   return _localctx;
 }
 
-//----------------- TupleWithPathContext
-//------------------------------------------------------------------
+//----------------- TupleWithPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TupleWithPathContext::TupleWithPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::TupleWithPathContext::TupleWithPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VerbPathOrSimpleContext*
-SparqlAutomaticParser::TupleWithPathContext::verbPathOrSimple() {
+SparqlAutomaticParser::VerbPathOrSimpleContext* SparqlAutomaticParser::TupleWithPathContext::verbPathOrSimple() {
   return getRuleContext<SparqlAutomaticParser::VerbPathOrSimpleContext>(0);
 }
 
-SparqlAutomaticParser::ObjectListPathContext*
-SparqlAutomaticParser::TupleWithPathContext::objectListPath() {
+SparqlAutomaticParser::ObjectListPathContext* SparqlAutomaticParser::TupleWithPathContext::objectListPath() {
   return getRuleContext<SparqlAutomaticParser::ObjectListPathContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::TupleWithPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleTupleWithPath;
 }
 
-void SparqlAutomaticParser::TupleWithPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTupleWithPath(this);
+void SparqlAutomaticParser::TupleWithPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTupleWithPath(this);
 }
 
-void SparqlAutomaticParser::TupleWithPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTupleWithPath(this);
+void SparqlAutomaticParser::TupleWithPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTupleWithPath(this);
 }
 
-SparqlAutomaticParser::TupleWithPathContext*
-SparqlAutomaticParser::tupleWithPath() {
-  TupleWithPathContext* _localctx =
-      _tracker.createInstance<TupleWithPathContext>(_ctx, getState());
+SparqlAutomaticParser::TupleWithPathContext* SparqlAutomaticParser::tupleWithPath() {
+  TupleWithPathContext *_localctx = _tracker.createInstance<TupleWithPathContext>(_ctx, getState());
   enterRule(_localctx, 180, SparqlAutomaticParser::RuleTupleWithPath);
 
 #if __cplusplus > 201703L
@@ -9702,12 +8500,13 @@ SparqlAutomaticParser::tupleWithPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(994);
+    setState(1008);
     verbPathOrSimple();
-    setState(995);
+    setState(1009);
     objectListPath();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9716,43 +8515,39 @@ SparqlAutomaticParser::tupleWithPath() {
   return _localctx;
 }
 
-//----------------- VerbPathOrSimpleContext
-//------------------------------------------------------------------
+//----------------- VerbPathOrSimpleContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VerbPathOrSimpleContext::VerbPathOrSimpleContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::VerbPathOrSimpleContext::VerbPathOrSimpleContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::VerbPathContext*
-SparqlAutomaticParser::VerbPathOrSimpleContext::verbPath() {
+SparqlAutomaticParser::VerbPathContext* SparqlAutomaticParser::VerbPathOrSimpleContext::verbPath() {
   return getRuleContext<SparqlAutomaticParser::VerbPathContext>(0);
 }
 
-SparqlAutomaticParser::VerbSimpleContext*
-SparqlAutomaticParser::VerbPathOrSimpleContext::verbSimple() {
+SparqlAutomaticParser::VerbSimpleContext* SparqlAutomaticParser::VerbPathOrSimpleContext::verbSimple() {
   return getRuleContext<SparqlAutomaticParser::VerbSimpleContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::VerbPathOrSimpleContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleVerbPathOrSimple;
 }
 
-void SparqlAutomaticParser::VerbPathOrSimpleContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVerbPathOrSimple(this);
+void SparqlAutomaticParser::VerbPathOrSimpleContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVerbPathOrSimple(this);
 }
 
-void SparqlAutomaticParser::VerbPathOrSimpleContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVerbPathOrSimple(this);
+void SparqlAutomaticParser::VerbPathOrSimpleContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVerbPathOrSimple(this);
 }
 
-SparqlAutomaticParser::VerbPathOrSimpleContext*
-SparqlAutomaticParser::verbPathOrSimple() {
-  VerbPathOrSimpleContext* _localctx =
-      _tracker.createInstance<VerbPathOrSimpleContext>(_ctx, getState());
+SparqlAutomaticParser::VerbPathOrSimpleContext* SparqlAutomaticParser::verbPathOrSimple() {
+  VerbPathOrSimpleContext *_localctx = _tracker.createInstance<VerbPathOrSimpleContext>(_ctx, getState());
   enterRule(_localctx, 182, SparqlAutomaticParser::RuleVerbPathOrSimple);
 
 #if __cplusplus > 201703L
@@ -9764,7 +8559,7 @@ SparqlAutomaticParser::verbPathOrSimple() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(999);
+    setState(1013);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1:
@@ -9775,23 +8570,24 @@ SparqlAutomaticParser::verbPathOrSimple() {
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        setState(997);
+        setState(1011);
         verbPath();
         break;
       }
 
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
-        setState(998);
+        setState(1012);
         verbSimple();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9800,43 +8596,39 @@ SparqlAutomaticParser::verbPathOrSimple() {
   return _localctx;
 }
 
-//----------------- ObjectListPathContext
-//------------------------------------------------------------------
+//----------------- ObjectListPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ObjectListPathContext::ObjectListPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ObjectListPathContext::ObjectListPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::ObjectPathContext*>
-SparqlAutomaticParser::ObjectListPathContext::objectPath() {
+std::vector<SparqlAutomaticParser::ObjectPathContext *> SparqlAutomaticParser::ObjectListPathContext::objectPath() {
   return getRuleContexts<SparqlAutomaticParser::ObjectPathContext>();
 }
 
-SparqlAutomaticParser::ObjectPathContext*
-SparqlAutomaticParser::ObjectListPathContext::objectPath(size_t i) {
+SparqlAutomaticParser::ObjectPathContext* SparqlAutomaticParser::ObjectListPathContext::objectPath(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ObjectPathContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::ObjectListPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleObjectListPath;
 }
 
-void SparqlAutomaticParser::ObjectListPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterObjectListPath(this);
+void SparqlAutomaticParser::ObjectListPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterObjectListPath(this);
 }
 
-void SparqlAutomaticParser::ObjectListPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitObjectListPath(this);
+void SparqlAutomaticParser::ObjectListPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitObjectListPath(this);
 }
 
-SparqlAutomaticParser::ObjectListPathContext*
-SparqlAutomaticParser::objectListPath() {
-  ObjectListPathContext* _localctx =
-      _tracker.createInstance<ObjectListPathContext>(_ctx, getState());
+SparqlAutomaticParser::ObjectListPathContext* SparqlAutomaticParser::objectListPath() {
+  ObjectListPathContext *_localctx = _tracker.createInstance<ObjectListPathContext>(_ctx, getState());
   enterRule(_localctx, 184, SparqlAutomaticParser::RuleObjectListPath);
   size_t _la = 0;
 
@@ -9849,22 +8641,23 @@ SparqlAutomaticParser::objectListPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1001);
+    setState(1015);
     objectPath();
-    setState(1006);
+    setState(1020);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__7) {
-      setState(1002);
+      setState(1016);
       match(SparqlAutomaticParser::T__7);
-      setState(1003);
+      setState(1017);
       objectPath();
-      setState(1008);
+      setState(1022);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9873,37 +8666,35 @@ SparqlAutomaticParser::objectListPath() {
   return _localctx;
 }
 
-//----------------- ObjectPathContext
-//------------------------------------------------------------------
+//----------------- ObjectPathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ObjectPathContext::ObjectPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ObjectPathContext::ObjectPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::GraphNodePathContext*
-SparqlAutomaticParser::ObjectPathContext::graphNodePath() {
+SparqlAutomaticParser::GraphNodePathContext* SparqlAutomaticParser::ObjectPathContext::graphNodePath() {
   return getRuleContext<SparqlAutomaticParser::GraphNodePathContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ObjectPathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleObjectPath;
 }
 
-void SparqlAutomaticParser::ObjectPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterObjectPath(this);
+void SparqlAutomaticParser::ObjectPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterObjectPath(this);
 }
 
-void SparqlAutomaticParser::ObjectPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitObjectPath(this);
+void SparqlAutomaticParser::ObjectPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitObjectPath(this);
 }
 
 SparqlAutomaticParser::ObjectPathContext* SparqlAutomaticParser::objectPath() {
-  ObjectPathContext* _localctx =
-      _tracker.createInstance<ObjectPathContext>(_ctx, getState());
+  ObjectPathContext *_localctx = _tracker.createInstance<ObjectPathContext>(_ctx, getState());
   enterRule(_localctx, 186, SparqlAutomaticParser::RuleObjectPath);
 
 #if __cplusplus > 201703L
@@ -9915,10 +8706,11 @@ SparqlAutomaticParser::ObjectPathContext* SparqlAutomaticParser::objectPath() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1009);
+    setState(1023);
     graphNodePath();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9927,37 +8719,35 @@ SparqlAutomaticParser::ObjectPathContext* SparqlAutomaticParser::objectPath() {
   return _localctx;
 }
 
-//----------------- PathContext
-//------------------------------------------------------------------
+//----------------- PathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathContext::PathContext(ParserRuleContext* parent,
-                                                size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathContext::PathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PathAlternativeContext*
-SparqlAutomaticParser::PathContext::pathAlternative() {
+SparqlAutomaticParser::PathAlternativeContext* SparqlAutomaticParser::PathContext::pathAlternative() {
   return getRuleContext<SparqlAutomaticParser::PathAlternativeContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PathContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePath;
 }
 
-void SparqlAutomaticParser::PathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPath(this);
+void SparqlAutomaticParser::PathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPath(this);
 }
 
-void SparqlAutomaticParser::PathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPath(this);
+void SparqlAutomaticParser::PathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPath(this);
 }
 
 SparqlAutomaticParser::PathContext* SparqlAutomaticParser::path() {
-  PathContext* _localctx =
-      _tracker.createInstance<PathContext>(_ctx, getState());
+  PathContext *_localctx = _tracker.createInstance<PathContext>(_ctx, getState());
   enterRule(_localctx, 188, SparqlAutomaticParser::RulePath);
 
 #if __cplusplus > 201703L
@@ -9969,10 +8759,11 @@ SparqlAutomaticParser::PathContext* SparqlAutomaticParser::path() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1011);
+    setState(1025);
     pathAlternative();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -9981,43 +8772,39 @@ SparqlAutomaticParser::PathContext* SparqlAutomaticParser::path() {
   return _localctx;
 }
 
-//----------------- PathAlternativeContext
-//------------------------------------------------------------------
+//----------------- PathAlternativeContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathAlternativeContext::PathAlternativeContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathAlternativeContext::PathAlternativeContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::PathSequenceContext*>
-SparqlAutomaticParser::PathAlternativeContext::pathSequence() {
+std::vector<SparqlAutomaticParser::PathSequenceContext *> SparqlAutomaticParser::PathAlternativeContext::pathSequence() {
   return getRuleContexts<SparqlAutomaticParser::PathSequenceContext>();
 }
 
-SparqlAutomaticParser::PathSequenceContext*
-SparqlAutomaticParser::PathAlternativeContext::pathSequence(size_t i) {
+SparqlAutomaticParser::PathSequenceContext* SparqlAutomaticParser::PathAlternativeContext::pathSequence(size_t i) {
   return getRuleContext<SparqlAutomaticParser::PathSequenceContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::PathAlternativeContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePathAlternative;
 }
 
-void SparqlAutomaticParser::PathAlternativeContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathAlternative(this);
+void SparqlAutomaticParser::PathAlternativeContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathAlternative(this);
 }
 
-void SparqlAutomaticParser::PathAlternativeContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathAlternative(this);
+void SparqlAutomaticParser::PathAlternativeContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathAlternative(this);
 }
 
-SparqlAutomaticParser::PathAlternativeContext*
-SparqlAutomaticParser::pathAlternative() {
-  PathAlternativeContext* _localctx =
-      _tracker.createInstance<PathAlternativeContext>(_ctx, getState());
+SparqlAutomaticParser::PathAlternativeContext* SparqlAutomaticParser::pathAlternative() {
+  PathAlternativeContext *_localctx = _tracker.createInstance<PathAlternativeContext>(_ctx, getState());
   enterRule(_localctx, 190, SparqlAutomaticParser::RulePathAlternative);
   size_t _la = 0;
 
@@ -10030,22 +8817,23 @@ SparqlAutomaticParser::pathAlternative() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1013);
+    setState(1027);
     pathSequence();
-    setState(1018);
+    setState(1032);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__9) {
-      setState(1014);
+      setState(1028);
       match(SparqlAutomaticParser::T__9);
-      setState(1015);
+      setState(1029);
       pathSequence();
-      setState(1020);
+      setState(1034);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10054,43 +8842,39 @@ SparqlAutomaticParser::pathAlternative() {
   return _localctx;
 }
 
-//----------------- PathSequenceContext
-//------------------------------------------------------------------
+//----------------- PathSequenceContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathSequenceContext::PathSequenceContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathSequenceContext::PathSequenceContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::PathEltOrInverseContext*>
-SparqlAutomaticParser::PathSequenceContext::pathEltOrInverse() {
+std::vector<SparqlAutomaticParser::PathEltOrInverseContext *> SparqlAutomaticParser::PathSequenceContext::pathEltOrInverse() {
   return getRuleContexts<SparqlAutomaticParser::PathEltOrInverseContext>();
 }
 
-SparqlAutomaticParser::PathEltOrInverseContext*
-SparqlAutomaticParser::PathSequenceContext::pathEltOrInverse(size_t i) {
+SparqlAutomaticParser::PathEltOrInverseContext* SparqlAutomaticParser::PathSequenceContext::pathEltOrInverse(size_t i) {
   return getRuleContext<SparqlAutomaticParser::PathEltOrInverseContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::PathSequenceContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePathSequence;
 }
 
-void SparqlAutomaticParser::PathSequenceContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathSequence(this);
+void SparqlAutomaticParser::PathSequenceContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathSequence(this);
 }
 
-void SparqlAutomaticParser::PathSequenceContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathSequence(this);
+void SparqlAutomaticParser::PathSequenceContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathSequence(this);
 }
 
-SparqlAutomaticParser::PathSequenceContext*
-SparqlAutomaticParser::pathSequence() {
-  PathSequenceContext* _localctx =
-      _tracker.createInstance<PathSequenceContext>(_ctx, getState());
+SparqlAutomaticParser::PathSequenceContext* SparqlAutomaticParser::pathSequence() {
+  PathSequenceContext *_localctx = _tracker.createInstance<PathSequenceContext>(_ctx, getState());
   enterRule(_localctx, 192, SparqlAutomaticParser::RulePathSequence);
   size_t _la = 0;
 
@@ -10103,22 +8887,23 @@ SparqlAutomaticParser::pathSequence() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1021);
+    setState(1035);
     pathEltOrInverse();
-    setState(1026);
+    setState(1040);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__10) {
-      setState(1022);
+      setState(1036);
       match(SparqlAutomaticParser::T__10);
-      setState(1023);
+      setState(1037);
       pathEltOrInverse();
-      setState(1028);
+      setState(1042);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10127,42 +8912,39 @@ SparqlAutomaticParser::pathSequence() {
   return _localctx;
 }
 
-//----------------- PathEltContext
-//------------------------------------------------------------------
+//----------------- PathEltContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathEltContext::PathEltContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathEltContext::PathEltContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PathPrimaryContext*
-SparqlAutomaticParser::PathEltContext::pathPrimary() {
+SparqlAutomaticParser::PathPrimaryContext* SparqlAutomaticParser::PathEltContext::pathPrimary() {
   return getRuleContext<SparqlAutomaticParser::PathPrimaryContext>(0);
 }
 
-SparqlAutomaticParser::PathModContext*
-SparqlAutomaticParser::PathEltContext::pathMod() {
+SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::PathEltContext::pathMod() {
   return getRuleContext<SparqlAutomaticParser::PathModContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PathEltContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePathElt;
 }
 
-void SparqlAutomaticParser::PathEltContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathElt(this);
+void SparqlAutomaticParser::PathEltContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathElt(this);
 }
 
-void SparqlAutomaticParser::PathEltContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathElt(this);
+void SparqlAutomaticParser::PathEltContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathElt(this);
 }
 
 SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
-  PathEltContext* _localctx =
-      _tracker.createInstance<PathEltContext>(_ctx, getState());
+  PathEltContext *_localctx = _tracker.createInstance<PathEltContext>(_ctx, getState());
   enterRule(_localctx, 194, SparqlAutomaticParser::RulePathElt);
   size_t _la = 0;
 
@@ -10175,18 +8957,20 @@ SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1029);
+    setState(1043);
     pathPrimary();
-    setState(1031);
+    setState(1045);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0)) {
-      setState(1030);
+    if ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 24594) != 0)) {
+      setState(1044);
       pathMod();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10195,38 +8979,35 @@ SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
   return _localctx;
 }
 
-//----------------- PathEltOrInverseContext
-//------------------------------------------------------------------
+//----------------- PathEltOrInverseContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathEltOrInverseContext::PathEltOrInverseContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathEltOrInverseContext::PathEltOrInverseContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PathEltContext*
-SparqlAutomaticParser::PathEltOrInverseContext::pathElt() {
+SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::PathEltOrInverseContext::pathElt() {
   return getRuleContext<SparqlAutomaticParser::PathEltContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PathEltOrInverseContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePathEltOrInverse;
 }
 
-void SparqlAutomaticParser::PathEltOrInverseContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathEltOrInverse(this);
+void SparqlAutomaticParser::PathEltOrInverseContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathEltOrInverse(this);
 }
 
-void SparqlAutomaticParser::PathEltOrInverseContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathEltOrInverse(this);
+void SparqlAutomaticParser::PathEltOrInverseContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathEltOrInverse(this);
 }
 
-SparqlAutomaticParser::PathEltOrInverseContext*
-SparqlAutomaticParser::pathEltOrInverse() {
-  PathEltOrInverseContext* _localctx =
-      _tracker.createInstance<PathEltOrInverseContext>(_ctx, getState());
+SparqlAutomaticParser::PathEltOrInverseContext* SparqlAutomaticParser::pathEltOrInverse() {
+  PathEltOrInverseContext *_localctx = _tracker.createInstance<PathEltOrInverseContext>(_ctx, getState());
   enterRule(_localctx, 196, SparqlAutomaticParser::RulePathEltOrInverse);
 
 #if __cplusplus > 201703L
@@ -10237,7 +9018,7 @@ SparqlAutomaticParser::pathEltOrInverse() {
     exitRule();
   });
   try {
-    setState(1036);
+    setState(1050);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1:
@@ -10248,26 +9029,26 @@ SparqlAutomaticParser::pathEltOrInverse() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 1);
-        setState(1033);
+        setState(1047);
         pathElt();
         break;
       }
 
       case SparqlAutomaticParser::T__11: {
         enterOuterAlt(_localctx, 2);
-        setState(1034);
-        antlrcpp::downCast<PathEltOrInverseContext*>(_localctx)
-            ->negationOperator = match(SparqlAutomaticParser::T__11);
-        setState(1035);
+        setState(1048);
+        antlrcpp::downCast<PathEltOrInverseContext *>(_localctx)->negationOperator = match(SparqlAutomaticParser::T__11);
+        setState(1049);
         pathElt();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10276,34 +9057,48 @@ SparqlAutomaticParser::pathEltOrInverse() {
   return _localctx;
 }
 
-//----------------- PathModContext
-//------------------------------------------------------------------
+//----------------- PathModContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathModContext::PathModContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PathModContext::PathModContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::ExactLengthContext* SparqlAutomaticParser::PathModContext::exactLength() {
+  return getRuleContext<SparqlAutomaticParser::ExactLengthContext>(0);
+}
+
+SparqlAutomaticParser::OnlyMinContext* SparqlAutomaticParser::PathModContext::onlyMin() {
+  return getRuleContext<SparqlAutomaticParser::OnlyMinContext>(0);
+}
+
+SparqlAutomaticParser::MinMaxContext* SparqlAutomaticParser::PathModContext::minMax() {
+  return getRuleContext<SparqlAutomaticParser::MinMaxContext>(0);
+}
+
+SparqlAutomaticParser::OnlyMaxContext* SparqlAutomaticParser::PathModContext::onlyMax() {
+  return getRuleContext<SparqlAutomaticParser::OnlyMaxContext>(0);
+}
+
 
 size_t SparqlAutomaticParser::PathModContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePathMod;
 }
 
-void SparqlAutomaticParser::PathModContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathMod(this);
+void SparqlAutomaticParser::PathModContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathMod(this);
 }
 
-void SparqlAutomaticParser::PathModContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathMod(this);
+void SparqlAutomaticParser::PathModContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathMod(this);
 }
 
 SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::pathMod() {
-  PathModContext* _localctx =
-      _tracker.createInstance<PathModContext>(_ctx, getState());
+  PathModContext *_localctx = _tracker.createInstance<PathModContext>(_ctx, getState());
   enterRule(_localctx, 198, SparqlAutomaticParser::RulePathMod);
-  size_t _la = 0;
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -10313,237 +9108,75 @@ SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::pathMod() {
     exitRule();
   });
   try {
-    enterOuterAlt(_localctx, 1);
-    setState(1038);
-    _la = _input->LA(1);
-    if (!((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0))) {
-      _errHandler->recoverInline(this);
-    } else {
-      _errHandler->reportMatch(this);
-      consume();
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- PathPrimaryContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::PathPrimaryContext::PathPrimaryContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::PathPrimaryContext::iri() {
-  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
-}
-
-SparqlAutomaticParser::PathNegatedPropertySetContext*
-SparqlAutomaticParser::PathPrimaryContext::pathNegatedPropertySet() {
-  return getRuleContext<SparqlAutomaticParser::PathNegatedPropertySetContext>(
-      0);
-}
-
-SparqlAutomaticParser::PathContext*
-SparqlAutomaticParser::PathPrimaryContext::path() {
-  return getRuleContext<SparqlAutomaticParser::PathContext>(0);
-}
-
-size_t SparqlAutomaticParser::PathPrimaryContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RulePathPrimary;
-}
-
-void SparqlAutomaticParser::PathPrimaryContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPathPrimary(this);
-}
-
-void SparqlAutomaticParser::PathPrimaryContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathPrimary(this);
-}
-
-SparqlAutomaticParser::PathPrimaryContext*
-SparqlAutomaticParser::pathPrimary() {
-  PathPrimaryContext* _localctx =
-      _tracker.createInstance<PathPrimaryContext>(_ctx, getState());
-  enterRule(_localctx, 200, SparqlAutomaticParser::RulePathPrimary);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1048);
+    setState(1064);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+      case SparqlAutomaticParser::T__12: {
         enterOuterAlt(_localctx, 1);
-        setState(1040);
-        iri();
+        setState(1052);
+        match(SparqlAutomaticParser::T__12);
         break;
       }
 
-      case SparqlAutomaticParser::T__8: {
+      case SparqlAutomaticParser::T__0: {
         enterOuterAlt(_localctx, 2);
-        setState(1041);
-        match(SparqlAutomaticParser::T__8);
+        setState(1053);
+        match(SparqlAutomaticParser::T__0);
         break;
       }
 
-      case SparqlAutomaticParser::T__14: {
+      case SparqlAutomaticParser::T__13: {
         enterOuterAlt(_localctx, 3);
-        setState(1042);
-        match(SparqlAutomaticParser::T__14);
-        setState(1043);
-        pathNegatedPropertySet();
+        setState(1054);
+        match(SparqlAutomaticParser::T__13);
         break;
       }
 
-      case SparqlAutomaticParser::T__1: {
+      case SparqlAutomaticParser::T__3: {
         enterOuterAlt(_localctx, 4);
-        setState(1044);
-        match(SparqlAutomaticParser::T__1);
-        setState(1045);
-        path();
-        setState(1046);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- PathNegatedPropertySetContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::PathNegatedPropertySetContext::
-    PathNegatedPropertySetContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-std::vector<SparqlAutomaticParser::PathOneInPropertySetContext*>
-SparqlAutomaticParser::PathNegatedPropertySetContext::pathOneInPropertySet() {
-  return getRuleContexts<SparqlAutomaticParser::PathOneInPropertySetContext>();
-}
-
-SparqlAutomaticParser::PathOneInPropertySetContext*
-SparqlAutomaticParser::PathNegatedPropertySetContext::pathOneInPropertySet(
-    size_t i) {
-  return getRuleContext<SparqlAutomaticParser::PathOneInPropertySetContext>(i);
-}
-
-size_t SparqlAutomaticParser::PathNegatedPropertySetContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RulePathNegatedPropertySet;
-}
-
-void SparqlAutomaticParser::PathNegatedPropertySetContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->enterPathNegatedPropertySet(this);
-}
-
-void SparqlAutomaticParser::PathNegatedPropertySetContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->exitPathNegatedPropertySet(this);
-}
-
-SparqlAutomaticParser::PathNegatedPropertySetContext*
-SparqlAutomaticParser::pathNegatedPropertySet() {
-  PathNegatedPropertySetContext* _localctx =
-      _tracker.createInstance<PathNegatedPropertySetContext>(_ctx, getState());
-  enterRule(_localctx, 202, SparqlAutomaticParser::RulePathNegatedPropertySet);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1063);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__8:
-      case SparqlAutomaticParser::T__11:
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        enterOuterAlt(_localctx, 1);
-        setState(1050);
-        pathOneInPropertySet();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__1: {
-        enterOuterAlt(_localctx, 2);
-        setState(1051);
-        match(SparqlAutomaticParser::T__1);
+        setState(1055);
+        match(SparqlAutomaticParser::T__3);
         setState(1060);
         _errHandler->sync(this);
+        switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 115, _ctx)) {
+        case 1: {
+          setState(1056);
+          exactLength();
+          break;
+        }
 
-        _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::T__8
-
-            || _la == SparqlAutomaticParser::T__11 ||
-            ((((_la - 142) & ~0x3fULL) == 0) &&
-             ((1ULL << (_la - 142)) & 135) != 0)) {
-          setState(1052);
-          pathOneInPropertySet();
+        case 2: {
           setState(1057);
-          _errHandler->sync(this);
-          _la = _input->LA(1);
-          while (_la == SparqlAutomaticParser::T__9) {
-            setState(1053);
-            match(SparqlAutomaticParser::T__9);
-            setState(1054);
-            pathOneInPropertySet();
-            setState(1059);
-            _errHandler->sync(this);
-            _la = _input->LA(1);
-          }
+          onlyMin();
+          break;
+        }
+
+        case 3: {
+          setState(1058);
+          minMax();
+          break;
+        }
+
+        case 4: {
+          setState(1059);
+          onlyMax();
+          break;
+        }
+
+        default:
+          break;
         }
         setState(1062);
-        match(SparqlAutomaticParser::T__2);
+        match(SparqlAutomaticParser::T__4);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10552,142 +9185,36 @@ SparqlAutomaticParser::pathNegatedPropertySet() {
   return _localctx;
 }
 
-//----------------- PathOneInPropertySetContext
-//------------------------------------------------------------------
+//----------------- ExactLengthContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PathOneInPropertySetContext::PathOneInPropertySetContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::PathOneInPropertySetContext::iri() {
-  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
+SparqlAutomaticParser::ExactLengthContext::ExactLengthContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-size_t SparqlAutomaticParser::PathOneInPropertySetContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RulePathOneInPropertySet;
+SparqlAutomaticParser::StepsExactContext* SparqlAutomaticParser::ExactLengthContext::stepsExact() {
+  return getRuleContext<SparqlAutomaticParser::StepsExactContext>(0);
 }
 
-void SparqlAutomaticParser::PathOneInPropertySetContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+
+size_t SparqlAutomaticParser::ExactLengthContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleExactLength;
+}
+
+void SparqlAutomaticParser::ExactLengthContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
-    parserListener->enterPathOneInPropertySet(this);
+    parserListener->enterExactLength(this);
 }
 
-void SparqlAutomaticParser::PathOneInPropertySetContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPathOneInPropertySet(this);
+void SparqlAutomaticParser::ExactLengthContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitExactLength(this);
 }
 
-SparqlAutomaticParser::PathOneInPropertySetContext*
-SparqlAutomaticParser::pathOneInPropertySet() {
-  PathOneInPropertySetContext* _localctx =
-      _tracker.createInstance<PathOneInPropertySetContext>(_ctx, getState());
-  enterRule(_localctx, 204, SparqlAutomaticParser::RulePathOneInPropertySet);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1072);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::PREFIX_LANGTAG: {
-        enterOuterAlt(_localctx, 1);
-        setState(1065);
-        iri();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__8: {
-        enterOuterAlt(_localctx, 2);
-        setState(1066);
-        match(SparqlAutomaticParser::T__8);
-        break;
-      }
-
-      case SparqlAutomaticParser::T__11: {
-        enterOuterAlt(_localctx, 3);
-        setState(1067);
-        match(SparqlAutomaticParser::T__11);
-        setState(1070);
-        _errHandler->sync(this);
-        switch (_input->LA(1)) {
-          case SparqlAutomaticParser::IRI_REF:
-          case SparqlAutomaticParser::PNAME_NS:
-          case SparqlAutomaticParser::PNAME_LN:
-          case SparqlAutomaticParser::PREFIX_LANGTAG: {
-            setState(1068);
-            iri();
-            break;
-          }
-
-          case SparqlAutomaticParser::T__8: {
-            setState(1069);
-            match(SparqlAutomaticParser::T__8);
-            break;
-          }
-
-          default:
-            throw NoViableAltException(this);
-        }
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- IntegerContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::IntegerContext::IntegerContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-tree::TerminalNode* SparqlAutomaticParser::IntegerContext::INTEGER() {
-  return getToken(SparqlAutomaticParser::INTEGER, 0);
-}
-
-size_t SparqlAutomaticParser::IntegerContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleInteger;
-}
-
-void SparqlAutomaticParser::IntegerContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterInteger(this);
-}
-
-void SparqlAutomaticParser::IntegerContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitInteger(this);
-}
-
-SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::integer() {
-  IntegerContext* _localctx =
-      _tracker.createInstance<IntegerContext>(_ctx, getState());
-  enterRule(_localctx, 206, SparqlAutomaticParser::RuleInteger);
+SparqlAutomaticParser::ExactLengthContext* SparqlAutomaticParser::exactLength() {
+  ExactLengthContext *_localctx = _tracker.createInstance<ExactLengthContext>(_ctx, getState());
+  enterRule(_localctx, 200, SparqlAutomaticParser::RuleExactLength);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -10698,10 +9225,11 @@ SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::integer() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1074);
-    match(SparqlAutomaticParser::INTEGER);
-
-  } catch (RecognitionException& e) {
+    setState(1066);
+    stepsExact();
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10710,44 +9238,36 @@ SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::integer() {
   return _localctx;
 }
 
-//----------------- TriplesNodeContext
-//------------------------------------------------------------------
+//----------------- OnlyMinContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesNodeContext::TriplesNodeContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::CollectionContext*
-SparqlAutomaticParser::TriplesNodeContext::collection() {
-  return getRuleContext<SparqlAutomaticParser::CollectionContext>(0);
+SparqlAutomaticParser::OnlyMinContext::OnlyMinContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::BlankNodePropertyListContext*
-SparqlAutomaticParser::TriplesNodeContext::blankNodePropertyList() {
-  return getRuleContext<SparqlAutomaticParser::BlankNodePropertyListContext>(0);
+SparqlAutomaticParser::StepsMinContext* SparqlAutomaticParser::OnlyMinContext::stepsMin() {
+  return getRuleContext<SparqlAutomaticParser::StepsMinContext>(0);
 }
 
-size_t SparqlAutomaticParser::TriplesNodeContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleTriplesNode;
+
+size_t SparqlAutomaticParser::OnlyMinContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleOnlyMin;
 }
 
-void SparqlAutomaticParser::TriplesNodeContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTriplesNode(this);
+void SparqlAutomaticParser::OnlyMinContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterOnlyMin(this);
 }
 
-void SparqlAutomaticParser::TriplesNodeContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTriplesNode(this);
+void SparqlAutomaticParser::OnlyMinContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOnlyMin(this);
 }
 
-SparqlAutomaticParser::TriplesNodeContext*
-SparqlAutomaticParser::triplesNode() {
-  TriplesNodeContext* _localctx =
-      _tracker.createInstance<TriplesNodeContext>(_ctx, getState());
-  enterRule(_localctx, 208, SparqlAutomaticParser::RuleTriplesNode);
+SparqlAutomaticParser::OnlyMinContext* SparqlAutomaticParser::onlyMin() {
+  OnlyMinContext *_localctx = _tracker.createInstance<OnlyMinContext>(_ctx, getState());
+  enterRule(_localctx, 202, SparqlAutomaticParser::RuleOnlyMin);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -10757,28 +9277,14 @@ SparqlAutomaticParser::triplesNode() {
     exitRule();
   });
   try {
-    setState(1078);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__1: {
-        enterOuterAlt(_localctx, 1);
-        setState(1076);
-        collection();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__15: {
-        enterOuterAlt(_localctx, 2);
-        setState(1077);
-        blankNodePropertyList();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
+    enterOuterAlt(_localctx, 1);
+    setState(1068);
+    stepsMin();
+    setState(1069);
+    match(SparqlAutomaticParser::T__7);
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10787,43 +9293,205 @@ SparqlAutomaticParser::triplesNode() {
   return _localctx;
 }
 
-//----------------- BlankNodePropertyListContext
-//------------------------------------------------------------------
+//----------------- MinMaxContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BlankNodePropertyListContext::
-    BlankNodePropertyListContext(ParserRuleContext* parent,
-                                 size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::PropertyListNotEmptyContext*
-SparqlAutomaticParser::BlankNodePropertyListContext::propertyListNotEmpty() {
-  return getRuleContext<SparqlAutomaticParser::PropertyListNotEmptyContext>(0);
+SparqlAutomaticParser::MinMaxContext::MinMaxContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-size_t SparqlAutomaticParser::BlankNodePropertyListContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RuleBlankNodePropertyList;
+SparqlAutomaticParser::StepsMinContext* SparqlAutomaticParser::MinMaxContext::stepsMin() {
+  return getRuleContext<SparqlAutomaticParser::StepsMinContext>(0);
 }
 
-void SparqlAutomaticParser::BlankNodePropertyListContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+SparqlAutomaticParser::StepsMaxContext* SparqlAutomaticParser::MinMaxContext::stepsMax() {
+  return getRuleContext<SparqlAutomaticParser::StepsMaxContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::MinMaxContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMinMax;
+}
+
+void SparqlAutomaticParser::MinMaxContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
-    parserListener->enterBlankNodePropertyList(this);
+    parserListener->enterMinMax(this);
 }
 
-void SparqlAutomaticParser::BlankNodePropertyListContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::MinMaxContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
-    parserListener->exitBlankNodePropertyList(this);
+    parserListener->exitMinMax(this);
 }
 
-SparqlAutomaticParser::BlankNodePropertyListContext*
-SparqlAutomaticParser::blankNodePropertyList() {
-  BlankNodePropertyListContext* _localctx =
-      _tracker.createInstance<BlankNodePropertyListContext>(_ctx, getState());
-  enterRule(_localctx, 210, SparqlAutomaticParser::RuleBlankNodePropertyList);
+SparqlAutomaticParser::MinMaxContext* SparqlAutomaticParser::minMax() {
+  MinMaxContext *_localctx = _tracker.createInstance<MinMaxContext>(_ctx, getState());
+  enterRule(_localctx, 204, SparqlAutomaticParser::RuleMinMax);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1071);
+    stepsMin();
+    setState(1072);
+    match(SparqlAutomaticParser::T__7);
+    setState(1073);
+    stepsMax();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- OnlyMaxContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::OnlyMaxContext::OnlyMaxContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::StepsMaxContext* SparqlAutomaticParser::OnlyMaxContext::stepsMax() {
+  return getRuleContext<SparqlAutomaticParser::StepsMaxContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::OnlyMaxContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleOnlyMax;
+}
+
+void SparqlAutomaticParser::OnlyMaxContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterOnlyMax(this);
+}
+
+void SparqlAutomaticParser::OnlyMaxContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitOnlyMax(this);
+}
+
+SparqlAutomaticParser::OnlyMaxContext* SparqlAutomaticParser::onlyMax() {
+  OnlyMaxContext *_localctx = _tracker.createInstance<OnlyMaxContext>(_ctx, getState());
+  enterRule(_localctx, 206, SparqlAutomaticParser::RuleOnlyMax);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1075);
+    match(SparqlAutomaticParser::T__7);
+    setState(1076);
+    stepsMax();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- StepsExactContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::StepsExactContext::StepsExactContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::StepsExactContext::integer() {
+  return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::StepsExactContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleStepsExact;
+}
+
+void SparqlAutomaticParser::StepsExactContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterStepsExact(this);
+}
+
+void SparqlAutomaticParser::StepsExactContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitStepsExact(this);
+}
+
+SparqlAutomaticParser::StepsExactContext* SparqlAutomaticParser::stepsExact() {
+  StepsExactContext *_localctx = _tracker.createInstance<StepsExactContext>(_ctx, getState());
+  enterRule(_localctx, 208, SparqlAutomaticParser::RuleStepsExact);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1078);
+    integer();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- StepsMinContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::StepsMinContext::StepsMinContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::StepsMinContext::integer() {
+  return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::StepsMinContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleStepsMin;
+}
+
+void SparqlAutomaticParser::StepsMinContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterStepsMin(this);
+}
+
+void SparqlAutomaticParser::StepsMinContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitStepsMin(this);
+}
+
+SparqlAutomaticParser::StepsMinContext* SparqlAutomaticParser::stepsMin() {
+  StepsMinContext *_localctx = _tracker.createInstance<StepsMinContext>(_ctx, getState());
+  enterRule(_localctx, 210, SparqlAutomaticParser::RuleStepsMin);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -10835,13 +9503,63 @@ SparqlAutomaticParser::blankNodePropertyList() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(1080);
-    match(SparqlAutomaticParser::T__15);
-    setState(1081);
-    propertyListNotEmpty();
+    integer();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- StepsMaxContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::StepsMaxContext::StepsMaxContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::StepsMaxContext::integer() {
+  return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::StepsMaxContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleStepsMax;
+}
+
+void SparqlAutomaticParser::StepsMaxContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterStepsMax(this);
+}
+
+void SparqlAutomaticParser::StepsMaxContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitStepsMax(this);
+}
+
+SparqlAutomaticParser::StepsMaxContext* SparqlAutomaticParser::stepsMax() {
+  StepsMaxContext *_localctx = _tracker.createInstance<StepsMaxContext>(_ctx, getState());
+  enterRule(_localctx, 212, SparqlAutomaticParser::RuleStepsMax);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
     setState(1082);
-    match(SparqlAutomaticParser::T__16);
-
-  } catch (RecognitionException& e) {
+    integer();
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -10850,635 +9568,400 @@ SparqlAutomaticParser::blankNodePropertyList() {
   return _localctx;
 }
 
-//----------------- TriplesNodePathContext
-//------------------------------------------------------------------
+//----------------- PathPrimaryContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::TriplesNodePathContext::TriplesNodePathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::CollectionPathContext*
-SparqlAutomaticParser::TriplesNodePathContext::collectionPath() {
-  return getRuleContext<SparqlAutomaticParser::CollectionPathContext>(0);
+SparqlAutomaticParser::PathPrimaryContext::PathPrimaryContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::BlankNodePropertyListPathContext*
-SparqlAutomaticParser::TriplesNodePathContext::blankNodePropertyListPath() {
-  return getRuleContext<
-      SparqlAutomaticParser::BlankNodePropertyListPathContext>(0);
-}
-
-size_t SparqlAutomaticParser::TriplesNodePathContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleTriplesNodePath;
-}
-
-void SparqlAutomaticParser::TriplesNodePathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterTriplesNodePath(this);
-}
-
-void SparqlAutomaticParser::TriplesNodePathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitTriplesNodePath(this);
-}
-
-SparqlAutomaticParser::TriplesNodePathContext*
-SparqlAutomaticParser::triplesNodePath() {
-  TriplesNodePathContext* _localctx =
-      _tracker.createInstance<TriplesNodePathContext>(_ctx, getState());
-  enterRule(_localctx, 212, SparqlAutomaticParser::RuleTriplesNodePath);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1086);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__1: {
-        enterOuterAlt(_localctx, 1);
-        setState(1084);
-        collectionPath();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__15: {
-        enterOuterAlt(_localctx, 2);
-        setState(1085);
-        blankNodePropertyListPath();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- BlankNodePropertyListPathContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::BlankNodePropertyListPathContext::
-    BlankNodePropertyListPathContext(ParserRuleContext* parent,
-                                     size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::
-    BlankNodePropertyListPathContext::propertyListPathNotEmpty() {
-  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(
-      0);
-}
-
-size_t SparqlAutomaticParser::BlankNodePropertyListPathContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RuleBlankNodePropertyListPath;
-}
-
-void SparqlAutomaticParser::BlankNodePropertyListPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->enterBlankNodePropertyListPath(this);
-}
-
-void SparqlAutomaticParser::BlankNodePropertyListPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->exitBlankNodePropertyListPath(this);
-}
-
-SparqlAutomaticParser::BlankNodePropertyListPathContext*
-SparqlAutomaticParser::blankNodePropertyListPath() {
-  BlankNodePropertyListPathContext* _localctx =
-      _tracker.createInstance<BlankNodePropertyListPathContext>(_ctx,
-                                                                getState());
-  enterRule(_localctx, 214,
-            SparqlAutomaticParser::RuleBlankNodePropertyListPath);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1088);
-    match(SparqlAutomaticParser::T__15);
-    setState(1089);
-    propertyListPathNotEmpty();
-    setState(1090);
-    match(SparqlAutomaticParser::T__16);
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- CollectionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::CollectionContext::CollectionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-std::vector<SparqlAutomaticParser::GraphNodeContext*>
-SparqlAutomaticParser::CollectionContext::graphNode() {
-  return getRuleContexts<SparqlAutomaticParser::GraphNodeContext>();
-}
-
-SparqlAutomaticParser::GraphNodeContext*
-SparqlAutomaticParser::CollectionContext::graphNode(size_t i) {
-  return getRuleContext<SparqlAutomaticParser::GraphNodeContext>(i);
-}
-
-size_t SparqlAutomaticParser::CollectionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleCollection;
-}
-
-void SparqlAutomaticParser::CollectionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterCollection(this);
-}
-
-void SparqlAutomaticParser::CollectionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitCollection(this);
-}
-
-SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::collection() {
-  CollectionContext* _localctx =
-      _tracker.createInstance<CollectionContext>(_ctx, getState());
-  enterRule(_localctx, 216, SparqlAutomaticParser::RuleCollection);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1092);
-    match(SparqlAutomaticParser::T__1);
-    setState(1094);
-    _errHandler->sync(this);
-    _la = _input->LA(1);
-    do {
-      setState(1093);
-      graphNode();
-      setState(1096);
-      _errHandler->sync(this);
-      _la = _input->LA(1);
-    } while ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-             ((((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 29228991) != 0));
-    setState(1098);
-    match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- CollectionPathContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::CollectionPathContext::CollectionPathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-std::vector<SparqlAutomaticParser::GraphNodePathContext*>
-SparqlAutomaticParser::CollectionPathContext::graphNodePath() {
-  return getRuleContexts<SparqlAutomaticParser::GraphNodePathContext>();
-}
-
-SparqlAutomaticParser::GraphNodePathContext*
-SparqlAutomaticParser::CollectionPathContext::graphNodePath(size_t i) {
-  return getRuleContext<SparqlAutomaticParser::GraphNodePathContext>(i);
-}
-
-size_t SparqlAutomaticParser::CollectionPathContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleCollectionPath;
-}
-
-void SparqlAutomaticParser::CollectionPathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterCollectionPath(this);
-}
-
-void SparqlAutomaticParser::CollectionPathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitCollectionPath(this);
-}
-
-SparqlAutomaticParser::CollectionPathContext*
-SparqlAutomaticParser::collectionPath() {
-  CollectionPathContext* _localctx =
-      _tracker.createInstance<CollectionPathContext>(_ctx, getState());
-  enterRule(_localctx, 218, SparqlAutomaticParser::RuleCollectionPath);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1100);
-    match(SparqlAutomaticParser::T__1);
-    setState(1102);
-    _errHandler->sync(this);
-    _la = _input->LA(1);
-    do {
-      setState(1101);
-      graphNodePath();
-      setState(1104);
-      _errHandler->sync(this);
-      _la = _input->LA(1);
-    } while ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
-             ((((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 29228991) != 0));
-    setState(1106);
-    match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- GraphNodeContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::GraphNodeContext::GraphNodeContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::VarOrTermContext*
-SparqlAutomaticParser::GraphNodeContext::varOrTerm() {
-  return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
-}
-
-SparqlAutomaticParser::TriplesNodeContext*
-SparqlAutomaticParser::GraphNodeContext::triplesNode() {
-  return getRuleContext<SparqlAutomaticParser::TriplesNodeContext>(0);
-}
-
-size_t SparqlAutomaticParser::GraphNodeContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleGraphNode;
-}
-
-void SparqlAutomaticParser::GraphNodeContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphNode(this);
-}
-
-void SparqlAutomaticParser::GraphNodeContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphNode(this);
-}
-
-SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
-  GraphNodeContext* _localctx =
-      _tracker.createInstance<GraphNodeContext>(_ctx, getState());
-  enterRule(_localctx, 220, SparqlAutomaticParser::RuleGraphNode);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1110);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__27:
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::BLANK_NODE_LABEL:
-      case SparqlAutomaticParser::VAR1:
-      case SparqlAutomaticParser::VAR2:
-      case SparqlAutomaticParser::PREFIX_LANGTAG:
-      case SparqlAutomaticParser::INTEGER:
-      case SparqlAutomaticParser::DECIMAL:
-      case SparqlAutomaticParser::DOUBLE:
-      case SparqlAutomaticParser::INTEGER_POSITIVE:
-      case SparqlAutomaticParser::DECIMAL_POSITIVE:
-      case SparqlAutomaticParser::DOUBLE_POSITIVE:
-      case SparqlAutomaticParser::INTEGER_NEGATIVE:
-      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
-      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
-      case SparqlAutomaticParser::STRING_LITERAL1:
-      case SparqlAutomaticParser::STRING_LITERAL2:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
-      case SparqlAutomaticParser::NIL:
-      case SparqlAutomaticParser::ANON: {
-        enterOuterAlt(_localctx, 1);
-        setState(1108);
-        varOrTerm();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__15: {
-        enterOuterAlt(_localctx, 2);
-        setState(1109);
-        triplesNode();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- GraphNodePathContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::GraphNodePathContext::GraphNodePathContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::VarOrTermContext*
-SparqlAutomaticParser::GraphNodePathContext::varOrTerm() {
-  return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
-}
-
-SparqlAutomaticParser::TriplesNodePathContext*
-SparqlAutomaticParser::GraphNodePathContext::triplesNodePath() {
-  return getRuleContext<SparqlAutomaticParser::TriplesNodePathContext>(0);
-}
-
-size_t SparqlAutomaticParser::GraphNodePathContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleGraphNodePath;
-}
-
-void SparqlAutomaticParser::GraphNodePathContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphNodePath(this);
-}
-
-void SparqlAutomaticParser::GraphNodePathContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphNodePath(this);
-}
-
-SparqlAutomaticParser::GraphNodePathContext*
-SparqlAutomaticParser::graphNodePath() {
-  GraphNodePathContext* _localctx =
-      _tracker.createInstance<GraphNodePathContext>(_ctx, getState());
-  enterRule(_localctx, 222, SparqlAutomaticParser::RuleGraphNodePath);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1114);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__27:
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::BLANK_NODE_LABEL:
-      case SparqlAutomaticParser::VAR1:
-      case SparqlAutomaticParser::VAR2:
-      case SparqlAutomaticParser::PREFIX_LANGTAG:
-      case SparqlAutomaticParser::INTEGER:
-      case SparqlAutomaticParser::DECIMAL:
-      case SparqlAutomaticParser::DOUBLE:
-      case SparqlAutomaticParser::INTEGER_POSITIVE:
-      case SparqlAutomaticParser::DECIMAL_POSITIVE:
-      case SparqlAutomaticParser::DOUBLE_POSITIVE:
-      case SparqlAutomaticParser::INTEGER_NEGATIVE:
-      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
-      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
-      case SparqlAutomaticParser::STRING_LITERAL1:
-      case SparqlAutomaticParser::STRING_LITERAL2:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
-      case SparqlAutomaticParser::NIL:
-      case SparqlAutomaticParser::ANON: {
-        enterOuterAlt(_localctx, 1);
-        setState(1112);
-        varOrTerm();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__15: {
-        enterOuterAlt(_localctx, 2);
-        setState(1113);
-        triplesNodePath();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- VarOrTermContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::VarOrTermContext::VarOrTermContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::VarOrTermContext::var() {
-  return getRuleContext<SparqlAutomaticParser::VarContext>(0);
-}
-
-SparqlAutomaticParser::GraphTermContext*
-SparqlAutomaticParser::VarOrTermContext::graphTerm() {
-  return getRuleContext<SparqlAutomaticParser::GraphTermContext>(0);
-}
-
-size_t SparqlAutomaticParser::VarOrTermContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleVarOrTerm;
-}
-
-void SparqlAutomaticParser::VarOrTermContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVarOrTerm(this);
-}
-
-void SparqlAutomaticParser::VarOrTermContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVarOrTerm(this);
-}
-
-SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::varOrTerm() {
-  VarOrTermContext* _localctx =
-      _tracker.createInstance<VarOrTermContext>(_ctx, getState());
-  enterRule(_localctx, 224, SparqlAutomaticParser::RuleVarOrTerm);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1118);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::VAR1:
-      case SparqlAutomaticParser::VAR2: {
-        enterOuterAlt(_localctx, 1);
-        setState(1116);
-        var();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__27:
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::BLANK_NODE_LABEL:
-      case SparqlAutomaticParser::PREFIX_LANGTAG:
-      case SparqlAutomaticParser::INTEGER:
-      case SparqlAutomaticParser::DECIMAL:
-      case SparqlAutomaticParser::DOUBLE:
-      case SparqlAutomaticParser::INTEGER_POSITIVE:
-      case SparqlAutomaticParser::DECIMAL_POSITIVE:
-      case SparqlAutomaticParser::DOUBLE_POSITIVE:
-      case SparqlAutomaticParser::INTEGER_NEGATIVE:
-      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
-      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
-      case SparqlAutomaticParser::STRING_LITERAL1:
-      case SparqlAutomaticParser::STRING_LITERAL2:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
-      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
-      case SparqlAutomaticParser::NIL:
-      case SparqlAutomaticParser::ANON: {
-        enterOuterAlt(_localctx, 2);
-        setState(1117);
-        graphTerm();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- VarOrIriContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::VarOrIriContext::VarOrIriContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::VarOrIriContext::var() {
-  return getRuleContext<SparqlAutomaticParser::VarContext>(0);
-}
-
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::VarOrIriContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::PathPrimaryContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
-size_t SparqlAutomaticParser::VarOrIriContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleVarOrIri;
+SparqlAutomaticParser::PathNegatedPropertySetContext* SparqlAutomaticParser::PathPrimaryContext::pathNegatedPropertySet() {
+  return getRuleContext<SparqlAutomaticParser::PathNegatedPropertySetContext>(0);
 }
 
-void SparqlAutomaticParser::VarOrIriContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVarOrIri(this);
+SparqlAutomaticParser::PathContext* SparqlAutomaticParser::PathPrimaryContext::path() {
+  return getRuleContext<SparqlAutomaticParser::PathContext>(0);
 }
 
-void SparqlAutomaticParser::VarOrIriContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVarOrIri(this);
+
+size_t SparqlAutomaticParser::PathPrimaryContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RulePathPrimary;
 }
 
-SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::varOrIri() {
-  VarOrIriContext* _localctx =
-      _tracker.createInstance<VarOrIriContext>(_ctx, getState());
-  enterRule(_localctx, 226, SparqlAutomaticParser::RuleVarOrIri);
+void SparqlAutomaticParser::PathPrimaryContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathPrimary(this);
+}
+
+void SparqlAutomaticParser::PathPrimaryContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathPrimary(this);
+}
+
+SparqlAutomaticParser::PathPrimaryContext* SparqlAutomaticParser::pathPrimary() {
+  PathPrimaryContext *_localctx = _tracker.createInstance<PathPrimaryContext>(_ctx, getState());
+  enterRule(_localctx, 214, SparqlAutomaticParser::RulePathPrimary);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1092);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+        enterOuterAlt(_localctx, 1);
+        setState(1084);
+        iri();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__8: {
+        enterOuterAlt(_localctx, 2);
+        setState(1085);
+        match(SparqlAutomaticParser::T__8);
+        break;
+      }
+
+      case SparqlAutomaticParser::T__14: {
+        enterOuterAlt(_localctx, 3);
+        setState(1086);
+        match(SparqlAutomaticParser::T__14);
+        setState(1087);
+        pathNegatedPropertySet();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__1: {
+        enterOuterAlt(_localctx, 4);
+        setState(1088);
+        match(SparqlAutomaticParser::T__1);
+        setState(1089);
+        path();
+        setState(1090);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- PathNegatedPropertySetContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::PathNegatedPropertySetContext::PathNegatedPropertySetContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+std::vector<SparqlAutomaticParser::PathOneInPropertySetContext *> SparqlAutomaticParser::PathNegatedPropertySetContext::pathOneInPropertySet() {
+  return getRuleContexts<SparqlAutomaticParser::PathOneInPropertySetContext>();
+}
+
+SparqlAutomaticParser::PathOneInPropertySetContext* SparqlAutomaticParser::PathNegatedPropertySetContext::pathOneInPropertySet(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::PathOneInPropertySetContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::PathNegatedPropertySetContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RulePathNegatedPropertySet;
+}
+
+void SparqlAutomaticParser::PathNegatedPropertySetContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathNegatedPropertySet(this);
+}
+
+void SparqlAutomaticParser::PathNegatedPropertySetContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathNegatedPropertySet(this);
+}
+
+SparqlAutomaticParser::PathNegatedPropertySetContext* SparqlAutomaticParser::pathNegatedPropertySet() {
+  PathNegatedPropertySetContext *_localctx = _tracker.createInstance<PathNegatedPropertySetContext>(_ctx, getState());
+  enterRule(_localctx, 216, SparqlAutomaticParser::RulePathNegatedPropertySet);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1107);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__8:
+      case SparqlAutomaticParser::T__11:
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+        enterOuterAlt(_localctx, 1);
+        setState(1094);
+        pathOneInPropertySet();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__1: {
+        enterOuterAlt(_localctx, 2);
+        setState(1095);
+        match(SparqlAutomaticParser::T__1);
+        setState(1104);
+        _errHandler->sync(this);
+
+        _la = _input->LA(1);
+        if (_la == SparqlAutomaticParser::T__8
+
+        || _la == SparqlAutomaticParser::T__11 || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+          ((1ULL << (_la - 142)) & 135) != 0)) {
+          setState(1096);
+          pathOneInPropertySet();
+          setState(1101);
+          _errHandler->sync(this);
+          _la = _input->LA(1);
+          while (_la == SparqlAutomaticParser::T__9) {
+            setState(1097);
+            match(SparqlAutomaticParser::T__9);
+            setState(1098);
+            pathOneInPropertySet();
+            setState(1103);
+            _errHandler->sync(this);
+            _la = _input->LA(1);
+          }
+        }
+        setState(1106);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- PathOneInPropertySetContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::PathOneInPropertySetContext::PathOneInPropertySetContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::PathOneInPropertySetContext::iri() {
+  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::PathOneInPropertySetContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RulePathOneInPropertySet;
+}
+
+void SparqlAutomaticParser::PathOneInPropertySetContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPathOneInPropertySet(this);
+}
+
+void SparqlAutomaticParser::PathOneInPropertySetContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPathOneInPropertySet(this);
+}
+
+SparqlAutomaticParser::PathOneInPropertySetContext* SparqlAutomaticParser::pathOneInPropertySet() {
+  PathOneInPropertySetContext *_localctx = _tracker.createInstance<PathOneInPropertySetContext>(_ctx, getState());
+  enterRule(_localctx, 218, SparqlAutomaticParser::RulePathOneInPropertySet);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1116);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+        enterOuterAlt(_localctx, 1);
+        setState(1109);
+        iri();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__8: {
+        enterOuterAlt(_localctx, 2);
+        setState(1110);
+        match(SparqlAutomaticParser::T__8);
+        break;
+      }
+
+      case SparqlAutomaticParser::T__11: {
+        enterOuterAlt(_localctx, 3);
+        setState(1111);
+        match(SparqlAutomaticParser::T__11);
+        setState(1114);
+        _errHandler->sync(this);
+        switch (_input->LA(1)) {
+          case SparqlAutomaticParser::IRI_REF:
+          case SparqlAutomaticParser::PNAME_NS:
+          case SparqlAutomaticParser::PNAME_LN:
+          case SparqlAutomaticParser::PREFIX_LANGTAG: {
+            setState(1112);
+            iri();
+            break;
+          }
+
+          case SparqlAutomaticParser::T__8: {
+            setState(1113);
+            match(SparqlAutomaticParser::T__8);
+            break;
+          }
+
+        default:
+          throw NoViableAltException(this);
+        }
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- IntegerContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::IntegerContext::IntegerContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+tree::TerminalNode* SparqlAutomaticParser::IntegerContext::INTEGER() {
+  return getToken(SparqlAutomaticParser::INTEGER, 0);
+}
+
+
+size_t SparqlAutomaticParser::IntegerContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleInteger;
+}
+
+void SparqlAutomaticParser::IntegerContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterInteger(this);
+}
+
+void SparqlAutomaticParser::IntegerContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitInteger(this);
+}
+
+SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::integer() {
+  IntegerContext *_localctx = _tracker.createInstance<IntegerContext>(_ctx, getState());
+  enterRule(_localctx, 220, SparqlAutomaticParser::RuleInteger);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1118);
+    match(SparqlAutomaticParser::INTEGER);
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- TriplesNodeContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::TriplesNodeContext::TriplesNodeContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::TriplesNodeContext::collection() {
+  return getRuleContext<SparqlAutomaticParser::CollectionContext>(0);
+}
+
+SparqlAutomaticParser::BlankNodePropertyListContext* SparqlAutomaticParser::TriplesNodeContext::blankNodePropertyList() {
+  return getRuleContext<SparqlAutomaticParser::BlankNodePropertyListContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::TriplesNodeContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleTriplesNode;
+}
+
+void SparqlAutomaticParser::TriplesNodeContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTriplesNode(this);
+}
+
+void SparqlAutomaticParser::TriplesNodeContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTriplesNode(this);
+}
+
+SparqlAutomaticParser::TriplesNodeContext* SparqlAutomaticParser::triplesNode() {
+  TriplesNodeContext *_localctx = _tracker.createInstance<TriplesNodeContext>(_ctx, getState());
+  enterRule(_localctx, 222, SparqlAutomaticParser::RuleTriplesNode);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -11491,29 +9974,26 @@ SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::varOrIri() {
     setState(1122);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::VAR1:
-      case SparqlAutomaticParser::VAR2: {
+      case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 1);
         setState(1120);
-        var();
+        collection();
         break;
       }
 
-      case SparqlAutomaticParser::IRI_REF:
-      case SparqlAutomaticParser::PNAME_NS:
-      case SparqlAutomaticParser::PNAME_LN:
-      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(1121);
-        iri();
+        blankNodePropertyList();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11522,41 +10002,36 @@ SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::varOrIri() {
   return _localctx;
 }
 
-//----------------- VarContext
-//------------------------------------------------------------------
+//----------------- BlankNodePropertyListContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::VarContext::VarContext(ParserRuleContext* parent,
-                                              size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-tree::TerminalNode* SparqlAutomaticParser::VarContext::VAR1() {
-  return getToken(SparqlAutomaticParser::VAR1, 0);
+SparqlAutomaticParser::BlankNodePropertyListContext::BlankNodePropertyListContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-tree::TerminalNode* SparqlAutomaticParser::VarContext::VAR2() {
-  return getToken(SparqlAutomaticParser::VAR2, 0);
+SparqlAutomaticParser::PropertyListNotEmptyContext* SparqlAutomaticParser::BlankNodePropertyListContext::propertyListNotEmpty() {
+  return getRuleContext<SparqlAutomaticParser::PropertyListNotEmptyContext>(0);
 }
 
-size_t SparqlAutomaticParser::VarContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleVar;
+
+size_t SparqlAutomaticParser::BlankNodePropertyListContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleBlankNodePropertyList;
 }
 
-void SparqlAutomaticParser::VarContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterVar(this);
+void SparqlAutomaticParser::BlankNodePropertyListContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBlankNodePropertyList(this);
 }
 
-void SparqlAutomaticParser::VarContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitVar(this);
+void SparqlAutomaticParser::BlankNodePropertyListContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBlankNodePropertyList(this);
 }
 
-SparqlAutomaticParser::VarContext* SparqlAutomaticParser::var() {
-  VarContext* _localctx = _tracker.createInstance<VarContext>(_ctx, getState());
-  enterRule(_localctx, 228, SparqlAutomaticParser::RuleVar);
-  size_t _la = 0;
+SparqlAutomaticParser::BlankNodePropertyListContext* SparqlAutomaticParser::blankNodePropertyList() {
+  BlankNodePropertyListContext *_localctx = _tracker.createInstance<BlankNodePropertyListContext>(_ctx, getState());
+  enterRule(_localctx, 224, SparqlAutomaticParser::RuleBlankNodePropertyList);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -11568,17 +10043,14 @@ SparqlAutomaticParser::VarContext* SparqlAutomaticParser::var() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(1124);
-    _la = _input->LA(1);
-    if (!(_la == SparqlAutomaticParser::VAR1
-
-          || _la == SparqlAutomaticParser::VAR2)) {
-      _errHandler->recoverInline(this);
-    } else {
-      _errHandler->reportMatch(this);
-      consume();
-    }
-
-  } catch (RecognitionException& e) {
+    match(SparqlAutomaticParser::T__15);
+    setState(1125);
+    propertyListNotEmpty();
+    setState(1126);
+    match(SparqlAutomaticParser::T__16);
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11587,62 +10059,40 @@ SparqlAutomaticParser::VarContext* SparqlAutomaticParser::var() {
   return _localctx;
 }
 
-//----------------- GraphTermContext
-//------------------------------------------------------------------
+//----------------- TriplesNodePathContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::GraphTermContext::GraphTermContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::GraphTermContext::iri() {
-  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
+SparqlAutomaticParser::TriplesNodePathContext::TriplesNodePathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::RdfLiteralContext*
-SparqlAutomaticParser::GraphTermContext::rdfLiteral() {
-  return getRuleContext<SparqlAutomaticParser::RdfLiteralContext>(0);
+SparqlAutomaticParser::CollectionPathContext* SparqlAutomaticParser::TriplesNodePathContext::collectionPath() {
+  return getRuleContext<SparqlAutomaticParser::CollectionPathContext>(0);
 }
 
-SparqlAutomaticParser::NumericLiteralContext*
-SparqlAutomaticParser::GraphTermContext::numericLiteral() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralContext>(0);
+SparqlAutomaticParser::BlankNodePropertyListPathContext* SparqlAutomaticParser::TriplesNodePathContext::blankNodePropertyListPath() {
+  return getRuleContext<SparqlAutomaticParser::BlankNodePropertyListPathContext>(0);
 }
 
-SparqlAutomaticParser::BooleanLiteralContext*
-SparqlAutomaticParser::GraphTermContext::booleanLiteral() {
-  return getRuleContext<SparqlAutomaticParser::BooleanLiteralContext>(0);
+
+size_t SparqlAutomaticParser::TriplesNodePathContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleTriplesNodePath;
 }
 
-SparqlAutomaticParser::BlankNodeContext*
-SparqlAutomaticParser::GraphTermContext::blankNode() {
-  return getRuleContext<SparqlAutomaticParser::BlankNodeContext>(0);
+void SparqlAutomaticParser::TriplesNodePathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterTriplesNodePath(this);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::GraphTermContext::NIL() {
-  return getToken(SparqlAutomaticParser::NIL, 0);
+void SparqlAutomaticParser::TriplesNodePathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitTriplesNodePath(this);
 }
 
-size_t SparqlAutomaticParser::GraphTermContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleGraphTerm;
-}
-
-void SparqlAutomaticParser::GraphTermContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterGraphTerm(this);
-}
-
-void SparqlAutomaticParser::GraphTermContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitGraphTerm(this);
-}
-
-SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
-  GraphTermContext* _localctx =
-      _tracker.createInstance<GraphTermContext>(_ctx, getState());
-  enterRule(_localctx, 230, SparqlAutomaticParser::RuleGraphTerm);
+SparqlAutomaticParser::TriplesNodePathContext* SparqlAutomaticParser::triplesNodePath() {
+  TriplesNodePathContext *_localctx = _tracker.createInstance<TriplesNodePathContext>(_ctx, getState());
+  enterRule(_localctx, 226, SparqlAutomaticParser::RuleTriplesNodePath);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -11652,7 +10102,735 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
     exitRule();
   });
   try {
+    setState(1130);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__1: {
+        enterOuterAlt(_localctx, 1);
+        setState(1128);
+        collectionPath();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__15: {
+        enterOuterAlt(_localctx, 2);
+        setState(1129);
+        blankNodePropertyListPath();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- BlankNodePropertyListPathContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::BlankNodePropertyListPathContext::BlankNodePropertyListPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::PropertyListPathNotEmptyContext* SparqlAutomaticParser::BlankNodePropertyListPathContext::propertyListPathNotEmpty() {
+  return getRuleContext<SparqlAutomaticParser::PropertyListPathNotEmptyContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::BlankNodePropertyListPathContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleBlankNodePropertyListPath;
+}
+
+void SparqlAutomaticParser::BlankNodePropertyListPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBlankNodePropertyListPath(this);
+}
+
+void SparqlAutomaticParser::BlankNodePropertyListPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBlankNodePropertyListPath(this);
+}
+
+SparqlAutomaticParser::BlankNodePropertyListPathContext* SparqlAutomaticParser::blankNodePropertyListPath() {
+  BlankNodePropertyListPathContext *_localctx = _tracker.createInstance<BlankNodePropertyListPathContext>(_ctx, getState());
+  enterRule(_localctx, 228, SparqlAutomaticParser::RuleBlankNodePropertyListPath);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
     setState(1132);
+    match(SparqlAutomaticParser::T__15);
+    setState(1133);
+    propertyListPathNotEmpty();
+    setState(1134);
+    match(SparqlAutomaticParser::T__16);
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- CollectionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::CollectionContext::CollectionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+std::vector<SparqlAutomaticParser::GraphNodeContext *> SparqlAutomaticParser::CollectionContext::graphNode() {
+  return getRuleContexts<SparqlAutomaticParser::GraphNodeContext>();
+}
+
+SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::CollectionContext::graphNode(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::GraphNodeContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::CollectionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleCollection;
+}
+
+void SparqlAutomaticParser::CollectionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterCollection(this);
+}
+
+void SparqlAutomaticParser::CollectionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitCollection(this);
+}
+
+SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::collection() {
+  CollectionContext *_localctx = _tracker.createInstance<CollectionContext>(_ctx, getState());
+  enterRule(_localctx, 230, SparqlAutomaticParser::RuleCollection);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1136);
+    match(SparqlAutomaticParser::T__1);
+    setState(1138); 
+    _errHandler->sync(this);
+    _la = _input->LA(1);
+    do {
+      setState(1137);
+      graphNode();
+      setState(1140); 
+      _errHandler->sync(this);
+      _la = _input->LA(1);
+    } while ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0));
+    setState(1142);
+    match(SparqlAutomaticParser::T__2);
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- CollectionPathContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::CollectionPathContext::CollectionPathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+std::vector<SparqlAutomaticParser::GraphNodePathContext *> SparqlAutomaticParser::CollectionPathContext::graphNodePath() {
+  return getRuleContexts<SparqlAutomaticParser::GraphNodePathContext>();
+}
+
+SparqlAutomaticParser::GraphNodePathContext* SparqlAutomaticParser::CollectionPathContext::graphNodePath(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::GraphNodePathContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::CollectionPathContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleCollectionPath;
+}
+
+void SparqlAutomaticParser::CollectionPathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterCollectionPath(this);
+}
+
+void SparqlAutomaticParser::CollectionPathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitCollectionPath(this);
+}
+
+SparqlAutomaticParser::CollectionPathContext* SparqlAutomaticParser::collectionPath() {
+  CollectionPathContext *_localctx = _tracker.createInstance<CollectionPathContext>(_ctx, getState());
+  enterRule(_localctx, 232, SparqlAutomaticParser::RuleCollectionPath);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1144);
+    match(SparqlAutomaticParser::T__1);
+    setState(1146); 
+    _errHandler->sync(this);
+    _la = _input->LA(1);
+    do {
+      setState(1145);
+      graphNodePath();
+      setState(1148); 
+      _errHandler->sync(this);
+      _la = _input->LA(1);
+    } while ((((_la & ~ 0x3fULL) == 0) &&
+      ((1ULL << _la) & 805371908) != 0) || ((((_la - 142) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 142)) & 29228991) != 0));
+    setState(1150);
+    match(SparqlAutomaticParser::T__2);
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- GraphNodeContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::GraphNodeContext::GraphNodeContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::GraphNodeContext::varOrTerm() {
+  return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
+}
+
+SparqlAutomaticParser::TriplesNodeContext* SparqlAutomaticParser::GraphNodeContext::triplesNode() {
+  return getRuleContext<SparqlAutomaticParser::TriplesNodeContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::GraphNodeContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleGraphNode;
+}
+
+void SparqlAutomaticParser::GraphNodeContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphNode(this);
+}
+
+void SparqlAutomaticParser::GraphNodeContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphNode(this);
+}
+
+SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
+  GraphNodeContext *_localctx = _tracker.createInstance<GraphNodeContext>(_ctx, getState());
+  enterRule(_localctx, 234, SparqlAutomaticParser::RuleGraphNode);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1154);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28:
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::BLANK_NODE_LABEL:
+      case SparqlAutomaticParser::VAR1:
+      case SparqlAutomaticParser::VAR2:
+      case SparqlAutomaticParser::PREFIX_LANGTAG:
+      case SparqlAutomaticParser::INTEGER:
+      case SparqlAutomaticParser::DECIMAL:
+      case SparqlAutomaticParser::DOUBLE:
+      case SparqlAutomaticParser::INTEGER_POSITIVE:
+      case SparqlAutomaticParser::DECIMAL_POSITIVE:
+      case SparqlAutomaticParser::DOUBLE_POSITIVE:
+      case SparqlAutomaticParser::INTEGER_NEGATIVE:
+      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
+      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
+      case SparqlAutomaticParser::STRING_LITERAL1:
+      case SparqlAutomaticParser::STRING_LITERAL2:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
+      case SparqlAutomaticParser::NIL:
+      case SparqlAutomaticParser::ANON: {
+        enterOuterAlt(_localctx, 1);
+        setState(1152);
+        varOrTerm();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__1:
+      case SparqlAutomaticParser::T__15: {
+        enterOuterAlt(_localctx, 2);
+        setState(1153);
+        triplesNode();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- GraphNodePathContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::GraphNodePathContext::GraphNodePathContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::GraphNodePathContext::varOrTerm() {
+  return getRuleContext<SparqlAutomaticParser::VarOrTermContext>(0);
+}
+
+SparqlAutomaticParser::TriplesNodePathContext* SparqlAutomaticParser::GraphNodePathContext::triplesNodePath() {
+  return getRuleContext<SparqlAutomaticParser::TriplesNodePathContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::GraphNodePathContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleGraphNodePath;
+}
+
+void SparqlAutomaticParser::GraphNodePathContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphNodePath(this);
+}
+
+void SparqlAutomaticParser::GraphNodePathContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphNodePath(this);
+}
+
+SparqlAutomaticParser::GraphNodePathContext* SparqlAutomaticParser::graphNodePath() {
+  GraphNodePathContext *_localctx = _tracker.createInstance<GraphNodePathContext>(_ctx, getState());
+  enterRule(_localctx, 236, SparqlAutomaticParser::RuleGraphNodePath);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1158);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28:
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::BLANK_NODE_LABEL:
+      case SparqlAutomaticParser::VAR1:
+      case SparqlAutomaticParser::VAR2:
+      case SparqlAutomaticParser::PREFIX_LANGTAG:
+      case SparqlAutomaticParser::INTEGER:
+      case SparqlAutomaticParser::DECIMAL:
+      case SparqlAutomaticParser::DOUBLE:
+      case SparqlAutomaticParser::INTEGER_POSITIVE:
+      case SparqlAutomaticParser::DECIMAL_POSITIVE:
+      case SparqlAutomaticParser::DOUBLE_POSITIVE:
+      case SparqlAutomaticParser::INTEGER_NEGATIVE:
+      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
+      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
+      case SparqlAutomaticParser::STRING_LITERAL1:
+      case SparqlAutomaticParser::STRING_LITERAL2:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
+      case SparqlAutomaticParser::NIL:
+      case SparqlAutomaticParser::ANON: {
+        enterOuterAlt(_localctx, 1);
+        setState(1156);
+        varOrTerm();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__1:
+      case SparqlAutomaticParser::T__15: {
+        enterOuterAlt(_localctx, 2);
+        setState(1157);
+        triplesNodePath();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- VarOrTermContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::VarOrTermContext::VarOrTermContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::VarOrTermContext::var() {
+  return getRuleContext<SparqlAutomaticParser::VarContext>(0);
+}
+
+SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::VarOrTermContext::graphTerm() {
+  return getRuleContext<SparqlAutomaticParser::GraphTermContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::VarOrTermContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleVarOrTerm;
+}
+
+void SparqlAutomaticParser::VarOrTermContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVarOrTerm(this);
+}
+
+void SparqlAutomaticParser::VarOrTermContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVarOrTerm(this);
+}
+
+SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::varOrTerm() {
+  VarOrTermContext *_localctx = _tracker.createInstance<VarOrTermContext>(_ctx, getState());
+  enterRule(_localctx, 238, SparqlAutomaticParser::RuleVarOrTerm);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1162);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::VAR1:
+      case SparqlAutomaticParser::VAR2: {
+        enterOuterAlt(_localctx, 1);
+        setState(1160);
+        var();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28:
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::BLANK_NODE_LABEL:
+      case SparqlAutomaticParser::PREFIX_LANGTAG:
+      case SparqlAutomaticParser::INTEGER:
+      case SparqlAutomaticParser::DECIMAL:
+      case SparqlAutomaticParser::DOUBLE:
+      case SparqlAutomaticParser::INTEGER_POSITIVE:
+      case SparqlAutomaticParser::DECIMAL_POSITIVE:
+      case SparqlAutomaticParser::DOUBLE_POSITIVE:
+      case SparqlAutomaticParser::INTEGER_NEGATIVE:
+      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
+      case SparqlAutomaticParser::DOUBLE_NEGATIVE:
+      case SparqlAutomaticParser::STRING_LITERAL1:
+      case SparqlAutomaticParser::STRING_LITERAL2:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG1:
+      case SparqlAutomaticParser::STRING_LITERAL_LONG2:
+      case SparqlAutomaticParser::NIL:
+      case SparqlAutomaticParser::ANON: {
+        enterOuterAlt(_localctx, 2);
+        setState(1161);
+        graphTerm();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- VarOrIriContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::VarOrIriContext::VarOrIriContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::VarOrIriContext::var() {
+  return getRuleContext<SparqlAutomaticParser::VarContext>(0);
+}
+
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::VarOrIriContext::iri() {
+  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::VarOrIriContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleVarOrIri;
+}
+
+void SparqlAutomaticParser::VarOrIriContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVarOrIri(this);
+}
+
+void SparqlAutomaticParser::VarOrIriContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVarOrIri(this);
+}
+
+SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::varOrIri() {
+  VarOrIriContext *_localctx = _tracker.createInstance<VarOrIriContext>(_ctx, getState());
+  enterRule(_localctx, 240, SparqlAutomaticParser::RuleVarOrIri);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1166);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::VAR1:
+      case SparqlAutomaticParser::VAR2: {
+        enterOuterAlt(_localctx, 1);
+        setState(1164);
+        var();
+        break;
+      }
+
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::PREFIX_LANGTAG: {
+        enterOuterAlt(_localctx, 2);
+        setState(1165);
+        iri();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- VarContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::VarContext::VarContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+tree::TerminalNode* SparqlAutomaticParser::VarContext::VAR1() {
+  return getToken(SparqlAutomaticParser::VAR1, 0);
+}
+
+tree::TerminalNode* SparqlAutomaticParser::VarContext::VAR2() {
+  return getToken(SparqlAutomaticParser::VAR2, 0);
+}
+
+
+size_t SparqlAutomaticParser::VarContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleVar;
+}
+
+void SparqlAutomaticParser::VarContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterVar(this);
+}
+
+void SparqlAutomaticParser::VarContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitVar(this);
+}
+
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::var() {
+  VarContext *_localctx = _tracker.createInstance<VarContext>(_ctx, getState());
+  enterRule(_localctx, 242, SparqlAutomaticParser::RuleVar);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1168);
+    _la = _input->LA(1);
+    if (!(_la == SparqlAutomaticParser::VAR1
+
+    || _la == SparqlAutomaticParser::VAR2)) {
+    _errHandler->recoverInline(this);
+    }
+    else {
+      _errHandler->reportMatch(this);
+      consume();
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- GraphTermContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::GraphTermContext::GraphTermContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::GraphTermContext::iri() {
+  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
+}
+
+SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::GraphTermContext::rdfLiteral() {
+  return getRuleContext<SparqlAutomaticParser::RdfLiteralContext>(0);
+}
+
+SparqlAutomaticParser::NumericLiteralContext* SparqlAutomaticParser::GraphTermContext::numericLiteral() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralContext>(0);
+}
+
+SparqlAutomaticParser::BooleanLiteralContext* SparqlAutomaticParser::GraphTermContext::booleanLiteral() {
+  return getRuleContext<SparqlAutomaticParser::BooleanLiteralContext>(0);
+}
+
+SparqlAutomaticParser::BlankNodeContext* SparqlAutomaticParser::GraphTermContext::blankNode() {
+  return getRuleContext<SparqlAutomaticParser::BlankNodeContext>(0);
+}
+
+tree::TerminalNode* SparqlAutomaticParser::GraphTermContext::NIL() {
+  return getToken(SparqlAutomaticParser::NIL, 0);
+}
+
+
+size_t SparqlAutomaticParser::GraphTermContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleGraphTerm;
+}
+
+void SparqlAutomaticParser::GraphTermContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterGraphTerm(this);
+}
+
+void SparqlAutomaticParser::GraphTermContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitGraphTerm(this);
+}
+
+SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
+  GraphTermContext *_localctx = _tracker.createInstance<GraphTermContext>(_ctx, getState());
+  enterRule(_localctx, 244, SparqlAutomaticParser::RuleGraphTerm);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1176);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF:
@@ -11660,7 +10838,7 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 1);
-        setState(1126);
+        setState(1170);
         iri();
         break;
       }
@@ -11670,7 +10848,7 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
       case SparqlAutomaticParser::STRING_LITERAL_LONG1:
       case SparqlAutomaticParser::STRING_LITERAL_LONG2: {
         enterOuterAlt(_localctx, 2);
-        setState(1127);
+        setState(1171);
         rdfLiteral();
         break;
       }
@@ -11685,7 +10863,7 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
       case SparqlAutomaticParser::DECIMAL_NEGATIVE:
       case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
         enterOuterAlt(_localctx, 3);
-        setState(1128);
+        setState(1172);
         numericLiteral();
         break;
       }
@@ -11693,7 +10871,7 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
       case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 4);
-        setState(1129);
+        setState(1173);
         booleanLiteral();
         break;
       }
@@ -11701,23 +10879,24 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
       case SparqlAutomaticParser::BLANK_NODE_LABEL:
       case SparqlAutomaticParser::ANON: {
         enterOuterAlt(_localctx, 5);
-        setState(1130);
+        setState(1174);
         blankNode();
         break;
       }
 
       case SparqlAutomaticParser::NIL: {
         enterOuterAlt(_localctx, 6);
-        setState(1131);
+        setState(1175);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11726,39 +10905,36 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
   return _localctx;
 }
 
-//----------------- ExpressionContext
-//------------------------------------------------------------------
+//----------------- ExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ExpressionContext::ExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::ConditionalOrExpressionContext*
-SparqlAutomaticParser::ExpressionContext::conditionalOrExpression() {
-  return getRuleContext<SparqlAutomaticParser::ConditionalOrExpressionContext>(
-      0);
+SparqlAutomaticParser::ExpressionContext::ExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
+
+SparqlAutomaticParser::ConditionalOrExpressionContext* SparqlAutomaticParser::ExpressionContext::conditionalOrExpression() {
+  return getRuleContext<SparqlAutomaticParser::ConditionalOrExpressionContext>(0);
+}
+
 
 size_t SparqlAutomaticParser::ExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleExpression;
 }
 
-void SparqlAutomaticParser::ExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterExpression(this);
+void SparqlAutomaticParser::ExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterExpression(this);
 }
 
-void SparqlAutomaticParser::ExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitExpression(this);
+void SparqlAutomaticParser::ExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitExpression(this);
 }
 
 SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::expression() {
-  ExpressionContext* _localctx =
-      _tracker.createInstance<ExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 232, SparqlAutomaticParser::RuleExpression);
+  ExpressionContext *_localctx = _tracker.createInstance<ExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 246, SparqlAutomaticParser::RuleExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -11769,10 +10945,11 @@ SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::expression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1134);
+    setState(1178);
     conditionalOrExpression();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11781,52 +10958,40 @@ SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::expression() {
   return _localctx;
 }
 
-//----------------- ConditionalOrExpressionContext
-//------------------------------------------------------------------
+//----------------- ConditionalOrExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConditionalOrExpressionContext::
-    ConditionalOrExpressionContext(ParserRuleContext* parent,
-                                   size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-std::vector<SparqlAutomaticParser::ConditionalAndExpressionContext*>
-SparqlAutomaticParser::ConditionalOrExpressionContext::
-    conditionalAndExpression() {
-  return getRuleContexts<
-      SparqlAutomaticParser::ConditionalAndExpressionContext>();
+SparqlAutomaticParser::ConditionalOrExpressionContext::ConditionalOrExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::ConditionalAndExpressionContext*
-SparqlAutomaticParser::ConditionalOrExpressionContext::conditionalAndExpression(
-    size_t i) {
-  return getRuleContext<SparqlAutomaticParser::ConditionalAndExpressionContext>(
-      i);
+std::vector<SparqlAutomaticParser::ConditionalAndExpressionContext *> SparqlAutomaticParser::ConditionalOrExpressionContext::conditionalAndExpression() {
+  return getRuleContexts<SparqlAutomaticParser::ConditionalAndExpressionContext>();
 }
 
-size_t SparqlAutomaticParser::ConditionalOrExpressionContext::getRuleIndex()
-    const {
+SparqlAutomaticParser::ConditionalAndExpressionContext* SparqlAutomaticParser::ConditionalOrExpressionContext::conditionalAndExpression(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::ConditionalAndExpressionContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::ConditionalOrExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConditionalOrExpression;
 }
 
-void SparqlAutomaticParser::ConditionalOrExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::ConditionalOrExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterConditionalOrExpression(this);
 }
 
-void SparqlAutomaticParser::ConditionalOrExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::ConditionalOrExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitConditionalOrExpression(this);
 }
 
-SparqlAutomaticParser::ConditionalOrExpressionContext*
-SparqlAutomaticParser::conditionalOrExpression() {
-  ConditionalOrExpressionContext* _localctx =
-      _tracker.createInstance<ConditionalOrExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 234, SparqlAutomaticParser::RuleConditionalOrExpression);
+SparqlAutomaticParser::ConditionalOrExpressionContext* SparqlAutomaticParser::conditionalOrExpression() {
+  ConditionalOrExpressionContext *_localctx = _tracker.createInstance<ConditionalOrExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 248, SparqlAutomaticParser::RuleConditionalOrExpression);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -11838,22 +11003,23 @@ SparqlAutomaticParser::conditionalOrExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1136);
+    setState(1180);
     conditionalAndExpression();
-    setState(1141);
+    setState(1185);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__17) {
-      setState(1137);
+      setState(1181);
       match(SparqlAutomaticParser::T__17);
-      setState(1138);
+      setState(1182);
       conditionalAndExpression();
-      setState(1143);
+      setState(1187);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11862,50 +11028,40 @@ SparqlAutomaticParser::conditionalOrExpression() {
   return _localctx;
 }
 
-//----------------- ConditionalAndExpressionContext
-//------------------------------------------------------------------
+//----------------- ConditionalAndExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ConditionalAndExpressionContext::
-    ConditionalAndExpressionContext(ParserRuleContext* parent,
-                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ConditionalAndExpressionContext::ConditionalAndExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::ValueLogicalContext*>
-SparqlAutomaticParser::ConditionalAndExpressionContext::valueLogical() {
+std::vector<SparqlAutomaticParser::ValueLogicalContext *> SparqlAutomaticParser::ConditionalAndExpressionContext::valueLogical() {
   return getRuleContexts<SparqlAutomaticParser::ValueLogicalContext>();
 }
 
-SparqlAutomaticParser::ValueLogicalContext*
-SparqlAutomaticParser::ConditionalAndExpressionContext::valueLogical(size_t i) {
+SparqlAutomaticParser::ValueLogicalContext* SparqlAutomaticParser::ConditionalAndExpressionContext::valueLogical(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ValueLogicalContext>(i);
 }
 
-size_t SparqlAutomaticParser::ConditionalAndExpressionContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::ConditionalAndExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleConditionalAndExpression;
 }
 
-void SparqlAutomaticParser::ConditionalAndExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::ConditionalAndExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterConditionalAndExpression(this);
 }
 
-void SparqlAutomaticParser::ConditionalAndExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::ConditionalAndExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitConditionalAndExpression(this);
 }
 
-SparqlAutomaticParser::ConditionalAndExpressionContext*
-SparqlAutomaticParser::conditionalAndExpression() {
-  ConditionalAndExpressionContext* _localctx =
-      _tracker.createInstance<ConditionalAndExpressionContext>(_ctx,
-                                                               getState());
-  enterRule(_localctx, 236,
-            SparqlAutomaticParser::RuleConditionalAndExpression);
+SparqlAutomaticParser::ConditionalAndExpressionContext* SparqlAutomaticParser::conditionalAndExpression() {
+  ConditionalAndExpressionContext *_localctx = _tracker.createInstance<ConditionalAndExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 250, SparqlAutomaticParser::RuleConditionalAndExpression);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -11917,22 +11073,23 @@ SparqlAutomaticParser::conditionalAndExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1144);
+    setState(1188);
     valueLogical();
-    setState(1149);
+    setState(1193);
     _errHandler->sync(this);
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__18) {
-      setState(1145);
+      setState(1189);
       match(SparqlAutomaticParser::T__18);
-      setState(1146);
+      setState(1190);
       valueLogical();
-      setState(1151);
+      setState(1195);
       _errHandler->sync(this);
       _la = _input->LA(1);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11941,39 +11098,36 @@ SparqlAutomaticParser::conditionalAndExpression() {
   return _localctx;
 }
 
-//----------------- ValueLogicalContext
-//------------------------------------------------------------------
+//----------------- ValueLogicalContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ValueLogicalContext::ValueLogicalContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ValueLogicalContext::ValueLogicalContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::RelationalExpressionContext*
-SparqlAutomaticParser::ValueLogicalContext::relationalExpression() {
+SparqlAutomaticParser::RelationalExpressionContext* SparqlAutomaticParser::ValueLogicalContext::relationalExpression() {
   return getRuleContext<SparqlAutomaticParser::RelationalExpressionContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ValueLogicalContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleValueLogical;
 }
 
-void SparqlAutomaticParser::ValueLogicalContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterValueLogical(this);
+void SparqlAutomaticParser::ValueLogicalContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterValueLogical(this);
 }
 
-void SparqlAutomaticParser::ValueLogicalContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitValueLogical(this);
+void SparqlAutomaticParser::ValueLogicalContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitValueLogical(this);
 }
 
-SparqlAutomaticParser::ValueLogicalContext*
-SparqlAutomaticParser::valueLogical() {
-  ValueLogicalContext* _localctx =
-      _tracker.createInstance<ValueLogicalContext>(_ctx, getState());
-  enterRule(_localctx, 238, SparqlAutomaticParser::RuleValueLogical);
+SparqlAutomaticParser::ValueLogicalContext* SparqlAutomaticParser::valueLogical() {
+  ValueLogicalContext *_localctx = _tracker.createInstance<ValueLogicalContext>(_ctx, getState());
+  enterRule(_localctx, 252, SparqlAutomaticParser::RuleValueLogical);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -11984,10 +11138,11 @@ SparqlAutomaticParser::valueLogical() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1152);
+    setState(1196);
     relationalExpression();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -11996,21 +11151,17 @@ SparqlAutomaticParser::valueLogical() {
   return _localctx;
 }
 
-//----------------- RelationalExpressionContext
-//------------------------------------------------------------------
+//----------------- RelationalExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::RelationalExpressionContext::RelationalExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::RelationalExpressionContext::RelationalExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-std::vector<SparqlAutomaticParser::NumericExpressionContext*>
-SparqlAutomaticParser::RelationalExpressionContext::numericExpression() {
+std::vector<SparqlAutomaticParser::NumericExpressionContext *> SparqlAutomaticParser::RelationalExpressionContext::numericExpression() {
   return getRuleContexts<SparqlAutomaticParser::NumericExpressionContext>();
 }
 
-SparqlAutomaticParser::NumericExpressionContext*
-SparqlAutomaticParser::RelationalExpressionContext::numericExpression(
-    size_t i) {
+SparqlAutomaticParser::NumericExpressionContext* SparqlAutomaticParser::RelationalExpressionContext::numericExpression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::NumericExpressionContext>(i);
 }
 
@@ -12018,8 +11169,7 @@ tree::TerminalNode* SparqlAutomaticParser::RelationalExpressionContext::IN() {
   return getToken(SparqlAutomaticParser::IN, 0);
 }
 
-SparqlAutomaticParser::ExpressionListContext*
-SparqlAutomaticParser::RelationalExpressionContext::expressionList() {
+SparqlAutomaticParser::ExpressionListContext* SparqlAutomaticParser::RelationalExpressionContext::expressionList() {
   return getRuleContext<SparqlAutomaticParser::ExpressionListContext>(0);
 }
 
@@ -12027,29 +11177,26 @@ tree::TerminalNode* SparqlAutomaticParser::RelationalExpressionContext::NOT() {
   return getToken(SparqlAutomaticParser::NOT, 0);
 }
 
-size_t SparqlAutomaticParser::RelationalExpressionContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::RelationalExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleRelationalExpression;
 }
 
-void SparqlAutomaticParser::RelationalExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::RelationalExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterRelationalExpression(this);
 }
 
-void SparqlAutomaticParser::RelationalExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitRelationalExpression(this);
+void SparqlAutomaticParser::RelationalExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitRelationalExpression(this);
 }
 
-SparqlAutomaticParser::RelationalExpressionContext*
-SparqlAutomaticParser::relationalExpression() {
-  RelationalExpressionContext* _localctx =
-      _tracker.createInstance<RelationalExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 240, SparqlAutomaticParser::RuleRelationalExpression);
+SparqlAutomaticParser::RelationalExpressionContext* SparqlAutomaticParser::relationalExpression() {
+  RelationalExpressionContext *_localctx = _tracker.createInstance<RelationalExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 254, SparqlAutomaticParser::RuleRelationalExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -12060,74 +11207,73 @@ SparqlAutomaticParser::relationalExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1154);
+    setState(1198);
     numericExpression();
-    setState(1172);
+    setState(1216);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__19: {
-        setState(1155);
+        setState(1199);
         match(SparqlAutomaticParser::T__19);
-        setState(1156);
+        setState(1200);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__20: {
-        setState(1157);
+        setState(1201);
         match(SparqlAutomaticParser::T__20);
-        setState(1158);
+        setState(1202);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__21: {
-        setState(1159);
+        setState(1203);
         match(SparqlAutomaticParser::T__21);
-        setState(1160);
+        setState(1204);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__22: {
-        setState(1161);
+        setState(1205);
         match(SparqlAutomaticParser::T__22);
-        setState(1162);
+        setState(1206);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__23: {
-        setState(1163);
+        setState(1207);
         match(SparqlAutomaticParser::T__23);
-        setState(1164);
+        setState(1208);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__24: {
-        setState(1165);
+        setState(1209);
         match(SparqlAutomaticParser::T__24);
-        setState(1166);
+        setState(1210);
         numericExpression();
         break;
       }
 
       case SparqlAutomaticParser::IN: {
-        setState(1167);
+        setState(1211);
         match(SparqlAutomaticParser::IN);
-        setState(1168);
+        setState(1212);
         expressionList();
         break;
       }
 
       case SparqlAutomaticParser::NOT: {
-        setState(1169);
-        antlrcpp::downCast<RelationalExpressionContext*>(_localctx)->notToken =
-            match(SparqlAutomaticParser::NOT);
-        setState(1170);
+        setState(1213);
+        antlrcpp::downCast<RelationalExpressionContext *>(_localctx)->notToken = match(SparqlAutomaticParser::NOT);
+        setState(1214);
         match(SparqlAutomaticParser::IN);
-        setState(1171);
+        setState(1215);
         expressionList();
         break;
       }
@@ -12141,11 +11287,12 @@ SparqlAutomaticParser::relationalExpression() {
         break;
       }
 
-      default:
-        break;
+    default:
+      break;
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -12154,754 +11301,36 @@ SparqlAutomaticParser::relationalExpression() {
   return _localctx;
 }
 
-//----------------- NumericExpressionContext
-//------------------------------------------------------------------
+//----------------- NumericExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NumericExpressionContext::NumericExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NumericExpressionContext::NumericExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::AdditiveExpressionContext*
-SparqlAutomaticParser::NumericExpressionContext::additiveExpression() {
+SparqlAutomaticParser::AdditiveExpressionContext* SparqlAutomaticParser::NumericExpressionContext::additiveExpression() {
   return getRuleContext<SparqlAutomaticParser::AdditiveExpressionContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::NumericExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNumericExpression;
 }
 
-void SparqlAutomaticParser::NumericExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterNumericExpression(this);
-}
-
-void SparqlAutomaticParser::NumericExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitNumericExpression(this);
-}
-
-SparqlAutomaticParser::NumericExpressionContext*
-SparqlAutomaticParser::numericExpression() {
-  NumericExpressionContext* _localctx =
-      _tracker.createInstance<NumericExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 242, SparqlAutomaticParser::RuleNumericExpression);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1174);
-    additiveExpression();
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- AdditiveExpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::AdditiveExpressionContext::AdditiveExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::MultiplicativeExpressionContext*
-SparqlAutomaticParser::AdditiveExpressionContext::multiplicativeExpression() {
-  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(
-      0);
-}
-
-std::vector<SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*>
-SparqlAutomaticParser::AdditiveExpressionContext::
-    multiplicativeExpressionWithSign() {
-  return getRuleContexts<
-      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext>();
-}
-
-SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*
-SparqlAutomaticParser::AdditiveExpressionContext::
-    multiplicativeExpressionWithSign(size_t i) {
-  return getRuleContext<
-      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext>(i);
-}
-
-size_t SparqlAutomaticParser::AdditiveExpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleAdditiveExpression;
-}
-
-void SparqlAutomaticParser::AdditiveExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAdditiveExpression(this);
-}
-
-void SparqlAutomaticParser::AdditiveExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAdditiveExpression(this);
-}
-
-SparqlAutomaticParser::AdditiveExpressionContext*
-SparqlAutomaticParser::additiveExpression() {
-  AdditiveExpressionContext* _localctx =
-      _tracker.createInstance<AdditiveExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 244, SparqlAutomaticParser::RuleAdditiveExpression);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1176);
-    multiplicativeExpression();
-    setState(1180);
-    _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__12
-
-           || _la == SparqlAutomaticParser::T__25 ||
-           ((((_la - 153) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 153)) & 63) != 0)) {
-      setState(1177);
-      multiplicativeExpressionWithSign();
-      setState(1182);
-      _errHandler->sync(this);
-      _la = _input->LA(1);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MultiplicativeExpressionWithSignContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::
-    MultiplicativeExpressionWithSignContext(ParserRuleContext* parent,
-                                            size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::PlusSubexpressionContext* SparqlAutomaticParser::
-    MultiplicativeExpressionWithSignContext::plusSubexpression() {
-  return getRuleContext<SparqlAutomaticParser::PlusSubexpressionContext>(0);
-}
-
-SparqlAutomaticParser::MinusSubexpressionContext* SparqlAutomaticParser::
-    MultiplicativeExpressionWithSignContext::minusSubexpression() {
-  return getRuleContext<SparqlAutomaticParser::MinusSubexpressionContext>(0);
-}
-
-SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
-SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::
-    multiplicativeExpressionWithLeadingSignButNoSpace() {
-  return getRuleContext<
-      SparqlAutomaticParser::
-          MultiplicativeExpressionWithLeadingSignButNoSpaceContext>(0);
-}
-
-size_t
-SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RuleMultiplicativeExpressionWithSign;
-}
-
-void SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
-    parserListener->enterMultiplicativeExpressionWithSign(this);
+    parserListener->enterNumericExpression(this);
 }
 
-void SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
-    parserListener->exitMultiplicativeExpressionWithSign(this);
+    parserListener->exitNumericExpression(this);
 }
 
-SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*
-SparqlAutomaticParser::multiplicativeExpressionWithSign() {
-  MultiplicativeExpressionWithSignContext* _localctx =
-      _tracker.createInstance<MultiplicativeExpressionWithSignContext>(
-          _ctx, getState());
-  enterRule(_localctx, 246,
-            SparqlAutomaticParser::RuleMultiplicativeExpressionWithSign);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1188);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__12: {
-        enterOuterAlt(_localctx, 1);
-        setState(1183);
-        match(SparqlAutomaticParser::T__12);
-        setState(1184);
-        plusSubexpression();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__25: {
-        enterOuterAlt(_localctx, 2);
-        setState(1185);
-        match(SparqlAutomaticParser::T__25);
-        setState(1186);
-        minusSubexpression();
-        break;
-      }
-
-      case SparqlAutomaticParser::INTEGER_POSITIVE:
-      case SparqlAutomaticParser::DECIMAL_POSITIVE:
-      case SparqlAutomaticParser::DOUBLE_POSITIVE:
-      case SparqlAutomaticParser::INTEGER_NEGATIVE:
-      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
-      case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
-        enterOuterAlt(_localctx, 3);
-        setState(1187);
-        multiplicativeExpressionWithLeadingSignButNoSpace();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- PlusSubexpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::PlusSubexpressionContext::PlusSubexpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::MultiplicativeExpressionContext*
-SparqlAutomaticParser::PlusSubexpressionContext::multiplicativeExpression() {
-  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(
-      0);
-}
-
-size_t SparqlAutomaticParser::PlusSubexpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RulePlusSubexpression;
-}
-
-void SparqlAutomaticParser::PlusSubexpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPlusSubexpression(this);
-}
-
-void SparqlAutomaticParser::PlusSubexpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPlusSubexpression(this);
-}
-
-SparqlAutomaticParser::PlusSubexpressionContext*
-SparqlAutomaticParser::plusSubexpression() {
-  PlusSubexpressionContext* _localctx =
-      _tracker.createInstance<PlusSubexpressionContext>(_ctx, getState());
-  enterRule(_localctx, 248, SparqlAutomaticParser::RulePlusSubexpression);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1190);
-    multiplicativeExpression();
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MinusSubexpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::MinusSubexpressionContext::MinusSubexpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::MultiplicativeExpressionContext*
-SparqlAutomaticParser::MinusSubexpressionContext::multiplicativeExpression() {
-  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(
-      0);
-}
-
-size_t SparqlAutomaticParser::MinusSubexpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleMinusSubexpression;
-}
-
-void SparqlAutomaticParser::MinusSubexpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterMinusSubexpression(this);
-}
-
-void SparqlAutomaticParser::MinusSubexpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitMinusSubexpression(this);
-}
-
-SparqlAutomaticParser::MinusSubexpressionContext*
-SparqlAutomaticParser::minusSubexpression() {
-  MinusSubexpressionContext* _localctx =
-      _tracker.createInstance<MinusSubexpressionContext>(_ctx, getState());
-  enterRule(_localctx, 250, SparqlAutomaticParser::RuleMinusSubexpression);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1192);
-    multiplicativeExpression();
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MultiplicativeExpressionWithLeadingSignButNoSpaceContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::
-        MultiplicativeExpressionWithLeadingSignButNoSpaceContext(
-            ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::NumericLiteralPositiveContext* SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::
-        numericLiteralPositive() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralPositiveContext>(
-      0);
-}
-
-SparqlAutomaticParser::NumericLiteralNegativeContext* SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::
-        numericLiteralNegative() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralNegativeContext>(
-      0);
-}
-
-std::vector<SparqlAutomaticParser::MultiplyOrDivideExpressionContext*>
-SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::
-        multiplyOrDivideExpression() {
-  return getRuleContexts<
-      SparqlAutomaticParser::MultiplyOrDivideExpressionContext>();
-}
-
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext*
-SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::
-        multiplyOrDivideExpression(size_t i) {
-  return getRuleContext<
-      SparqlAutomaticParser::MultiplyOrDivideExpressionContext>(i);
-}
-
-size_t SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::getRuleIndex()
-        const {
-  return SparqlAutomaticParser::
-      RuleMultiplicativeExpressionWithLeadingSignButNoSpace;
-}
-
-void SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::enterRule(
-        tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->enterMultiplicativeExpressionWithLeadingSignButNoSpace(
-        this);
-}
-
-void SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::exitRule(
-        tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->exitMultiplicativeExpressionWithLeadingSignButNoSpace(this);
-}
-
-SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
-SparqlAutomaticParser::multiplicativeExpressionWithLeadingSignButNoSpace() {
-  MultiplicativeExpressionWithLeadingSignButNoSpaceContext* _localctx =
-      _tracker.createInstance<
-          MultiplicativeExpressionWithLeadingSignButNoSpaceContext>(_ctx,
-                                                                    getState());
-  enterRule(_localctx, 252,
-            SparqlAutomaticParser::
-                RuleMultiplicativeExpressionWithLeadingSignButNoSpace);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1196);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::INTEGER_POSITIVE:
-      case SparqlAutomaticParser::DECIMAL_POSITIVE:
-      case SparqlAutomaticParser::DOUBLE_POSITIVE: {
-        setState(1194);
-        numericLiteralPositive();
-        break;
-      }
-
-      case SparqlAutomaticParser::INTEGER_NEGATIVE:
-      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
-      case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
-        setState(1195);
-        numericLiteralNegative();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-    setState(1201);
-    _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__0
-
-           || _la == SparqlAutomaticParser::T__10) {
-      setState(1198);
-      multiplyOrDivideExpression();
-      setState(1203);
-      _errHandler->sync(this);
-      _la = _input->LA(1);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MultiplicativeExpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::MultiplicativeExpressionContext::
-    MultiplicativeExpressionContext(ParserRuleContext* parent,
-                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::UnaryExpressionContext*
-SparqlAutomaticParser::MultiplicativeExpressionContext::unaryExpression() {
-  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
-}
-
-std::vector<SparqlAutomaticParser::MultiplyOrDivideExpressionContext*>
-SparqlAutomaticParser::MultiplicativeExpressionContext::
-    multiplyOrDivideExpression() {
-  return getRuleContexts<
-      SparqlAutomaticParser::MultiplyOrDivideExpressionContext>();
-}
-
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext*
-SparqlAutomaticParser::MultiplicativeExpressionContext::
-    multiplyOrDivideExpression(size_t i) {
-  return getRuleContext<
-      SparqlAutomaticParser::MultiplyOrDivideExpressionContext>(i);
-}
-
-size_t SparqlAutomaticParser::MultiplicativeExpressionContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RuleMultiplicativeExpression;
-}
-
-void SparqlAutomaticParser::MultiplicativeExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->enterMultiplicativeExpression(this);
-}
-
-void SparqlAutomaticParser::MultiplicativeExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->exitMultiplicativeExpression(this);
-}
-
-SparqlAutomaticParser::MultiplicativeExpressionContext*
-SparqlAutomaticParser::multiplicativeExpression() {
-  MultiplicativeExpressionContext* _localctx =
-      _tracker.createInstance<MultiplicativeExpressionContext>(_ctx,
-                                                               getState());
-  enterRule(_localctx, 254,
-            SparqlAutomaticParser::RuleMultiplicativeExpression);
-  size_t _la = 0;
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1204);
-    unaryExpression();
-    setState(1208);
-    _errHandler->sync(this);
-    _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__0
-
-           || _la == SparqlAutomaticParser::T__10) {
-      setState(1205);
-      multiplyOrDivideExpression();
-      setState(1210);
-      _errHandler->sync(this);
-      _la = _input->LA(1);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MultiplyOrDivideExpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext::
-    MultiplyOrDivideExpressionContext(ParserRuleContext* parent,
-                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::MultiplyExpressionContext*
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext::multiplyExpression() {
-  return getRuleContext<SparqlAutomaticParser::MultiplyExpressionContext>(0);
-}
-
-SparqlAutomaticParser::DivideExpressionContext*
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext::divideExpression() {
-  return getRuleContext<SparqlAutomaticParser::DivideExpressionContext>(0);
-}
-
-size_t SparqlAutomaticParser::MultiplyOrDivideExpressionContext::getRuleIndex()
-    const {
-  return SparqlAutomaticParser::RuleMultiplyOrDivideExpression;
-}
-
-void SparqlAutomaticParser::MultiplyOrDivideExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->enterMultiplyOrDivideExpression(this);
-}
-
-void SparqlAutomaticParser::MultiplyOrDivideExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr)
-    parserListener->exitMultiplyOrDivideExpression(this);
-}
-
-SparqlAutomaticParser::MultiplyOrDivideExpressionContext*
-SparqlAutomaticParser::multiplyOrDivideExpression() {
-  MultiplyOrDivideExpressionContext* _localctx =
-      _tracker.createInstance<MultiplyOrDivideExpressionContext>(_ctx,
-                                                                 getState());
-  enterRule(_localctx, 256,
-            SparqlAutomaticParser::RuleMultiplyOrDivideExpression);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    setState(1213);
-    _errHandler->sync(this);
-    switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__0: {
-        enterOuterAlt(_localctx, 1);
-        setState(1211);
-        multiplyExpression();
-        break;
-      }
-
-      case SparqlAutomaticParser::T__10: {
-        enterOuterAlt(_localctx, 2);
-        setState(1212);
-        divideExpression();
-        break;
-      }
-
-      default:
-        throw NoViableAltException(this);
-    }
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- MultiplyExpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::MultiplyExpressionContext::MultiplyExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::UnaryExpressionContext*
-SparqlAutomaticParser::MultiplyExpressionContext::unaryExpression() {
-  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
-}
-
-size_t SparqlAutomaticParser::MultiplyExpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleMultiplyExpression;
-}
-
-void SparqlAutomaticParser::MultiplyExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterMultiplyExpression(this);
-}
-
-void SparqlAutomaticParser::MultiplyExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitMultiplyExpression(this);
-}
-
-SparqlAutomaticParser::MultiplyExpressionContext*
-SparqlAutomaticParser::multiplyExpression() {
-  MultiplyExpressionContext* _localctx =
-      _tracker.createInstance<MultiplyExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 258, SparqlAutomaticParser::RuleMultiplyExpression);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(1215);
-    match(SparqlAutomaticParser::T__0);
-    setState(1216);
-    unaryExpression();
-
-  } catch (RecognitionException& e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
-//----------------- DivideExpressionContext
-//------------------------------------------------------------------
-
-SparqlAutomaticParser::DivideExpressionContext::DivideExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::UnaryExpressionContext*
-SparqlAutomaticParser::DivideExpressionContext::unaryExpression() {
-  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
-}
-
-size_t SparqlAutomaticParser::DivideExpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleDivideExpression;
-}
-
-void SparqlAutomaticParser::DivideExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterDivideExpression(this);
-}
-
-void SparqlAutomaticParser::DivideExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitDivideExpression(this);
-}
-
-SparqlAutomaticParser::DivideExpressionContext*
-SparqlAutomaticParser::divideExpression() {
-  DivideExpressionContext* _localctx =
-      _tracker.createInstance<DivideExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 260, SparqlAutomaticParser::RuleDivideExpression);
+SparqlAutomaticParser::NumericExpressionContext* SparqlAutomaticParser::numericExpression() {
+  NumericExpressionContext *_localctx = _tracker.createInstance<NumericExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 256, SparqlAutomaticParser::RuleNumericExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -12913,11 +11342,10 @@ SparqlAutomaticParser::divideExpression() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(1218);
-    match(SparqlAutomaticParser::T__10);
-    setState(1219);
-    unaryExpression();
-
-  } catch (RecognitionException& e) {
+    additiveExpression();
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -12926,39 +11354,45 @@ SparqlAutomaticParser::divideExpression() {
   return _localctx;
 }
 
-//----------------- UnaryExpressionContext
-//------------------------------------------------------------------
+//----------------- AdditiveExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::UnaryExpressionContext::UnaryExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::PrimaryExpressionContext*
-SparqlAutomaticParser::UnaryExpressionContext::primaryExpression() {
-  return getRuleContext<SparqlAutomaticParser::PrimaryExpressionContext>(0);
+SparqlAutomaticParser::AdditiveExpressionContext::AdditiveExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-size_t SparqlAutomaticParser::UnaryExpressionContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleUnaryExpression;
+SparqlAutomaticParser::MultiplicativeExpressionContext* SparqlAutomaticParser::AdditiveExpressionContext::multiplicativeExpression() {
+  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(0);
 }
 
-void SparqlAutomaticParser::UnaryExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterUnaryExpression(this);
+std::vector<SparqlAutomaticParser::MultiplicativeExpressionWithSignContext *> SparqlAutomaticParser::AdditiveExpressionContext::multiplicativeExpressionWithSign() {
+  return getRuleContexts<SparqlAutomaticParser::MultiplicativeExpressionWithSignContext>();
 }
 
-void SparqlAutomaticParser::UnaryExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitUnaryExpression(this);
+SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* SparqlAutomaticParser::AdditiveExpressionContext::multiplicativeExpressionWithSign(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionWithSignContext>(i);
 }
 
-SparqlAutomaticParser::UnaryExpressionContext*
-SparqlAutomaticParser::unaryExpression() {
-  UnaryExpressionContext* _localctx =
-      _tracker.createInstance<UnaryExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 262, SparqlAutomaticParser::RuleUnaryExpression);
+
+size_t SparqlAutomaticParser::AdditiveExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleAdditiveExpression;
+}
+
+void SparqlAutomaticParser::AdditiveExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterAdditiveExpression(this);
+}
+
+void SparqlAutomaticParser::AdditiveExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAdditiveExpression(this);
+}
+
+SparqlAutomaticParser::AdditiveExpressionContext* SparqlAutomaticParser::additiveExpression() {
+  AdditiveExpressionContext *_localctx = _tracker.createInstance<AdditiveExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 258, SparqlAutomaticParser::RuleAdditiveExpression);
+  size_t _la = 0;
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -12968,32 +11402,654 @@ SparqlAutomaticParser::unaryExpression() {
     exitRule();
   });
   try {
-    setState(1228);
+    enterOuterAlt(_localctx, 1);
+    setState(1220);
+    multiplicativeExpression();
+    setState(1224);
+    _errHandler->sync(this);
+    _la = _input->LA(1);
+    while (_la == SparqlAutomaticParser::T__12
+
+    || _la == SparqlAutomaticParser::T__25 || ((((_la - 153) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 153)) & 63) != 0)) {
+      setState(1221);
+      multiplicativeExpressionWithSign();
+      setState(1226);
+      _errHandler->sync(this);
+      _la = _input->LA(1);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MultiplicativeExpressionWithSignContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::MultiplicativeExpressionWithSignContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::PlusSubexpressionContext* SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::plusSubexpression() {
+  return getRuleContext<SparqlAutomaticParser::PlusSubexpressionContext>(0);
+}
+
+SparqlAutomaticParser::MinusSubexpressionContext* SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::minusSubexpression() {
+  return getRuleContext<SparqlAutomaticParser::MinusSubexpressionContext>(0);
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext* SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::multiplicativeExpressionWithLeadingSignButNoSpace() {
+  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMultiplicativeExpressionWithSign;
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMultiplicativeExpressionWithSign(this);
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMultiplicativeExpressionWithSign(this);
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* SparqlAutomaticParser::multiplicativeExpressionWithSign() {
+  MultiplicativeExpressionWithSignContext *_localctx = _tracker.createInstance<MultiplicativeExpressionWithSignContext>(_ctx, getState());
+  enterRule(_localctx, 260, SparqlAutomaticParser::RuleMultiplicativeExpressionWithSign);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1232);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__12: {
+        enterOuterAlt(_localctx, 1);
+        setState(1227);
+        match(SparqlAutomaticParser::T__12);
+        setState(1228);
+        plusSubexpression();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__25: {
+        enterOuterAlt(_localctx, 2);
+        setState(1229);
+        match(SparqlAutomaticParser::T__25);
+        setState(1230);
+        minusSubexpression();
+        break;
+      }
+
+      case SparqlAutomaticParser::INTEGER_POSITIVE:
+      case SparqlAutomaticParser::DECIMAL_POSITIVE:
+      case SparqlAutomaticParser::DOUBLE_POSITIVE:
+      case SparqlAutomaticParser::INTEGER_NEGATIVE:
+      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
+      case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
+        enterOuterAlt(_localctx, 3);
+        setState(1231);
+        multiplicativeExpressionWithLeadingSignButNoSpace();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- PlusSubexpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::PlusSubexpressionContext::PlusSubexpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionContext* SparqlAutomaticParser::PlusSubexpressionContext::multiplicativeExpression() {
+  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::PlusSubexpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RulePlusSubexpression;
+}
+
+void SparqlAutomaticParser::PlusSubexpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPlusSubexpression(this);
+}
+
+void SparqlAutomaticParser::PlusSubexpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPlusSubexpression(this);
+}
+
+SparqlAutomaticParser::PlusSubexpressionContext* SparqlAutomaticParser::plusSubexpression() {
+  PlusSubexpressionContext *_localctx = _tracker.createInstance<PlusSubexpressionContext>(_ctx, getState());
+  enterRule(_localctx, 262, SparqlAutomaticParser::RulePlusSubexpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1234);
+    multiplicativeExpression();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MinusSubexpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MinusSubexpressionContext::MinusSubexpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionContext* SparqlAutomaticParser::MinusSubexpressionContext::multiplicativeExpression() {
+  return getRuleContext<SparqlAutomaticParser::MultiplicativeExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::MinusSubexpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMinusSubexpression;
+}
+
+void SparqlAutomaticParser::MinusSubexpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMinusSubexpression(this);
+}
+
+void SparqlAutomaticParser::MinusSubexpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMinusSubexpression(this);
+}
+
+SparqlAutomaticParser::MinusSubexpressionContext* SparqlAutomaticParser::minusSubexpression() {
+  MinusSubexpressionContext *_localctx = _tracker.createInstance<MinusSubexpressionContext>(_ctx, getState());
+  enterRule(_localctx, 264, SparqlAutomaticParser::RuleMinusSubexpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1236);
+    multiplicativeExpression();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MultiplicativeExpressionWithLeadingSignButNoSpaceContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::MultiplicativeExpressionWithLeadingSignButNoSpaceContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::NumericLiteralPositiveContext* SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::numericLiteralPositive() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralPositiveContext>(0);
+}
+
+SparqlAutomaticParser::NumericLiteralNegativeContext* SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::numericLiteralNegative() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralNegativeContext>(0);
+}
+
+std::vector<SparqlAutomaticParser::MultiplyOrDivideExpressionContext *> SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::multiplyOrDivideExpression() {
+  return getRuleContexts<SparqlAutomaticParser::MultiplyOrDivideExpressionContext>();
+}
+
+SparqlAutomaticParser::MultiplyOrDivideExpressionContext* SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::multiplyOrDivideExpression(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::MultiplyOrDivideExpressionContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMultiplicativeExpressionWithLeadingSignButNoSpace;
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMultiplicativeExpressionWithLeadingSignButNoSpace(this);
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMultiplicativeExpressionWithLeadingSignButNoSpace(this);
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext* SparqlAutomaticParser::multiplicativeExpressionWithLeadingSignButNoSpace() {
+  MultiplicativeExpressionWithLeadingSignButNoSpaceContext *_localctx = _tracker.createInstance<MultiplicativeExpressionWithLeadingSignButNoSpaceContext>(_ctx, getState());
+  enterRule(_localctx, 266, SparqlAutomaticParser::RuleMultiplicativeExpressionWithLeadingSignButNoSpace);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1240);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::INTEGER_POSITIVE:
+      case SparqlAutomaticParser::DECIMAL_POSITIVE:
+      case SparqlAutomaticParser::DOUBLE_POSITIVE: {
+        setState(1238);
+        numericLiteralPositive();
+        break;
+      }
+
+      case SparqlAutomaticParser::INTEGER_NEGATIVE:
+      case SparqlAutomaticParser::DECIMAL_NEGATIVE:
+      case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
+        setState(1239);
+        numericLiteralNegative();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+    setState(1245);
+    _errHandler->sync(this);
+    _la = _input->LA(1);
+    while (_la == SparqlAutomaticParser::T__0
+
+    || _la == SparqlAutomaticParser::T__10) {
+      setState(1242);
+      multiplyOrDivideExpression();
+      setState(1247);
+      _errHandler->sync(this);
+      _la = _input->LA(1);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MultiplicativeExpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MultiplicativeExpressionContext::MultiplicativeExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::UnaryExpressionContext* SparqlAutomaticParser::MultiplicativeExpressionContext::unaryExpression() {
+  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
+}
+
+std::vector<SparqlAutomaticParser::MultiplyOrDivideExpressionContext *> SparqlAutomaticParser::MultiplicativeExpressionContext::multiplyOrDivideExpression() {
+  return getRuleContexts<SparqlAutomaticParser::MultiplyOrDivideExpressionContext>();
+}
+
+SparqlAutomaticParser::MultiplyOrDivideExpressionContext* SparqlAutomaticParser::MultiplicativeExpressionContext::multiplyOrDivideExpression(size_t i) {
+  return getRuleContext<SparqlAutomaticParser::MultiplyOrDivideExpressionContext>(i);
+}
+
+
+size_t SparqlAutomaticParser::MultiplicativeExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMultiplicativeExpression;
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMultiplicativeExpression(this);
+}
+
+void SparqlAutomaticParser::MultiplicativeExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMultiplicativeExpression(this);
+}
+
+SparqlAutomaticParser::MultiplicativeExpressionContext* SparqlAutomaticParser::multiplicativeExpression() {
+  MultiplicativeExpressionContext *_localctx = _tracker.createInstance<MultiplicativeExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 268, SparqlAutomaticParser::RuleMultiplicativeExpression);
+  size_t _la = 0;
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1248);
+    unaryExpression();
+    setState(1252);
+    _errHandler->sync(this);
+    _la = _input->LA(1);
+    while (_la == SparqlAutomaticParser::T__0
+
+    || _la == SparqlAutomaticParser::T__10) {
+      setState(1249);
+      multiplyOrDivideExpression();
+      setState(1254);
+      _errHandler->sync(this);
+      _la = _input->LA(1);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MultiplyOrDivideExpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MultiplyOrDivideExpressionContext::MultiplyOrDivideExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::MultiplyExpressionContext* SparqlAutomaticParser::MultiplyOrDivideExpressionContext::multiplyExpression() {
+  return getRuleContext<SparqlAutomaticParser::MultiplyExpressionContext>(0);
+}
+
+SparqlAutomaticParser::DivideExpressionContext* SparqlAutomaticParser::MultiplyOrDivideExpressionContext::divideExpression() {
+  return getRuleContext<SparqlAutomaticParser::DivideExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::MultiplyOrDivideExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMultiplyOrDivideExpression;
+}
+
+void SparqlAutomaticParser::MultiplyOrDivideExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMultiplyOrDivideExpression(this);
+}
+
+void SparqlAutomaticParser::MultiplyOrDivideExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMultiplyOrDivideExpression(this);
+}
+
+SparqlAutomaticParser::MultiplyOrDivideExpressionContext* SparqlAutomaticParser::multiplyOrDivideExpression() {
+  MultiplyOrDivideExpressionContext *_localctx = _tracker.createInstance<MultiplyOrDivideExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 270, SparqlAutomaticParser::RuleMultiplyOrDivideExpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1257);
+    _errHandler->sync(this);
+    switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__0: {
+        enterOuterAlt(_localctx, 1);
+        setState(1255);
+        multiplyExpression();
+        break;
+      }
+
+      case SparqlAutomaticParser::T__10: {
+        enterOuterAlt(_localctx, 2);
+        setState(1256);
+        divideExpression();
+        break;
+      }
+
+    default:
+      throw NoViableAltException(this);
+    }
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- MultiplyExpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::MultiplyExpressionContext::MultiplyExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::UnaryExpressionContext* SparqlAutomaticParser::MultiplyExpressionContext::unaryExpression() {
+  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::MultiplyExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleMultiplyExpression;
+}
+
+void SparqlAutomaticParser::MultiplyExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterMultiplyExpression(this);
+}
+
+void SparqlAutomaticParser::MultiplyExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitMultiplyExpression(this);
+}
+
+SparqlAutomaticParser::MultiplyExpressionContext* SparqlAutomaticParser::multiplyExpression() {
+  MultiplyExpressionContext *_localctx = _tracker.createInstance<MultiplyExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 272, SparqlAutomaticParser::RuleMultiplyExpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1259);
+    match(SparqlAutomaticParser::T__0);
+    setState(1260);
+    unaryExpression();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- DivideExpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::DivideExpressionContext::DivideExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::UnaryExpressionContext* SparqlAutomaticParser::DivideExpressionContext::unaryExpression() {
+  return getRuleContext<SparqlAutomaticParser::UnaryExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::DivideExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleDivideExpression;
+}
+
+void SparqlAutomaticParser::DivideExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterDivideExpression(this);
+}
+
+void SparqlAutomaticParser::DivideExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitDivideExpression(this);
+}
+
+SparqlAutomaticParser::DivideExpressionContext* SparqlAutomaticParser::divideExpression() {
+  DivideExpressionContext *_localctx = _tracker.createInstance<DivideExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 274, SparqlAutomaticParser::RuleDivideExpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    enterOuterAlt(_localctx, 1);
+    setState(1262);
+    match(SparqlAutomaticParser::T__10);
+    setState(1263);
+    unaryExpression();
+   
+  }
+  catch (RecognitionException &e) {
+    _errHandler->reportError(this, e);
+    _localctx->exception = std::current_exception();
+    _errHandler->recover(this, _localctx->exception);
+  }
+
+  return _localctx;
+}
+
+//----------------- UnaryExpressionContext ------------------------------------------------------------------
+
+SparqlAutomaticParser::UnaryExpressionContext::UnaryExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
+SparqlAutomaticParser::PrimaryExpressionContext* SparqlAutomaticParser::UnaryExpressionContext::primaryExpression() {
+  return getRuleContext<SparqlAutomaticParser::PrimaryExpressionContext>(0);
+}
+
+
+size_t SparqlAutomaticParser::UnaryExpressionContext::getRuleIndex() const {
+  return SparqlAutomaticParser::RuleUnaryExpression;
+}
+
+void SparqlAutomaticParser::UnaryExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterUnaryExpression(this);
+}
+
+void SparqlAutomaticParser::UnaryExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitUnaryExpression(this);
+}
+
+SparqlAutomaticParser::UnaryExpressionContext* SparqlAutomaticParser::unaryExpression() {
+  UnaryExpressionContext *_localctx = _tracker.createInstance<UnaryExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 276, SparqlAutomaticParser::RuleUnaryExpression);
+
+#if __cplusplus > 201703L
+  auto onExit = finally([=, this] {
+#else
+  auto onExit = finally([=] {
+#endif
+    exitRule();
+  });
+  try {
+    setState(1272);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__14: {
         enterOuterAlt(_localctx, 1);
-        setState(1221);
+        setState(1265);
         match(SparqlAutomaticParser::T__14);
-        setState(1222);
+        setState(1266);
         primaryExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__12: {
         enterOuterAlt(_localctx, 2);
-        setState(1223);
+        setState(1267);
         match(SparqlAutomaticParser::T__12);
-        setState(1224);
+        setState(1268);
         primaryExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__25: {
         enterOuterAlt(_localctx, 3);
-        setState(1225);
+        setState(1269);
         match(SparqlAutomaticParser::T__25);
-        setState(1226);
+        setState(1270);
         primaryExpression();
         break;
       }
@@ -13083,16 +12139,17 @@ SparqlAutomaticParser::unaryExpression() {
       case SparqlAutomaticParser::STRING_LITERAL_LONG1:
       case SparqlAutomaticParser::STRING_LITERAL_LONG2: {
         enterOuterAlt(_localctx, 4);
-        setState(1227);
+        setState(1271);
         primaryExpression();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -13101,69 +12158,60 @@ SparqlAutomaticParser::unaryExpression() {
   return _localctx;
 }
 
-//----------------- PrimaryExpressionContext
-//------------------------------------------------------------------
+//----------------- PrimaryExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PrimaryExpressionContext::PrimaryExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PrimaryExpressionContext::PrimaryExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::BrackettedExpressionContext*
-SparqlAutomaticParser::PrimaryExpressionContext::brackettedExpression() {
+SparqlAutomaticParser::BrackettedExpressionContext* SparqlAutomaticParser::PrimaryExpressionContext::brackettedExpression() {
   return getRuleContext<SparqlAutomaticParser::BrackettedExpressionContext>(0);
 }
 
-SparqlAutomaticParser::BuiltInCallContext*
-SparqlAutomaticParser::PrimaryExpressionContext::builtInCall() {
+SparqlAutomaticParser::BuiltInCallContext* SparqlAutomaticParser::PrimaryExpressionContext::builtInCall() {
   return getRuleContext<SparqlAutomaticParser::BuiltInCallContext>(0);
 }
 
-SparqlAutomaticParser::IriOrFunctionContext*
-SparqlAutomaticParser::PrimaryExpressionContext::iriOrFunction() {
+SparqlAutomaticParser::IriOrFunctionContext* SparqlAutomaticParser::PrimaryExpressionContext::iriOrFunction() {
   return getRuleContext<SparqlAutomaticParser::IriOrFunctionContext>(0);
 }
 
-SparqlAutomaticParser::RdfLiteralContext*
-SparqlAutomaticParser::PrimaryExpressionContext::rdfLiteral() {
+SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::PrimaryExpressionContext::rdfLiteral() {
   return getRuleContext<SparqlAutomaticParser::RdfLiteralContext>(0);
 }
 
-SparqlAutomaticParser::NumericLiteralContext*
-SparqlAutomaticParser::PrimaryExpressionContext::numericLiteral() {
+SparqlAutomaticParser::NumericLiteralContext* SparqlAutomaticParser::PrimaryExpressionContext::numericLiteral() {
   return getRuleContext<SparqlAutomaticParser::NumericLiteralContext>(0);
 }
 
-SparqlAutomaticParser::BooleanLiteralContext*
-SparqlAutomaticParser::PrimaryExpressionContext::booleanLiteral() {
+SparqlAutomaticParser::BooleanLiteralContext* SparqlAutomaticParser::PrimaryExpressionContext::booleanLiteral() {
   return getRuleContext<SparqlAutomaticParser::BooleanLiteralContext>(0);
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::PrimaryExpressionContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::PrimaryExpressionContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PrimaryExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePrimaryExpression;
 }
 
-void SparqlAutomaticParser::PrimaryExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPrimaryExpression(this);
+void SparqlAutomaticParser::PrimaryExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPrimaryExpression(this);
 }
 
-void SparqlAutomaticParser::PrimaryExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPrimaryExpression(this);
+void SparqlAutomaticParser::PrimaryExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPrimaryExpression(this);
 }
 
-SparqlAutomaticParser::PrimaryExpressionContext*
-SparqlAutomaticParser::primaryExpression() {
-  PrimaryExpressionContext* _localctx =
-      _tracker.createInstance<PrimaryExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 264, SparqlAutomaticParser::RulePrimaryExpression);
+SparqlAutomaticParser::PrimaryExpressionContext* SparqlAutomaticParser::primaryExpression() {
+  PrimaryExpressionContext *_localctx = _tracker.createInstance<PrimaryExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 278, SparqlAutomaticParser::RulePrimaryExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -13173,12 +12221,12 @@ SparqlAutomaticParser::primaryExpression() {
     exitRule();
   });
   try {
-    setState(1237);
+    setState(1281);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1: {
         enterOuterAlt(_localctx, 1);
-        setState(1230);
+        setState(1274);
         brackettedExpression();
         break;
       }
@@ -13246,7 +12294,7 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::STDEV:
       case SparqlAutomaticParser::SAMPLE: {
         enterOuterAlt(_localctx, 2);
-        setState(1231);
+        setState(1275);
         builtInCall();
         break;
       }
@@ -13256,7 +12304,7 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::PNAME_LN:
       case SparqlAutomaticParser::PREFIX_LANGTAG: {
         enterOuterAlt(_localctx, 3);
-        setState(1232);
+        setState(1276);
         iriOrFunction();
         break;
       }
@@ -13266,7 +12314,7 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::STRING_LITERAL_LONG1:
       case SparqlAutomaticParser::STRING_LITERAL_LONG2: {
         enterOuterAlt(_localctx, 4);
-        setState(1233);
+        setState(1277);
         rdfLiteral();
         break;
       }
@@ -13281,7 +12329,7 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::DECIMAL_NEGATIVE:
       case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
         enterOuterAlt(_localctx, 5);
-        setState(1234);
+        setState(1278);
         numericLiteral();
         break;
       }
@@ -13289,7 +12337,7 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 6);
-        setState(1235);
+        setState(1279);
         booleanLiteral();
         break;
       }
@@ -13297,16 +12345,17 @@ SparqlAutomaticParser::primaryExpression() {
       case SparqlAutomaticParser::VAR1:
       case SparqlAutomaticParser::VAR2: {
         enterOuterAlt(_localctx, 7);
-        setState(1236);
+        setState(1280);
         var();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -13315,41 +12364,36 @@ SparqlAutomaticParser::primaryExpression() {
   return _localctx;
 }
 
-//----------------- BrackettedExpressionContext
-//------------------------------------------------------------------
+//----------------- BrackettedExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BrackettedExpressionContext::BrackettedExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BrackettedExpressionContext::BrackettedExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::BrackettedExpressionContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::BrackettedExpressionContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
-size_t SparqlAutomaticParser::BrackettedExpressionContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::BrackettedExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBrackettedExpression;
 }
 
-void SparqlAutomaticParser::BrackettedExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::BrackettedExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterBrackettedExpression(this);
 }
 
-void SparqlAutomaticParser::BrackettedExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBrackettedExpression(this);
+void SparqlAutomaticParser::BrackettedExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBrackettedExpression(this);
 }
 
-SparqlAutomaticParser::BrackettedExpressionContext*
-SparqlAutomaticParser::brackettedExpression() {
-  BrackettedExpressionContext* _localctx =
-      _tracker.createInstance<BrackettedExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 266, SparqlAutomaticParser::RuleBrackettedExpression);
+SparqlAutomaticParser::BrackettedExpressionContext* SparqlAutomaticParser::brackettedExpression() {
+  BrackettedExpressionContext *_localctx = _tracker.createInstance<BrackettedExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 280, SparqlAutomaticParser::RuleBrackettedExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -13360,14 +12404,15 @@ SparqlAutomaticParser::brackettedExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1239);
+    setState(1283);
     match(SparqlAutomaticParser::T__1);
-    setState(1240);
+    setState(1284);
     expression();
-    setState(1241);
+    setState(1285);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -13376,15 +12421,13 @@ SparqlAutomaticParser::brackettedExpression() {
   return _localctx;
 }
 
-//----------------- BuiltInCallContext
-//------------------------------------------------------------------
+//----------------- BuiltInCallContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BuiltInCallContext::BuiltInCallContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BuiltInCallContext::BuiltInCallContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::AggregateContext*
-SparqlAutomaticParser::BuiltInCallContext::aggregate() {
+SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::BuiltInCallContext::aggregate() {
   return getRuleContext<SparqlAutomaticParser::AggregateContext>(0);
 }
 
@@ -13392,18 +12435,15 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::STR() {
   return getToken(SparqlAutomaticParser::STR, 0);
 }
 
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::BuiltInCallContext::expression() {
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::BuiltInCallContext::expression() {
   return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::BuiltInCallContext::expression(size_t i) {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::BuiltInCallContext::expression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
 }
 
-SparqlAutomaticParser::LangExpressionContext*
-SparqlAutomaticParser::BuiltInCallContext::langExpression() {
+SparqlAutomaticParser::LangExpressionContext* SparqlAutomaticParser::BuiltInCallContext::langExpression() {
   return getRuleContext<SparqlAutomaticParser::LangExpressionContext>(0);
 }
 
@@ -13419,8 +12459,7 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::BOUND() {
   return getToken(SparqlAutomaticParser::BOUND, 0);
 }
 
-SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::BuiltInCallContext::var() {
+SparqlAutomaticParser::VarContext* SparqlAutomaticParser::BuiltInCallContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
@@ -13464,13 +12503,11 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::CONCAT() {
   return getToken(SparqlAutomaticParser::CONCAT, 0);
 }
 
-SparqlAutomaticParser::ExpressionListContext*
-SparqlAutomaticParser::BuiltInCallContext::expressionList() {
+SparqlAutomaticParser::ExpressionListContext* SparqlAutomaticParser::BuiltInCallContext::expressionList() {
   return getRuleContext<SparqlAutomaticParser::ExpressionListContext>(0);
 }
 
-SparqlAutomaticParser::SubstringExpressionContext*
-SparqlAutomaticParser::BuiltInCallContext::substringExpression() {
+SparqlAutomaticParser::SubstringExpressionContext* SparqlAutomaticParser::BuiltInCallContext::substringExpression() {
   return getRuleContext<SparqlAutomaticParser::SubstringExpressionContext>(0);
 }
 
@@ -13478,8 +12515,7 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::STRLEN() {
   return getToken(SparqlAutomaticParser::STRLEN, 0);
 }
 
-SparqlAutomaticParser::StrReplaceExpressionContext*
-SparqlAutomaticParser::BuiltInCallContext::strReplaceExpression() {
+SparqlAutomaticParser::StrReplaceExpressionContext* SparqlAutomaticParser::BuiltInCallContext::strReplaceExpression() {
   return getRuleContext<SparqlAutomaticParser::StrReplaceExpressionContext>(0);
 }
 
@@ -13491,8 +12527,7 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::LCASE() {
   return getToken(SparqlAutomaticParser::LCASE, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::BuiltInCallContext::ENCODE_FOR_URI() {
+tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::ENCODE_FOR_URI() {
   return getToken(SparqlAutomaticParser::ENCODE_FOR_URI, 0);
 }
 
@@ -13620,42 +12655,38 @@ tree::TerminalNode* SparqlAutomaticParser::BuiltInCallContext::ISNUMERIC() {
   return getToken(SparqlAutomaticParser::ISNUMERIC, 0);
 }
 
-SparqlAutomaticParser::RegexExpressionContext*
-SparqlAutomaticParser::BuiltInCallContext::regexExpression() {
+SparqlAutomaticParser::RegexExpressionContext* SparqlAutomaticParser::BuiltInCallContext::regexExpression() {
   return getRuleContext<SparqlAutomaticParser::RegexExpressionContext>(0);
 }
 
-SparqlAutomaticParser::ExistsFuncContext*
-SparqlAutomaticParser::BuiltInCallContext::existsFunc() {
+SparqlAutomaticParser::ExistsFuncContext* SparqlAutomaticParser::BuiltInCallContext::existsFunc() {
   return getRuleContext<SparqlAutomaticParser::ExistsFuncContext>(0);
 }
 
-SparqlAutomaticParser::NotExistsFuncContext*
-SparqlAutomaticParser::BuiltInCallContext::notExistsFunc() {
+SparqlAutomaticParser::NotExistsFuncContext* SparqlAutomaticParser::BuiltInCallContext::notExistsFunc() {
   return getRuleContext<SparqlAutomaticParser::NotExistsFuncContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::BuiltInCallContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBuiltInCall;
 }
 
-void SparqlAutomaticParser::BuiltInCallContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterBuiltInCall(this);
+void SparqlAutomaticParser::BuiltInCallContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBuiltInCall(this);
 }
 
-void SparqlAutomaticParser::BuiltInCallContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBuiltInCall(this);
+void SparqlAutomaticParser::BuiltInCallContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBuiltInCall(this);
 }
 
-SparqlAutomaticParser::BuiltInCallContext*
-SparqlAutomaticParser::builtInCall() {
-  BuiltInCallContext* _localctx =
-      _tracker.createInstance<BuiltInCallContext>(_ctx, getState());
-  enterRule(_localctx, 268, SparqlAutomaticParser::RuleBuiltInCall);
+SparqlAutomaticParser::BuiltInCallContext* SparqlAutomaticParser::builtInCall() {
+  BuiltInCallContext *_localctx = _tracker.createInstance<BuiltInCallContext>(_ctx, getState());
+  enterRule(_localctx, 282, SparqlAutomaticParser::RuleBuiltInCall);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -13665,7 +12696,7 @@ SparqlAutomaticParser::builtInCall() {
     exitRule();
   });
   try {
-    setState(1497);
+    setState(1541);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::GROUP_CONCAT:
@@ -13677,230 +12708,91 @@ SparqlAutomaticParser::builtInCall() {
       case SparqlAutomaticParser::STDEV:
       case SparqlAutomaticParser::SAMPLE: {
         enterOuterAlt(_localctx, 1);
-        setState(1243);
+        setState(1287);
         aggregate();
         break;
       }
 
       case SparqlAutomaticParser::STR: {
         enterOuterAlt(_localctx, 2);
-        setState(1244);
+        setState(1288);
         match(SparqlAutomaticParser::STR);
-        setState(1245);
+        setState(1289);
         match(SparqlAutomaticParser::T__1);
-        setState(1246);
+        setState(1290);
         expression();
-        setState(1247);
+        setState(1291);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::LANG: {
         enterOuterAlt(_localctx, 3);
-        setState(1249);
+        setState(1293);
         langExpression();
         break;
       }
 
       case SparqlAutomaticParser::LANGMATCHES: {
         enterOuterAlt(_localctx, 4);
-        setState(1250);
+        setState(1294);
         match(SparqlAutomaticParser::LANGMATCHES);
-        setState(1251);
+        setState(1295);
         match(SparqlAutomaticParser::T__1);
-        setState(1252);
+        setState(1296);
         expression();
-        setState(1253);
+        setState(1297);
         match(SparqlAutomaticParser::T__7);
-        setState(1254);
+        setState(1298);
         expression();
-        setState(1255);
+        setState(1299);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::DATATYPE: {
         enterOuterAlt(_localctx, 5);
-        setState(1257);
+        setState(1301);
         match(SparqlAutomaticParser::DATATYPE);
-        setState(1258);
+        setState(1302);
         match(SparqlAutomaticParser::T__1);
-        setState(1259);
+        setState(1303);
         expression();
-        setState(1260);
+        setState(1304);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::BOUND: {
         enterOuterAlt(_localctx, 6);
-        setState(1262);
+        setState(1306);
         match(SparqlAutomaticParser::BOUND);
-        setState(1263);
+        setState(1307);
         match(SparqlAutomaticParser::T__1);
-        setState(1264);
+        setState(1308);
         var();
-        setState(1265);
+        setState(1309);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::IRI: {
         enterOuterAlt(_localctx, 7);
-        setState(1267);
+        setState(1311);
         match(SparqlAutomaticParser::IRI);
-        setState(1268);
+        setState(1312);
         match(SparqlAutomaticParser::T__1);
-        setState(1269);
+        setState(1313);
         expression();
-        setState(1270);
+        setState(1314);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::URI: {
         enterOuterAlt(_localctx, 8);
-        setState(1272);
-        match(SparqlAutomaticParser::URI);
-        setState(1273);
-        match(SparqlAutomaticParser::T__1);
-        setState(1274);
-        expression();
-        setState(1275);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::BNODE: {
-        enterOuterAlt(_localctx, 9);
-        setState(1277);
-        match(SparqlAutomaticParser::BNODE);
-        setState(1283);
-        _errHandler->sync(this);
-        switch (_input->LA(1)) {
-          case SparqlAutomaticParser::T__1: {
-            setState(1278);
-            match(SparqlAutomaticParser::T__1);
-            setState(1279);
-            expression();
-            setState(1280);
-            match(SparqlAutomaticParser::T__2);
-            break;
-          }
-
-          case SparqlAutomaticParser::NIL: {
-            setState(1282);
-            match(SparqlAutomaticParser::NIL);
-            break;
-          }
-
-          default:
-            throw NoViableAltException(this);
-        }
-        break;
-      }
-
-      case SparqlAutomaticParser::RAND: {
-        enterOuterAlt(_localctx, 10);
-        setState(1285);
-        match(SparqlAutomaticParser::RAND);
-        setState(1286);
-        match(SparqlAutomaticParser::NIL);
-        break;
-      }
-
-      case SparqlAutomaticParser::ABS: {
-        enterOuterAlt(_localctx, 11);
-        setState(1287);
-        match(SparqlAutomaticParser::ABS);
-        setState(1288);
-        match(SparqlAutomaticParser::T__1);
-        setState(1289);
-        expression();
-        setState(1290);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::CEIL: {
-        enterOuterAlt(_localctx, 12);
-        setState(1292);
-        match(SparqlAutomaticParser::CEIL);
-        setState(1293);
-        match(SparqlAutomaticParser::T__1);
-        setState(1294);
-        expression();
-        setState(1295);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::FLOOR: {
-        enterOuterAlt(_localctx, 13);
-        setState(1297);
-        match(SparqlAutomaticParser::FLOOR);
-        setState(1298);
-        match(SparqlAutomaticParser::T__1);
-        setState(1299);
-        expression();
-        setState(1300);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::ROUND: {
-        enterOuterAlt(_localctx, 14);
-        setState(1302);
-        match(SparqlAutomaticParser::ROUND);
-        setState(1303);
-        match(SparqlAutomaticParser::T__1);
-        setState(1304);
-        expression();
-        setState(1305);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::CONCAT: {
-        enterOuterAlt(_localctx, 15);
-        setState(1307);
-        match(SparqlAutomaticParser::CONCAT);
-        setState(1308);
-        expressionList();
-        break;
-      }
-
-      case SparqlAutomaticParser::SUBSTR: {
-        enterOuterAlt(_localctx, 16);
-        setState(1309);
-        substringExpression();
-        break;
-      }
-
-      case SparqlAutomaticParser::STRLEN: {
-        enterOuterAlt(_localctx, 17);
-        setState(1310);
-        match(SparqlAutomaticParser::STRLEN);
-        setState(1311);
-        match(SparqlAutomaticParser::T__1);
-        setState(1312);
-        expression();
-        setState(1313);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::REPLACE: {
-        enterOuterAlt(_localctx, 18);
-        setState(1315);
-        strReplaceExpression();
-        break;
-      }
-
-      case SparqlAutomaticParser::UCASE: {
-        enterOuterAlt(_localctx, 19);
         setState(1316);
-        match(SparqlAutomaticParser::UCASE);
+        match(SparqlAutomaticParser::URI);
         setState(1317);
         match(SparqlAutomaticParser::T__1);
         setState(1318);
@@ -13910,93 +12802,118 @@ SparqlAutomaticParser::builtInCall() {
         break;
       }
 
-      case SparqlAutomaticParser::LCASE: {
-        enterOuterAlt(_localctx, 20);
+      case SparqlAutomaticParser::BNODE: {
+        enterOuterAlt(_localctx, 9);
         setState(1321);
-        match(SparqlAutomaticParser::LCASE);
-        setState(1322);
-        match(SparqlAutomaticParser::T__1);
-        setState(1323);
-        expression();
-        setState(1324);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::ENCODE_FOR_URI: {
-        enterOuterAlt(_localctx, 21);
-        setState(1326);
-        match(SparqlAutomaticParser::ENCODE_FOR_URI);
+        match(SparqlAutomaticParser::BNODE);
         setState(1327);
-        match(SparqlAutomaticParser::T__1);
-        setState(1328);
-        expression();
-        setState(1329);
-        match(SparqlAutomaticParser::T__2);
+        _errHandler->sync(this);
+        switch (_input->LA(1)) {
+          case SparqlAutomaticParser::T__1: {
+            setState(1322);
+            match(SparqlAutomaticParser::T__1);
+            setState(1323);
+            expression();
+            setState(1324);
+            match(SparqlAutomaticParser::T__2);
+            break;
+          }
+
+          case SparqlAutomaticParser::NIL: {
+            setState(1326);
+            match(SparqlAutomaticParser::NIL);
+            break;
+          }
+
+        default:
+          throw NoViableAltException(this);
+        }
         break;
       }
 
-      case SparqlAutomaticParser::CONTAINS: {
-        enterOuterAlt(_localctx, 22);
+      case SparqlAutomaticParser::RAND: {
+        enterOuterAlt(_localctx, 10);
+        setState(1329);
+        match(SparqlAutomaticParser::RAND);
+        setState(1330);
+        match(SparqlAutomaticParser::NIL);
+        break;
+      }
+
+      case SparqlAutomaticParser::ABS: {
+        enterOuterAlt(_localctx, 11);
         setState(1331);
-        match(SparqlAutomaticParser::CONTAINS);
+        match(SparqlAutomaticParser::ABS);
         setState(1332);
         match(SparqlAutomaticParser::T__1);
         setState(1333);
         expression();
         setState(1334);
-        match(SparqlAutomaticParser::T__7);
-        setState(1335);
-        expression();
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::CEIL: {
+        enterOuterAlt(_localctx, 12);
         setState(1336);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::STRSTARTS: {
-        enterOuterAlt(_localctx, 23);
+        match(SparqlAutomaticParser::CEIL);
+        setState(1337);
+        match(SparqlAutomaticParser::T__1);
         setState(1338);
-        match(SparqlAutomaticParser::STRSTARTS);
+        expression();
         setState(1339);
-        match(SparqlAutomaticParser::T__1);
-        setState(1340);
-        expression();
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::FLOOR: {
+        enterOuterAlt(_localctx, 13);
         setState(1341);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::FLOOR);
         setState(1342);
-        expression();
+        match(SparqlAutomaticParser::T__1);
         setState(1343);
+        expression();
+        setState(1344);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::STRENDS: {
-        enterOuterAlt(_localctx, 24);
-        setState(1345);
-        match(SparqlAutomaticParser::STRENDS);
+      case SparqlAutomaticParser::ROUND: {
+        enterOuterAlt(_localctx, 14);
         setState(1346);
-        match(SparqlAutomaticParser::T__1);
+        match(SparqlAutomaticParser::ROUND);
         setState(1347);
-        expression();
+        match(SparqlAutomaticParser::T__1);
         setState(1348);
-        match(SparqlAutomaticParser::T__7);
-        setState(1349);
         expression();
-        setState(1350);
+        setState(1349);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::STRBEFORE: {
-        enterOuterAlt(_localctx, 25);
+      case SparqlAutomaticParser::CONCAT: {
+        enterOuterAlt(_localctx, 15);
+        setState(1351);
+        match(SparqlAutomaticParser::CONCAT);
         setState(1352);
-        match(SparqlAutomaticParser::STRBEFORE);
+        expressionList();
+        break;
+      }
+
+      case SparqlAutomaticParser::SUBSTR: {
+        enterOuterAlt(_localctx, 16);
         setState(1353);
-        match(SparqlAutomaticParser::T__1);
+        substringExpression();
+        break;
+      }
+
+      case SparqlAutomaticParser::STRLEN: {
+        enterOuterAlt(_localctx, 17);
         setState(1354);
-        expression();
+        match(SparqlAutomaticParser::STRLEN);
         setState(1355);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__1);
         setState(1356);
         expression();
         setState(1357);
@@ -14004,94 +12921,96 @@ SparqlAutomaticParser::builtInCall() {
         break;
       }
 
-      case SparqlAutomaticParser::STRAFTER: {
-        enterOuterAlt(_localctx, 26);
+      case SparqlAutomaticParser::REPLACE: {
+        enterOuterAlt(_localctx, 18);
         setState(1359);
-        match(SparqlAutomaticParser::STRAFTER);
+        strReplaceExpression();
+        break;
+      }
+
+      case SparqlAutomaticParser::UCASE: {
+        enterOuterAlt(_localctx, 19);
         setState(1360);
-        match(SparqlAutomaticParser::T__1);
+        match(SparqlAutomaticParser::UCASE);
         setState(1361);
-        expression();
+        match(SparqlAutomaticParser::T__1);
         setState(1362);
-        match(SparqlAutomaticParser::T__7);
+        expression();
         setState(1363);
-        expression();
-        setState(1364);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::YEAR: {
-        enterOuterAlt(_localctx, 27);
+      case SparqlAutomaticParser::LCASE: {
+        enterOuterAlt(_localctx, 20);
+        setState(1365);
+        match(SparqlAutomaticParser::LCASE);
         setState(1366);
-        match(SparqlAutomaticParser::YEAR);
+        match(SparqlAutomaticParser::T__1);
         setState(1367);
-        match(SparqlAutomaticParser::T__1);
+        expression();
         setState(1368);
-        expression();
-        setState(1369);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::MONTH: {
-        enterOuterAlt(_localctx, 28);
+      case SparqlAutomaticParser::ENCODE_FOR_URI: {
+        enterOuterAlt(_localctx, 21);
+        setState(1370);
+        match(SparqlAutomaticParser::ENCODE_FOR_URI);
         setState(1371);
-        match(SparqlAutomaticParser::MONTH);
+        match(SparqlAutomaticParser::T__1);
         setState(1372);
-        match(SparqlAutomaticParser::T__1);
+        expression();
         setState(1373);
-        expression();
-        setState(1374);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::DAY: {
-        enterOuterAlt(_localctx, 29);
+      case SparqlAutomaticParser::CONTAINS: {
+        enterOuterAlt(_localctx, 22);
+        setState(1375);
+        match(SparqlAutomaticParser::CONTAINS);
         setState(1376);
-        match(SparqlAutomaticParser::DAY);
+        match(SparqlAutomaticParser::T__1);
         setState(1377);
-        match(SparqlAutomaticParser::T__1);
+        expression();
         setState(1378);
-        expression();
+        match(SparqlAutomaticParser::T__7);
         setState(1379);
+        expression();
+        setState(1380);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::HOURS: {
-        enterOuterAlt(_localctx, 30);
-        setState(1381);
-        match(SparqlAutomaticParser::HOURS);
+      case SparqlAutomaticParser::STRSTARTS: {
+        enterOuterAlt(_localctx, 23);
         setState(1382);
-        match(SparqlAutomaticParser::T__1);
+        match(SparqlAutomaticParser::STRSTARTS);
         setState(1383);
-        expression();
+        match(SparqlAutomaticParser::T__1);
         setState(1384);
-        match(SparqlAutomaticParser::T__2);
-        break;
-      }
-
-      case SparqlAutomaticParser::MINUTES: {
-        enterOuterAlt(_localctx, 31);
-        setState(1386);
-        match(SparqlAutomaticParser::MINUTES);
-        setState(1387);
-        match(SparqlAutomaticParser::T__1);
-        setState(1388);
         expression();
-        setState(1389);
+        setState(1385);
+        match(SparqlAutomaticParser::T__7);
+        setState(1386);
+        expression();
+        setState(1387);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      case SparqlAutomaticParser::SECONDS: {
-        enterOuterAlt(_localctx, 32);
-        setState(1391);
-        match(SparqlAutomaticParser::SECONDS);
-        setState(1392);
+      case SparqlAutomaticParser::STRENDS: {
+        enterOuterAlt(_localctx, 24);
+        setState(1389);
+        match(SparqlAutomaticParser::STRENDS);
+        setState(1390);
         match(SparqlAutomaticParser::T__1);
+        setState(1391);
+        expression();
+        setState(1392);
+        match(SparqlAutomaticParser::T__7);
         setState(1393);
         expression();
         setState(1394);
@@ -14099,296 +13018,409 @@ SparqlAutomaticParser::builtInCall() {
         break;
       }
 
-      case SparqlAutomaticParser::TIMEZONE: {
-        enterOuterAlt(_localctx, 33);
+      case SparqlAutomaticParser::STRBEFORE: {
+        enterOuterAlt(_localctx, 25);
         setState(1396);
-        match(SparqlAutomaticParser::TIMEZONE);
+        match(SparqlAutomaticParser::STRBEFORE);
         setState(1397);
         match(SparqlAutomaticParser::T__1);
         setState(1398);
         expression();
         setState(1399);
+        match(SparqlAutomaticParser::T__7);
+        setState(1400);
+        expression();
+        setState(1401);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::STRAFTER: {
+        enterOuterAlt(_localctx, 26);
+        setState(1403);
+        match(SparqlAutomaticParser::STRAFTER);
+        setState(1404);
+        match(SparqlAutomaticParser::T__1);
+        setState(1405);
+        expression();
+        setState(1406);
+        match(SparqlAutomaticParser::T__7);
+        setState(1407);
+        expression();
+        setState(1408);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::YEAR: {
+        enterOuterAlt(_localctx, 27);
+        setState(1410);
+        match(SparqlAutomaticParser::YEAR);
+        setState(1411);
+        match(SparqlAutomaticParser::T__1);
+        setState(1412);
+        expression();
+        setState(1413);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::MONTH: {
+        enterOuterAlt(_localctx, 28);
+        setState(1415);
+        match(SparqlAutomaticParser::MONTH);
+        setState(1416);
+        match(SparqlAutomaticParser::T__1);
+        setState(1417);
+        expression();
+        setState(1418);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::DAY: {
+        enterOuterAlt(_localctx, 29);
+        setState(1420);
+        match(SparqlAutomaticParser::DAY);
+        setState(1421);
+        match(SparqlAutomaticParser::T__1);
+        setState(1422);
+        expression();
+        setState(1423);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::HOURS: {
+        enterOuterAlt(_localctx, 30);
+        setState(1425);
+        match(SparqlAutomaticParser::HOURS);
+        setState(1426);
+        match(SparqlAutomaticParser::T__1);
+        setState(1427);
+        expression();
+        setState(1428);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::MINUTES: {
+        enterOuterAlt(_localctx, 31);
+        setState(1430);
+        match(SparqlAutomaticParser::MINUTES);
+        setState(1431);
+        match(SparqlAutomaticParser::T__1);
+        setState(1432);
+        expression();
+        setState(1433);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::SECONDS: {
+        enterOuterAlt(_localctx, 32);
+        setState(1435);
+        match(SparqlAutomaticParser::SECONDS);
+        setState(1436);
+        match(SparqlAutomaticParser::T__1);
+        setState(1437);
+        expression();
+        setState(1438);
+        match(SparqlAutomaticParser::T__2);
+        break;
+      }
+
+      case SparqlAutomaticParser::TIMEZONE: {
+        enterOuterAlt(_localctx, 33);
+        setState(1440);
+        match(SparqlAutomaticParser::TIMEZONE);
+        setState(1441);
+        match(SparqlAutomaticParser::T__1);
+        setState(1442);
+        expression();
+        setState(1443);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::TZ: {
         enterOuterAlt(_localctx, 34);
-        setState(1401);
+        setState(1445);
         match(SparqlAutomaticParser::TZ);
-        setState(1402);
+        setState(1446);
         match(SparqlAutomaticParser::T__1);
-        setState(1403);
+        setState(1447);
         expression();
-        setState(1404);
+        setState(1448);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::NOW: {
         enterOuterAlt(_localctx, 35);
-        setState(1406);
+        setState(1450);
         match(SparqlAutomaticParser::NOW);
-        setState(1407);
+        setState(1451);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
       case SparqlAutomaticParser::UUID: {
         enterOuterAlt(_localctx, 36);
-        setState(1408);
+        setState(1452);
         match(SparqlAutomaticParser::UUID);
-        setState(1409);
+        setState(1453);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
       case SparqlAutomaticParser::STRUUID: {
         enterOuterAlt(_localctx, 37);
-        setState(1410);
+        setState(1454);
         match(SparqlAutomaticParser::STRUUID);
-        setState(1411);
+        setState(1455);
         match(SparqlAutomaticParser::NIL);
         break;
       }
 
       case SparqlAutomaticParser::MD5: {
         enterOuterAlt(_localctx, 38);
-        setState(1412);
+        setState(1456);
         match(SparqlAutomaticParser::MD5);
-        setState(1413);
+        setState(1457);
         match(SparqlAutomaticParser::T__1);
-        setState(1414);
+        setState(1458);
         expression();
-        setState(1415);
+        setState(1459);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SHA1: {
         enterOuterAlt(_localctx, 39);
-        setState(1417);
+        setState(1461);
         match(SparqlAutomaticParser::SHA1);
-        setState(1418);
+        setState(1462);
         match(SparqlAutomaticParser::T__1);
-        setState(1419);
+        setState(1463);
         expression();
-        setState(1420);
+        setState(1464);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SHA256: {
         enterOuterAlt(_localctx, 40);
-        setState(1422);
+        setState(1466);
         match(SparqlAutomaticParser::SHA256);
-        setState(1423);
+        setState(1467);
         match(SparqlAutomaticParser::T__1);
-        setState(1424);
+        setState(1468);
         expression();
-        setState(1425);
+        setState(1469);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SHA384: {
         enterOuterAlt(_localctx, 41);
-        setState(1427);
+        setState(1471);
         match(SparqlAutomaticParser::SHA384);
-        setState(1428);
+        setState(1472);
         match(SparqlAutomaticParser::T__1);
-        setState(1429);
+        setState(1473);
         expression();
-        setState(1430);
+        setState(1474);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SHA512: {
         enterOuterAlt(_localctx, 42);
-        setState(1432);
+        setState(1476);
         match(SparqlAutomaticParser::SHA512);
-        setState(1433);
+        setState(1477);
         match(SparqlAutomaticParser::T__1);
-        setState(1434);
+        setState(1478);
         expression();
-        setState(1435);
+        setState(1479);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::COALESCE: {
         enterOuterAlt(_localctx, 43);
-        setState(1437);
+        setState(1481);
         match(SparqlAutomaticParser::COALESCE);
-        setState(1438);
+        setState(1482);
         expressionList();
         break;
       }
 
       case SparqlAutomaticParser::IF: {
         enterOuterAlt(_localctx, 44);
-        setState(1439);
+        setState(1483);
         match(SparqlAutomaticParser::IF);
-        setState(1440);
+        setState(1484);
         match(SparqlAutomaticParser::T__1);
-        setState(1441);
+        setState(1485);
         expression();
-        setState(1442);
+        setState(1486);
         match(SparqlAutomaticParser::T__7);
-        setState(1443);
+        setState(1487);
         expression();
-        setState(1444);
+        setState(1488);
         match(SparqlAutomaticParser::T__7);
-        setState(1445);
+        setState(1489);
         expression();
-        setState(1446);
+        setState(1490);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::STRLANG: {
         enterOuterAlt(_localctx, 45);
-        setState(1448);
+        setState(1492);
         match(SparqlAutomaticParser::STRLANG);
-        setState(1449);
+        setState(1493);
         match(SparqlAutomaticParser::T__1);
-        setState(1450);
+        setState(1494);
         expression();
-        setState(1451);
+        setState(1495);
         match(SparqlAutomaticParser::T__7);
-        setState(1452);
+        setState(1496);
         expression();
-        setState(1453);
+        setState(1497);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::STRDT: {
         enterOuterAlt(_localctx, 46);
-        setState(1455);
+        setState(1499);
         match(SparqlAutomaticParser::STRDT);
-        setState(1456);
+        setState(1500);
         match(SparqlAutomaticParser::T__1);
-        setState(1457);
+        setState(1501);
         expression();
-        setState(1458);
+        setState(1502);
         match(SparqlAutomaticParser::T__7);
-        setState(1459);
+        setState(1503);
         expression();
-        setState(1460);
+        setState(1504);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SAMETERM: {
         enterOuterAlt(_localctx, 47);
-        setState(1462);
+        setState(1506);
         match(SparqlAutomaticParser::SAMETERM);
-        setState(1463);
+        setState(1507);
         match(SparqlAutomaticParser::T__1);
-        setState(1464);
+        setState(1508);
         expression();
-        setState(1465);
+        setState(1509);
         match(SparqlAutomaticParser::T__7);
-        setState(1466);
+        setState(1510);
         expression();
-        setState(1467);
+        setState(1511);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::ISIRI: {
         enterOuterAlt(_localctx, 48);
-        setState(1469);
+        setState(1513);
         match(SparqlAutomaticParser::ISIRI);
-        setState(1470);
+        setState(1514);
         match(SparqlAutomaticParser::T__1);
-        setState(1471);
+        setState(1515);
         expression();
-        setState(1472);
+        setState(1516);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::ISURI: {
         enterOuterAlt(_localctx, 49);
-        setState(1474);
+        setState(1518);
         match(SparqlAutomaticParser::ISURI);
-        setState(1475);
+        setState(1519);
         match(SparqlAutomaticParser::T__1);
-        setState(1476);
+        setState(1520);
         expression();
-        setState(1477);
+        setState(1521);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::ISBLANK: {
         enterOuterAlt(_localctx, 50);
-        setState(1479);
+        setState(1523);
         match(SparqlAutomaticParser::ISBLANK);
-        setState(1480);
+        setState(1524);
         match(SparqlAutomaticParser::T__1);
-        setState(1481);
+        setState(1525);
         expression();
-        setState(1482);
+        setState(1526);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::ISLITERAL: {
         enterOuterAlt(_localctx, 51);
-        setState(1484);
+        setState(1528);
         match(SparqlAutomaticParser::ISLITERAL);
-        setState(1485);
+        setState(1529);
         match(SparqlAutomaticParser::T__1);
-        setState(1486);
+        setState(1530);
         expression();
-        setState(1487);
+        setState(1531);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::ISNUMERIC: {
         enterOuterAlt(_localctx, 52);
-        setState(1489);
+        setState(1533);
         match(SparqlAutomaticParser::ISNUMERIC);
-        setState(1490);
+        setState(1534);
         match(SparqlAutomaticParser::T__1);
-        setState(1491);
+        setState(1535);
         expression();
-        setState(1492);
+        setState(1536);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::REGEX: {
         enterOuterAlt(_localctx, 53);
-        setState(1494);
+        setState(1538);
         regexExpression();
         break;
       }
 
       case SparqlAutomaticParser::EXISTS: {
         enterOuterAlt(_localctx, 54);
-        setState(1495);
+        setState(1539);
         existsFunc();
         break;
       }
 
       case SparqlAutomaticParser::NOT: {
         enterOuterAlt(_localctx, 55);
-        setState(1496);
+        setState(1540);
         notExistsFunc();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14397,48 +13429,44 @@ SparqlAutomaticParser::builtInCall() {
   return _localctx;
 }
 
-//----------------- RegexExpressionContext
-//------------------------------------------------------------------
+//----------------- RegexExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::RegexExpressionContext::RegexExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::RegexExpressionContext::RegexExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::RegexExpressionContext::REGEX() {
   return getToken(SparqlAutomaticParser::REGEX, 0);
 }
 
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::RegexExpressionContext::expression() {
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::RegexExpressionContext::expression() {
   return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::RegexExpressionContext::expression(size_t i) {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::RegexExpressionContext::expression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::RegexExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleRegexExpression;
 }
 
-void SparqlAutomaticParser::RegexExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterRegexExpression(this);
+void SparqlAutomaticParser::RegexExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterRegexExpression(this);
 }
 
-void SparqlAutomaticParser::RegexExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitRegexExpression(this);
+void SparqlAutomaticParser::RegexExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitRegexExpression(this);
 }
 
-SparqlAutomaticParser::RegexExpressionContext*
-SparqlAutomaticParser::regexExpression() {
-  RegexExpressionContext* _localctx =
-      _tracker.createInstance<RegexExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 270, SparqlAutomaticParser::RuleRegexExpression);
+SparqlAutomaticParser::RegexExpressionContext* SparqlAutomaticParser::regexExpression() {
+  RegexExpressionContext *_localctx = _tracker.createInstance<RegexExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 284, SparqlAutomaticParser::RuleRegexExpression);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -14450,30 +13478,31 @@ SparqlAutomaticParser::regexExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1499);
+    setState(1543);
     match(SparqlAutomaticParser::REGEX);
-    setState(1500);
+    setState(1544);
     match(SparqlAutomaticParser::T__1);
-    setState(1501);
+    setState(1545);
     expression();
-    setState(1502);
+    setState(1546);
     match(SparqlAutomaticParser::T__7);
-    setState(1503);
+    setState(1547);
     expression();
-    setState(1506);
+    setState(1550);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__7) {
-      setState(1504);
+      setState(1548);
       match(SparqlAutomaticParser::T__7);
-      setState(1505);
+      setState(1549);
       expression();
     }
-    setState(1508);
+    setState(1552);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14482,43 +13511,40 @@ SparqlAutomaticParser::regexExpression() {
   return _localctx;
 }
 
-//----------------- LangExpressionContext
-//------------------------------------------------------------------
+//----------------- LangExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::LangExpressionContext::LangExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::LangExpressionContext::LangExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::LangExpressionContext::LANG() {
   return getToken(SparqlAutomaticParser::LANG, 0);
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::LangExpressionContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::LangExpressionContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::LangExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleLangExpression;
 }
 
-void SparqlAutomaticParser::LangExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterLangExpression(this);
+void SparqlAutomaticParser::LangExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterLangExpression(this);
 }
 
-void SparqlAutomaticParser::LangExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitLangExpression(this);
+void SparqlAutomaticParser::LangExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitLangExpression(this);
 }
 
-SparqlAutomaticParser::LangExpressionContext*
-SparqlAutomaticParser::langExpression() {
-  LangExpressionContext* _localctx =
-      _tracker.createInstance<LangExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 272, SparqlAutomaticParser::RuleLangExpression);
+SparqlAutomaticParser::LangExpressionContext* SparqlAutomaticParser::langExpression() {
+  LangExpressionContext *_localctx = _tracker.createInstance<LangExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 286, SparqlAutomaticParser::RuleLangExpression);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -14529,16 +13555,17 @@ SparqlAutomaticParser::langExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1510);
+    setState(1554);
     match(SparqlAutomaticParser::LANG);
-    setState(1511);
+    setState(1555);
     match(SparqlAutomaticParser::T__1);
-    setState(1512);
+    setState(1556);
     expression();
-    setState(1513);
+    setState(1557);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14547,49 +13574,44 @@ SparqlAutomaticParser::langExpression() {
   return _localctx;
 }
 
-//----------------- SubstringExpressionContext
-//------------------------------------------------------------------
+//----------------- SubstringExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::SubstringExpressionContext::SubstringExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::SubstringExpressionContext::SubstringExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::SubstringExpressionContext::SUBSTR() {
+tree::TerminalNode* SparqlAutomaticParser::SubstringExpressionContext::SUBSTR() {
   return getToken(SparqlAutomaticParser::SUBSTR, 0);
 }
 
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::SubstringExpressionContext::expression() {
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::SubstringExpressionContext::expression() {
   return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::SubstringExpressionContext::expression(size_t i) {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::SubstringExpressionContext::expression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
 }
+
 
 size_t SparqlAutomaticParser::SubstringExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleSubstringExpression;
 }
 
-void SparqlAutomaticParser::SubstringExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterSubstringExpression(this);
+void SparqlAutomaticParser::SubstringExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterSubstringExpression(this);
 }
 
-void SparqlAutomaticParser::SubstringExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitSubstringExpression(this);
+void SparqlAutomaticParser::SubstringExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitSubstringExpression(this);
 }
 
-SparqlAutomaticParser::SubstringExpressionContext*
-SparqlAutomaticParser::substringExpression() {
-  SubstringExpressionContext* _localctx =
-      _tracker.createInstance<SubstringExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 274, SparqlAutomaticParser::RuleSubstringExpression);
+SparqlAutomaticParser::SubstringExpressionContext* SparqlAutomaticParser::substringExpression() {
+  SubstringExpressionContext *_localctx = _tracker.createInstance<SubstringExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 288, SparqlAutomaticParser::RuleSubstringExpression);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -14601,30 +13623,31 @@ SparqlAutomaticParser::substringExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1515);
+    setState(1559);
     match(SparqlAutomaticParser::SUBSTR);
-    setState(1516);
+    setState(1560);
     match(SparqlAutomaticParser::T__1);
-    setState(1517);
+    setState(1561);
     expression();
-    setState(1518);
+    setState(1562);
     match(SparqlAutomaticParser::T__7);
-    setState(1519);
+    setState(1563);
     expression();
-    setState(1522);
+    setState(1566);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__7) {
-      setState(1520);
+      setState(1564);
       match(SparqlAutomaticParser::T__7);
-      setState(1521);
+      setState(1565);
       expression();
     }
-    setState(1524);
+    setState(1568);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14633,51 +13656,44 @@ SparqlAutomaticParser::substringExpression() {
   return _localctx;
 }
 
-//----------------- StrReplaceExpressionContext
-//------------------------------------------------------------------
+//----------------- StrReplaceExpressionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::StrReplaceExpressionContext::StrReplaceExpressionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::StrReplaceExpressionContext::StrReplaceExpressionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::StrReplaceExpressionContext::REPLACE() {
+tree::TerminalNode* SparqlAutomaticParser::StrReplaceExpressionContext::REPLACE() {
   return getToken(SparqlAutomaticParser::REPLACE, 0);
 }
 
-std::vector<SparqlAutomaticParser::ExpressionContext*>
-SparqlAutomaticParser::StrReplaceExpressionContext::expression() {
+std::vector<SparqlAutomaticParser::ExpressionContext *> SparqlAutomaticParser::StrReplaceExpressionContext::expression() {
   return getRuleContexts<SparqlAutomaticParser::ExpressionContext>();
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::StrReplaceExpressionContext::expression(size_t i) {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::StrReplaceExpressionContext::expression(size_t i) {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(i);
 }
 
-size_t SparqlAutomaticParser::StrReplaceExpressionContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::StrReplaceExpressionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleStrReplaceExpression;
 }
 
-void SparqlAutomaticParser::StrReplaceExpressionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::StrReplaceExpressionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterStrReplaceExpression(this);
 }
 
-void SparqlAutomaticParser::StrReplaceExpressionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitStrReplaceExpression(this);
+void SparqlAutomaticParser::StrReplaceExpressionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitStrReplaceExpression(this);
 }
 
-SparqlAutomaticParser::StrReplaceExpressionContext*
-SparqlAutomaticParser::strReplaceExpression() {
-  StrReplaceExpressionContext* _localctx =
-      _tracker.createInstance<StrReplaceExpressionContext>(_ctx, getState());
-  enterRule(_localctx, 276, SparqlAutomaticParser::RuleStrReplaceExpression);
+SparqlAutomaticParser::StrReplaceExpressionContext* SparqlAutomaticParser::strReplaceExpression() {
+  StrReplaceExpressionContext *_localctx = _tracker.createInstance<StrReplaceExpressionContext>(_ctx, getState());
+  enterRule(_localctx, 290, SparqlAutomaticParser::RuleStrReplaceExpression);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -14689,34 +13705,35 @@ SparqlAutomaticParser::strReplaceExpression() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1526);
+    setState(1570);
     match(SparqlAutomaticParser::REPLACE);
-    setState(1527);
+    setState(1571);
     match(SparqlAutomaticParser::T__1);
-    setState(1528);
+    setState(1572);
     expression();
-    setState(1529);
+    setState(1573);
     match(SparqlAutomaticParser::T__7);
-    setState(1530);
+    setState(1574);
     expression();
-    setState(1531);
+    setState(1575);
     match(SparqlAutomaticParser::T__7);
-    setState(1532);
+    setState(1576);
     expression();
-    setState(1535);
+    setState(1579);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__7) {
-      setState(1533);
+      setState(1577);
       match(SparqlAutomaticParser::T__7);
-      setState(1534);
+      setState(1578);
       expression();
     }
-    setState(1537);
+    setState(1581);
     match(SparqlAutomaticParser::T__2);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14725,42 +13742,40 @@ SparqlAutomaticParser::strReplaceExpression() {
   return _localctx;
 }
 
-//----------------- ExistsFuncContext
-//------------------------------------------------------------------
+//----------------- ExistsFuncContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::ExistsFuncContext::ExistsFuncContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::ExistsFuncContext::ExistsFuncContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::ExistsFuncContext::EXISTS() {
   return getToken(SparqlAutomaticParser::EXISTS, 0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::ExistsFuncContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::ExistsFuncContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::ExistsFuncContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleExistsFunc;
 }
 
-void SparqlAutomaticParser::ExistsFuncContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterExistsFunc(this);
+void SparqlAutomaticParser::ExistsFuncContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterExistsFunc(this);
 }
 
-void SparqlAutomaticParser::ExistsFuncContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitExistsFunc(this);
+void SparqlAutomaticParser::ExistsFuncContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitExistsFunc(this);
 }
 
 SparqlAutomaticParser::ExistsFuncContext* SparqlAutomaticParser::existsFunc() {
-  ExistsFuncContext* _localctx =
-      _tracker.createInstance<ExistsFuncContext>(_ctx, getState());
-  enterRule(_localctx, 278, SparqlAutomaticParser::RuleExistsFunc);
+  ExistsFuncContext *_localctx = _tracker.createInstance<ExistsFuncContext>(_ctx, getState());
+  enterRule(_localctx, 292, SparqlAutomaticParser::RuleExistsFunc);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -14771,12 +13786,13 @@ SparqlAutomaticParser::ExistsFuncContext* SparqlAutomaticParser::existsFunc() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1539);
+    setState(1583);
     match(SparqlAutomaticParser::EXISTS);
-    setState(1540);
+    setState(1584);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14785,12 +13801,11 @@ SparqlAutomaticParser::ExistsFuncContext* SparqlAutomaticParser::existsFunc() {
   return _localctx;
 }
 
-//----------------- NotExistsFuncContext
-//------------------------------------------------------------------
+//----------------- NotExistsFuncContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NotExistsFuncContext::NotExistsFuncContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NotExistsFuncContext::NotExistsFuncContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::NotExistsFuncContext::NOT() {
   return getToken(SparqlAutomaticParser::NOT, 0);
@@ -14800,32 +13815,30 @@ tree::TerminalNode* SparqlAutomaticParser::NotExistsFuncContext::EXISTS() {
   return getToken(SparqlAutomaticParser::EXISTS, 0);
 }
 
-SparqlAutomaticParser::GroupGraphPatternContext*
-SparqlAutomaticParser::NotExistsFuncContext::groupGraphPattern() {
+SparqlAutomaticParser::GroupGraphPatternContext* SparqlAutomaticParser::NotExistsFuncContext::groupGraphPattern() {
   return getRuleContext<SparqlAutomaticParser::GroupGraphPatternContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::NotExistsFuncContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNotExistsFunc;
 }
 
-void SparqlAutomaticParser::NotExistsFuncContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterNotExistsFunc(this);
+void SparqlAutomaticParser::NotExistsFuncContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterNotExistsFunc(this);
 }
 
-void SparqlAutomaticParser::NotExistsFuncContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitNotExistsFunc(this);
+void SparqlAutomaticParser::NotExistsFuncContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitNotExistsFunc(this);
 }
 
-SparqlAutomaticParser::NotExistsFuncContext*
-SparqlAutomaticParser::notExistsFunc() {
-  NotExistsFuncContext* _localctx =
-      _tracker.createInstance<NotExistsFuncContext>(_ctx, getState());
-  enterRule(_localctx, 280, SparqlAutomaticParser::RuleNotExistsFunc);
+SparqlAutomaticParser::NotExistsFuncContext* SparqlAutomaticParser::notExistsFunc() {
+  NotExistsFuncContext *_localctx = _tracker.createInstance<NotExistsFuncContext>(_ctx, getState());
+  enterRule(_localctx, 294, SparqlAutomaticParser::RuleNotExistsFunc);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -14836,14 +13849,15 @@ SparqlAutomaticParser::notExistsFunc() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1542);
+    setState(1586);
     match(SparqlAutomaticParser::NOT);
-    setState(1543);
+    setState(1587);
     match(SparqlAutomaticParser::EXISTS);
-    setState(1544);
+    setState(1588);
     groupGraphPattern();
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -14852,19 +13866,17 @@ SparqlAutomaticParser::notExistsFunc() {
   return _localctx;
 }
 
-//----------------- AggregateContext
-//------------------------------------------------------------------
+//----------------- AggregateContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::AggregateContext::AggregateContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::AggregateContext::AggregateContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::AggregateContext::COUNT() {
   return getToken(SparqlAutomaticParser::COUNT, 0);
 }
 
-SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::AggregateContext::expression() {
+SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::AggregateContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
@@ -14904,31 +13916,30 @@ tree::TerminalNode* SparqlAutomaticParser::AggregateContext::SEPARATOR() {
   return getToken(SparqlAutomaticParser::SEPARATOR, 0);
 }
 
-SparqlAutomaticParser::StringContext*
-SparqlAutomaticParser::AggregateContext::string() {
+SparqlAutomaticParser::StringContext* SparqlAutomaticParser::AggregateContext::string() {
   return getRuleContext<SparqlAutomaticParser::StringContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::AggregateContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleAggregate;
 }
 
-void SparqlAutomaticParser::AggregateContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAggregate(this);
+void SparqlAutomaticParser::AggregateContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterAggregate(this);
 }
 
-void SparqlAutomaticParser::AggregateContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAggregate(this);
+void SparqlAutomaticParser::AggregateContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitAggregate(this);
 }
 
 SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
-  AggregateContext* _localctx =
-      _tracker.createInstance<AggregateContext>(_ctx, getState());
-  enterRule(_localctx, 282, SparqlAutomaticParser::RuleAggregate);
+  AggregateContext *_localctx = _tracker.createInstance<AggregateContext>(_ctx, getState());
+  enterRule(_localctx, 296, SparqlAutomaticParser::RuleAggregate);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -14939,28 +13950,28 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
     exitRule();
   });
   try {
-    setState(1618);
+    setState(1662);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::COUNT: {
         enterOuterAlt(_localctx, 1);
-        setState(1546);
+        setState(1590);
         match(SparqlAutomaticParser::COUNT);
-        setState(1547);
+        setState(1591);
         match(SparqlAutomaticParser::T__1);
-        setState(1549);
+        setState(1593);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1548);
+          setState(1592);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1553);
+        setState(1597);
         _errHandler->sync(this);
         switch (_input->LA(1)) {
           case SparqlAutomaticParser::T__0: {
-            setState(1551);
+            setState(1595);
             match(SparqlAutomaticParser::T__0);
             break;
           }
@@ -15052,185 +14063,186 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
           case SparqlAutomaticParser::STRING_LITERAL2:
           case SparqlAutomaticParser::STRING_LITERAL_LONG1:
           case SparqlAutomaticParser::STRING_LITERAL_LONG2: {
-            setState(1552);
+            setState(1596);
             expression();
             break;
           }
 
-          default:
-            throw NoViableAltException(this);
+        default:
+          throw NoViableAltException(this);
         }
-        setState(1555);
+        setState(1599);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SUM: {
         enterOuterAlt(_localctx, 2);
-        setState(1556);
+        setState(1600);
         match(SparqlAutomaticParser::SUM);
-        setState(1557);
+        setState(1601);
         match(SparqlAutomaticParser::T__1);
-        setState(1559);
+        setState(1603);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1558);
+          setState(1602);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1561);
+        setState(1605);
         expression();
-        setState(1562);
+        setState(1606);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::MIN: {
         enterOuterAlt(_localctx, 3);
-        setState(1564);
+        setState(1608);
         match(SparqlAutomaticParser::MIN);
-        setState(1565);
+        setState(1609);
         match(SparqlAutomaticParser::T__1);
-        setState(1567);
+        setState(1611);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1566);
+          setState(1610);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1569);
+        setState(1613);
         expression();
-        setState(1570);
+        setState(1614);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::MAX: {
         enterOuterAlt(_localctx, 4);
-        setState(1572);
+        setState(1616);
         match(SparqlAutomaticParser::MAX);
-        setState(1573);
+        setState(1617);
         match(SparqlAutomaticParser::T__1);
-        setState(1575);
+        setState(1619);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1574);
+          setState(1618);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1577);
+        setState(1621);
         expression();
-        setState(1578);
+        setState(1622);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::AVG: {
         enterOuterAlt(_localctx, 5);
-        setState(1580);
+        setState(1624);
         match(SparqlAutomaticParser::AVG);
-        setState(1581);
+        setState(1625);
         match(SparqlAutomaticParser::T__1);
-        setState(1583);
+        setState(1627);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1582);
+          setState(1626);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1585);
+        setState(1629);
         expression();
-        setState(1586);
+        setState(1630);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::STDEV: {
         enterOuterAlt(_localctx, 6);
-        setState(1588);
+        setState(1632);
         match(SparqlAutomaticParser::STDEV);
-        setState(1589);
+        setState(1633);
         match(SparqlAutomaticParser::T__1);
-        setState(1591);
+        setState(1635);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1590);
+          setState(1634);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1593);
+        setState(1637);
         expression();
-        setState(1594);
+        setState(1638);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::SAMPLE: {
         enterOuterAlt(_localctx, 7);
-        setState(1596);
+        setState(1640);
         match(SparqlAutomaticParser::SAMPLE);
-        setState(1597);
+        setState(1641);
         match(SparqlAutomaticParser::T__1);
-        setState(1599);
+        setState(1643);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1598);
+          setState(1642);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1601);
+        setState(1645);
         expression();
-        setState(1602);
+        setState(1646);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
       case SparqlAutomaticParser::GROUP_CONCAT: {
         enterOuterAlt(_localctx, 8);
-        setState(1604);
+        setState(1648);
         match(SparqlAutomaticParser::GROUP_CONCAT);
-        setState(1605);
+        setState(1649);
         match(SparqlAutomaticParser::T__1);
-        setState(1607);
+        setState(1651);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::DISTINCT) {
-          setState(1606);
+          setState(1650);
           match(SparqlAutomaticParser::DISTINCT);
         }
-        setState(1609);
+        setState(1653);
         expression();
-        setState(1614);
+        setState(1658);
         _errHandler->sync(this);
 
         _la = _input->LA(1);
         if (_la == SparqlAutomaticParser::T__5) {
-          setState(1610);
+          setState(1654);
           match(SparqlAutomaticParser::T__5);
-          setState(1611);
+          setState(1655);
           match(SparqlAutomaticParser::SEPARATOR);
-          setState(1612);
+          setState(1656);
           match(SparqlAutomaticParser::T__19);
-          setState(1613);
+          setState(1657);
           string();
         }
-        setState(1616);
+        setState(1660);
         match(SparqlAutomaticParser::T__2);
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15239,44 +14251,40 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
   return _localctx;
 }
 
-//----------------- IriOrFunctionContext
-//------------------------------------------------------------------
+//----------------- IriOrFunctionContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::IriOrFunctionContext::IriOrFunctionContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::IriOrFunctionContext::IriOrFunctionContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::IriOrFunctionContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::IriOrFunctionContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
-SparqlAutomaticParser::ArgListContext*
-SparqlAutomaticParser::IriOrFunctionContext::argList() {
+SparqlAutomaticParser::ArgListContext* SparqlAutomaticParser::IriOrFunctionContext::argList() {
   return getRuleContext<SparqlAutomaticParser::ArgListContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::IriOrFunctionContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleIriOrFunction;
 }
 
-void SparqlAutomaticParser::IriOrFunctionContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterIriOrFunction(this);
+void SparqlAutomaticParser::IriOrFunctionContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterIriOrFunction(this);
 }
 
-void SparqlAutomaticParser::IriOrFunctionContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitIriOrFunction(this);
+void SparqlAutomaticParser::IriOrFunctionContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitIriOrFunction(this);
 }
 
-SparqlAutomaticParser::IriOrFunctionContext*
-SparqlAutomaticParser::iriOrFunction() {
-  IriOrFunctionContext* _localctx =
-      _tracker.createInstance<IriOrFunctionContext>(_ctx, getState());
-  enterRule(_localctx, 284, SparqlAutomaticParser::RuleIriOrFunction);
+SparqlAutomaticParser::IriOrFunctionContext* SparqlAutomaticParser::iriOrFunction() {
+  IriOrFunctionContext *_localctx = _tracker.createInstance<IriOrFunctionContext>(_ctx, getState());
+  enterRule(_localctx, 298, SparqlAutomaticParser::RuleIriOrFunction);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15288,19 +14296,19 @@ SparqlAutomaticParser::iriOrFunction() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1620);
+    setState(1664);
     iri();
-    setState(1622);
+    setState(1666);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__1 ||
-        _la == SparqlAutomaticParser::NIL) {
-      setState(1621);
+    if (_la == SparqlAutomaticParser::T__1 || _la == SparqlAutomaticParser::NIL) {
+      setState(1665);
       argList();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15309,15 +14317,13 @@ SparqlAutomaticParser::iriOrFunction() {
   return _localctx;
 }
 
-//----------------- RdfLiteralContext
-//------------------------------------------------------------------
+//----------------- RdfLiteralContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::RdfLiteralContext::RdfLiteralContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::RdfLiteralContext::RdfLiteralContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::StringContext*
-SparqlAutomaticParser::RdfLiteralContext::string() {
+SparqlAutomaticParser::StringContext* SparqlAutomaticParser::RdfLiteralContext::string() {
   return getRuleContext<SparqlAutomaticParser::StringContext>(0);
 }
 
@@ -15325,31 +14331,30 @@ tree::TerminalNode* SparqlAutomaticParser::RdfLiteralContext::LANGTAG() {
   return getToken(SparqlAutomaticParser::LANGTAG, 0);
 }
 
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::RdfLiteralContext::iri() {
+SparqlAutomaticParser::IriContext* SparqlAutomaticParser::RdfLiteralContext::iri() {
   return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::RdfLiteralContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleRdfLiteral;
 }
 
-void SparqlAutomaticParser::RdfLiteralContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterRdfLiteral(this);
+void SparqlAutomaticParser::RdfLiteralContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterRdfLiteral(this);
 }
 
-void SparqlAutomaticParser::RdfLiteralContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitRdfLiteral(this);
+void SparqlAutomaticParser::RdfLiteralContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitRdfLiteral(this);
 }
 
 SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
-  RdfLiteralContext* _localctx =
-      _tracker.createInstance<RdfLiteralContext>(_ctx, getState());
-  enterRule(_localctx, 286, SparqlAutomaticParser::RuleRdfLiteral);
+  RdfLiteralContext *_localctx = _tracker.createInstance<RdfLiteralContext>(_ctx, getState());
+  enterRule(_localctx, 300, SparqlAutomaticParser::RuleRdfLiteral);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -15360,21 +14365,21 @@ SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1624);
+    setState(1668);
     string();
-    setState(1628);
+    setState(1672);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::LANGTAG: {
-        setState(1625);
+        setState(1669);
         match(SparqlAutomaticParser::LANGTAG);
         break;
       }
 
       case SparqlAutomaticParser::T__26: {
-        setState(1626);
+        setState(1670);
         match(SparqlAutomaticParser::T__26);
-        setState(1627);
+        setState(1671);
         iri();
         break;
       }
@@ -15441,11 +14446,12 @@ SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
         break;
       }
 
-      default:
-        break;
+    default:
+      break;
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15454,52 +14460,44 @@ SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
   return _localctx;
 }
 
-//----------------- NumericLiteralContext
-//------------------------------------------------------------------
+//----------------- NumericLiteralContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NumericLiteralContext::NumericLiteralContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
-
-SparqlAutomaticParser::NumericLiteralUnsignedContext*
-SparqlAutomaticParser::NumericLiteralContext::numericLiteralUnsigned() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralUnsignedContext>(
-      0);
+SparqlAutomaticParser::NumericLiteralContext::NumericLiteralContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
 }
 
-SparqlAutomaticParser::NumericLiteralPositiveContext*
-SparqlAutomaticParser::NumericLiteralContext::numericLiteralPositive() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralPositiveContext>(
-      0);
+SparqlAutomaticParser::NumericLiteralUnsignedContext* SparqlAutomaticParser::NumericLiteralContext::numericLiteralUnsigned() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralUnsignedContext>(0);
 }
 
-SparqlAutomaticParser::NumericLiteralNegativeContext*
-SparqlAutomaticParser::NumericLiteralContext::numericLiteralNegative() {
-  return getRuleContext<SparqlAutomaticParser::NumericLiteralNegativeContext>(
-      0);
+SparqlAutomaticParser::NumericLiteralPositiveContext* SparqlAutomaticParser::NumericLiteralContext::numericLiteralPositive() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralPositiveContext>(0);
 }
+
+SparqlAutomaticParser::NumericLiteralNegativeContext* SparqlAutomaticParser::NumericLiteralContext::numericLiteralNegative() {
+  return getRuleContext<SparqlAutomaticParser::NumericLiteralNegativeContext>(0);
+}
+
 
 size_t SparqlAutomaticParser::NumericLiteralContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNumericLiteral;
 }
 
-void SparqlAutomaticParser::NumericLiteralContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterNumericLiteral(this);
+void SparqlAutomaticParser::NumericLiteralContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterNumericLiteral(this);
 }
 
-void SparqlAutomaticParser::NumericLiteralContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitNumericLiteral(this);
+void SparqlAutomaticParser::NumericLiteralContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitNumericLiteral(this);
 }
 
-SparqlAutomaticParser::NumericLiteralContext*
-SparqlAutomaticParser::numericLiteral() {
-  NumericLiteralContext* _localctx =
-      _tracker.createInstance<NumericLiteralContext>(_ctx, getState());
-  enterRule(_localctx, 288, SparqlAutomaticParser::RuleNumericLiteral);
+SparqlAutomaticParser::NumericLiteralContext* SparqlAutomaticParser::numericLiteral() {
+  NumericLiteralContext *_localctx = _tracker.createInstance<NumericLiteralContext>(_ctx, getState());
+  enterRule(_localctx, 302, SparqlAutomaticParser::RuleNumericLiteral);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -15509,14 +14507,14 @@ SparqlAutomaticParser::numericLiteral() {
     exitRule();
   });
   try {
-    setState(1633);
+    setState(1677);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::INTEGER:
       case SparqlAutomaticParser::DECIMAL:
       case SparqlAutomaticParser::DOUBLE: {
         enterOuterAlt(_localctx, 1);
-        setState(1630);
+        setState(1674);
         numericLiteralUnsigned();
         break;
       }
@@ -15525,7 +14523,7 @@ SparqlAutomaticParser::numericLiteral() {
       case SparqlAutomaticParser::DECIMAL_POSITIVE:
       case SparqlAutomaticParser::DOUBLE_POSITIVE: {
         enterOuterAlt(_localctx, 2);
-        setState(1631);
+        setState(1675);
         numericLiteralPositive();
         break;
       }
@@ -15534,16 +14532,17 @@ SparqlAutomaticParser::numericLiteral() {
       case SparqlAutomaticParser::DECIMAL_NEGATIVE:
       case SparqlAutomaticParser::DOUBLE_NEGATIVE: {
         enterOuterAlt(_localctx, 3);
-        setState(1632);
+        setState(1676);
         numericLiteralNegative();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15552,53 +14551,44 @@ SparqlAutomaticParser::numericLiteral() {
   return _localctx;
 }
 
-//----------------- NumericLiteralUnsignedContext
-//------------------------------------------------------------------
+//----------------- NumericLiteralUnsignedContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NumericLiteralUnsignedContext::
-    NumericLiteralUnsignedContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NumericLiteralUnsignedContext::NumericLiteralUnsignedContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralUnsignedContext::INTEGER() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralUnsignedContext::INTEGER() {
   return getToken(SparqlAutomaticParser::INTEGER, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralUnsignedContext::DECIMAL() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralUnsignedContext::DECIMAL() {
   return getToken(SparqlAutomaticParser::DECIMAL, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralUnsignedContext::DOUBLE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralUnsignedContext::DOUBLE() {
   return getToken(SparqlAutomaticParser::DOUBLE, 0);
 }
 
-size_t SparqlAutomaticParser::NumericLiteralUnsignedContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::NumericLiteralUnsignedContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNumericLiteralUnsigned;
 }
 
-void SparqlAutomaticParser::NumericLiteralUnsignedContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralUnsignedContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterNumericLiteralUnsigned(this);
 }
 
-void SparqlAutomaticParser::NumericLiteralUnsignedContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralUnsignedContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitNumericLiteralUnsigned(this);
 }
 
-SparqlAutomaticParser::NumericLiteralUnsignedContext*
-SparqlAutomaticParser::numericLiteralUnsigned() {
-  NumericLiteralUnsignedContext* _localctx =
-      _tracker.createInstance<NumericLiteralUnsignedContext>(_ctx, getState());
-  enterRule(_localctx, 290, SparqlAutomaticParser::RuleNumericLiteralUnsigned);
+SparqlAutomaticParser::NumericLiteralUnsignedContext* SparqlAutomaticParser::numericLiteralUnsigned() {
+  NumericLiteralUnsignedContext *_localctx = _tracker.createInstance<NumericLiteralUnsignedContext>(_ctx, getState());
+  enterRule(_localctx, 304, SparqlAutomaticParser::RuleNumericLiteralUnsigned);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15610,17 +14600,19 @@ SparqlAutomaticParser::numericLiteralUnsigned() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1635);
+    setState(1679);
     _la = _input->LA(1);
-    if (!(((((_la - 150) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 150)) & 7) != 0))) {
-      _errHandler->recoverInline(this);
-    } else {
+    if (!(((((_la - 150) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 150)) & 7) != 0))) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15629,53 +14621,44 @@ SparqlAutomaticParser::numericLiteralUnsigned() {
   return _localctx;
 }
 
-//----------------- NumericLiteralPositiveContext
-//------------------------------------------------------------------
+//----------------- NumericLiteralPositiveContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NumericLiteralPositiveContext::
-    NumericLiteralPositiveContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NumericLiteralPositiveContext::NumericLiteralPositiveContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralPositiveContext::INTEGER_POSITIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralPositiveContext::INTEGER_POSITIVE() {
   return getToken(SparqlAutomaticParser::INTEGER_POSITIVE, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralPositiveContext::DECIMAL_POSITIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralPositiveContext::DECIMAL_POSITIVE() {
   return getToken(SparqlAutomaticParser::DECIMAL_POSITIVE, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralPositiveContext::DOUBLE_POSITIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralPositiveContext::DOUBLE_POSITIVE() {
   return getToken(SparqlAutomaticParser::DOUBLE_POSITIVE, 0);
 }
 
-size_t SparqlAutomaticParser::NumericLiteralPositiveContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::NumericLiteralPositiveContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNumericLiteralPositive;
 }
 
-void SparqlAutomaticParser::NumericLiteralPositiveContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralPositiveContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterNumericLiteralPositive(this);
 }
 
-void SparqlAutomaticParser::NumericLiteralPositiveContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralPositiveContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitNumericLiteralPositive(this);
 }
 
-SparqlAutomaticParser::NumericLiteralPositiveContext*
-SparqlAutomaticParser::numericLiteralPositive() {
-  NumericLiteralPositiveContext* _localctx =
-      _tracker.createInstance<NumericLiteralPositiveContext>(_ctx, getState());
-  enterRule(_localctx, 292, SparqlAutomaticParser::RuleNumericLiteralPositive);
+SparqlAutomaticParser::NumericLiteralPositiveContext* SparqlAutomaticParser::numericLiteralPositive() {
+  NumericLiteralPositiveContext *_localctx = _tracker.createInstance<NumericLiteralPositiveContext>(_ctx, getState());
+  enterRule(_localctx, 306, SparqlAutomaticParser::RuleNumericLiteralPositive);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15687,17 +14670,19 @@ SparqlAutomaticParser::numericLiteralPositive() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1637);
+    setState(1681);
     _la = _input->LA(1);
-    if (!(((((_la - 153) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 153)) & 7) != 0))) {
-      _errHandler->recoverInline(this);
-    } else {
+    if (!(((((_la - 153) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 153)) & 7) != 0))) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15706,53 +14691,44 @@ SparqlAutomaticParser::numericLiteralPositive() {
   return _localctx;
 }
 
-//----------------- NumericLiteralNegativeContext
-//------------------------------------------------------------------
+//----------------- NumericLiteralNegativeContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::NumericLiteralNegativeContext::
-    NumericLiteralNegativeContext(ParserRuleContext* parent,
-                                  size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::NumericLiteralNegativeContext::NumericLiteralNegativeContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralNegativeContext::INTEGER_NEGATIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralNegativeContext::INTEGER_NEGATIVE() {
   return getToken(SparqlAutomaticParser::INTEGER_NEGATIVE, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralNegativeContext::DECIMAL_NEGATIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralNegativeContext::DECIMAL_NEGATIVE() {
   return getToken(SparqlAutomaticParser::DECIMAL_NEGATIVE, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::NumericLiteralNegativeContext::DOUBLE_NEGATIVE() {
+tree::TerminalNode* SparqlAutomaticParser::NumericLiteralNegativeContext::DOUBLE_NEGATIVE() {
   return getToken(SparqlAutomaticParser::DOUBLE_NEGATIVE, 0);
 }
 
-size_t SparqlAutomaticParser::NumericLiteralNegativeContext::getRuleIndex()
-    const {
+
+size_t SparqlAutomaticParser::NumericLiteralNegativeContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleNumericLiteralNegative;
 }
 
-void SparqlAutomaticParser::NumericLiteralNegativeContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralNegativeContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->enterNumericLiteralNegative(this);
 }
 
-void SparqlAutomaticParser::NumericLiteralNegativeContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
+void SparqlAutomaticParser::NumericLiteralNegativeContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
   if (parserListener != nullptr)
     parserListener->exitNumericLiteralNegative(this);
 }
 
-SparqlAutomaticParser::NumericLiteralNegativeContext*
-SparqlAutomaticParser::numericLiteralNegative() {
-  NumericLiteralNegativeContext* _localctx =
-      _tracker.createInstance<NumericLiteralNegativeContext>(_ctx, getState());
-  enterRule(_localctx, 294, SparqlAutomaticParser::RuleNumericLiteralNegative);
+SparqlAutomaticParser::NumericLiteralNegativeContext* SparqlAutomaticParser::numericLiteralNegative() {
+  NumericLiteralNegativeContext *_localctx = _tracker.createInstance<NumericLiteralNegativeContext>(_ctx, getState());
+  enterRule(_localctx, 308, SparqlAutomaticParser::RuleNumericLiteralNegative);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15764,17 +14740,19 @@ SparqlAutomaticParser::numericLiteralNegative() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1639);
+    setState(1683);
     _la = _input->LA(1);
-    if (!(((((_la - 156) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 156)) & 7) != 0))) {
-      _errHandler->recoverInline(this);
-    } else {
+    if (!(((((_la - 156) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 156)) & 7) != 0))) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15783,34 +14761,32 @@ SparqlAutomaticParser::numericLiteralNegative() {
   return _localctx;
 }
 
-//----------------- BooleanLiteralContext
-//------------------------------------------------------------------
+//----------------- BooleanLiteralContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BooleanLiteralContext::BooleanLiteralContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BooleanLiteralContext::BooleanLiteralContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
+
 
 size_t SparqlAutomaticParser::BooleanLiteralContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBooleanLiteral;
 }
 
-void SparqlAutomaticParser::BooleanLiteralContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterBooleanLiteral(this);
+void SparqlAutomaticParser::BooleanLiteralContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBooleanLiteral(this);
 }
 
-void SparqlAutomaticParser::BooleanLiteralContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBooleanLiteral(this);
+void SparqlAutomaticParser::BooleanLiteralContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBooleanLiteral(this);
 }
 
-SparqlAutomaticParser::BooleanLiteralContext*
-SparqlAutomaticParser::booleanLiteral() {
-  BooleanLiteralContext* _localctx =
-      _tracker.createInstance<BooleanLiteralContext>(_ctx, getState());
-  enterRule(_localctx, 296, SparqlAutomaticParser::RuleBooleanLiteral);
+SparqlAutomaticParser::BooleanLiteralContext* SparqlAutomaticParser::booleanLiteral() {
+  BooleanLiteralContext *_localctx = _tracker.createInstance<BooleanLiteralContext>(_ctx, getState());
+  enterRule(_localctx, 310, SparqlAutomaticParser::RuleBooleanLiteral);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15822,18 +14798,20 @@ SparqlAutomaticParser::booleanLiteral() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1641);
+    setState(1685);
     _la = _input->LA(1);
     if (!(_la == SparqlAutomaticParser::T__27
 
-          || _la == SparqlAutomaticParser::T__28)) {
-      _errHandler->recoverInline(this);
-    } else {
+    || _la == SparqlAutomaticParser::T__28)) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15842,12 +14820,11 @@ SparqlAutomaticParser::booleanLiteral() {
   return _localctx;
 }
 
-//----------------- StringContext
-//------------------------------------------------------------------
+//----------------- StringContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::StringContext::StringContext(ParserRuleContext* parent,
-                                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::StringContext::StringContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::StringContext::STRING_LITERAL1() {
   return getToken(SparqlAutomaticParser::STRING_LITERAL1, 0);
@@ -15857,36 +14834,34 @@ tree::TerminalNode* SparqlAutomaticParser::StringContext::STRING_LITERAL2() {
   return getToken(SparqlAutomaticParser::STRING_LITERAL2, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::StringContext::STRING_LITERAL_LONG1() {
+tree::TerminalNode* SparqlAutomaticParser::StringContext::STRING_LITERAL_LONG1() {
   return getToken(SparqlAutomaticParser::STRING_LITERAL_LONG1, 0);
 }
 
-tree::TerminalNode*
-SparqlAutomaticParser::StringContext::STRING_LITERAL_LONG2() {
+tree::TerminalNode* SparqlAutomaticParser::StringContext::STRING_LITERAL_LONG2() {
   return getToken(SparqlAutomaticParser::STRING_LITERAL_LONG2, 0);
 }
+
 
 size_t SparqlAutomaticParser::StringContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleString;
 }
 
-void SparqlAutomaticParser::StringContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterString(this);
+void SparqlAutomaticParser::StringContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterString(this);
 }
 
-void SparqlAutomaticParser::StringContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitString(this);
+void SparqlAutomaticParser::StringContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitString(this);
 }
 
 SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
-  StringContext* _localctx =
-      _tracker.createInstance<StringContext>(_ctx, getState());
-  enterRule(_localctx, 298, SparqlAutomaticParser::RuleString);
+  StringContext *_localctx = _tracker.createInstance<StringContext>(_ctx, getState());
+  enterRule(_localctx, 312, SparqlAutomaticParser::RuleString);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15898,17 +14873,19 @@ SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1643);
+    setState(1687);
     _la = _input->LA(1);
-    if (!(((((_la - 160) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 160)) & 15) != 0))) {
-      _errHandler->recoverInline(this);
-    } else {
+    if (!(((((_la - 160) & ~ 0x3fULL) == 0) &&
+      ((1ULL << (_la - 160)) & 15) != 0))) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -15917,20 +14894,17 @@ SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
   return _localctx;
 }
 
-//----------------- IriContext
-//------------------------------------------------------------------
+//----------------- IriContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::IriContext::IriContext(ParserRuleContext* parent,
-                                              size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::IriContext::IriContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::IrirefContext*
-SparqlAutomaticParser::IriContext::iriref() {
+SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::IriContext::iriref() {
   return getRuleContext<SparqlAutomaticParser::IrirefContext>(0);
 }
 
-SparqlAutomaticParser::PrefixedNameContext*
-SparqlAutomaticParser::IriContext::prefixedName() {
+SparqlAutomaticParser::PrefixedNameContext* SparqlAutomaticParser::IriContext::prefixedName() {
   return getRuleContext<SparqlAutomaticParser::PrefixedNameContext>(0);
 }
 
@@ -15938,25 +14912,26 @@ tree::TerminalNode* SparqlAutomaticParser::IriContext::PREFIX_LANGTAG() {
   return getToken(SparqlAutomaticParser::PREFIX_LANGTAG, 0);
 }
 
+
 size_t SparqlAutomaticParser::IriContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleIri;
 }
 
-void SparqlAutomaticParser::IriContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterIri(this);
+void SparqlAutomaticParser::IriContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterIri(this);
 }
 
-void SparqlAutomaticParser::IriContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitIri(this);
+void SparqlAutomaticParser::IriContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitIri(this);
 }
 
 SparqlAutomaticParser::IriContext* SparqlAutomaticParser::iri() {
-  IriContext* _localctx = _tracker.createInstance<IriContext>(_ctx, getState());
-  enterRule(_localctx, 300, SparqlAutomaticParser::RuleIri);
+  IriContext *_localctx = _tracker.createInstance<IriContext>(_ctx, getState());
+  enterRule(_localctx, 314, SparqlAutomaticParser::RuleIri);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -15968,35 +14943,36 @@ SparqlAutomaticParser::IriContext* SparqlAutomaticParser::iri() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1646);
+    setState(1690);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::PREFIX_LANGTAG) {
-      setState(1645);
+      setState(1689);
       match(SparqlAutomaticParser::PREFIX_LANGTAG);
     }
-    setState(1650);
+    setState(1694);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::IRI_REF: {
-        setState(1648);
+        setState(1692);
         iriref();
         break;
       }
 
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN: {
-        setState(1649);
+        setState(1693);
         prefixedName();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16005,44 +14981,40 @@ SparqlAutomaticParser::IriContext* SparqlAutomaticParser::iri() {
   return _localctx;
 }
 
-//----------------- PrefixedNameContext
-//------------------------------------------------------------------
+//----------------- PrefixedNameContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PrefixedNameContext::PrefixedNameContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PrefixedNameContext::PrefixedNameContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-SparqlAutomaticParser::PnameLnContext*
-SparqlAutomaticParser::PrefixedNameContext::pnameLn() {
+SparqlAutomaticParser::PnameLnContext* SparqlAutomaticParser::PrefixedNameContext::pnameLn() {
   return getRuleContext<SparqlAutomaticParser::PnameLnContext>(0);
 }
 
-SparqlAutomaticParser::PnameNsContext*
-SparqlAutomaticParser::PrefixedNameContext::pnameNs() {
+SparqlAutomaticParser::PnameNsContext* SparqlAutomaticParser::PrefixedNameContext::pnameNs() {
   return getRuleContext<SparqlAutomaticParser::PnameNsContext>(0);
 }
+
 
 size_t SparqlAutomaticParser::PrefixedNameContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePrefixedName;
 }
 
-void SparqlAutomaticParser::PrefixedNameContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPrefixedName(this);
+void SparqlAutomaticParser::PrefixedNameContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPrefixedName(this);
 }
 
-void SparqlAutomaticParser::PrefixedNameContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPrefixedName(this);
+void SparqlAutomaticParser::PrefixedNameContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPrefixedName(this);
 }
 
-SparqlAutomaticParser::PrefixedNameContext*
-SparqlAutomaticParser::prefixedName() {
-  PrefixedNameContext* _localctx =
-      _tracker.createInstance<PrefixedNameContext>(_ctx, getState());
-  enterRule(_localctx, 302, SparqlAutomaticParser::RulePrefixedName);
+SparqlAutomaticParser::PrefixedNameContext* SparqlAutomaticParser::prefixedName() {
+  PrefixedNameContext *_localctx = _tracker.createInstance<PrefixedNameContext>(_ctx, getState());
+  enterRule(_localctx, 316, SparqlAutomaticParser::RulePrefixedName);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -16052,28 +15024,29 @@ SparqlAutomaticParser::prefixedName() {
     exitRule();
   });
   try {
-    setState(1654);
+    setState(1698);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::PNAME_LN: {
         enterOuterAlt(_localctx, 1);
-        setState(1652);
+        setState(1696);
         pnameLn();
         break;
       }
 
       case SparqlAutomaticParser::PNAME_NS: {
         enterOuterAlt(_localctx, 2);
-        setState(1653);
+        setState(1697);
         pnameNs();
         break;
       }
 
-      default:
-        throw NoViableAltException(this);
+    default:
+      throw NoViableAltException(this);
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16082,15 +15055,13 @@ SparqlAutomaticParser::prefixedName() {
   return _localctx;
 }
 
-//----------------- BlankNodeContext
-//------------------------------------------------------------------
+//----------------- BlankNodeContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::BlankNodeContext::BlankNodeContext(
-    ParserRuleContext* parent, size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::BlankNodeContext::BlankNodeContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
-tree::TerminalNode*
-SparqlAutomaticParser::BlankNodeContext::BLANK_NODE_LABEL() {
+tree::TerminalNode* SparqlAutomaticParser::BlankNodeContext::BLANK_NODE_LABEL() {
   return getToken(SparqlAutomaticParser::BLANK_NODE_LABEL, 0);
 }
 
@@ -16098,26 +15069,26 @@ tree::TerminalNode* SparqlAutomaticParser::BlankNodeContext::ANON() {
   return getToken(SparqlAutomaticParser::ANON, 0);
 }
 
+
 size_t SparqlAutomaticParser::BlankNodeContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleBlankNode;
 }
 
-void SparqlAutomaticParser::BlankNodeContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterBlankNode(this);
+void SparqlAutomaticParser::BlankNodeContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterBlankNode(this);
 }
 
-void SparqlAutomaticParser::BlankNodeContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitBlankNode(this);
+void SparqlAutomaticParser::BlankNodeContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitBlankNode(this);
 }
 
 SparqlAutomaticParser::BlankNodeContext* SparqlAutomaticParser::blankNode() {
-  BlankNodeContext* _localctx =
-      _tracker.createInstance<BlankNodeContext>(_ctx, getState());
-  enterRule(_localctx, 304, SparqlAutomaticParser::RuleBlankNode);
+  BlankNodeContext *_localctx = _tracker.createInstance<BlankNodeContext>(_ctx, getState());
+  enterRule(_localctx, 318, SparqlAutomaticParser::RuleBlankNode);
   size_t _la = 0;
 
 #if __cplusplus > 201703L
@@ -16129,18 +15100,20 @@ SparqlAutomaticParser::BlankNodeContext* SparqlAutomaticParser::blankNode() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1656);
+    setState(1700);
     _la = _input->LA(1);
     if (!(_la == SparqlAutomaticParser::BLANK_NODE_LABEL
 
-          || _la == SparqlAutomaticParser::ANON)) {
-      _errHandler->recoverInline(this);
-    } else {
+    || _la == SparqlAutomaticParser::ANON)) {
+    _errHandler->recoverInline(this);
+    }
+    else {
       _errHandler->reportMatch(this);
       consume();
     }
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16149,37 +15122,36 @@ SparqlAutomaticParser::BlankNodeContext* SparqlAutomaticParser::blankNode() {
   return _localctx;
 }
 
-//----------------- IrirefContext
-//------------------------------------------------------------------
+//----------------- IrirefContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::IrirefContext::IrirefContext(ParserRuleContext* parent,
-                                                    size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::IrirefContext::IrirefContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::IrirefContext::IRI_REF() {
   return getToken(SparqlAutomaticParser::IRI_REF, 0);
 }
 
+
 size_t SparqlAutomaticParser::IrirefContext::getRuleIndex() const {
   return SparqlAutomaticParser::RuleIriref;
 }
 
-void SparqlAutomaticParser::IrirefContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterIriref(this);
+void SparqlAutomaticParser::IrirefContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterIriref(this);
 }
 
-void SparqlAutomaticParser::IrirefContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitIriref(this);
+void SparqlAutomaticParser::IrirefContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitIriref(this);
 }
 
 SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::iriref() {
-  IrirefContext* _localctx =
-      _tracker.createInstance<IrirefContext>(_ctx, getState());
-  enterRule(_localctx, 306, SparqlAutomaticParser::RuleIriref);
+  IrirefContext *_localctx = _tracker.createInstance<IrirefContext>(_ctx, getState());
+  enterRule(_localctx, 320, SparqlAutomaticParser::RuleIriref);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -16190,10 +15162,11 @@ SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::iriref() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1658);
+    setState(1702);
     match(SparqlAutomaticParser::IRI_REF);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16202,37 +15175,36 @@ SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::iriref() {
   return _localctx;
 }
 
-//----------------- PnameLnContext
-//------------------------------------------------------------------
+//----------------- PnameLnContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PnameLnContext::PnameLnContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PnameLnContext::PnameLnContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::PnameLnContext::PNAME_LN() {
   return getToken(SparqlAutomaticParser::PNAME_LN, 0);
 }
 
+
 size_t SparqlAutomaticParser::PnameLnContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePnameLn;
 }
 
-void SparqlAutomaticParser::PnameLnContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPnameLn(this);
+void SparqlAutomaticParser::PnameLnContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPnameLn(this);
 }
 
-void SparqlAutomaticParser::PnameLnContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPnameLn(this);
+void SparqlAutomaticParser::PnameLnContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPnameLn(this);
 }
 
 SparqlAutomaticParser::PnameLnContext* SparqlAutomaticParser::pnameLn() {
-  PnameLnContext* _localctx =
-      _tracker.createInstance<PnameLnContext>(_ctx, getState());
-  enterRule(_localctx, 308, SparqlAutomaticParser::RulePnameLn);
+  PnameLnContext *_localctx = _tracker.createInstance<PnameLnContext>(_ctx, getState());
+  enterRule(_localctx, 322, SparqlAutomaticParser::RulePnameLn);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -16243,10 +15215,11 @@ SparqlAutomaticParser::PnameLnContext* SparqlAutomaticParser::pnameLn() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1660);
+    setState(1704);
     match(SparqlAutomaticParser::PNAME_LN);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16255,37 +15228,36 @@ SparqlAutomaticParser::PnameLnContext* SparqlAutomaticParser::pnameLn() {
   return _localctx;
 }
 
-//----------------- PnameNsContext
-//------------------------------------------------------------------
+//----------------- PnameNsContext ------------------------------------------------------------------
 
-SparqlAutomaticParser::PnameNsContext::PnameNsContext(ParserRuleContext* parent,
-                                                      size_t invokingState)
-    : ParserRuleContext(parent, invokingState) {}
+SparqlAutomaticParser::PnameNsContext::PnameNsContext(ParserRuleContext *parent, size_t invokingState)
+  : ParserRuleContext(parent, invokingState) {
+}
 
 tree::TerminalNode* SparqlAutomaticParser::PnameNsContext::PNAME_NS() {
   return getToken(SparqlAutomaticParser::PNAME_NS, 0);
 }
 
+
 size_t SparqlAutomaticParser::PnameNsContext::getRuleIndex() const {
   return SparqlAutomaticParser::RulePnameNs;
 }
 
-void SparqlAutomaticParser::PnameNsContext::enterRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterPnameNs(this);
+void SparqlAutomaticParser::PnameNsContext::enterRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->enterPnameNs(this);
 }
 
-void SparqlAutomaticParser::PnameNsContext::exitRule(
-    tree::ParseTreeListener* listener) {
-  auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitPnameNs(this);
+void SparqlAutomaticParser::PnameNsContext::exitRule(tree::ParseTreeListener *listener) {
+  auto parserListener = dynamic_cast<SparqlAutomaticListener *>(listener);
+  if (parserListener != nullptr)
+    parserListener->exitPnameNs(this);
 }
 
 SparqlAutomaticParser::PnameNsContext* SparqlAutomaticParser::pnameNs() {
-  PnameNsContext* _localctx =
-      _tracker.createInstance<PnameNsContext>(_ctx, getState());
-  enterRule(_localctx, 310, SparqlAutomaticParser::RulePnameNs);
+  PnameNsContext *_localctx = _tracker.createInstance<PnameNsContext>(_ctx, getState());
+  enterRule(_localctx, 324, SparqlAutomaticParser::RulePnameNs);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -16296,10 +15268,11 @@ SparqlAutomaticParser::PnameNsContext* SparqlAutomaticParser::pnameNs() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(1662);
+    setState(1706);
     match(SparqlAutomaticParser::PNAME_NS);
-
-  } catch (RecognitionException& e) {
+   
+  }
+  catch (RecognitionException &e) {
     _errHandler->reportError(this, e);
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
@@ -16312,7 +15285,6 @@ void SparqlAutomaticParser::initialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
   sparqlautomaticParserInitialize();
 #else
-  ::antlr4::internal::call_once(sparqlautomaticParserOnceFlag,
-                                sparqlautomaticParserInitialize);
+  ::antlr4::internal::call_once(sparqlautomaticParserOnceFlag, sparqlautomaticParserInitialize);
 #endif
 }
