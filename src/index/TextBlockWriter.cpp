@@ -21,6 +21,7 @@ void TextBlockWriter::writeTextIndexFile(const std::string& filename,
   LOG(DEBUG) << "Done creating text index." << std::endl;
   LOG(INFO) << "Statistics for text index: " << textMeta.statistics()
             << std::endl;
+  writeTextMetaDataToFile(out, textMeta);
 }
 
 // _____________________________________________________________________________

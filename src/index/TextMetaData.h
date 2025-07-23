@@ -10,7 +10,7 @@
 
 #include "global/IndexTypes.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
 class ContextListMetaData {
