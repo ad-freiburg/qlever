@@ -244,7 +244,8 @@ void TextIndexBuilder::addContextToVectors(WordTextVec& wordTextVec,
                                            const WordMap& words,
                                            const EntityMap& entities) {
   // Add all words to respective vector
-  ql::ranges::for_each(words, [&](const auto& word) {
+  ql::ranges::for_each(words, [context, &wordTextVec, &entityTextVec,
+                               &entities](const auto& word) {
     wordTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
                                 Id::makeFromTextRecordIndex(context),
                                 Id::makeFromDouble(word.second)});

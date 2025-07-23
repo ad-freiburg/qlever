@@ -13,10 +13,9 @@
 #include "index/TextScoringEnum.h"
 #include "util/File.h"
 
-// Word Id (uint_64t), Context Id (TextRecordIndex), Score (float)
+// WordVocabIndex, TextRecordIndex, Score
 using WordTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 3>;
-// Word Id (uint_64t), Context Id (TextRecordIndex), Entity Id (VocabIndex),
-// Score (float)
+// WordVocabIndex, TextRecordIndex, VocabIndex, Score
 using EntityTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
 
 using WordTextVecView = decltype(std::declval<WordTextVec&>().sortedView());
