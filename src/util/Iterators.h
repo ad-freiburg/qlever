@@ -295,7 +295,7 @@ class InputRangeFromGet {
   void getNextAndStore() { storage_ = get(); }
 
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
-  Details& details() requires hasDetails {
+  CPP_member auto details() -> CPP_ret(Details&)(requires hasDetails) {
     return std::holds_alternative<Details>(m_details)
                ? std::get<Details>(m_details)
                : *std::get<Details*>(m_details);
