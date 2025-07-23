@@ -522,7 +522,7 @@ CPP_template(typename Range, typename ElementType)(
     ElementType separator_;
     std::vector<ElementType> buffer_;
     decltype(ranges::views::split(
-        ql::views::join(generator_) | ranges::views::common,
+        ranges::views::common(ql::views::join(generator_)),
         separator_)) splitView_;
     decltype(splitView_.begin()) splitIter_;
 
@@ -530,7 +530,7 @@ CPP_template(typename Range, typename ElementType)(
         : generator_{generator},
           separator_{separator},
           splitView_{ranges::views::split(
-              ql::views::join(generator_) | ranges::views::common, separator)},
+              ranges::views::common(ql::views::join(generator_)), separator)},
           splitIter_{ql::ranges::begin(splitView_)} {}
 
     std::optional<ql::span<ElementType>> get() override {
