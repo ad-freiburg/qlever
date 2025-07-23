@@ -62,7 +62,7 @@ class GraphStoreProtocol {
   [[noreturn]] static void throwNotYetImplementedHTTPMethod(
       const std::string_view& method);
 
-  // Aborts the request with an HTTP 204 No Content if the request body is
+  // Abort the request with an `HTTP 204 No Content` if the request body is
   // empty.
   static void throwIfRequestBodyEmpty(const auto& request) {
     if (request.body().empty()) {

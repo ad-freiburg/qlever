@@ -4,6 +4,8 @@
 
 #include "ParsedRequestBuilder.h"
 
+#include "engine/HttpError.h"
+
 using namespace ad_utility::url_parser::sparqlOperation;
 
 // ____________________________________________________________________________
@@ -85,9 +87,10 @@ void ParsedRequestBuilder::extractGraphStoreOperationDirect() {
   // default to `http` for the constructed IRIs.
   AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
   if (!host_.has_value()) {
-    throw std::runtime_error(
+    throw HttpError(
+        boost::beast::http::status::bad_request,
         "Request for Graph Store Protocol with direct graph identification "
-        "requires the host header to be set.");
+        "requires the `host` header to be set.");
   }
   parsedRequest_.operation_ =
       GraphStoreOperation{GraphRef::fromIrirefWithoutBrackets(

@@ -58,10 +58,9 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
   auto transformTc =
       [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
     if (tc.isString()) {
-      // Remove the `_:`.
       return blankNodeAdder.getBlankNodeIndex(tc.getString());
     } else {
-      return tc;
+      return std::move(tc);
     }
   };
   auto transformTurtleTriple = [&tripleGraph,
