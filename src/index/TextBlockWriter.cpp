@@ -45,7 +45,8 @@ void TextBlockWriter::calculateAndWriteTextBlocks(
       "Number of word postings in text block has to be larger than zero.");
   auto currentWordTextVecWordIndex = WordVocabIndex::make(0);
   for (auto&& chunk :
-       ::ranges::views::chunk(wordTextVecView_, nofWordPostingsInTextBlock)) {
+       ::ranges::views::chunk(::ranges::views::ref(wordTextVecView_),
+                              nofWordPostingsInTextBlock)) {
     for (const auto& row : chunk) {
       currentWordTextVecWordIndex = row[0].getWordVocabIndex();
       addWordPosting(row);
