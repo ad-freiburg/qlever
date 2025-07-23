@@ -36,8 +36,14 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-constexpr std::string_view litInvalid =
+constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidBrackets =
+    "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidNumCoords =
+    "\"POINT(1)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -108,7 +114,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {2090456}};
   checkGeoInfo(g7, exp7);
 
-  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
   checkGeoInfo(g8, std::nullopt);
 }
 
@@ -234,7 +240,9 @@ TEST(GeometryInfoTest, MetricLength) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  checkInvalidLiteral(litInvalid);
+  checkInvalidLiteral(litInvalidType);
+  checkInvalidLiteral(litInvalidBrackets, true);
+  checkInvalidLiteral(litInvalidNumCoords, true);
 }
 
 // ____________________________________________________________________________
