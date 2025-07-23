@@ -221,13 +221,15 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       // Stop when all the blocks have been yielded or the LIMIT of the query is
       // reached. Keep track of various statistics.
       while ((item = queue_.get()) != std::nullopt) {
+        popTimer_.stop();
+
+        cancellationHandle_->throwIfCancelled();
+
         auto& optBlock{item.value()};
 
-        popTimer_.stop();
-        cancellationHandle_->throwIfCancelled();
         details().update(optBlock);
         if (optBlock.has_value()) {
-          auto& block = optBlock.value().block_;
+          auto block{std::move(optBlock.value().block_)};
           pruneBlock(block, limitOffset_);
           details().numElementsYielded_ += block.numRows();
           if (!block.empty()) {
@@ -361,7 +363,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
         blockGenerator{};
     bool firstBlockYielded{false};
-    bool middleBlocksYielded{false};
     bool lastBlockYielded{false};
     bool generatorCreated{false};
     std::vector<CompressedBlockMetadata>::iterator beginBlockMetadata;
@@ -417,7 +418,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       }
 
       if (beginBlockMetadata + 1 < endBlockMetadata) {
-        if (!middleBlocksYielded) {
           // Get and yield the remaining blocks.
           if (!generatorCreated) {
             generatorCreated = true;
@@ -429,13 +429,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
           auto block{middleBlocksGenerator.get()};
           if (block.has_value()) {
-            if (!block.has_value()) {
-              middleBlocksYielded = true;
-            }
-
-            return block.value();
+            return std::move(block.value());
           }
-        }
 
         if (!lastBlockYielded) {
           lastBlockYielded = true;
