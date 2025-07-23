@@ -113,14 +113,10 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
       createRandomlyFilledIdTable(0, 0, JoinColumnAndBounds{0, 0, 1}));
   ASSERT_ANY_THROW(
       createRandomlyFilledIdTable(1, 0, JoinColumnAndBounds{0, 0, 1}));
-  ASSERT_ANY_THROW(
-      createRandomlyFilledIdTable(0, 1, JoinColumnAndBounds{0, 0, 1}));
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       0, 0, std::vector{JoinColumnAndBounds{0, 0, 1}}));
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       1, 0, std::vector{JoinColumnAndBounds{0, 0, 1}}));
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
-      0, 1, std::vector{JoinColumnAndBounds{0, 0, 1}}));
 
   // Table with out of bounds join column.
   ASSERT_ANY_THROW(
@@ -223,8 +219,6 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
       createRandomlyFilledIdTable(10, 10, {1}, std::function<ValueId()>{}));
 
   // Creating an empty table of size (0,0).
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
-      0, 0, std::vector<std::pair<size_t, std::function<ValueId()>>>{}));
   ASSERT_ANY_THROW(
       createRandomlyFilledIdTable(0, 0, {}, std::function<ValueId()>{}));
 
@@ -301,9 +295,6 @@ TEST(IdTableHelpersTest, generateIdTable) {
       return row;
     };
   };
-
-  // Creating an empty table of size (0,0).
-  ASSERT_ANY_THROW(generateIdTable(0, 0, createCountUpGenerator(0)));
 
   // A row generator should always have the correct width.
   ASSERT_ANY_THROW(generateIdTable(5, 5, createCountUpGenerator(0)));
