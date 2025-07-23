@@ -680,6 +680,10 @@ class CompressedExternalIdTableSorter
         AD_CORRECTNESS_CHECK(b.first != b.second);
       }
       ql::ranges::make_heap(priorityQueue_, comp_);
+      // Without that call, `begin() != end()` would always hold (even for empty
+      // sorters), and `*begin()` would always yield an empty block (even for
+      // non-empty sorters).
+      next();
     }
 
     bool isFinished() {
@@ -730,14 +734,18 @@ class CompressedExternalIdTableSorter
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
-        return InputRangeTypeErased{
-            lazySingleValueRange([this]() -> IdTableStatic<N> {
-              if (this->moveResultOnMerge_) {
-                return std::move(this->currentBlock_).template toStatic<N>();
-              } else {
-                return this->currentBlock_.clone().template toStatic<N>();
-              }
-            })};
+        return block.empty()
+                   ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
+                   : InputRangeTypeErased{
+                         lazySingleValueRange([this]() -> IdTableStatic<N> {
+                           if (this->moveResultOnMerge_) {
+                             return std::move(this->currentBlock_)
+                                 .template toStatic<N>();
+                           } else {
+                             return this->currentBlock_.clone()
+                                 .template toStatic<N>();
+                           }
+                         })};
       }
       namespace rv = ::ranges::views;
       auto chunked =

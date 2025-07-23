@@ -11,6 +11,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
+#include "util/ConstexprUtils.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
@@ -121,14 +122,26 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       writer.moveResultOnMerge() = false;
     }
 
-    for (size_t k = 0; k < 5; ++k) {
+    auto testMultipleTimesImpl = [&](auto k) {
       // Also test the case that the blocksize does not exactly divides the
       // number of inputs.
       auto blocksize = k == 1 ? 1 : 17;
       using namespace ::testing;
-      auto generator = k == 0 ? ql::views::join(ad_utility::OwningView{
-                                    writer.getSortedBlocks(blocksize)})
-                              : writer.sortedView();
+      auto generator = [&]() {
+        if constexpr (k == 0) {
+          // Also check that we don't accidentally get empty blocks yielded,
+          // which would be unexpected.
+          auto checkNonEmpty = [](auto&& idTable) -> decltype(auto) {
+            EXPECT_FALSE(idTable.empty());
+            return AD_FWD(idTable);
+          };
+          return ql::views::join(
+              ad_utility::OwningView{writer.getSortedBlocks(blocksize)} |
+              ql::views::transform(checkNonEmpty));
+        } else {
+          return writer.sortedView();
+        }
+      }();
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
             generator, numDynamicColumns);
@@ -140,10 +153,12 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       }
       // We cannot access or change this value after the first merge.
       EXPECT_ANY_THROW(writer.moveResultOnMerge());
-    }
+    };
+    ad_utility::ConstexprForLoopVi(std::make_index_sequence<5>(),
+                                   testMultipleTimesImpl);
     writer.clear();
   }
-}
+};
 
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns, size_t numRows,
@@ -162,8 +177,11 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   // memory limit), but also the case that there is a
   testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB);
+
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 0, 1_MB);
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {
