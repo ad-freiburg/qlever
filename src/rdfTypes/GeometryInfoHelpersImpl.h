@@ -38,40 +38,40 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
-  switch (type) {
-    case WKTType::POINT: {
-      parsed = pointFromWKT<CoordType>(wktLiteral);
-      break;
+  using enum WKTType;
+  try {
+    switch (type) {
+      case POINT:
+        parsed = pointFromWKT<CoordType>(wktLiteral);
+        break;
+      case LINESTRING:
+        parsed = lineFromWKT<CoordType>(wktLiteral);
+        break;
+      case POLYGON:
+        parsed = polygonFromWKT<CoordType>(wktLiteral);
+        break;
+      case MULTIPOINT:
+        parsed = multiPointFromWKT<CoordType>(wktLiteral);
+        break;
+      case MULTILINESTRING:
+        parsed = multiLineFromWKT<CoordType>(wktLiteral);
+        break;
+      case MULTIPOLYGON:
+        parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
+        break;
+      case COLLECTION:
+        parsed = collectionFromWKT<CoordType>(wktLiteral);
+        break;
+      case NONE:
+      default:
+        break;
     }
-    case WKTType::LINESTRING: {
-      parsed = lineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::POLYGON: {
-      parsed = polygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOINT: {
-      parsed = multiPointFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTILINESTRING: {
-      parsed = multiLineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOLYGON: {
-      parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::COLLECTION: {
-      parsed = collectionFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::NONE:
-      break;
+  } catch (const std::runtime_error& error) {
+    AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
+                 << std::endl;
   }
 
-  return {type, parsed};
+  return {type, std::move(parsed)};
 }
 
 // ____________________________________________________________________________
