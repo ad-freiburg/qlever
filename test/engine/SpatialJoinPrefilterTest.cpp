@@ -92,7 +92,7 @@ const std::vector<TestGeometry> testGeometries{
     {"approx-de", approximatedAreaGermany, true},
     {"uni-separate", areaTFCampus, true},
     {"invalid", invalidWkt, false},
-    {"capetown", areaCapeTownStation, false},
+    {"cape-town", areaCapeTownStation, false},
 };
 constexpr std::string_view VAR_LEFT{"?geom1"};
 constexpr std::string_view VAR_RIGHT{"?geom2"};
@@ -102,7 +102,7 @@ std::string buildLibSJTestDataset(bool addApproxGermany = false,
                                   bool germanyDifferentPredicate = true,
                                   bool addSeparateUni = false,
                                   bool addInvalid = false,
-                                  bool addCapetown = false) {
+                                  bool addCapeTown = false) {
   std::string kg;
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
     if (addApproxGermany && name == "approx-de") {
@@ -115,7 +115,7 @@ std::string buildLibSJTestDataset(bool addApproxGermany = false,
       kg = absl::StrCat(kg, "<invalid> <wkt-invalid> ", wkt, " .\n");
     }
     if (name != "uni-separate" && name != "approx-de" && name != "invalid" &&
-        (name != "capetown" || addCapetown)) {
+        (name != "cape-town" || addCapeTown)) {
       kg = absl::StrCat(
           kg, "<", name, "> <wkt-",
           (isInGermany && germanyDifferentPredicate ? "de" : "other"), "> ",
