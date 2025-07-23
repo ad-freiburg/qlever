@@ -97,7 +97,7 @@ std::vector<EntityPosting> TextBlockWriter::addEntityPostingsUpToWordIndex(
 
   for (; entityTextVecIterator_ != entityTextVecSentinel_;
        ++entityTextVecIterator_) {
-    auto currentEntityTextVecWordIndex = getWVI((*entityTextVecIterator_));
+    auto currentEntityTextVecWordIndex = getWVI(*entityTextVecIterator_);
     if (currentEntityTextVecWordIndex > upperBoundWordVocabIndex) {
       break;
     }

@@ -249,12 +249,13 @@ void TextIndexBuilder::addContextToVectors(WordTextVec& wordTextVec,
     wordTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
                                 Id::makeFromTextRecordIndex(context),
                                 Id::makeFromDouble(word.second)});
-    ql::ranges::for_each(entities, [&](const auto& entity) {
-      entityTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
-                                    Id::makeFromTextRecordIndex(context),
-                                    Id::makeFromVocabIndex(entity.first),
-                                    Id::makeFromDouble(entity.second)});
-    });
+    ql::ranges::for_each(
+        entities, [context, &word, &entityTextVec](const auto& entity) {
+          entityTextVec.push(std::array{Id::makeFromWordVocabIndex(word.first),
+                                        Id::makeFromTextRecordIndex(context),
+                                        Id::makeFromVocabIndex(entity.first),
+                                        Id::makeFromDouble(entity.second)});
+        });
   });
 }
 
