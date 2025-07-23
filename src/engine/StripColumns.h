@@ -11,11 +11,18 @@ class StripColumns : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> child_;
   std::vector<ColumnIndex> subset_;
+  VariableToColumnMap varToCol_;
 
  public:
   StripColumns(QueryExecutionContext* ctx,
                std::shared_ptr<QueryExecutionTree> child,
                ad_utility::HashSet<Variable> keepVariables);
+
+  // The constructor needed for cloning.
+  StripColumns(QueryExecutionContext* ctx,
+               std::shared_ptr<QueryExecutionTree> child,
+               std::vector<ColumnIndex> subset, VariableToColumnMap varToCol);
+
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees
   std::vector<QueryExecutionTree*> getChildren();

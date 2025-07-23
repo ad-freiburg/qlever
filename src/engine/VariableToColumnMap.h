@@ -80,6 +80,6 @@ enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
-    size_t leftResultWidth);
+    size_t leftResultWidth, bool keepJoinCols = true);
 
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

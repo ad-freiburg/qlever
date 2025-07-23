@@ -730,7 +730,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
+    [[maybe_unused]] const ad_utility::HashSet<Variable>& variables) const {
   return std::nullopt;
 }
 

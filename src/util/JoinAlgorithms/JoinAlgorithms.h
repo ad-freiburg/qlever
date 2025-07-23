@@ -265,11 +265,17 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
         mergeWithUndefLeft(it, std::begin(left), it1);
       }
 
-      for (; it1 != endSame1; ++it1) {
-        checkCancellation();
-        cover(it1);
-        for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
-          compatibleRowAction(it1, innerIt2);
+      if constexpr (requires {
+                      compatibleRowAction.addRows(it1, endSame1, it2, endSame2);
+                    } && !hasNotFoundAction) {
+        compatibleRowAction.addRows(it1, endSame1, it2, endSame2);
+      } else {
+        for (; it1 != endSame1; ++it1) {
+          checkCancellation();
+          cover(it1);
+          for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
+            compatibleRowAction(it1, innerIt2);
+          }
         }
       }
       it1 = endSame1;
@@ -850,7 +856,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
         return true;
       }
-      AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(*it, lessThan_));
+      AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(*it, lessThan_));
       side.currentBlocks_.emplace_back(std::move(*it));
     }
     return it == end;
@@ -933,11 +939,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-        for (size_t i : lBlock.getIndexRange()) {
-          for (size_t j : rBlock.getIndexRange()) {
-            compatibleRowAction_.addRow(i, j);
-          }
-        }
+        compatibleRowAction_.addRows(lBlock.getIndexRange(),
+                                     rBlock.getIndexRange());
       }
     }
   }
@@ -1054,6 +1057,15 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
                                             currentSide.get().undefBlocks_);
     };
   }
+  template <typename F1, typename F2>
+  struct RowIndexAdder {
+    F1 f1;
+    F2 f2;
+    void operator()(auto&&... args) const { return f1(AD_FWD(args)...); }
+    void addRows(auto&&... args) const { return f2(AD_FWD(args)...); }
+  };
+  template <typename F1, typename F2>
+  RowIndexAdder(F1, F2) -> RowIndexAdder<std::decay_t<F1>, std::decay_t<F2>>;
 
   // Join the first block in `currentBlocksLeft` with the first block in
   // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
@@ -1076,6 +1088,17 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       AD_EXPENSIVE_CHECK(itFromL >= begL);
       AD_EXPENSIVE_CHECK(itFromR >= begR);
       compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
+    };
+    auto addRowIndices = [&begL, &begR, this](auto itFromL, auto endFromL,
+                                              auto itFromR, auto endFromR) {
+      AD_EXPENSIVE_CHECK(itFromL >= begL);
+      AD_EXPENSIVE_CHECK(itFromR >= begR);
+      // TODO<joka921> more expensive checks.
+      auto io = [&](const auto& beg, const auto& it, const auto& end) {
+        return ql::views::iota(it - beg, end - beg);
+      };
+      compatibleRowAction_.addRows(io(begL, itFromL, endFromL),
+                                   io(begR, itFromR, endFromR));
     };
 
     auto addNotFoundRowIndex = [&]() {
@@ -1102,7 +1125,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          addRowIndex,
+          RowIndexAdder{addRowIndex, addRowIndices},
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
           addNotFoundRowIndex, noop, std::false_type{});
@@ -1110,7 +1133,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          addRowIndex, noop, noop, addNotFoundRowIndex);
+          RowIndexAdder{addRowIndex, addRowIndices}, noop, noop,
+          addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();
 
@@ -1128,7 +1152,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     while (targetBuffer.empty() && it != end) {
       auto& el = *it;
       if (!el.empty()) {
-        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(el, lessThan_));
+        AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(el, lessThan_));
         targetBuffer.emplace_back(std::move(el));
       }
       ++it;

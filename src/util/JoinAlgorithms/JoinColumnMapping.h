@@ -69,7 +69,8 @@ class JoinColumnMapping {
   // (leftColIndex, rightColIndex)`), and the total number of columns in the
   // left and right input respectively.
   JoinColumnMapping(const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-                    size_t numColsLeft, size_t numColsRight) {
+                    size_t numColsLeft, size_t numColsRight,
+                    bool keepJoinColumns = true) {
     permutationResult_.resize(numColsLeft + numColsRight - joinColumns.size());
     for (auto [colA, colB] : joinColumns) {
       permutationResult_.at(colA) = jcsLeft_.size();
@@ -95,6 +96,13 @@ class JoinColumnMapping {
         permutationRight_.push_back(i);
       } else {
         ++numSkippedJoinColumns;
+      }
+    }
+    if (!keepJoinColumns) {
+      auto jcls = joinColumns;
+      ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
+      for (auto i : ql::views::reverse(jcls)) {
+        permutationResult_.erase(permutationResult_.begin() + i.at(0));
       }
     }
   }

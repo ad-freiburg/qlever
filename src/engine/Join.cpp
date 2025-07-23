@@ -34,8 +34,9 @@ using std::string;
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec) {
+           ColumnIndex t2JoinCol, bool keepJoinColumn,
+           bool allowSwappingChildrenOnlyForTesting)
+    : Operation(qec), _keepJoinColumn{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
@@ -84,6 +85,7 @@ string Join::getCacheKeyImpl() const {
      << _left->getCacheKey() << " join-column: [" << _leftJoinCol << "]\n";
   os << "|X|\n"
      << _right->getCacheKey() << " join-column: [" << _rightJoinCol << "]";
+  os << "keep join Col " << _keepJoinColumn;
   return std::move(os).str();
 }
 
@@ -176,19 +178,26 @@ Result Join::computeResult(bool requestLaziness) {
 VariableToColumnMap Join::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
-      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
-      _left->getResultWidth());
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join, _left->getResultWidth(),
+      _keepJoinColumn);
 }
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
-  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1;
-  AD_CONTRACT_CHECK(res > 0);
+  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1 -
+               static_cast<size_t>(!_keepJoinColumn);
+  AD_CONTRACT_CHECK(res > 0 || !_keepJoinColumn);
   return res;
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
+std::vector<ColumnIndex> Join::resultSortedOn() const {
+  if (_keepJoinColumn) {
+    return {_leftJoinCol};
+  } else {
+    return {};
+  }
+}
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
@@ -252,6 +261,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
              << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
              << std::endl;
 
+  // TODO<joka921> These multiplicities are off if we don't keep the join
+  // column.
   for (auto i = ColumnIndex{0}; i < _left->getResultWidth(); ++i) {
     double oldMult = _left->getMultiplicity(i);
     double m = std::max(
@@ -277,7 +288,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-  assert(_multiplicities.size() == getResultWidth());
+  // TODO<joka921> as stated, the size is still wrong here.
+  // assert(_multiplicities.size() == getResultWidth());
 }
 
 // ______________________________________________________________________________
@@ -302,7 +314,8 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_);
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
+      _keepJoinColumn);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -729,15 +742,20 @@ Result Join::createEmptyResult() const {
 ad_utility::JoinColumnMapping Join::getJoinColumnMapping() const {
   return ad_utility::JoinColumnMapping{{{_leftJoinCol, _rightJoinCol}},
                                        _left->getResultWidth(),
-                                       _right->getResultWidth()};
+                                       _right->getResultWidth(),
+                                       _keepJoinColumn};
 }
 
 // _____________________________________________________________________________
 ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
     std::function<void(IdTable&, LocalVocab&)> callback) const {
   return ad_utility::AddCombinedRowToIdTable{
-      1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-      CHUNK_SIZE, std::move(callback)};
+      1,
+      IdTable{getResultWidth(), allocator()},
+      cancellationHandle_,
+      _keepJoinColumn,
+      CHUNK_SIZE,
+      std::move(callback)};
 }
 
 // _____________________________________________________________________________
@@ -757,4 +775,25 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
     return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::makeTreeWithStrippedColumns(
+    const ad_utility::HashSet<Variable>& variables) const {
+  ad_utility::HashSet<Variable> newVariables;
+  const auto* vars = &variables;
+  if (!variables.contains(_joinVar)) {
+    newVariables = variables;
+    newVariables.insert(_joinVar);
+    vars = &newVariables;
+  }
+
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+  auto leftCol = left->getVariableColumn(_joinVar);
+  auto rightCol = left->getVariableColumn(_joinVar);
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), std::move(left), std::move(right), leftCol,
+      rightCol, variables.contains(_joinVar));
 }

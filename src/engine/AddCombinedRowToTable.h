@@ -36,6 +36,7 @@ CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
+  bool keepJoinColumns_ = true;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
   LocalVocab mergedVocab_{};
@@ -88,10 +89,11 @@ class AddCombinedRowToIdTable {
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
       IdTable output, CancellationHandle cancellationHandle,
-      size_t bufferSize = 100'000,
+      bool keepJoinColumns = true, size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
+        keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
@@ -107,10 +109,12 @@ class AddCombinedRowToIdTable {
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTable output,
-      CancellationHandle cancellationHandle, size_t bufferSize = 100'000,
+      CancellationHandle cancellationHandle, bool keepJoinColumns = true,
+      size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
+        keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
@@ -133,8 +137,30 @@ class AddCombinedRowToIdTable {
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
     ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
+    if (nextIndex_ >= bufferSize_) {
       flush();
+    }
+  }
+
+  // TODO<joka921> concepts + C++17 etc.
+  void addRows(const auto& rowIndicesA, const auto& rowIndicesB) {
+    if (resultTable_.numColumns() == 0) {
+      auto sz = [](const auto& ri) { return ql::ranges::size(ri); };
+      size_t total = sz(rowIndicesA) * sz(rowIndicesB);
+      while (total > 0) {
+        auto chunkSz = std::min(bufferSize_ - nextIndex_, total);
+        nextIndex_ += chunkSz;
+        total -= chunkSz;
+        if (nextIndex_ >= bufferSize_) {
+          flush();
+        }
+      }
+    } else {
+      for (auto a : rowIndicesA) {
+        for (auto b : rowIndicesB) {
+          addRow(a, b);
+        }
+      }
     }
   }
 
@@ -245,8 +271,9 @@ class AddCombinedRowToIdTable {
     cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
-    AD_CORRECTNESS_CHECK(nextIndex_ ==
-                         indexBuffer_.size() + optionalIndexBuffer_.size());
+    AD_CORRECTNESS_CHECK(nextIndex_ == indexBuffer_.size() +
+                                           optionalIndexBuffer_.size() ||
+                         result.numColumns() == 0);
     // Sometimes the left input and right input are not valid anymore, because
     // the `IdTable`s they point to have already been destroyed. This case is
     // okay, as long as there was a manual call to `flush` (after which
@@ -343,7 +370,9 @@ class AddCombinedRowToIdTable {
     size_t nextResultColIdx = 0;
     // First write all the join columns.
     for (size_t col = 0; col < numJoinColumns_; col++) {
-      writeJoinColumn(col, nextResultColIdx);
+      if (keepJoinColumns_) {
+        writeJoinColumn(col, nextResultColIdx);
+      }
       ++nextResultColIdx;
     }
 
@@ -385,9 +414,10 @@ class AddCombinedRowToIdTable {
   void checkNumColumns() const {
     AD_CONTRACT_CHECK(inputLeft().numColumns() >= numJoinColumns_);
     AD_CONTRACT_CHECK(inputRight().numColumns() >= numJoinColumns_);
-    AD_CONTRACT_CHECK(resultTable_.numColumns() ==
-                      inputLeft().numColumns() + inputRight().numColumns() -
-                          numJoinColumns_);
+    AD_CONTRACT_CHECK(
+        resultTable_.numColumns() ==
+        inputLeft().numColumns() + inputRight().numColumns() - numJoinColumns_ -
+            numJoinColumns_ * static_cast<size_t>(!keepJoinColumns_));
   }
 };
 }  // namespace ad_utility

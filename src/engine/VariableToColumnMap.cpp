@@ -20,11 +20,32 @@ copySortedByColumnIndex(VariableToColumnMap map) {
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
-    size_t leftResultWidth) {
+    size_t leftResultWidth, bool keepJoinColumns) {
   // First come all the variables from the left input. Variables that only
   // appear in the left input always have the same definedness as in the input.
   // For join columns we might override it below.
-  VariableToColumnMap result{leftVars};
+  auto result = [&]() {
+    if (keepJoinColumns) {
+      return leftVars;
+    }
+    VariableToColumnMap res;
+    const auto& jcls = joinColumns | ql::views::keys;
+    for (auto el : leftVars) {
+      auto& [variable, columnIndexWithType] = el;
+      if (ad_utility::contains(jcls, columnIndexWithType.columnIndex_)) {
+        continue;
+      }
+      size_t shift = 0;
+      for (const auto& jcl : jcls) {
+        if (jcl < columnIndexWithType.columnIndex_) {
+          ++shift;
+        }
+      }
+      columnIndexWithType.columnIndex_ -= shift;
+      res.insert(std::move(el));
+    }
+    return res;
+  }();
   bool isOptionalJoin = binOpType == BinOpType::OptionalJoin;
 
   // Add the variables from the right operand.
@@ -36,14 +57,16 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     auto joinColumnIt =
         ql::ranges::find(joinColumns, colIdxRight, ad_utility::second);
     if (joinColumnIt != joinColumns.end()) {
-      // For non-optional joins, a join column is `AlwaysDefined` if it is
-      // always defined in ANY of the inputs. For optional joins a join column
-      // is `AlwaysDefined` if it is always defined in the left input.
-      auto& undef = result.at(variable).mightContainUndef_;
-      undef = static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
-          static_cast<bool>(undef) &&
-          (isOptionalJoin ||
-           static_cast<bool>(columnIndexWithType.mightContainUndef_)));
+      if (keepJoinColumns) {
+        // For non-optional joins, a join column is `AlwaysDefined` if it is
+        // always defined in ANY of the inputs. For optional joins a join column
+        // is `AlwaysDefined` if it is always defined in the left input.
+        auto& undef = result.at(variable).mightContainUndef_;
+        undef = static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
+            static_cast<bool>(undef) &&
+            (isOptionalJoin ||
+             static_cast<bool>(columnIndexWithType.mightContainUndef_)));
+      }
       ++numJoinColumnsBefore;
     } else {
       // The column is not a join column. For non-optional joins it keeps its
