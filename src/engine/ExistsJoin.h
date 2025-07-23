@@ -60,7 +60,7 @@ class ExistsJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 
@@ -72,7 +72,7 @@ class ExistsJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {left_.get(), right_.get()};
   }
 
@@ -85,6 +85,11 @@ class ExistsJoin : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Lazy implementation for lazy exists joins.
+  Result lazyExistsJoin(std::shared_ptr<const Result> left,
+                        std::shared_ptr<const Result> right,
+                        bool requestLaziness);
 
   FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };

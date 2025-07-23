@@ -15,31 +15,53 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using Loc = source_location;
 
-inline void checkGeometryType(GeometryType a, GeometryType b,
+// Helpers that assert (approx.) equality of two GeometryInfo objects or for
+// instances of the associated helper classes.
+
+// ____________________________________________________________________________
+inline void checkGeometryType(std::optional<GeometryType> a,
+                              std::optional<GeometryType> b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.type_, b.type_);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_EQ(a.value().type_, b.value().type_);
 }
 
-inline void checkCentroid(Centroid a, Centroid b,
+// ____________________________________________________________________________
+inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.centroid_.getLat(), b.centroid_.getLat(), 0.001);
-  ASSERT_NEAR(a.centroid_.getLng(), b.centroid_.getLng(), 0.001);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().centroid_.getLat(), b.value().centroid_.getLat(),
+              0.001);
+  ASSERT_NEAR(a.value().centroid_.getLng(), b.value().centroid_.getLng(),
+              0.001);
 }
 
-inline void checkBoundingBox(BoundingBox a, BoundingBox b,
+// ____________________________________________________________________________
+inline void checkBoundingBox(std::optional<BoundingBox> a,
+                             std::optional<BoundingBox> b,
                              Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto [all, aur] = a;
-  auto [bll, bur] = b;
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  auto [all, aur] = a.value();
+  auto [bll, bur] = b.value();
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
   ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
 }
 
-// Helper that asserts (approx.) equality of two GeometryInfo objects
+// ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
                          Loc sourceLocation = Loc::current()) {
@@ -59,6 +81,7 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
     std::optional<GeometryInfo> optGeoInfo,
     Loc sourceLocation = Loc::current()) {
@@ -74,6 +97,7 @@ inline void checkRequestedInfoForInstance(
                     sourceLocation);
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForWktLiteral(
     const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -87,6 +111,24 @@ inline void checkRequestedInfoForWktLiteral(
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
   checkGeometryType(gi.getWktType(),
                     GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+}
+
+// ____________________________________________________________________________
+inline void checkInvalidLiteral(std::string_view wkt,
+                                bool expectValidGeometryType = false,
+                                Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+
+  EXPECT_FALSE(GeometryInfo::fromWktLiteral(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getWktType(wkt).has_value(), expectValidGeometryType);
+  EXPECT_FALSE(GeometryInfo::getCentroid(wkt).has_value());
+  EXPECT_FALSE(GeometryInfo::getBoundingBox(wkt).has_value());
+
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<GeometryInfo>(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(wkt).has_value(),
+            expectValidGeometryType);
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
 }
 
 };  // namespace geoInfoTestHelpers

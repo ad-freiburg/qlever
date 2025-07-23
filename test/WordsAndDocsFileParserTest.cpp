@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "./WordsAndDocsFileLineCreator.h"
+#include "./util/GTestHelpers.h"
 #include "parser/WordsAndDocsFileParser.h"
 
 // All lambdas and type aliases used in this file contained here
@@ -162,4 +163,14 @@ TEST(TokenizeAndNormalizeText, tokenizeAndNormalizeTextTest) {
   testTokenizeAndNormalizeText(
       "test\twith\ndifferent,separators.here ,.\t",
       {"test", "with", "different", "separators", "here"});
+}
+
+// _____________________________________________________________________________
+TEST(TokenizeAndNormalizeText, Unicode) {
+  testTokenizeAndNormalizeText(
+      "Äpfel über,affen\U0001F600háusen, ääädä\U0001F600blubä",
+      {"äpfel", "über", "affen", "háusen", "ääädä", "blubä"});
+
+  AD_EXPECT_THROW_WITH_MESSAGE(testTokenizeAndNormalizeText("\255", {}),
+                               ::testing::HasSubstr("Invalid UTF-8"));
 }

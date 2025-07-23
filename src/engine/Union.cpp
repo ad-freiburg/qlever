@@ -3,6 +3,8 @@
 // Author:
 //   2018     Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #include "Union.h"
 
 #include "backports/span.h"
@@ -61,7 +63,7 @@ Union::Union(QueryExecutionContext* qec,
 
   if (!targetOrder_.empty()) {
     auto computeSortOrder = [this](bool left) {
-      vector<ColumnIndex> specificSortOrder;
+      std::vector<ColumnIndex> specificSortOrder;
       for (ColumnIndex index : targetOrder_) {
         ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
         if (realIndex != NO_COLUMN) {
@@ -115,7 +117,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -327,31 +329,40 @@ IdTable Union::transformToCorrectColumnFormat(
 }
 
 // _____________________________________________________________________________
-Result::Generator Union::computeResultLazily(
+Result::LazyResult Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
-  std::vector<ColumnIndex> permutation = computePermutation<true>();
-  if (result1->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result1->idTable().clone(), permutation),
-        result1->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result1->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
+  auto transformFactory = [this](const std::vector<ColumnIndex>& permutation) {
+    return [this, permutation](IdTable&& idTable, LocalVocab&& vocab) {
+      return Result::IdTableVocabPair{
+          this->transformToCorrectColumnFormat(std::move(idTable), permutation),
+          std::move(vocab)};
+    };
+  };
+
+  auto rangeFactory = [transformFactory = std::move(transformFactory)](
+                          std::shared_ptr<const Result> result,
+                          std::vector<ColumnIndex> permutation) {
+    using namespace ad_utility;
+    if (result->isFullyMaterialized()) {
+      return InputRangeTypeErased(
+          lazySingleValueRange([transform = transformFactory(permutation),
+                                result = std::move(result)]() {
+            return transform(result->idTable().clone(),
+                             result->getCopyOfLocalVocab());
+          }));
     }
-  }
-  permutation = computePermutation<false>();
-  if (result2->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result2->idTable().clone(), permutation),
-        result2->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result2->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
-    }
-  }
+    return InputRangeTypeErased(CachingTransformInputRange(
+        result->idTables(), [transform = transformFactory(permutation)](
+                                Result::IdTableVocabPair& idTableAndVocab) {
+          return transform(std::move(idTableAndVocab.idTable_),
+                           std::move(idTableAndVocab.localVocab_));
+        }));
+  };
+
+  return Result::LazyResult{::ranges::concat_view(
+      rangeFactory(std::move(result1), computePermutation<true>()),
+      rangeFactory(std::move(result2), computePermutation<false>()))};
 }
 
 // _____________________________________________________________________________
@@ -365,7 +376,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
       _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);

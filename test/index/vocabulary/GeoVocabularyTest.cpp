@@ -41,15 +41,22 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     std::vector<std::string> testLiterals{
         // Invalid literal
-        "\"BLABLIBLU\""
+        "\"Example non-geometry literal\"@en",
+        "\"BLABLIBLU(1 2, 3 4, 5 6, 7 8, 9 0)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Out of range literal
+        "\"POLYGON((1 1, 2 2, 3 450))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
-        "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
-        "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-        "\"LINESTRING(1 1, 2 2, 3 "
-        "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-        "\"POLYGON((1 1, 2 2, 3 "
-        "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+        "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), "
+        "POLYGON((2 4, 4 4, 4 2, 2 2)))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"LINESTRING(1 1, 2 2, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POLYGON((1 1, 2 2, 3 3))\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    };
+    std::sort(testLiterals.begin(), testLiterals.end());
 
     for (size_t i = 0; i < testLiterals.size(); i++) {
       auto lit = testLiterals[i];
@@ -81,7 +88,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
               testLiterals.size());
 
     auto wI = geoVocab.lower_bound("\"LINE", ql::ranges::less{});
-    ASSERT_EQ(wI.index(), 2);
+    ASSERT_EQ(wI.index(), 3);
     ASSERT_EQ(wI.word(),
               "\"LINESTRING(1 1, 2 2, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -110,6 +117,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   // Generate test vocabulary
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
+  ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   auto wordCallback = vocabulary.makeWordWriterPtr("geoVocabTest.dat");
   auto nonGeoIdx = (*wordCallback)("<http://example.com/abc>", true);
   auto geoIdx = (*wordCallback)(
@@ -120,6 +128,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
 
   // Load test vocabulary and try to retrieve precomputed `GeometryInfo`
   vocabulary.readFromFile("geoVocabTest.dat");
+  ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(nonGeoIdx)).has_value());
   auto gi = vocabulary.getGeoInfo(VocabIndex::make(geoIdx));
   ASSERT_TRUE(gi.has_value());
@@ -130,6 +139,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   // `GeoVocabulary`
   RdfsVocabulary nonGeoVocab;
   nonGeoVocab.resetToType(nonGeoVocabType);
+  ASSERT_FALSE(nonGeoVocab.isGeoInfoAvailable());
   auto ngWordCallback = vocabulary.makeWordWriterPtr("nonGeoVocabTest.dat");
   (*ngWordCallback)("<http://example.com/abc>", true);
   ngWordCallback->finish();
@@ -162,6 +172,32 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
       ::testing::HasSubstr(
           "The geometry info version of geoVocabTest2.dat.geometry.geoinfo is "
           "0, which is incompatible"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoVocabularyTest, WordWriterDestructor) {
+  const std::string lit =
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+  // Create a `GeoVocabulary::WordWriter` and destruct it without a call to
+  // `finish()`.
+  AnyGeoVocab sv1;
+  auto wordWriter1 =
+      sv1.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor1.dat");
+  (*wordWriter1)(lit, true);
+  ASSERT_FALSE(wordWriter1->finishWasCalled());
+  wordWriter1.reset();
+
+  // Create a `GeoVocabulary::WordWriter` and destruct it after an explicit
+  // call to `finish()`.
+  AnyGeoVocab sv2;
+  auto wordWriter2 =
+      sv2.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor2.dat");
+  (*wordWriter2)(lit, true);
+  wordWriter2->finish();
+  ASSERT_TRUE(wordWriter2->finishWasCalled());
+  wordWriter2.reset();
 }
 
 }  // namespace

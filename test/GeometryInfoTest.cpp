@@ -36,8 +36,17 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-constexpr std::string_view litInvalid =
+constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidBrackets =
+    "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidNumCoords =
+    "\"POINT(1)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litCoordOutOfRange =
+    "\"LINESTRING(2 -500, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -98,7 +107,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
   checkGeoInfo(g7, exp7);
 
-  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
   checkGeoInfo(g8, std::nullopt);
 }
 
@@ -138,7 +147,8 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+  ASSERT_TRUE(bb3.has_value());
+  ASSERT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
 }
 
 // ____________________________________________________________________________
@@ -196,12 +206,15 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto parsed1 = parseRes1.second.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
-  checkCentroid(centroid1, {{4, 3}});
+  Centroid centroidExp1{{4, 3}};
+  checkCentroid(centroid1, centroidExp1);
 
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
-  checkBoundingBox(bb1, {{4, 3}, {4, 3}});
+  BoundingBox bbExp1{{4, 3}, {4, 3}};
+  checkBoundingBox(bb1, bbExp1);
 
-  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
+  auto bb1Wkt =
+      boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
@@ -209,6 +222,22 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
+  checkInvalidLiteral(litInvalidType);
+  checkInvalidLiteral(litInvalidBrackets, true);
+  checkInvalidLiteral(litInvalidNumCoords, true);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
+  checkInvalidLiteral(litCoordOutOfRange, true);
+  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
+                    {2});
+  checkGeometryType(
+      GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
 }
 
 }  // namespace

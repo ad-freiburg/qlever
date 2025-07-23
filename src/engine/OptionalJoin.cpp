@@ -154,7 +154,7 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {

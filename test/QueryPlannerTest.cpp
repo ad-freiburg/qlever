@@ -133,12 +133,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -153,14 +153,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      vector<size_t> keep;
+      std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -3717,8 +3717,8 @@ TEST(QueryPlanner, TextLimit) {
       h::TextLimit(10,
                    h::Join(wordScan(Var{"?text"}, "test*"),
                            entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
@@ -3730,8 +3730,8 @@ TEST(QueryPlanner, TextLimit) {
           10,
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{
+          Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
@@ -3745,8 +3745,8 @@ TEST(QueryPlanner, TextLimit) {
                        wordScan(Var{"?text"}, "test*"),
                        entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
                        entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-                   vector<Variable>{
+                   Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
@@ -3762,8 +3762,9 @@ TEST(QueryPlanner, TextLimit) {
               wordScan(Var{"?text"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          vector<Variable>{
+          Var{"?text"},
+          std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
@@ -3780,8 +3781,8 @@ TEST(QueryPlanner, TextLimit) {
               5,
               h::Join(wordScan(Var{"?text1"}, "test*"),
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
-              Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
-              vector<Variable>{
+              Var{"?text1"}, std::vector<Variable>{Var{"?scientist1"}},
+              std::vector<Variable>{
                   Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
           h::TextLimit(
               5,
@@ -3789,8 +3790,9 @@ TEST(QueryPlanner, TextLimit) {
                   wordScan(Var{"?text2"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-              Var{"?text2"}, vector<Variable>{Var{"?author1"}, Var{"?author2"}},
-              vector<Variable>{
+              Var{"?text2"},
+              std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              std::vector<Variable>{
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
@@ -4163,6 +4165,13 @@ TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));
+
+  // Regression test for issue https://github.com/ad-freiburg/qlever/issues/2034
+  h::expect("SELECT * { ?a <a> [] . { SELECT * { ?a <a> [] }}}",
+            h::Join(h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_0"),
+                    h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_1")));
 }
 
 // _____________________________________________________________________________
@@ -4783,6 +4792,21 @@ TEST(QueryPlanner, correctFiltersHandling) {
             h::OptionalJoin(scan("?x", "<c>", "?d"),
                             h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
 
+  // A similar test with an OPTIONAL that is unconnected to the query before it.
+  // This is related to the issue
+  // https://github.com/ad-freiburg/qlever/issues/2194. Note: We need to run
+  // this test on an index where the used predicates actually exist, otherwise
+  // we will get a garbage plan.
+  auto qec = ad_utility::testing::getQec(
+      "<a> <b> <c>. <a2> <b> 4. <x> <p> <y>. <x> <c> 43");
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?a <c> ?d } ?x <p> ?a "
+      "}",
+      h::UnorderedJoins(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                        h::NeutralOptional(scan("?a", "<c>", "?d")),
+                        scan("?x", "<p>", "?a")),
+      qec);
+
   // Filter is applied in the correct subtree with MINUS
   h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) MINUS { ?x <c> ?d } }",
             h::Minus(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
@@ -4965,4 +4989,64 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
       "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
       h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
                         scan("?a", "<equal-to>", "?b")));
+}
+
+// Regression test for GitHub issue #2194
+TEST(QueryPlanner, RegressionTest2194) {
+  // Test that the three queries reported in
+  // `https://github.com/ad-freiburg/qlever/issues/2194` don't throw an error.
+
+  h::expect("SELECT * { OPTIONAL {<x> <y> ?z FILTER (?z != <z>)}}",
+            h::NeutralOptional(h::Filter(
+                "?z != <z>", h::IndexScanFromStrings("<x>", "<y>", "?z"))));
+
+  auto q1 = R"(
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+SELECT DISTINCT ?s_wikidata ?place WHERE {
+  VALUES(?s_wikidata) {
+    (<http://www.wikidata.org/entity/Q213322>)
+  }
+  OPTIONAL {
+    OPTIONAL {
+      ?s_wikidata wdt:P131+ ?city .
+      FILTER(EXISTS {
+          ?city wdt:P31/wdt:P279* wd:Q515 .
+        } || (?city = wd:Q23939248))
+    }
+    OPTIONAL {
+      ?s_wikidata wdt:P131 ?region .
+    }
+    BIND(COALESCE(?city, ?region) AS ?place)
+  }
+}
+)";
+  auto q2 = R"(
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?assetGraphIri ?namespace ?hasAdditionalTypes (GROUP_CONCAT(?class; SEPARATOR=", ") AS ?additionalTypes) WHERE {
+  BIND (<http://data.example.org/terms-ext/vocabulary> AS ?vocabulary)
+  GRAPH ?assetGraphIri {
+    ?vocabulary rdf:type skos:ConceptScheme .
+  }
+  OPTIONAL {
+    ?vocabulary <http://www.linkedmodel.org/1.2/schema/vaem#namespace> ?ns .
+  }
+  OPTIONAL {
+    ?vocabulary <http://purl.org/vocab/vann/preferredNamespaceUri> ?ns2 .
+  }
+  BIND (COALESCE(STR(?ns), STR(?ns2), STR(?vocabulary)) AS ?namespaceCandidate)
+  BIND (IF((STRENDS(?namespaceCandidate,"#")) || (STRENDS(?namespaceCandidate,"/")),?namespaceCandidate,CONCAT(?namespaceCandidate, "/")) AS ?namespace)
+  OPTIONAL {
+    <http://data.example.org/terms-ext/vocabulary/3273f45c-9b3e-4ba0-9637-ca04e1c92a20> rdf:type ?class .
+    FILTER (?class != skos:Concept)
+  }
+  BIND (BOUND(?class) AS ?hasAdditionalTypes)
+}
+GROUP BY ?assetGraphIri ?namespace ?hasAdditionalTypes
+LIMIT 1
+)";
+  h::expect(q1, ::testing::_);
+  h::expect(q2, ::testing::_);
 }

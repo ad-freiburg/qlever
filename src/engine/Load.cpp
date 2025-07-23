@@ -65,10 +65,21 @@ std::unique_ptr<Operation> Load::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {
+  auto makeSilentResult = [this]() -> Result {
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab{}};
+  };
+
+  // In the syntax test mode we don't even try to compute the result, as this
+  // could run into timeouts which would be a waste of time and is hard to
+  // properly recover from.
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    return makeSilentResult();
+  }
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -77,14 +88,14 @@ Result Load::computeResult(bool requestLaziness) {
     throw;
   } catch (const std::exception&) {
     // If the `SILENT` keyword is set, catch the error and return the neutral
-    // element for this operation (an empty `IdTable`). The `IdTable` is used to
-    // fill in the variables in the template triple `?s ?p ?o`. The empty
+    // element for this operation (an empty `IdTable`). The `IdTable` is used
+    // to fill in the variables in the template triple `?s ?p ?o`. The empty
     // `IdTable` results in no triples being updated.
-    if (loadClause_.silent_ || RuntimeParameters().get<"syntax-test-mode">()) {
-      return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-              resultSortedOn(), LocalVocab{}};
+    if (loadClause_.silent_) {
+      return makeSilentResult();
+    } else {
+      throw;
     }
-    throw;
   }
 }
 
