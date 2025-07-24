@@ -204,7 +204,8 @@ inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
   }
 }
 
-// ____________________________________________________________________________
+// Extract the n-th geometry from a parsed geometry collection using a 1-based
+// index `n`.
 inline std::optional<std::string> getGeometryN(const ParsedWkt& geom,
                                                int64_t n) {
   if (n < 1) {
@@ -219,10 +220,14 @@ inline std::optional<std::string> getGeometryN(const ParsedWkt& geom,
   return std::visit(
       [n](const auto& g) -> std::optional<std::string> {
         using T = std::decay_t<decltype(g)>;
+
+        // Is this geometry a collection type?
         if constexpr (isVector<T>) {
+          // Index range check
           if (n - 1 >= static_cast<int64_t>(g.size())) {
             return std::nullopt;
           }
+
           if constexpr (std::is_same_v<T, Collection<CoordType>>) {
             return getWktAnyGeometry(g.at(n - 1));
           } else {
@@ -230,6 +235,9 @@ inline std::optional<std::string> getGeometryN(const ParsedWkt& geom,
           }
         } else {
           static_assert(!std::is_same_v<T, AnyGeometry<CoordType>>);
+
+          // For non collection types, only index 1 is defined and returns the
+          // geometry itself.
           if (n == 1) {
             return getWKT(g);
           }
