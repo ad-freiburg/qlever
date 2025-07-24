@@ -42,8 +42,6 @@ CPP_concept WktCollectionType =
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
 // Removes the datatype and quotation marks from a given literal
-
-// ____________________________________________________________________________
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
