@@ -3,6 +3,7 @@
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <util/geo/Geo.h>
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -52,6 +53,9 @@ const auto getAllTestLiterals = []() {
       litPoint,           litLineString,   litPolygon,   litMultiPoint,
       litMultiLineString, litMultiPolygon, litCollection};
 };
+
+constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
+                                                              2, 2, 3};
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
@@ -208,6 +212,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
+  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
   ASSERT_TRUE(parseRes1.second.has_value());
   auto parsed1 = parseRes1.second.value();
 
@@ -228,6 +233,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+
+  EXPECT_EQ(countChildGeometries(parsed1), 1);
 }
 
 // ____________________________________________________________________________
@@ -244,6 +251,9 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
                     {2});
   checkGeometryType(
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+  checkNumGeometries(
+      GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
+      NumGeometries{1});
 }
 
 // _____________________________________________________________________________
@@ -255,6 +265,21 @@ TEST(GeometryInfoTest, WebMercProjection) {
   checkUtilBoundingBox(result1, b1);
 }
 
-// TODO
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, NumGeometries) {
+  const auto testLiterals = getAllTestLiterals();
+  ASSERT_EQ(testLiterals.size(), allTestLiteralNumGeometries.size());
+
+  for (size_t i = 0; i < testLiterals.size(); ++i) {
+    const auto& lit = testLiterals[i];
+    NumGeometries expected{allTestLiteralNumGeometries[i]};
+
+    checkNumGeometries(GeometryInfo::getNumGeometries(lit), expected);
+
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    checkNumGeometries(gi.value().getNumGeometries(), expected);
+  }
+}
 
 }  // namespace
