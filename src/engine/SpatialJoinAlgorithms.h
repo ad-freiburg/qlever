@@ -19,6 +19,7 @@
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
+#include "global/RuntimeParameters.h"
 #include "util/GeoSparqlHelpers.h"
 
 namespace BoostGeometryNamespace {
@@ -238,7 +239,10 @@ class SpatialJoinAlgorithms {
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is
   // disabled. See `libspatialjoinParse`.
-  static constexpr double maxAreaPrefilterBox_ = 2500.0;
+  static double maxAreaPrefilterBox() {
+    return static_cast<double>(
+        RuntimeParameters().get<"spatial-join-prefilter-max-size">());
+  };
 
   // if the distance calculation should be approximated, by the midpoint of
   // the area

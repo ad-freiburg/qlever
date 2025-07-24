@@ -80,12 +80,11 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
                          qec_->getIndex().getVocab().isGeoInfoAvailable();
 
-  // If the prefilter box is larger than 50 x 50 coordinates, the
-  // prefiltering overhead (cost of retrieving bounding boxes from disk) is
-  // likely larger than its performance gain. Therefore prefiltering is
-  // disabled in this case.
+  // If the prefilter box is too large, the prefiltering overhead (cost of
+  // retrieving bounding boxes from disk) is likely larger than its performance
+  // gain. Therefore prefiltering is disabled in this case.
   if (usePrefiltering &&
-      util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox_) {
+      util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox()) {
     usePrefiltering = false;
     spatialJoin_.value()->runtimeInfo().addDetail(
         "prefilter-disabled-by-bounding-box-area", true);
