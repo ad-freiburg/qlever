@@ -498,8 +498,6 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   };
 
   std::vector<CompressedBlockMetadata> result;
-  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
-  auto upper = ql::ranges::upper_bound(mdView, joinColumn.front(), lessThan);
   ql::ranges::copy(metadataAndBlocks.getBlockMetadataView() |
                        ql::views::filter(blockIsNeeded),
                    std::back_inserter(result));
