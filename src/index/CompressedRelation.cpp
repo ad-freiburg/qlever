@@ -363,6 +363,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
         blockGenerator{};
     bool firstBlockYielded{false};
+    bool middleBlocksYielded{false};
     bool lastBlockYielded{false};
     bool generatorCreated{false};
     std::vector<CompressedBlockMetadata>::iterator beginBlockMetadata;
@@ -418,6 +419,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       }
 
       if (beginBlockMetadata + 1 < endBlockMetadata) {
+        if (!middleBlocksYielded) {
           // Get and yield the remaining blocks.
           if (!generatorCreated) {
             generatorCreated = true;
@@ -430,7 +432,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
           auto block{middleBlocksGenerator.get()};
           if (block.has_value()) {
             return std::move(block.value());
+          } else {
+            middleBlocksYielded = true;
           }
+        }
 
         if (!lastBlockYielded) {
           lastBlockYielded = true;
