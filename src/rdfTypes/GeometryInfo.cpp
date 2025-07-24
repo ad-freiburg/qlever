@@ -15,9 +15,10 @@ namespace ad_utility {
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-                           Centroid centroid)
+                           Centroid centroid, NumGeometries numGeometries)
     : boundingBox_{boundingBox.lowerLeft_.toBitRepresentation(),
-                   boundingBox.upperRight_.toBitRepresentation()} {
+                   boundingBox.upperRight_.toBitRepresentation()},
+      numGeometries_{numGeometries.numGeometries_} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -36,6 +37,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
           boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng(),
       "Bounding box coordinates invalid: first point must be lower "
       "left and second point must be upper right of a rectangle.");
+
+  AD_CORRECTNESS_CHECK(numGeometries_ > 0,
+                       "Number of geometries must be strictly positive.");
 };
 
 // ____________________________________________________________________________
@@ -49,6 +53,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
 
   auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
   auto centroid = centroidAsGeoPoint(parsed.value());
+  auto numGeom = countChildGeometries(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
     LOG(DEBUG) << "The WKT string `" << wkt
                << "` would lead to an invalid centroid or bounding box. It "
@@ -57,7 +62,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
     return std::nullopt;
   }
 
-  return GeometryInfo{type, boundingBox.value(), centroid.value()};
+  return GeometryInfo{type, boundingBox.value(), centroid.value(), {numGeom}};
 }
 
 // ____________________________________________________________________________
@@ -73,7 +78,7 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point}, point};
+  return {util::geo::WKTType::POINT, {point, point}, point, {1}};
 }
 
 // ____________________________________________________________________________

@@ -105,7 +105,7 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid);
+               Centroid centroid, NumGeometries numGeometries);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
