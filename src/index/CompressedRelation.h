@@ -518,6 +518,23 @@ class CompressedRelationReader {
       return ql::views::join(blockMetadata_);
     }
 
+    // TODO<joka921> comment.
+    void removePrefix(size_t numBlocksToRemove) {
+      auto it = blockMetadata_.begin();
+      auto end = blockMetadata_.end();
+      while (it != end) {
+        auto& subspan = *it;
+        auto sz = ql::ranges::size(subspan);
+        if (numBlocksToRemove < sz) {
+          subspan.advance(numBlocksToRemove);
+          break;
+        } else {
+          numBlocksToRemove -= sz;
+        }
+      }
+      blockMetadata_.erase(blockMetadata_.begin(), it);
+    }
+
     // If `BlockMetadataRanges blockMetadata_` contains exactly one
     // `BlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
     // corresponding CompressedBlockMetadata values as a span.
@@ -604,6 +621,14 @@ class CompressedRelationReader {
   // is not fixed by the `metadataAndBlocks`, so the middle column (col1) in
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
+
+  struct GetBlocksForJoinResult {
+    std::vector<CompressedBlockMetadata> matchingIndices_;
+    size_t lastRelevantIndex_{0};
+  };
+  static GetBlocksForJoinResult getBlocksForJoinAsIndices(
+      ql::span<const Id> joinColumn,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
       ql::span<const Id> joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);

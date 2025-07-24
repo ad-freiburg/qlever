@@ -472,6 +472,9 @@ struct BlockLessThanBlock {
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     ql::span<const Id> joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
+  if (joinColumn.empty()) {
+    return {};
+  }
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
                              Id id, const CompressedBlockMetadata& block) {
@@ -495,14 +498,75 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   };
 
   std::vector<CompressedBlockMetadata> result;
+  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
+  auto upper = ql::ranges::upper_bound(mdView, joinColumn.front(), lessThan);
   ql::ranges::copy(metadataAndBlocks.getBlockMetadataView() |
                        ql::views::filter(blockIsNeeded),
                    std::back_inserter(result));
 
-  // The following check is cheap as there are only few blocks.
-  AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
-                       result.end());
+  AD_EXPENSIVE_CHECK(std::unique(result.begin(), result.end()) == result.end());
   return result;
+}
+
+auto CompressedRelationReader::getBlocksForJoinAsIndices(
+    ql::span<const Id> joinColumn,
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
+    -> GetBlocksForJoinResult {
+  if (joinColumn.empty() || metadataAndBlocks.getBlockMetadataView().empty()) {
+    return {};
+  }
+  // We need symmetric comparisons between Ids and blocks.
+  auto idLessThanBlock = [&metadataAndBlocks](
+                             Id id, const CompressedBlockMetadata& block) {
+    return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
+  };
+
+  auto blockLessThanId = [&metadataAndBlocks](
+                             const CompressedBlockMetadata& block, Id id) {
+    return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
+  };
+
+  std::vector<CompressedBlockMetadata> result;
+  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
+
+  auto colIt = joinColumn.begin();
+  auto colEnd = joinColumn.end();
+  auto blockIt = mdView.begin();
+  auto blockEnd = mdView.end();
+  size_t blockIdx = 0;
+
+  GetBlocksForJoinResult res;
+  while (true) {
+    while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
+      ++colIt;
+    }
+    if (colIt == colEnd) {
+      // TODO<joka921> is the `distance` efficient?
+      res.lastRelevantIndex_ = ql::ranges::distance(mdView.begin(), blockIt);
+      return res;
+    }
+    while (blockIt != blockEnd && blockLessThanId(*blockIt, *colIt)) {
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      // TODO<joka921> it is not efficient, because there might be a join
+      // involved, we have to count ourselves.
+      res.lastRelevantIndex_ = blockIdx;
+      return res;
+    }
+    // TODO<joka921> Assert that this is in fact correct by using exhaustive
+    // unit tests.
+    while (blockIt != blockEnd && !idLessThanBlock(*colIt, *blockIt)) {
+      res.matchingIndices_.push_back(*blockIt);
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      res.lastRelevantIndex_ = blockIdx;
+      return res;
+    }
+  }
 }
 
 // _____________________________________________________________________________

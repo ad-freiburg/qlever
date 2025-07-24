@@ -15,7 +15,9 @@ StripColumns::StripColumns(QueryExecutionContext* ctx,
   for (const auto& var : keepVariables) {
     auto it = childVars.find(var);
     if (it != childVars.end()) {
-      varToCol_.emplace(var, it->second);
+      auto info = it->second;
+      info.columnIndex_ = subset_.size();
+      varToCol_.emplace(var, std::move(info));
       subset_.push_back(it->second.columnIndex_);
     }
   }
@@ -52,7 +54,9 @@ uint64_t StripColumns::getSizeEstimateBeforeLimit() {
 }
 
 float StripColumns::getMultiplicity(size_t col) {
-  return child_->getMultiplicity(subset_.at(col));
+  // TODO<joka921> This hack shouldn't be necessary as soon as we fix the
+  // multiplicity computation inside `Join`.
+  return col < subset_.size() ? child_->getMultiplicity(subset_.at(col)) : 1.0f;
 }
 
 bool StripColumns::knownEmptyResult() { return child_->knownEmptyResult(); }
@@ -71,7 +75,9 @@ std::vector<ColumnIndex> StripColumns::resultSortedOn() const {
     if (it == subset_.end()) {
       break;
     }
-    sortedOn.push_back(*it);
+    // TODO<joka921> Add a unit test that would have caught this.
+    sortedOn.push_back(it - subset_.begin());
+    ;
   }
   return sortedOn;
 }

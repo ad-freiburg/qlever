@@ -789,10 +789,11 @@ Join::makeTreeWithStrippedColumns(
     vars = &newVariables;
   }
 
+  // TODO<joka921> Code duplication including a former copy-paste bug.
   auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
   auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
   auto leftCol = left->getVariableColumn(_joinVar);
-  auto rightCol = left->getVariableColumn(_joinVar);
+  auto rightCol = right->getVariableColumn(_joinVar);
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, variables.contains(_joinVar));
