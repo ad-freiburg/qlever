@@ -32,7 +32,6 @@ using ParsedWkt =
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
-<<<<<<< HEAD
 template <typename T>
 CPP_concept WktSingleGeometryType =
     SameAsAny<T, Point<CoordType>, Line<CoordType>, Polygon<CoordType>>;
@@ -42,10 +41,9 @@ CPP_concept WktCollectionType =
     SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
-// ____________________________________________________________________________
-=======
 // Removes the datatype and quotation marks from a given literal
->>>>>>> 26997d7633ce47bb22bd7f40dcb74db7d50f67d3
+
+// ____________________________________________________________________________
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
@@ -177,24 +175,6 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   return std::nullopt;
 }
 
-<<<<<<< HEAD
-// ____________________________________________________________________________
-inline uint32_t countChildGeometries(const ParsedWkt& geom) {
-  return std::visit(
-      [](const auto& g) -> uint32_t {
-        using T = std::decay_t<decltype(g)>;
-        if constexpr (WktCollectionType<T>) {
-          return static_cast<uint32_t>(g.size());
-        } else {
-          static_assert(WktSingleGeometryType<T>);
-          // TODO: Should this return 0 or 1 or `undef`? What about points of a
-          // line and rings of a polygon? What are the correct semantics?
-          return 0;
-        }
-      },
-      geom);
-}
-=======
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
 inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
@@ -210,7 +190,23 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
->>>>>>> 26997d7633ce47bb22bd7f40dcb74db7d50f67d3
+
+// Counts the number of geometries in a geometry collection.
+inline uint32_t countChildGeometries(const ParsedWkt& geom) {
+  return std::visit(
+      [](const auto& g) -> uint32_t {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (WktCollectionType<T>) {
+          return static_cast<uint32_t>(g.size());
+        } else {
+          static_assert(WktSingleGeometryType<T>);
+          // TODO: Should this return 0 or 1 or `undef`? What about points of a
+          // line and rings of a polygon? What are the correct semantics?
+          return 0;
+        }
+      },
+      geom);
+}
 
 }  // namespace ad_utility::detail
 
