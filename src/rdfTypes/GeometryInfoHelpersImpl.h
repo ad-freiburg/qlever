@@ -41,6 +41,8 @@ CPP_concept WktCollectionType =
     SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
               MultiPolygon<CoordType>, Collection<CoordType>>;
 
+static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
+
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
