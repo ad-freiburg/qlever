@@ -6,7 +6,6 @@
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -238,6 +237,15 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
                     {2});
   checkGeometryType(
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, WebMercProjection) {
+  util::geo::DBox b1{{1, 2}, {3, 4}};
+  auto b1WebMerc = boxToWebMerc(b1);
+  auto result1 =
+      ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+  checkUtilBoundingBox(result1, b1);
 }
 
 }  // namespace
