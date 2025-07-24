@@ -101,16 +101,19 @@ class TimeTracer {
   }
 };
 
-class DummyTimeTracer : public TimeTracer {
+// A time tracer that does nothing, which will be used a default argument in
+// all methods that take a TimeTracer. This is useful for testing, so that we
+// don't have to pass a TimeTracer to every method that uses one.
+class DefaultTimeTracer : public TimeTracer {
  public:
-  DummyTimeTracer(std::string name) : TimeTracer(name) {}
+  DefaultTimeTracer(std::string name) : TimeTracer(name) {}
   void beginTrace(std::string) override {}
   void endTrace(std::string_view) override {}
   nlohmann::ordered_json getJSON() const override { return {}; }
   nlohmann::ordered_json getJSONShort() const override { return {}; }
 };
 
-extern TimeTracer DEFAULT_TRACER;
+static inline DefaultTimeTracer DEFAULT_TIME_TRACER = DefaultTimeTracer("");
 
 }  // namespace ad_utility::timer
 

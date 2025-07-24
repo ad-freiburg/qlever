@@ -171,12 +171,12 @@ class DeltaTriples {
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
-                         ad_utility::timer::DEFAULT_TRACER);
+                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
-                         ad_utility::timer::DEFAULT_TRACER);
+                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
@@ -210,7 +210,7 @@ class DeltaTriples {
       CancellationHandle cancellationHandle,
       ql::span<const IdTriple<0>> triples, bool insertOrDelete,
       ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TRACER);
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Common implementation for `insertTriples` and `deleteTriples`. When
   // `insertOrDelete` is `true`, the triples are inserted, `targetMap` contains
@@ -222,7 +222,7 @@ class DeltaTriples {
                          bool shouldExist, TriplesToHandlesMap& targetMap,
                          TriplesToHandlesMap& inverseMap,
                          ad_utility::timer::TimeTracer& tracer =
-                             ad_utility::timer::DEFAULT_TRACER);
+                             ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
   // local blank nodes are managed by the `localVocab_` of this class.
@@ -252,8 +252,6 @@ class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
   ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
       currentLocatedTriplesSnapshot_;
-  ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
-      emptyLocatedTriplesSnapshot_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -271,7 +269,7 @@ class DeltaTriplesManager {
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
                     bool writeToDiskAfterRequest = true,
                     ad_utility::timer::TimeTracer& tracer =
-                        ad_utility::timer::DEFAULT_TRACER);
+                        ad_utility::timer::DEFAULT_TIME_TRACER);
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 

@@ -225,7 +225,7 @@ class Server {
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TRACER);
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,
