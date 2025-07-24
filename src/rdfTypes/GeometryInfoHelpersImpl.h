@@ -181,7 +181,8 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
 
-// ____________________________________________________________________________
+// Generate a WKT literal for the custom `AnyGeometry` container type from
+// `pb_util`, which can dynamically hold any geometry type.
 inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
   switch (geom.getType()) {
     case 0:
@@ -204,14 +205,11 @@ inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
 }
 
 // ____________________________________________________________________________
-inline std::optional<std::string> getGeometryN(std::string_view wkt,
+inline std::optional<std::string> getGeometryN(WKTType type,
+                                               const ParsedWkt& geom,
                                                int64_t n) {
+  // TODO: Should 1 on a non-collection-type return the geometry itself.
   if (n < 0) {
-    return std::nullopt;
-  }
-
-  auto [type, parsed] = parseWkt(wkt);
-  if (!parsed.has_value()) {
     return std::nullopt;
   }
 
@@ -221,22 +219,23 @@ inline std::optional<std::string> getGeometryN(std::string_view wkt,
   }
 
   return std::visit(
-      [n](const auto& geom) -> std::optional<std::string> {
-        using T = std::decay_t<decltype(geom)>;
+      [n](const auto& g) -> std::optional<std::string> {
+        using T = std::decay_t<decltype(g)>;
         if constexpr (isVector<T>) {
-          if (static_cast<uint64_t>(n) >= geom.size()) {
+          // TODO 0- or 1-indexed?
+          if (static_cast<uint64_t>(n) >= g.size()) {
             return std::nullopt;
           }
           if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-            return getWktAnyGeometry(geom[n]);
+            return getWktAnyGeometry(g[n]);
           } else {
-            return getWKT(geom[n]);
+            return getWKT(g[n]);
           }
         } else {
           return std::nullopt;
         }
       },
-      parsed.value());
+      geom);
 }
 
 }  // namespace ad_utility::detail
