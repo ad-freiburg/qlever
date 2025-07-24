@@ -47,6 +47,18 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                 [&map = subtree->getVariableColumns()](const auto& var) {
                   return !map.contains(var);
                 });
+  if (RuntimeParameters().get<"strip-columns">()) {
+    ad_utility::HashSet<Variable> usedVariables{groupByVariables.begin(),
+                                                groupByVariables.end()};
+    for (const auto& alias : _aliases) {
+      const auto& vars = alias._expression.containedVariables();
+      for (auto& var : vars) {
+        usedVariables.insert(*var);
+      }
+    }
+    subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::move(subtree), usedVariables);
+  }
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
   //
   // NOTE: It is tempting to do the same also for the aliases, but that would
@@ -54,14 +66,14 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   // alias.
   ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
-  auto sortColumns = computeSortColumns(subtree.get());
-
   // Aliases are like `BIND`s, which may contain `EXISTS` expressions.
   for (const auto& alias : _aliases) {
     subtree = ExistsJoin::addExistsJoinsToSubtree(
         alias._expression, std::move(subtree), getExecutionContext(),
         cancellationHandle_);
   }
+
+  auto sortColumns = computeSortColumns(subtree.get());
 
   _subtree =
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
@@ -328,6 +340,12 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
     return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
+  }
+
+  if (_groupByVariables.empty() && _aliases.size() == 1 &&
+      dynamic_cast<const sparqlExpression::CountStarExpression*>(
+          _aliases[0]._expression.getPimpl())) {
+    return computeCountStar(*_subtree->getResult(true));
   }
 
   std::vector<Aggregate> aggregates;
@@ -1641,4 +1659,27 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+Result GroupByImpl::computeCountStar(const Result& input) {
+  auto res = [&input]() -> size_t {
+    if (input.isFullyMaterialized()) {
+      return input.idTable().size();
+    } else {
+      auto gen = input.idTables();
+      // TODO<joka921> There is an easier way to perform this.
+      auto sz = gen | ql::views::transform([](const auto& pair) {
+                  return pair.idTable_.numRows();
+                });
+      size_t x = 0;
+      for (const auto& s : sz) {
+        x += s;
+      }
+      return x;
+    }
+  }();
+  IdTable result{1, getExecutionContext()->getAllocator()};
+  result.push_back(std::array{Id::makeFromInt(res)});
+  return {std::move(result), resultSortedOn(), LocalVocab()};
 }

@@ -519,8 +519,11 @@ struct IndexScan::SharedGeneratorState {
         return;
       }
       AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
-      auto newBlocks =
-          CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
+      auto newBlocksAndIndex =
+          CompressedRelationReader::getBlocksForJoinAsIndices(joinColumn,
+                                                              metaBlocks_);
+      metaBlocks_.removePrefix(newBlocksAndIndex.lastRelevantIndex_);
+      auto& newBlocks = newBlocksAndIndex.matchingIndices_;
       if (newBlocks.empty()) {
         // The current input table matches no blocks, so we don't have to yield
         // it.

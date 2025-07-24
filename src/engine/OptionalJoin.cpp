@@ -430,7 +430,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     ad_utility::AddCombinedRowToIdTable rowAdder{
         _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, CHUNK_SIZE, std::move(yieldTable)};
+        cancellationHandle_, true,
+        CHUNK_SIZE,          std::move(yieldTable)};
     auto leftRange = resultToView(*left, joinColMap.permutationLeft());
     auto rightRange = resultToView(*right, joinColMap.permutationRight());
     std::visit(
@@ -462,4 +463,27 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OptionalJoin::makeTreeWithStrippedColumns(
+    const ad_utility::HashSet<Variable>& variables) const {
+  ad_utility::HashSet<Variable> newVariables;
+  const auto* vars = &variables;
+  for (const auto& [jcl, _] : _joinColumns) {
+    const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
+    if (!variables.contains(var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+  return ad_utility::makeExecutionTree<OptionalJoin>(
+      getExecutionContext(), std::move(left), std::move(right));
 }

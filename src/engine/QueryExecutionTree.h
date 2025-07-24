@@ -192,6 +192,10 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB);
 
+  static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const ad_utility::HashSet<Variable>& variables);
+
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a

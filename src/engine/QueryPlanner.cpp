@@ -3154,8 +3154,12 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // Make sure that variables that are not selected by the subquery are not
   // visible.
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
-    plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        select.getSelectedVariables());
+    const auto& selected = select.getSelectedVariables();
+    ad_utility::HashSet<Variable> selectedVariables{selected.begin(),
+                                                    selected.end()};
+    plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::move(plan._qet), selectedVariables);
+    // plan._qet->getRootOperation()->setSelectedVariablesForSubquery(selected);
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
