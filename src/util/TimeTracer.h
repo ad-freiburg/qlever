@@ -110,7 +110,7 @@ class DummyTimeTracer : public TimeTracer {
   nlohmann::ordered_json getJSONShort() const override { return {}; }
 };
 
-TimeTracer DEFAULT_TRACER = DummyTimeTracer(std::string());
+extern TimeTracer DEFAULT_TRACER;
 
 }  // namespace ad_utility::timer
 

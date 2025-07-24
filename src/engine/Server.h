@@ -223,7 +223,9 @@ class Server {
   UpdateMetadata processUpdateImpl(
       const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples, ad_utility::timer::TimeTracerOpt tracer);
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TRACER);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

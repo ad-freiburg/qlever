@@ -36,7 +36,8 @@ class ExecuteUpdate {
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
       const CancellationHandle& cancellationHandle,
-      ad_utility::timer::TimeTracerOpt tracer = {});
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TRACER);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
@@ -77,7 +78,8 @@ class ExecuteUpdate {
                           const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata,
-                          ad_utility::timer::TimeTracerOpt tracer = {});
+                          ad_utility::timer::TimeTracer& tracer =
+                              ad_utility::timer::DEFAULT_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 
   // After the operation the vector is sorted and contains no duplicate
