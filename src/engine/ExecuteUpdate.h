@@ -10,6 +10,7 @@
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
+#include "util/TimeTracer.h"
 
 // Metadata about the time spent on different parts of an update.
 struct UpdateMetadata {
@@ -18,7 +19,9 @@ struct UpdateMetadata {
   Milliseconds triplePreparationTime_ = Zero;
   Milliseconds insertionTime_ = Zero;
   Milliseconds deletionTime_ = Zero;
+  std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
+  std::optional<DeltaTriplesCount> countAfter_;
 };
 
 class ExecuteUpdate {
@@ -32,7 +35,9 @@ class ExecuteUpdate {
   static UpdateMetadata executeUpdate(
       const Index& index, const ParsedQuery& query,
       const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
-      const CancellationHandle& cancellationHandle);
+      const CancellationHandle& cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
@@ -72,7 +77,9 @@ class ExecuteUpdate {
                           const Result& result,
                           const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
-                          UpdateMetadata& metadata);
+                          UpdateMetadata& metadata,
+                          ad_utility::timer::TimeTracer& tracer =
+                              ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 
   // After the operation the vector is sorted and contains no duplicate
