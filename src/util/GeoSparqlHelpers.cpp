@@ -101,7 +101,7 @@ std::optional<std::string> wktGetGeometryN(std::string_view wkt, int64_t n) {
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return getGeometryN(type, parsed.value(), n);
+  return getGeometryN(parsed.value(), n);
 }
 
 }  // namespace detail

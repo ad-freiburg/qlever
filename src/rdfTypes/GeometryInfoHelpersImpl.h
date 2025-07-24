@@ -205,33 +205,34 @@ inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
 }
 
 // ____________________________________________________________________________
-inline std::optional<std::string> getGeometryN(WKTType type,
-                                               const ParsedWkt& geom,
+inline std::optional<std::string> getGeometryN(const ParsedWkt& geom,
                                                int64_t n) {
+  if (n < 1) {
+    return std::nullopt;
+  }
   // TODO: Should 1 on a non-collection-type return the geometry itself.
-  if (n < 0) {
-    return std::nullopt;
-  }
+  // TODO 0- or 1-indexed?
 
-  // A linestring is represented as a vector but is not a collection type.
-  if (type == WKTType::LINESTRING) {
-    return std::nullopt;
-  }
+  static_assert(!isVector<Line<CoordType>>);
+  static_assert(isVector<Collection<CoordType>>);
 
   return std::visit(
       [n](const auto& g) -> std::optional<std::string> {
         using T = std::decay_t<decltype(g)>;
         if constexpr (isVector<T>) {
-          // TODO 0- or 1-indexed?
-          if (static_cast<uint64_t>(n) >= g.size()) {
+          if (n - 1 >= static_cast<int64_t>(g.size())) {
             return std::nullopt;
           }
           if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-            return getWktAnyGeometry(g[n]);
+            return getWktAnyGeometry(g.at(n - 1));
           } else {
-            return getWKT(g[n]);
+            return getWKT(g.at(n - 1));
           }
         } else {
+          static_assert(!std::is_same_v<T, AnyGeometry<CoordType>>);
+          if (n == 1) {
+            return getWKT(g);
+          }
           return std::nullopt;
         }
       },
