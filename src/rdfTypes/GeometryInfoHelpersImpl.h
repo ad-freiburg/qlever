@@ -8,12 +8,9 @@
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
-<<<<<<< HEAD
-#include <range/v3/numeric/accumulate.hpp>
-=======
 #include <array>
+#include <range/v3/numeric/accumulate.hpp>
 #include <string_view>
->>>>>>> 26997d7633ce47bb22bd7f40dcb74db7d50f67d3
 
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -168,7 +165,6 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   return std::nullopt;
 }
 
-<<<<<<< HEAD
 // ____________________________________________________________________________
 inline double computeMetricLengthPolygon(const Polygon<CoordType>& geom) {
   return latLngLen<CoordType>(geom.getOuter());
@@ -236,7 +232,7 @@ inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
       },
       geometry)};
 }
-=======
+
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
 inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
@@ -252,7 +248,6 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
->>>>>>> 26997d7633ce47bb22bd7f40dcb74db7d50f67d3
 
 }  // namespace ad_utility::detail
 
