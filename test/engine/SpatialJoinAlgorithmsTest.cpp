@@ -1,3 +1,8 @@
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller @Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
@@ -9,13 +14,14 @@
 #include <variant>
 
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinConfig.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -29,10 +35,10 @@ using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
 namespace computeResultTest {
 
 // Represents from left to right: the algorithm, addLeftChildFirst,
-// bigChildLeft, a spatial join task and if areas (=true) or points (=false)
-// should be used
+// bigChildLeft, a spatial join task, if areas (=true) or points (=false)
+// should be used and if the `GeoVocabulary` should be used
 using SpatialJoinTestParam =
-    std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask, bool>;
+    std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask, bool, bool>;
 
 using Row = std::vector<std::string>;
 using Rows = std::vector<Row>;
@@ -40,6 +46,14 @@ using Rows = std::vector<Row>;
 class SpatialJoinParamTest
     : public ::testing::TestWithParam<SpatialJoinTestParam> {
  public:
+  // Named getters for the test parameters
+  SpatialJoinAlgorithm getAlgorithm() { return std::get<0>(GetParam()); };
+  bool getAddLeftChildFirst() { return std::get<1>(GetParam()); };
+  bool getBigChildLeft() { return std::get<2>(GetParam()); };
+  SpatialJoinTask getTask() { return std::get<3>(GetParam()); };
+  bool getUseAreasOrPoints() { return std::get<4>(GetParam()); };
+  bool getUseGeoVocabulary() { return std::get<5>(GetParam()); };
+
   void createAndTestSpatialJoin(QueryExecutionContext* qec, Variable left,
                                 SJ task, Variable right,
                                 std::shared_ptr<QueryExecutionTree> leftChild,
@@ -102,7 +116,7 @@ class SpatialJoinParamTest
         createRowVectorFromColumnVector(expectedOutputOrdered);
 
     // Select algorithm
-    spatialJoin->selectAlgorithm(std::get<0>(GetParam()));
+    spatialJoin->selectAlgorithm(getAlgorithm());
 
     // At worst quadratic time
     ASSERT_LE(spatialJoin->getCostEstimate(),
@@ -125,7 +139,7 @@ class SpatialJoinParamTest
     EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
 
     if (isWrongPointInputTest &&
-        std::get<0>(GetParam()) == SpatialJoinAlgorithm::BOUNDING_BOX) {
+        getAlgorithm() == SpatialJoinAlgorithm::BOUNDING_BOX) {
       auto warnings = spatialJoin->collectWarnings();
       bool containsWrongPointWarning = false;
       std::string warningMessage =
@@ -158,7 +172,7 @@ class SpatialJoinParamTest
   void buildAndTestSmallTestSetLargeChildren(SJ task, bool addLeftChildFirst,
                                              Rows expectedOutput,
                                              Row columnNames) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(getUseAreasOrPoints(), getUseGeoVocabulary());
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ===================== build the first child
@@ -191,7 +205,7 @@ class SpatialJoinParamTest
   void buildAndTestSmallTestSetSmallChildren(SJ task, bool addLeftChildFirst,
                                              Rows expectedOutput,
                                              Row columnNames) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(getUseAreasOrPoints(), getUseGeoVocabulary());
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ===================================
@@ -218,7 +232,7 @@ class SpatialJoinParamTest
                                                 Rows expectedOutput,
                                                 Row columnNames,
                                                 bool bigChildLeft) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(getUseAreasOrPoints(), getUseGeoVocabulary());
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ========================= build big child =============================
@@ -246,12 +260,12 @@ class SpatialJoinParamTest
   void testDiffSizeIdTables(SJ task, bool addLeftChildFirst,
                             Rows expectedOutput, Row columnNames,
                             bool bigChildLeft) {
-    auto qec = buildTestQEC(std::get<4>(GetParam()));
+    auto qec = buildTestQEC(getUseAreasOrPoints(), getUseGeoVocabulary());
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build small input ==============================
     std::string geometry =
-        std::get<4>(GetParam()) ? "<geometryArea1>" : "<geometry1>";
+        getUseAreasOrPoints() ? "<geometryArea1>" : "<geometry1>";
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
         ad_utility::triple_component::Iri::fromIriref(geometry)};
@@ -282,7 +296,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    auto qec = buildQec(kg);
+    auto qec = buildQec(kg, getUseGeoVocabulary());
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -299,7 +313,7 @@ class SpatialJoinParamTest
   }
 
   std::optional<MaxDistanceConfig> getMaxDist() {
-    auto task = std::get<3>(GetParam());
+    auto task = getTask();
 
     if (std::holds_alternative<MaxDistanceConfig>(task)) {
       return std::get<MaxDistanceConfig>(task);
@@ -308,7 +322,7 @@ class SpatialJoinParamTest
   }
 
   std::optional<NearestNeighborsConfig> getNearestNeighbors() {
-    auto task = std::get<3>(GetParam());
+    auto task = getTask();
 
     if (std::holds_alternative<NearestNeighborsConfig>(task)) {
       return std::get<NearestNeighborsConfig>(task);
@@ -327,47 +341,47 @@ class SpatialJoinParamTest
     return result;
   };
 
-  std::string name1 = (std::get<4>(GetParam())) ? "\"Uni Freiburg TF Area\""
-                                                : "\"Uni Freiburg TF\"";
-  std::string name2 = (std::get<4>(GetParam())) ? "\"Minster Freiburg Area\""
-                                                : "\"Minster Freiburg\"";
+  std::string name1 = getUseAreasOrPoints() ? "\"Uni Freiburg TF Area\""
+                                            : "\"Uni Freiburg TF\"";
+  std::string name2 = getUseAreasOrPoints() ? "\"Minster Freiburg Area\""
+                                            : "\"Minster Freiburg\"";
   std::string name3 =
-      (std::get<4>(GetParam())) ? "\"London Eye Area\"" : "\"London Eye\"";
-  std::string name4 = (std::get<4>(GetParam())) ? "\"Statue of liberty Area\""
-                                                : "\"Statue of liberty\"";
+      getUseAreasOrPoints() ? "\"London Eye Area\"" : "\"London Eye\"";
+  std::string name4 = getUseAreasOrPoints() ? "\"Statue of liberty Area\""
+                                            : "\"Statue of liberty\"";
   std::string name5 =
-      (std::get<4>(GetParam())) ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
+      getUseAreasOrPoints() ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
 
-  std::string node1 = (std::get<4>(GetParam())) ? "<nodeArea_1>" : "<node_1>";
-  std::string node2 = (std::get<4>(GetParam())) ? "<nodeArea_2>" : "<node_2>";
-  std::string node3 = (std::get<4>(GetParam())) ? "<nodeArea_3>" : "<node_3>";
-  std::string node4 = (std::get<4>(GetParam())) ? "<nodeArea_4>" : "<node_4>";
-  std::string node5 = (std::get<4>(GetParam())) ? "<nodeArea_5>" : "<node_5>";
+  std::string node1 = getUseAreasOrPoints() ? "<nodeArea_1>" : "<node_1>";
+  std::string node2 = getUseAreasOrPoints() ? "<nodeArea_2>" : "<node_2>";
+  std::string node3 = getUseAreasOrPoints() ? "<nodeArea_3>" : "<node_3>";
+  std::string node4 = getUseAreasOrPoints() ? "<nodeArea_4>" : "<node_4>";
+  std::string node5 = getUseAreasOrPoints() ? "<nodeArea_5>" : "<node_5>";
 
   std::string geometry1 =
-      (std::get<4>(GetParam())) ? "<geometryArea1>" : "<geometry1>";
+      getUseAreasOrPoints() ? "<geometryArea1>" : "<geometry1>";
   std::string geometry2 =
-      (std::get<4>(GetParam())) ? "<geometryArea2>" : "<geometry2>";
+      getUseAreasOrPoints() ? "<geometryArea2>" : "<geometry2>";
   std::string geometry3 =
-      (std::get<4>(GetParam())) ? "<geometryArea3>" : "<geometry3>";
+      getUseAreasOrPoints() ? "<geometryArea3>" : "<geometry3>";
   std::string geometry4 =
-      (std::get<4>(GetParam())) ? "<geometryArea4>" : "<geometry4>";
+      getUseAreasOrPoints() ? "<geometryArea4>" : "<geometry4>";
   std::string geometry5 =
-      (std::get<4>(GetParam())) ? "<geometryArea5>" : "<geometry5>";
+      getUseAreasOrPoints() ? "<geometryArea5>" : "<geometry5>";
 
-  std::string wktString1 = (std::get<4>(GetParam()))
+  std::string wktString1 = getUseAreasOrPoints()
                                ? SpatialJoinTestHelpers::areaUniFreiburg
                                : "POINT(7.835050 48.012670)";
-  std::string wktString2 = (std::get<4>(GetParam()))
+  std::string wktString2 = getUseAreasOrPoints()
                                ? SpatialJoinTestHelpers::areaMuenster
                                : "POINT(7.852980 47.995570)";
-  std::string wktString3 = (std::get<4>(GetParam()))
+  std::string wktString3 = getUseAreasOrPoints()
                                ? SpatialJoinTestHelpers::areaLondonEye
                                : "POINT(-0.119570 51.503330)";
-  std::string wktString4 = (std::get<4>(GetParam()))
+  std::string wktString4 = getUseAreasOrPoints()
                                ? SpatialJoinTestHelpers::areaStatueOfLiberty
                                : "POINT(-74.044540 40.689250)";
-  std::string wktString5 = (std::get<4>(GetParam()))
+  std::string wktString5 = getUseAreasOrPoints()
                                ? SpatialJoinTestHelpers::areaEiffelTower
                                : "POINT(2.294510 48.858250)";
 
@@ -828,9 +842,8 @@ class SpatialJoinParamTest
   // some combinations of the gtest parameters are invalid. Those cases should
   // not be tested and are therefore excluded
   bool isInvalidAreaTestConfig(std::optional<MaxDistanceConfig> maxDistConfig) {
-    bool isAreaDataset = std::get<4>(GetParam());
-    bool isS2geoAlg =
-        std::get<0>(GetParam()) == SpatialJoinAlgorithm::S2_GEOMETRY;
+    bool isAreaDataset = getUseAreasOrPoints();
+    bool isS2geoAlg = getAlgorithm() == SpatialJoinAlgorithm::S2_GEOMETRY;
     return isAreaDataset && (!maxDistConfig.has_value() ||
                              (maxDistConfig.has_value() && isS2geoAlg));
   }
@@ -842,7 +855,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
       "?name1",  "?obj1",   "?geo1",
       "?point1", "?name2",  "?obj2",
       "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
-  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
 
   auto nearestNeighborsTask = getNearestNeighbors();
   auto maxDistTask = getMaxDist();
@@ -868,7 +881,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
-  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
 
   auto maxDistTask = getMaxDist();
   if (isInvalidAreaTestConfig(maxDistTask)) {
@@ -889,8 +902,8 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
                   "?obj2",
                   "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
-  bool addLeftChildFirst = std::get<1>(GetParam());
-  bool bigChildLeft = std::get<2>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
+  bool bigChildLeft = getBigChildLeft();
 
   auto maxDistTask = getMaxDist();
   if (isInvalidAreaTestConfig(maxDistTask)) {
@@ -907,7 +920,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   auto maxDist = std::numeric_limits<double>::max();
   MaxDistanceConfig maxDistConf{maxDist};
-  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
 
   if (isInvalidAreaTestConfig(maxDistConf)) {
     return;
@@ -944,8 +957,8 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   Row columnNames{"?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
-  bool addLeftChildFirst = std::get<1>(GetParam());
-  bool bigChildLeft = std::get<2>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
+  bool bigChildLeft = getBigChildLeft();
 
   auto maxDistTask = getMaxDist();
   if (isInvalidAreaTestConfig(maxDistTask)) {
@@ -963,13 +976,13 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   // expected behavior: point is skipped
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
-  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool addLeftChildFirst = getAddLeftChildFirst();
 
   auto maxDistTask = getMaxDist();
   if (isInvalidAreaTestConfig(maxDistTask)) {
     return;
   }
-  if (maxDistTask.has_value() and !std::get<4>(GetParam())) {
+  if (maxDistTask.has_value() and !getUseAreasOrPoints()) {
     testWrongPointInInput(
         maxDistTask.value(), addLeftChildFirst,
         expectedMaxDistRowsSmallWrongPoint[maxDistTask.value().maxDist_],
@@ -992,9 +1005,9 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
                           NearestNeighborsConfig{3, 500000}),
-        ::testing::Bool()));
+        ::testing::Bool(), ::testing::Bool()));
 
-}  // end of Namespace computeResultTest
+}  // namespace computeResultTest
 
 namespace boundingBox {
 
