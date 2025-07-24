@@ -137,6 +137,7 @@ inline void checkRequestedInfoForWktLiteral(
 // ____________________________________________________________________________
 inline void checkInvalidLiteral(std::string_view wkt,
                                 bool expectValidGeometryType = false,
+                                bool expectNumGeom = false,
                                 Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
 
@@ -150,7 +151,8 @@ inline void checkInvalidLiteral(std::string_view wkt,
             expectValidGeometryType);
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value(),
+            expectNumGeom);
 }
 
 // ____________________________________________________________________________

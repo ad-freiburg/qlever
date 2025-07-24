@@ -239,7 +239,7 @@ TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
-  checkInvalidLiteral(litCoordOutOfRange, true);
+  checkInvalidLiteral(litCoordOutOfRange, true, true);
   checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
                     {2});
   checkGeometryType(
