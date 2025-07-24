@@ -372,8 +372,8 @@ class AddCombinedRowToIdTable {
     for (size_t col = 0; col < numJoinColumns_; col++) {
       if (keepJoinColumns_) {
         writeJoinColumn(col, nextResultColIdx);
+        ++nextResultColIdx;
       }
-      ++nextResultColIdx;
     }
 
     // Then the remaining columns from the left input.

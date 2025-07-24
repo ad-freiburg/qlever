@@ -580,6 +580,9 @@ class GroupByImpl : public Operation {
   // GROUP BY. This is used by some of the optimizations above.
   bool isVariableBoundInSubtree(const Variable& variable) const;
 
+  // compute the result in case of a single `Count(*)` aggregate.
+  Result computeCountStar(const Result& input);
+
  public:
   std::unique_ptr<Operation> cloneImpl() const override;
 

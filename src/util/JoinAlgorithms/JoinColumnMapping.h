@@ -102,6 +102,11 @@ class JoinColumnMapping {
       auto jcls = joinColumns;
       ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
       for (auto i : ql::views::reverse(jcls)) {
+        for (auto& j : permutationResult_) {
+          if (j > i.at(0)) {
+            --j;
+          }
+        }
         permutationResult_.erase(permutationResult_.begin() + i.at(0));
       }
     }

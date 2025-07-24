@@ -79,6 +79,9 @@ class Sort : public Operation {
   }
 
   std::string getCacheKeyImpl() const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const ad_utility::HashSet<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

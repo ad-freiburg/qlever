@@ -342,6 +342,12 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
   }
 
+  if (_groupByVariables.empty() && _aliases.size() == 1 &&
+      dynamic_cast<const sparqlExpression::CountStarExpression*>(
+          _aliases[0]._expression.getPimpl())) {
+    return computeCountStar(*_subtree->getResult(true));
+  }
+
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
@@ -1653,4 +1659,27 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+Result GroupByImpl::computeCountStar(const Result& input) {
+  auto res = [&input]() -> size_t {
+    if (input.isFullyMaterialized()) {
+      return input.idTable().size();
+    } else {
+      auto gen = input.idTables();
+      // TODO<joka921> There is an easier way to perform this.
+      auto sz = gen | ql::views::transform([](const auto& pair) {
+                  return pair.idTable_.numRows();
+                });
+      size_t x = 0;
+      for (const auto& s : sz) {
+        x += s;
+      }
+      return x;
+    }
+  }();
+  IdTable result{1, getExecutionContext()->getAllocator()};
+  result.push_back(std::array{Id::makeFromInt(res)});
+  return {std::move(result), resultSortedOn(), LocalVocab()};
 }

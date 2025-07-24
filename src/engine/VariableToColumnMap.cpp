@@ -28,6 +28,9 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     if (keepJoinColumns) {
       return leftVars;
     }
+    // TODO<joka921> A lot to debug and test here, especially in the
+    // combinations with hidden variables.
+    leftResultWidth -= joinColumns.size();
     VariableToColumnMap res;
     const auto& jcls = joinColumns | ql::views::keys;
     for (auto el : leftVars) {
@@ -79,6 +82,13 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
           static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
               static_cast<bool>(columnIndexWithType.mightContainUndef_) ||
               isOptionalJoin)};
+    }
+  }
+  if (!keepJoinColumns) {
+    std::cerr << "dumping varToColMap\n";
+    for (const auto& [variable, columnIndexWithType] : result) {
+      std::cerr << variable.name() << " " << columnIndexWithType.columnIndex_
+                << "\n";
     }
   }
   return result;
