@@ -135,8 +135,8 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 // Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
 // required by `pb_util`.
 inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
-  return {geoPointToUtilPoint(boundingBox.lowerLeft_),
-          geoPointToUtilPoint(boundingBox.upperRight_)};
+  return {geoPointToUtilPoint(boundingBox.lowerLeft()),
+          geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
@@ -165,19 +165,37 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   return std::nullopt;
 }
 
-// ____________________________________________________________________________
+// Reverse projection applied by `sj::WKTParser`: convert coordinates from web
+// mercator int32 to normal lat-long double coordinates.
+inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
+    const util::geo::I32Point& p) {
+  return util::geo::webMercToLatLng<double>(
+      static_cast<double>(p.getX()) / PREC,
+      static_cast<double>(p.getY()) / PREC);
+};
+
+// Same as above, but for a bounding box.
+inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
+    const util::geo::I32Box& box) {
+  return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
+          projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
+};
+
+// Compute the length of the outer boundary of a polygon.
 inline double computeMetricLengthPolygon(const Polygon<CoordType>& geom) {
   return latLngLen<CoordType>(geom.getOuter());
 }
 
-// ____________________________________________________________________________
+// Compute the length of a multi-geometry by adding up the lengths of its
+// members.
 template <typename T>
 inline double computeMetricLengthMulti(
     const std::vector<T>& geom, std::function<double(const T&)> lenFunction) {
   return ::ranges::accumulate(::ranges::transform_view(geom, lenFunction), 0);
 }
 
-// ____________________________________________________________________________
+// Compute the length for the custom container type `AnyGeometry` from
+// `pb_util`. It can dynamically hold any geometry type.
 inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
   switch (geom.getType()) {
     case 0:  // Point
@@ -202,7 +220,7 @@ inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
   }
 }
 
-// ____________________________________________________________________________
+// Compute the length for a parsed WKT geometry.
 inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
   return {std::visit(
       [](const auto& geom) -> double {
@@ -232,22 +250,6 @@ inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
       },
       geometry)};
 }
-
-// Reverse projection applied by `sj::WKTParser`: convert coordinates from web
-// mercator int32 to normal lat-long double coordinates.
-inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Point& p) {
-  return util::geo::webMercToLatLng<double>(
-      static_cast<double>(p.getX()) / PREC,
-      static_cast<double>(p.getY()) / PREC);
-};
-
-// Same as above, but for a bounding box.
-inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Box& box) {
-  return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
-          projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
-};
 
 }  // namespace ad_utility::detail
 
