@@ -200,9 +200,7 @@ inline uint32_t countChildGeometries(const ParsedWkt& geom) {
           return static_cast<uint32_t>(g.size());
         } else {
           static_assert(WktSingleGeometryType<T>);
-          // TODO: Should this return 0 or 1 or `undef`? What about points of a
-          // line and rings of a polygon? What are the correct semantics?
-          return 0;
+          return 1;
         }
       },
       geom);
