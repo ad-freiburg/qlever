@@ -278,9 +278,16 @@ ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
   AD_CONTRACT_CHECK(numThreads > 0u);
   using V = typename Queue::value_type;
   struct QueueGenerator : public ad_utility::InputRangeFromGet<V> {
-    std::vector<ad_utility::JThread> threads_;
+    // The order of these members is important, see the comment for the
+    // destructor.
     Queue queue_;
+    std::vector<ad_utility::JThread> threads_;
     std::atomic<int64_t> numUnfinishedThreads_;
+
+    // We first `finish` the queue. This allows the `threads_` to join in their
+    // destructor. Only then we can destroy the `queue_` (it is declared before
+    // the `threads_`, because no one is accessing it anymore.
+    ~QueueGenerator() { queue_.finish(); }
 
     QueueGenerator(const size_t queueSize, const size_t numThreads,
                    Producer producer)

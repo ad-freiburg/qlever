@@ -11,6 +11,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
+#include "util/ConstexprUtils.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
@@ -58,26 +59,38 @@ auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
 
 TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
   using namespace ad_utility::memory_literals;
-  std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
-  ad_utility::CompressedExternalIdTableWriter writer{
-      filename, 3, ad_utility::testing::makeAllocator(), 48_B};
-  std::vector<CopyableIdTable<0>> tables;
-  tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
-  tables.push_back(makeIdTableFromVector({{2, 3, 7}, {3, 6, 8}, {4, 2, 123}}));
-  tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
 
-  for (const auto& table : tables) {
-    writer.writeIdTable(table);
-  }
+  auto runTestForBlockSize = [](ad_utility::MemorySize memoryToUse,
+                                ad_utility::source_location l =
+                                    source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), memoryToUse};
+    std::vector<CopyableIdTable<0>> tables;
+    tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
+    tables.push_back(
+        makeIdTableFromVector({{2, 3, 7}, {3, 6, 8}, {4, 2, 123}}));
+    tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
 
-  auto generators = writer.getAllGenerators();
-  ASSERT_EQ(generators.size(), tables.size());
+    for (const auto& table : tables) {
+      writer.writeIdTable(table);
+    }
 
-  using namespace ::testing;
-  std::vector<CopyableIdTable<0>> result;
-  auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
-  ql::ranges::copy(tr, std::back_inserter(result));
-  ASSERT_THAT(result, ElementsAreArray(tables));
+    auto generators = writer.getAllGenerators();
+    ASSERT_EQ(generators.size(), tables.size());
+
+    using namespace ::testing;
+    std::vector<CopyableIdTable<0>> result;
+    auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
+    ql::ranges::copy(tr, std::back_inserter(result));
+    EXPECT_THAT(result, ElementsAreArray(tables));
+  };
+  // With 10 bytes per block, the first and second IdTable are split up into
+  // multiple blocks.
+  runTestForBlockSize(10_B);
+  // With 48 bytes, each IdTable is stored in a single block.
+  runTestForBlockSize(48_B);
 }
 
 template <size_t NumStaticColumns>
@@ -109,14 +122,26 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       writer.moveResultOnMerge() = false;
     }
 
-    for (size_t k = 0; k < 5; ++k) {
+    auto testMultipleTimesImpl = [&](auto k) {
       // Also test the case that the blocksize does not exactly divides the
       // number of inputs.
       auto blocksize = k == 1 ? 1 : 17;
       using namespace ::testing;
-      auto generator = k == 0 ? ql::views::join(ad_utility::OwningView{
-                                    writer.getSortedBlocks(blocksize)})
-                              : writer.sortedView();
+      auto generator = [&]() {
+        if constexpr (k == 0) {
+          // Also check that we don't accidentally get empty blocks yielded,
+          // which would be unexpected.
+          auto checkNonEmpty = [](auto&& idTable) -> decltype(auto) {
+            EXPECT_FALSE(idTable.empty());
+            return AD_FWD(idTable);
+          };
+          return ql::views::join(
+              ad_utility::OwningView{writer.getSortedBlocks(blocksize)} |
+              ql::views::transform(checkNonEmpty));
+        } else {
+          return writer.sortedView();
+        }
+      }();
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
             generator, numDynamicColumns);
@@ -128,10 +153,12 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       }
       // We cannot access or change this value after the first merge.
       EXPECT_ANY_THROW(writer.moveResultOnMerge());
-    }
+    };
+    ad_utility::ConstexprForLoopVi(std::make_index_sequence<5>(),
+                                   testMultipleTimesImpl);
     writer.clear();
   }
-}
+};
 
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns, size_t numRows,
@@ -150,8 +177,11 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   // memory limit), but also the case that there is a
   testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB);
+
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 0, 1_MB);
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {

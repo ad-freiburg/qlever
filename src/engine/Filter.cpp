@@ -78,16 +78,22 @@ Result Filter::computeResult(bool requestLaziness) {
   }
 
   if (requestLaziness) {
-    return {[](auto subRes, auto* self) -> Result::Generator {
-              for (auto& [idTable, localVocab] : subRes->idTables()) {
-                IdTable result = self->filterIdTable(subRes->sortedBy(),
-                                                     idTable, localVocab);
-                if (!result.empty()) {
-                  co_yield {std::move(result), std::move(localVocab)};
-                }
-              }
-            }(std::move(subRes), this),
-            resultSortedOn()};
+    return {Result::LazyResult{
+                ad_utility::OwningView{subRes->idTables()} |
+                ql::views::transform([this, subRes](auto& idTableVocabPair) {
+                  IdTable filteredTable = this->filterIdTable(
+                      subRes->sortedBy(), idTableVocabPair.idTable_,
+                      idTableVocabPair.localVocab_);
+                  // Note: the `clone` is shallow and therefore cheap, but
+                  // necessary to establish invariants in the `LocalVocab`
+                  // class.
+                  return Result::IdTableVocabPair{
+                      std::move(filteredTable),
+                      idTableVocabPair.localVocab_.clone()};
+                }) |
+                ql::views::filter(
+                    [](const auto& pair) { return !pair.idTable_.empty(); })},
+            subRes->sortedBy()};
   }
 
   // If we receive a generator of IdTables, we need to materialize it into a

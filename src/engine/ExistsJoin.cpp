@@ -4,8 +4,10 @@
 
 #include "engine/ExistsJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Result.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -97,17 +99,19 @@ size_t ExistsJoin::getCostEstimate() {
 // ____________________________________________________________________________
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
-  auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
-  auto rightRes = right_->getResult();
-  const auto& right = rightRes->idTable();
+  // The lazy exists join implementation does only work if there's just a single
+  // join column. This might be extended in the future.
+  bool lazyJoinIsSupported = joinColumns_.size() == 1;
+  auto leftRes = left_->getResult(requestLaziness &&
+                                  (noJoinNecessary || lazyJoinIsSupported));
+  auto rightRes = right_->getResult(!noJoinNecessary && lazyJoinIsSupported);
 
-  if (!leftRes->isFullyMaterialized()) {
-    AD_CORRECTNESS_CHECK(noJoinNecessary);
+  if (noJoinNecessary && !leftRes->isFullyMaterialized()) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
                 ad_utility::OwningView{leftRes->idTables()} |
-                ql::views::transform([exists = !right.empty(),
+                ql::views::transform([exists = !rightRes->idTable().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -120,6 +124,11 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
                 })},
             leftRes->sortedBy()};
   }
+  if (!leftRes->isFullyMaterialized() || !rightRes->isFullyMaterialized()) {
+    return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
+                          requestLaziness);
+  }
+  const auto& right = rightRes->idTable();
   const auto& left = leftRes->idTable();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
@@ -262,4 +271,191 @@ bool ExistsJoin::columnOriginatesFromGraphOrUndef(
     return false;
   }
   return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+}
+
+namespace {
+
+// Implementation to add the `EXISTS` column to the result of a child operation
+// of this class. Works with lazy and non-lazy results.
+struct LazyExistsJoinImpl
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  // Store child results.
+  std::shared_ptr<const Result> left_;
+  std::shared_ptr<const Result> right_;
+
+  // Store the ranges of the child results. The left result is owned, the right
+  // is just a view to the wrapped `IdTable`s.
+  ad_utility::InputRangeTypeErased<Result::IdTableVocabPair> leftRange_;
+  ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
+      rightRange_;
+
+  // Store the join columns.
+  ColumnIndex leftJoinColumn_;
+  ColumnIndex rightJoinColumn_;
+
+  // Store the current result of the right child. This is a view to the current
+  // `IdTable`.
+  std::optional<std::reference_wrapper<const IdTable>> currentRight_ =
+      std::nullopt;
+  // Store the current index in the right child that was last being checked.
+  size_t currentRightIndex_ = 0;
+
+  // Helper enum to indicate if we can avoid expensive checks.
+  enum class FastForwardState { Unknown, Yes, No };
+
+  // If we found undef values on the right, or the right ranges have been
+  // consumed, we can fast-forward and skip expensive checks.
+  FastForwardState allRowsFromLeftExist_ = FastForwardState::Unknown;
+
+  // Convert result to an owned range of `IdTableVocabPair`s. This is used for
+  // the left side.
+  static Result::LazyResult toOwnedRange(
+      const std::shared_ptr<const Result>& result) {
+    if (result->isFullyMaterialized()) {
+      return ad_utility::InputRangeTypeErased{
+          std::array{Result::IdTableVocabPair{result->idTable().clone(),
+                                              result->getCopyOfLocalVocab()}}};
+    }
+    return result->idTables();
+  }
+
+  // Convert result to a view of `IdTable`s. This is used for the right side.
+  static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
+  toRangeView(const std::shared_ptr<const Result>& result) {
+    if (result->isFullyMaterialized()) {
+      return ad_utility::InputRangeTypeErased{
+          std::array{std::cref(result->idTable())}};
+    }
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::CachingTransformInputRange{
+            result->idTables(),
+            [](const auto& pair) { return std::cref(pair.idTable_); }}};
+  }
+
+  // Construct an instance of `LazyExistsJoinImpl` with the given left and right
+  // join columns as well as the respective results.
+  explicit LazyExistsJoinImpl(std::shared_ptr<const Result> left,
+                              std::shared_ptr<const Result> right,
+                              ColumnIndex leftJoinColumn,
+                              ColumnIndex rightJoinColumn)
+      : left_{std::move(left)},
+        right_{std::move(right)},
+        leftRange_{toOwnedRange(left_)},
+        rightRange_{toRangeView(right_)},
+        leftJoinColumn_{leftJoinColumn},
+        rightJoinColumn_{rightJoinColumn} {}
+
+  // Fetch and store the next non-empty result from `rightRange_` in
+  // `currentRight_`.
+  void fetchNextRightBlock() {
+    do {
+      currentRight_ = rightRange_.get();
+    } while (currentRight_.has_value() && currentRight_.value().get().empty());
+  }
+
+  // Increment `currentRightIndex_` by one, or fetch the next non-empty element
+  // from `rightRange_` and reset `currentRightIndex_` back to zero.
+  void incrementToNextRow() {
+    currentRightIndex_++;
+    // Get the next block from the range if we couldn't find a matching value
+    // in this one.
+    if (currentRightIndex_ == currentRight_.value().get().size()) {
+      fetchNextRightBlock();
+      currentRightIndex_ = 0;
+      // Optimization to copy all remaining blocks in one.
+      if (!currentRight_.has_value()) {
+        allRowsFromLeftExist_ = FastForwardState::No;
+      }
+    }
+  }
+
+  // Check if the `id` has a match on the right side. This will increment the
+  // index until a match is found, or no matches exist.
+  bool hasMatch(Id id) {
+    if (id.isUndefined()) {
+      // This is correct, because undefined values are processed first and
+      // `currentRight_` is not-reassigned until a non-undefined value is
+      // processed.
+      return currentRight_.has_value();
+    }
+    // Search for the next match.
+    while (currentRight_.has_value()) {
+      AD_CORRECTNESS_CHECK(currentRightIndex_ <
+                           currentRight_.value().get().size());
+      auto comparison = currentRight_.value().get().at(currentRightIndex_,
+                                                       rightJoinColumn_) <=> id;
+      if (comparison == 0) {
+        return true;
+      }
+      if (comparison > 0) {
+        return false;
+      }
+      incrementToNextRow();
+    }
+    return false;
+  }
+
+  // Get the next result from the left side that is augmented with EXISTS
+  // information.
+  std::optional<Result::IdTableVocabPair> get() override {
+    if (!currentRight_.has_value() &&
+        allRowsFromLeftExist_ == FastForwardState::Unknown) {
+      fetchNextRightBlock();
+      if (currentRight_.has_value()) {
+        if (currentRight_.value().get().at(0, rightJoinColumn_).isUndefined()) {
+          allRowsFromLeftExist_ = FastForwardState::Yes;
+        }
+      } else {
+        allRowsFromLeftExist_ = FastForwardState::No;
+      }
+    }
+
+    auto result = leftRange_.get();
+
+    if (result.has_value()) {
+      auto& idTable = result.value().idTable_;
+      idTable.addEmptyColumn();
+      auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
+
+      if (allRowsFromLeftExist_ != FastForwardState::Unknown) {
+        ql::ranges::fill(outputColumn, Id::makeFromBool(allRowsFromLeftExist_ ==
+                                                        FastForwardState::Yes));
+      } else {
+        auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
+
+        for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size();
+             rowIndex++) {
+          outputColumn[rowIndex] =
+              Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+        }
+      }
+    }
+    return result;
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
+                                  std::shared_ptr<const Result> right,
+                                  bool requestLaziness) {
+  // If both inputs are fully materialized, we can join them more
+  // efficiently.
+  AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||
+                    !right->isFullyMaterialized());
+  // If `requestLaziness` is false, we expect the left result to be fully
+  // materialized as well.
+  AD_CONTRACT_CHECK(left->isFullyMaterialized() || requestLaziness);
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(joinColumns_.size() == 1);
+
+  auto [leftCol, rightCol] = joinColumns_.at(0);
+
+  Result::LazyResult generator{
+      LazyExistsJoinImpl{std::move(left), std::move(right), leftCol, rightCol}};
+
+  return requestLaziness
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }

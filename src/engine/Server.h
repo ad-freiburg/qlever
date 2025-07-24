@@ -135,7 +135,7 @@ class Server {
   ///             `HttpServer.h` for documentation).
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(const RequestT& request, ResponseT&& send);
+      Awaitable<void> process(RequestT& request, ResponseT&& send);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.

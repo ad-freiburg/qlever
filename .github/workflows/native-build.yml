@@ -172,7 +172,7 @@ jobs:
       - name: E2E with index in one go
         if: (matrix.compiler == 'clang') && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh
-      
+
       - name: E2E with separate text index build
         if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh -t

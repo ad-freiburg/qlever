@@ -311,7 +311,7 @@ addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 
-addLinkAndDiscoverTest(ResetWhenMovedTest)
+addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest)
 
@@ -453,7 +453,7 @@ addLinkAndDiscoverTest(ValueGetterTest engine)
 
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
-addLinkAndDiscoverTest(SPARQLProtocolTest engine)
+addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
 addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 
