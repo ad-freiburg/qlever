@@ -93,6 +93,9 @@ inline auto& RuntimeParameters() {
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
+        // The maximum size of the `prefilterBox` for
+        // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+        SizeT<"spatial-join-prefilter-max-size">{2'500},
     };
   }();
   return params;
