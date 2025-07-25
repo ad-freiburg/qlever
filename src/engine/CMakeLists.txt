@@ -14,7 +14,7 @@ add_library(engine
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
-        Describe.cpp GraphStoreProtocol.cpp
+        Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
