@@ -10,6 +10,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 
 // _____________________________________________________________________________
@@ -50,11 +51,64 @@ std::string Sort::getDescriptor() const {
   return "Sort (internal order) on" + orderByVars;
 }
 
+template <size_t NUM_COLS>
+Result Sort::lazySort(std::shared_ptr<const Result> res, size_t col) {
+  auto sortByCol = [col](const auto& a, const auto& b) {
+    return a[col] < b[col];
+  };
+  // TODO<joka921> random name.
+  auto sorterPtr = std::make_shared<ad_utility::CompressedExternalIdTableSorter<
+      decltype(sortByCol), NUM_COLS>>(
+      "lazy-sorter-todo-rename.dat", getResultWidth(),
+      ad_utility::MemorySize::gigabytes(5), allocator(),
+      ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE, sortByCol);
+  auto& sorter = *sorterPtr;
+  // TODO<joka921> For this to work properly we need a memory limit on the local
+  // vocab...
+  LocalVocab localVocab{};
+  for (auto& [table, lv] : res->idTables()) {
+    localVocab.mergeWith(lv);
+    // TODO<joka921> This probably really inefficient, why don't we have a
+    // blockwise interface here?
+    for (const auto& row : table) {
+      sorter.push(row);
+    }
+  }
+
+  auto toIdTable = [sorterPtr,
+                    lv = std::move(localVocab)](IdTableStatic<0>& table) {
+    return Result::IdTableVocabPair{IdTable{std::move(table)}, lv.clone()};
+  };
+
+  // TODO<joka921> There is still one generator inside the
+  // `CompressedExternalIdTable`.
+
+  auto transformer = ad_utility::CachingTransformInputRange(
+      ad_utility::OwningView{sorter.template getSortedBlocks<0>()},
+      std::move(toIdTable));
+  Result::LazyResult lazyRes{std::move(transformer)};
+
+  return {std::move(lazyRes), resultSortedOn()};
+}
+
 // _____________________________________________________________________________
 Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  std::shared_ptr<const Result> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes;
+  if (sortColumnIndices_.size() == 1 && requestLaziness &&
+      RuntimeParameters().get<"external-sort-highly-experimental">()) {
+    subRes = subtree_->getResult(true);
+    if (!subRes->isFullyMaterialized()) {
+      auto doLazySort = [&](auto WIDTH) {
+        return lazySort<WIDTH>(std::move(subRes), sortColumnIndices_[0]);
+      };
+      return ad_utility::callFixedSizeVi(getResultWidth(), doLazySort);
+    }
+  } else {
+    subRes = subtree_->getResult(false);
+  }
+  AD_CORRECTNESS_CHECK(subRes != nullptr);
 
   // TODO<joka921> proper timeout for sorting operations
   const auto& subTable = subRes->idTable();

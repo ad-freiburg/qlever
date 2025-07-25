@@ -82,6 +82,10 @@ class Sort : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const ad_utility::HashSet<Variable>& variables) const override;
+
+  // TODO<joka921> Much to do in this function, Comment and fix and test
+  template <size_t NUM_COLS>
+  Result lazySort(std::shared_ptr<const Result> res, size_t col);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

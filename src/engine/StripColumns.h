@@ -42,6 +42,9 @@ class StripColumns : public Operation {
  public:
   float getMultiplicity(size_t col);
   bool knownEmptyResult();
+  // TODO<joka921> This should be handled differently by the GroupBy
+  // And in particular not violate the constness etc.
+  std::shared_ptr<QueryExecutionTree> getSubtreePtr() const { return child_; }
 
  private:
   std::unique_ptr<Operation> cloneImpl() const;

@@ -15,6 +15,7 @@
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -48,11 +49,10 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                   return !map.contains(var);
                 });
   if (RuntimeParameters().get<"strip-columns">()) {
-    ad_utility::HashSet<Variable> usedVariables{groupByVariables.begin(),
-                                                groupByVariables.end()};
+    ad_utility::HashSet<Variable> usedVariables{_groupByVariables.begin(),
+                                                _groupByVariables.end()};
     for (const auto& alias : _aliases) {
-      const auto& vars = alias._expression.containedVariables();
-      for (auto& var : vars) {
+      for (const auto* var : alias._expression.containedVariables()) {
         usedVariables.insert(*var);
       }
     }
@@ -335,11 +335,25 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
+  auto subtreeIfStripped =
+      [this]() -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    if (auto strip = dynamic_cast<const StripColumns*>(
+            _subtree->getRootOperation().get())) {
+      return strip->getSubtreePtr();
+    }
+    return std::nullopt;
+  }();
+  if (subtreeIfStripped.has_value()) {
+    std::swap(subtreeIfStripped.value(), _subtree);
+  }
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
     return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
+  }
+  if (subtreeIfStripped.has_value()) {
+    _subtree = subtreeIfStripped.value();
   }
 
   if (_groupByVariables.empty() && _aliases.size() == 1 &&

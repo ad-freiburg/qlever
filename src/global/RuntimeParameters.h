@@ -94,7 +94,8 @@ inline auto& RuntimeParameters() {
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
         // TODO<joka921> comment.
-        Bool<"strip-columns">{true}};
+        Bool<"strip-columns">{true},
+        Bool<"external-sort-highly-experimental">{false}};
   }();
   return params;
 }
