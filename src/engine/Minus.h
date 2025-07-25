@@ -87,6 +87,10 @@ class Minus : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const ad_utility::HashSet<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MINUS_H

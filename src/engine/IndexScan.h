@@ -36,6 +36,9 @@ class IndexScan final : public Operation {
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
+  using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
+  VarsToKeep varsToKeep_;
+
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
@@ -48,7 +51,7 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
 
   ~IndexScan() override = default;
 
@@ -231,6 +234,24 @@ class IndexScan final : public Operation {
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+
+  // TODO<joka921> Comment.
+  auto makeApplyColumnSubset() const {
+    bool hasSubset = varsToKeep_.has_value();
+    auto cols =
+        hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
+    return [cols = std::move(cols)](auto&& table) {
+      if (cols.has_value()) {
+        table.setColumnSubset(cols.value());
+      }
+      return std::move(table);
+    };
+  }
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const ad_utility::HashSet<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
