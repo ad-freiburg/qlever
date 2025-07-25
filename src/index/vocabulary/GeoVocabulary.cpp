@@ -39,6 +39,8 @@ void GeoVocabulary<V>::open(const std::string& filename) {
 
   // Read all members of the `geoInfoFile_` and cache their bounding boxes in
   // memory.
+  AD_LOG_INFO << "Loading " << size()
+              << " precomputed bounding boxes into memory...";
   boundingBoxes_ = std::make_shared<BoundingBoxVector>();
   boundingBoxes_.value()->reserve(size());
   for (size_t i = 0; i < size(); i++) {
