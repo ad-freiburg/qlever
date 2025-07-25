@@ -5,9 +5,9 @@
 #ifndef QLEVER_SRC_INDEX_POSTINGS_H
 #define QLEVER_SRC_INDEX_POSTINGS_H
 
-#include "global/Id.h"
 #include "global/IndexTypes.h"
 
-using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
+using WordPosting = std::tuple<TextRecordIndex, WordVocabIndex, Score>;
+using EntityPosting = std::tuple<TextRecordIndex, VocabIndex, Score>;
 
 #endif  // QLEVER_SRC_INDEX_POSTINGS_H
