@@ -353,11 +353,11 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 //    join full scan, object count).
 // 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
 // grouping.
-// 4) If the hash-map grows too large mid-aggregation, buffer
+// 4) (PLANNED) If the hash-map grows too large mid-aggregation, buffer
 // remaining data and
 //    switch to sort-based aggregation via mergeSortedTailIntoPartial.
-// 5) If all optimizations fail or threshold crossed, fallback to standard
-// doGroupBy (sort+group-by).
+// 5) (PLANNED) If all optimizations fail or threshold crossed, fallback to
+// standard doGroupBy (sort+group-by).
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -1580,7 +1580,6 @@ template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupByImpl::computeGroupByForHashMapOptimization(
     std::vector<HashMapAliasInformation>& aggregateAliases,
     SubResults subresults, const std::vector<size_t>& columnIndices) const {
-  // [Benke] Contract check instead? (AI suggested)
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;
@@ -1590,23 +1589,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       getExecutionContext()->getAllocator(), aggregateAliases,
       columnIndices.size());
 
-  // Buffer for tail blocks if we switch to sort
-  std::vector<std::pair<IdTable, LocalVocab>> tailBlocks;
-  bool switchToSort = false;
-  size_t groupThreshold =
-      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
-
+  // Process the input blocks (pairs of `IdTable` and `LocalVocab`) one after
+  // the other.
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
-
-  auto beginIt = ql::ranges::begin(subresults);
-  auto endIt = ql::ranges::end(subresults);
-  bool singleBlock = ql::ranges::next(beginIt) == endIt;
-
-  // Iterate through input blocks; break out and buffer the rest if threshold
-  // exceeded
-  for (auto it = beginIt; it != endIt; ++it) {
-    const auto& [inputTableRef, inputLocalVocabRef] = *it;
+  for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
@@ -1671,202 +1658,13 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       }
       aggregationTimer.stop();
     }
-
-    size_t currentGroups = aggregationData.getNumberOfGroups();
-    // After each block, check if the number of groups is too large, but only if
-    // we are not processing a single block (which is the case for lazy
-    // evaluation).
-    if (!singleBlock && currentGroups > groupThreshold) {
-      AD_LOG_DEBUG << "GroupBy Hash-map group count (" << currentGroups
-                   << ") is bigger than threshold (" << groupThreshold
-                   << "), switching to sort-based aggregation." << std::endl;
-      switchToSort = true;
-      // buffer this and all remaining blocks into tailBlocks
-      for (auto tailIt = std::next(it); tailIt != subresults.end(); ++tailIt) {
-        if constexpr (requires { tailIt->idTable_; }) {
-          tailBlocks.emplace_back(std::move(tailIt->idTable_),
-                                  std::move(tailIt->localVocab_));
-        } else {
-          tailBlocks.emplace_back(tailIt->first.get().clone(),
-                                  tailIt->second.get().clone());
-        }
-      }
-      break;
-    }
   }
 
   runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
   runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
   IdTable resultTable =
       createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
-
-  if (switchToSort) {
-    AD_LOG_DEBUG << "GroupBy HashMap: Switching to sort-based merge of "
-                 << tailBlocks.size() << " leftover blocks" << std::endl;
-    // Materialize partial result
-    IdTable partial = std::move(resultTable);
-    // Merge sorted tail blocks into partial
-    IdTable merged = mergeSortedTailIntoPartial(std::move(partial), tailBlocks,
-                                                columnIndices, &localVocab);
-    AD_LOG_DEBUG << "GroupBy HashMap: Merged result has " << merged.numRows()
-                 << " rows" << std::endl;
-    return {std::move(merged), resultSortedOn(), std::move(localVocab)};
-  } else {
-    return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
-  }
-}
-
-// _____________________________________________________________________________
-IdTable GroupByImpl::mergeSortedTailIntoPartial(
-    IdTable&& partial,
-    const std::vector<std::pair<IdTable, LocalVocab>>& tailBlocks,
-    const std::vector<size_t>& columnIndices, LocalVocab* localVocab) const {
-  AD_CORRECTNESS_CHECK(localVocab);
-
-  // Phase 1: Aggregate tailBlocks
-  IdTable aggregatedTailData =
-      aggregateTailBlocks(tailBlocks, columnIndices, *localVocab);
-
-  // ensure the tail is sorted on the GROUP-BY columns
-  std::sort(aggregatedTailData.begin(), aggregatedTailData.end(),
-            [&](auto const& L, auto const& R) {
-              for (auto col : columnIndices) {
-                if (L[col] < R[col]) return true;
-                if (R[col] < L[col]) return false;
-              }
-              return false;
-            });
-
-  // Delay merging LocalVocabs until after grouping: now merge all tail block
-  // vocabs
-  for (auto& [block, vocab] : tailBlocks) {
-    localVocab->mergeWith(vocab);
-  }
-  // If no new data, return existing partial
-  if (aggregatedTailData.empty()) {
-    return std::move(partial);
-  }
-  // If partial is empty, return aggregated tail
-  if (partial.empty()) {
-    // No existing partial: return aggregated tail directly (RVO applies)
-    return aggregatedTailData;
-  }
-
-  // Phase 2: merge partial and tail
-  // Schema must match
-  AD_CORRECTNESS_CHECK(partial.numColumns() == aggregatedTailData.numColumns());
-  // Common definitions for merging
-  const auto numCols = partial.numColumns();
-  const auto numGroupCols = columnIndices.size();
-  IdTable merged{numCols, getExecutionContext()->getAllocator()};
-  merged.reserve(partial.size() + aggregatedTailData.size());
-  auto appendRow = [&](const IdTable& tbl, size_t idx) {
-    merged.emplace_back();
-    size_t destRow = merged.numRows() - 1;
-    for (size_t c = 0; c < numCols; ++c) {
-      merged(destRow, c) = tbl(idx, c);
-    }
-  };
-  size_t i = 0, j = 0;
-  if (columnIndices.empty()) {
-    // Distinct merge: simply interleave sorted rows
-    while (i < partial.size() && j < aggregatedTailData.size()) {
-      bool lessPartial = false, lessTail = false;
-      for (size_t c = 0; c < numCols; ++c) {
-        auto v1 = partial(i, c), v2 = aggregatedTailData(j, c);
-        if (v1 < v2) {
-          lessPartial = true;
-          break;
-        }
-        if (v2 < v1) {
-          lessTail = true;
-          break;
-        }
-      }
-      if (lessPartial)
-        appendRow(partial, i++);
-      else if (lessTail)
-        appendRow(aggregatedTailData, j++);
-      else {
-        appendRow(partial, i++);
-        ++j;
-      }
-    }
-    while (i < partial.size()) appendRow(partial, i++);
-    while (j < aggregatedTailData.size()) appendRow(aggregatedTailData, j++);
-  } else {
-    // Fallback: sum aggregates for matching keys
-    while (i < partial.size() && j < aggregatedTailData.size()) {
-      bool equal = true, less = false;
-      for (size_t c = 0; c < numGroupCols; ++c) {
-        auto v1 = partial(i, c), v2 = aggregatedTailData(j, c);
-        if (v1 < v2) {
-          less = true;
-          equal = false;
-          break;
-        }
-        if (v2 < v1) {
-          equal = false;
-          break;
-        }
-      }
-      if (equal) {
-        merged.emplace_back();
-        size_t destRow = merged.numRows() - 1;
-        // copy group columns
-        for (size_t c = 0; c < numGroupCols; ++c) {
-          merged(destRow, c) = partial(i, c);
-        }
-        // sum aggregate columns
-        for (size_t c = numGroupCols; c < numCols; ++c) {
-          merged(destRow, c) = Id::makeFromInt(
-              partial(i, c).getInt() + aggregatedTailData(j, c).getInt());
-        }
-        ++i;
-        ++j;
-      } else if (less) {
-        appendRow(partial, i++);
-      } else {
-        appendRow(aggregatedTailData, j++);
-      }
-    }
-    while (i < partial.size()) appendRow(partial, i++);
-    while (j < aggregatedTailData.size()) appendRow(aggregatedTailData, j++);
-  }
-  return merged;
-}
-
-// _____________________________________________________________________________
-IdTable GroupByImpl::aggregateTailBlocks(
-    const std::vector<std::pair<IdTable, LocalVocab>>& tailBlocks,
-    const std::vector<size_t>& columnIndices, LocalVocab& localVocab) const {
-  // Concatenate raw tail blocks
-  if (tailBlocks.empty()) {
-    // No tail blocks to aggregate: return empty result with correct schema
-    return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
-  }
-  // Determine input width from first block
-  size_t inWidth = tailBlocks.front().first.numColumns();
-  IdTable concatenated{inWidth, getExecutionContext()->getAllocator()};
-  for (const auto& [block, vocab] : tailBlocks) {
-    // Batch-append all rows of the block at once
-    concatenated.insertAtEnd(block);
-    // Delay merging LocalVocabs until after grouping
-    // localVocab.mergeWith(vocab);
-  }
-  // Build aggregates from aliases
-  std::vector<Aggregate> aggregates;
-  aggregates.reserve(_aliases.size());
-  const auto& varColMap = getInternallyVisibleVariableColumns();
-  for (const auto& alias : _aliases) {
-    aggregates.emplace_back(alias._expression,
-                            varColMap.at(alias._target).columnIndex_);
-  }
-  // Perform grouping on concatenated data
-  size_t outWidth = getResultWidth();
-  return CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
-                         &GroupByImpl::doGroupBy, this, concatenated,
-                         columnIndices, aggregates, &localVocab);
+  return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
@@ -1939,56 +1737,10 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
 }
 
 // _____________________________________________________________________________
-// Lazy sampling guard: skip hash-map grouping if estimated distinct groups
-// exceed threshold ratio
-bool GroupByImpl::shouldSkipHashMapGroupingLazy(
-    const std::shared_ptr<const Result>& subresult) const {
-  // Fetch runtime parameters
-  size_t sampleSize = RuntimeParameters().get<"group-by-sample-max-rows">();
-  // This is the threshold for the estimated number of distinct groups
-  double ratioThreshold =
-      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
-  // Note: total number of rows is not fetched to avoid full materialization
-
-  AD_LOG_DEBUG << "GroupBy: Sampling " << sampleSize
-               << " rows for group estimation" << std::endl;
-
-  absl::flat_hash_set<std::vector<Id>> uniqueGroups;
-  uniqueGroups.reserve(sampleSize);
-  size_t rowsProcessed = 0;
-  const auto& varCols = _subtree->getVariableColumns();
-  for (auto& pair : subresult->idTables()) {
-    const auto& table = pair.idTable_;
-    for (size_t i = 0; i < table.size() && rowsProcessed < sampleSize; ++i) {
-      std::vector<Id> key;
-      key.reserve(_groupByVariables.size());
-      for (auto& var : _groupByVariables) {
-        key.push_back(table(i, varCols.at(var).columnIndex_));
-      }
-      uniqueGroups.insert(std::move(key));
-      ++rowsProcessed;
-    }
-    if (rowsProcessed >= sampleSize) break;
-  }
-
-  size_t sampleGroupSize = uniqueGroups.size();
-  double estimatedGroupRatio = double(sampleGroupSize) / rowsProcessed;
-  AD_LOG_DEBUG << "GroupBy: Sampled " << rowsProcessed << " rows, "
-               << "estimated distinct groups: " << sampleGroupSize
-               << ", ratio: " << estimatedGroupRatio
-               << " (threshold: " << ratioThreshold << ")" << std::endl;
-
-  // If the estimated number of distinct groups exceeds the threshold, skip the
-  // hash-map optimization
-  return estimatedGroupRatio > ratioThreshold;
-}
-
-// _____________________________________________________________________________
 bool GroupByImpl::shouldSkipHashMapGroupingDynamic(
     const std::shared_ptr<const Result>& subresult) const {
-  if (subresult->isFullyMaterialized()) {
-    return shouldSkipHashMapGrouping(subresult->idTable());
-  } else {
-    return shouldSkipHashMapGroupingLazy(subresult);
+  if (!subresult->isFullyMaterialized()) {
+    return false;
   }
+  return shouldSkipHashMapGrouping(subresult->idTable());
 }
