@@ -4,6 +4,7 @@
 #ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H
 #define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H
 
+
 #include "SparqlAutomaticParser.h"
 #include "antlr4-runtime.h"
 
@@ -457,6 +458,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
   virtual void exitPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
 
+  virtual void enterPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+  virtual void exitPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+
   virtual void enterExactLength(
       SparqlAutomaticParser::ExactLengthContext* ctx) = 0;
   virtual void exitExactLength(
@@ -470,17 +476,6 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
 
   virtual void enterOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
   virtual void exitOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
-
-  virtual void enterStepsExact(
-      SparqlAutomaticParser::StepsExactContext* ctx) = 0;
-  virtual void exitStepsExact(
-      SparqlAutomaticParser::StepsExactContext* ctx) = 0;
-
-  virtual void enterStepsMin(SparqlAutomaticParser::StepsMinContext* ctx) = 0;
-  virtual void exitStepsMin(SparqlAutomaticParser::StepsMinContext* ctx) = 0;
-
-  virtual void enterStepsMax(SparqlAutomaticParser::StepsMaxContext* ctx) = 0;
-  virtual void exitStepsMax(SparqlAutomaticParser::StepsMaxContext* ctx) = 0;
 
   virtual void enterPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* ctx) = 0;
@@ -739,4 +734,4 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitPnameNs(SparqlAutomaticParser::PnameNsContext* ctx) = 0;
 };
 
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H
+#endif // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H

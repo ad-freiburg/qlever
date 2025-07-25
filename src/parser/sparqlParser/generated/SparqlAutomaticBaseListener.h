@@ -4,6 +4,7 @@
 #ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
 #define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
 
+
 #include "SparqlAutomaticListener.h"
 #include "antlr4-runtime.h"
 
@@ -511,6 +512,11 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitPathMod(
       SparqlAutomaticParser::PathModContext* /*ctx*/) override {}
 
+  virtual void enterPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* /*ctx*/) override {}
+  virtual void exitPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* /*ctx*/) override {}
+
   virtual void enterExactLength(
       SparqlAutomaticParser::ExactLengthContext* /*ctx*/) override {}
   virtual void exitExactLength(
@@ -530,21 +536,6 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
       SparqlAutomaticParser::OnlyMaxContext* /*ctx*/) override {}
   virtual void exitOnlyMax(
       SparqlAutomaticParser::OnlyMaxContext* /*ctx*/) override {}
-
-  virtual void enterStepsExact(
-      SparqlAutomaticParser::StepsExactContext* /*ctx*/) override {}
-  virtual void exitStepsExact(
-      SparqlAutomaticParser::StepsExactContext* /*ctx*/) override {}
-
-  virtual void enterStepsMin(
-      SparqlAutomaticParser::StepsMinContext* /*ctx*/) override {}
-  virtual void exitStepsMin(
-      SparqlAutomaticParser::StepsMinContext* /*ctx*/) override {}
-
-  virtual void enterStepsMax(
-      SparqlAutomaticParser::StepsMaxContext* /*ctx*/) override {}
-  virtual void exitStepsMax(
-      SparqlAutomaticParser::StepsMaxContext* /*ctx*/) override {}
 
   virtual void enterPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* /*ctx*/) override {}
@@ -844,4 +835,4 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void visitErrorNode(antlr4::tree::ErrorNode* /*node*/) override {}
 };
 
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
+#endif // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H

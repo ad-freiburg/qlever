@@ -407,6 +407,9 @@ class SparqlQleverVisitor {
   // lower and upper bounds of the path length.
   static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
+  static std::pair<size_t, size_t> visit(
+      Parser::PathSyntaxExtensionContext* ctx);
+
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
   PropertyPath visit(Parser::PathNegatedPropertySetContext*);
