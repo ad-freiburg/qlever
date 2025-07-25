@@ -49,6 +49,8 @@ class WKTParser {
             static_cast<int>(projPoint.getY() * PREC)};
   }
 
+  size_t getPrefilterCounter();
+
  private:
   void parseLine(char* c, size_t len, size_t gid, size_t t,
                  sj::WriteBatch& batch, bool side);
@@ -69,6 +71,8 @@ class WKTParser {
   std::vector<util::geo::I32Box> _bboxes;
 
   std::atomic<bool> _cancelled;
+
+  std::vector<size_t> _numSkipped;
 
   bool _usePrefiltering;
   const std::optional<util::geo::DBox>& _prefilterLatLngBox;

@@ -7,11 +7,8 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
-#ifdef __cpp_lib_string_view
-#include <string_view>
-#endif
+namespace sjTemp {
 
-using sjTemp::WKTParser;
 using util::geo::collectionFromWKT;
 using util::geo::getWKTType;
 using util::geo::lineFromWKT;
@@ -31,6 +28,7 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
       _thrds(numThreads),
       _bboxes(numThreads),
       _cancelled(false),
+      _numSkipped(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _index(index) {
@@ -196,8 +194,18 @@ void WKTParser::parseLine(char* c, size_t len, size_t gid, size_t t,
 }
 
 // _____________________________________________________________________________
+size_t WKTParser::getPrefilterCounter() {
+  size_t res = 0;
+  for (auto c : _numSkipped) {
+    res += c;
+  }
+  return res;
+};
+
+// _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   ParseBatch batch;
+  size_t prefilterCounter = 0;
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -210,7 +218,7 @@ void WKTParser::processQueue(size_t t) {
         if (_usePrefiltering &&
             SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
                 _prefilterLatLngBox, _index, job.valueId.getVocabIndex())) {
-          // prefilterCounter++;
+          prefilterCounter++;
           continue;
         }
 
@@ -227,7 +235,7 @@ void WKTParser::processQueue(size_t t) {
         // immediately instead of feeding it to the parser.
         if (_prefilterLatLngBox.has_value() &&
             !util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
-          // prefilterCounter++;
+          prefilterCounter++;
           continue;
         }
         // parse point directly
@@ -252,15 +260,19 @@ void WKTParser::processQueue(size_t t) {
 
     _sweeper->addBatch(w);
   }
+
+  _numSkipped[t] = prefilterCounter;
 }
 
 // _____________________________________________________________________________
 void WKTParser::addValueIdToQueue(ValueId valueId, size_t id, bool side) {
   _curBatch.reserve(10000);
-  _curBatch.push_back({valueId, id, side});
+  _curBatch.push_back({valueId, id, side, ""});
 
   if (_curBatch.size() > 10000) {
     _jobs.add(std::move(_curBatch));
     _curBatch.clear();
   }
 }
+
+}  // namespace sjTemp

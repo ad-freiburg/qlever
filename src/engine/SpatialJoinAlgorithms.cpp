@@ -141,6 +141,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // the geometries parsed so far.
   parser.done();
 
+  prefilterCounter = parser.getPrefilterCounter();
   if (spatialJoin_.has_value() && prefilterBox.has_value()) {
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", prefilterCounter);
