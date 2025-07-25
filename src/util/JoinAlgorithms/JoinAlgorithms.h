@@ -266,8 +266,13 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
 
       if constexpr (requires {
                       compatibleRowAction.addRows(it1, endSame1, it2, endSame2);
-                    } && !hasNotFoundAction) {
+                    }) {
         compatibleRowAction.addRows(it1, endSame1, it2, endSame2);
+        if constexpr (hasNotFoundAction) {
+          for (; it1 != endSame1; ++it1) {
+            cover(it1);
+          }
+        }
       } else {
         for (; it1 != endSame1; ++it1) {
           checkCancellation();

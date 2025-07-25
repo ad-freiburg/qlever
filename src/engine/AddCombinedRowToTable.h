@@ -34,6 +34,9 @@ class AddCombinedRowToIdTable {
   LocalVocab mergedVocab_{};
   std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
+ public:
+  bool logStuff_ = false;
+
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
   // `targetIndex_`-th row in the output, you have to combine
@@ -125,6 +128,11 @@ class AddCombinedRowToIdTable {
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
+    /*
+    if (logStuff_) {
+      AD_LOG_INFO << "adding a row" << rowIndexA << ' ' <<  rowIndexB << '\n';
+    }
+     */
     AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
@@ -136,9 +144,14 @@ class AddCombinedRowToIdTable {
 
   // TODO<joka921> concepts + C++17 etc.
   void addRows(const auto& rowIndicesA, const auto& rowIndicesB) {
+    auto sz = [](const auto& ri) { return ql::ranges::size(ri); };
+    size_t total = sz(rowIndicesA) * sz(rowIndicesB);
     if (resultTable_.numColumns() == 0) {
-      auto sz = [](const auto& ri) { return ql::ranges::size(ri); };
-      size_t total = sz(rowIndicesA) * sz(rowIndicesB);
+      /*
+      if (total > 0 && logStuff_) {
+        AD_LOG_INFO << "Adding " << total << "rows at once\n";
+      }
+       */
       while (total > 0) {
         auto chunkSz = std::min(bufferSize_ - nextIndex_, total);
         nextIndex_ += chunkSz;
@@ -248,6 +261,8 @@ class AddCombinedRowToIdTable {
   // will throw an exception.
   void flush() {
     cancellationHandle_->throwIfCancelled();
+    // AD_LOG_INFO << "num columns in result " << resultTable_.numColumns() <<
+    // '\n';
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ == indexBuffer_.size() +

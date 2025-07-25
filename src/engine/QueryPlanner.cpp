@@ -2382,9 +2382,16 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
+    // TODO<joka921> This is an experiment for the benchmark paper, properly
+    // analyze the impact
+    if (!unionOperation) {
+      return;
+    }
+    /*
     if (!unionOperation || !hasUnboundTransitivePathInTree(*unionOperation)) {
       return;
     }
+     */
 
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,

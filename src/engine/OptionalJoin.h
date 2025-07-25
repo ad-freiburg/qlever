@@ -31,10 +31,15 @@ class OptionalJoin : public Operation {
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
+  // TODO<joka921> in the future we can extend this to only keep some join
+  // columns.
+  bool _keepJoinColumns = true;
+
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2);
+               std::shared_ptr<QueryExecutionTree> t2,
+               bool keepJoinColumns = true);
 
  private:
   std::string getCacheKeyImpl() const override;
