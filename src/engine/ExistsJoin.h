@@ -82,6 +82,8 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  std::optional<Result> tryNestedLoopJoinIfSuitable();
+
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

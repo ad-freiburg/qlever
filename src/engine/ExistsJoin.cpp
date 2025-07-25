@@ -8,9 +8,12 @@
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Result.h"
+#include "engine/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/NestedLoopJoin.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -99,6 +102,13 @@ size_t ExistsJoin::getCostEstimate() {
 // ____________________________________________________________________________
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
+
+  if (!noJoinNecessary) {
+    if (auto res = tryNestedLoopJoinIfSuitable()) {
+      return std::move(res).value();
+    }
+  }
+
   // The lazy exists join implementation does only work if there's just a single
   // join column. This might be extended in the future.
   bool lazyJoinIsSupported = joinColumns_.size() == 1;
@@ -258,6 +268,36 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side.
+  if (!std::dynamic_pointer_cast<Sort>(right_->getRootOperation()) ||
+      left_->getSizeEstimate() > right_->getSizeEstimate()) {
+    return std::nullopt;
+  }
+  auto leftRes = left_->getResult(false);
+  auto child = right_->getRootOperation()->getChildren().at(0);
+  auto runTimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  right_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {runTimeInfoChildren});
+  auto rightRes = child->getResult(true);
+
+  IdTable result = leftRes->idTable().clone();
+  LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
+  NestedLoopJoin nestedLoopJoin{joinColumns_, std::move(leftRes),
+                                std::move(rightRes)};
+  result.addEmptyColumn();
+  ad_utility::chunkedCopy(
+      ql::ranges::transform_view(
+          ad_utility::OwningView{nestedLoopJoin.computeCounter()},
+          [](size_t counter) { return Id::makeFromBool(counter != 0); }),
+      result.getColumn(result.numColumns() - 1).begin(),
+      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+  return std::optional{
+      Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
 }
 
 // _____________________________________________________________________________
