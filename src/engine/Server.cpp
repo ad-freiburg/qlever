@@ -22,7 +22,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "parser/SparqlParser.h"
@@ -288,7 +288,7 @@ auto Server::prepareOperation(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(const RequestT& request, ResponseT&& send) {
+    Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -308,7 +308,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  auto parsedHttpRequest = SPARQLProtocol::parseHttpRequest(request);
+  auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
   // We always want to call `Server::checkParameter` with the same first
@@ -505,26 +505,28 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
-  auto visitGraphStore = [&request, &visitOperation, &requireValidAccessToken](
-                             GraphStoreOperation operation) -> Awaitable<void> {
-    ParsedQuery parsedOperation =
+  auto visitGraphStore =
+      [&request, &visitOperation, &requireValidAccessToken,
+       this](GraphStoreOperation operation) -> Awaitable<void> {
+    std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request);
+                                                        request, index_);
 
-    if (parsedOperation.hasUpdateClause()) {
+    if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
       requireValidAccessToken("Update from Graph Store Protocol");
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
     auto trueFunc = [](const ParsedQuery&) { return true; };
-    std::string_view operationType =
-        parsedOperation.hasUpdateClause() ? "Update" : "Query";
-    std::string operationString = parsedOperation._originalString;
-    return visitOperation({std::move(parsedOperation)},
-                          absl::StrCat("Graph Store (", operationType, ")"),
-                          std::move(operationString), trueFunc,
-                          "Unused dummy message");
+    std::string operationString = parsedOperations[0]._originalString;
+    return visitOperation(
+        std::move(parsedOperations),
+        absl::StrCat("Graph Store (", std::string_view{request.method_string()},
+                     ")"),
+        std::move(operationString), trueFunc, "Unused dummy message");
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
