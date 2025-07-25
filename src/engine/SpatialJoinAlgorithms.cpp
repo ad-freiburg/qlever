@@ -13,7 +13,6 @@
 #include <s2/util/units/length-units.h>
 #include <spatialjoin/BoxIds.h>
 #include <spatialjoin/Sweeper.h>
-#include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 
 #include <cmath>
@@ -21,6 +20,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinParser.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
@@ -66,9 +66,6 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
     std::optional<util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column] = idTableAndCol;
 
-  // Initialize the parser.
-  sj::WKTParser parser(&sweeper, numThreads);
-
   // Convert prefilter box to lat lng coordinates for comparing against geometry
   // info from vocabulary.
   std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
@@ -91,48 +88,53 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
         "prefilter-disabled-by-bounding-box-area", true);
   }
 
+  // Initialize the parser.
+  sjTemp::WKTParser parser(&sweeper, numThreads, usePrefiltering,
+                           prefilterLatLngBox, qec_->getIndex());
+
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
     throwIfCancelled();
 
     const auto id = idTable->at(row, column);
-    if (id.getDatatype() == Datatype::VocabIndex) {
-      // If we have a prefilter box, check if we also have a precomputed
-      // bounding box for the geometry this `VocabIndex` is referring to.
-      if (usePrefiltering &&
-          prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
-                                    id.getVocabIndex())) {
-        prefilterCounter++;
-        continue;
-      }
+    parser.addValueIdToQueue(id, row, leftOrRightSide);
+    /* if (id.getDatatype() == Datatype::VocabIndex) {
+       // If we have a prefilter box, check if we also have a precomputed
+       // bounding box for the geometry this `VocabIndex` is referring to.
+       if (usePrefiltering &&
+           prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
+                                     id.getVocabIndex())) {
+         prefilterCounter++;
+         continue;
+       }
 
-      // If we have not filtered out this geometry, read and parse the full
-      // string.
-      const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
-      parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
-    } else if (id.getDatatype() == Datatype::GeoPoint) {
-      const auto& p = id.getGeoPoint();
-      const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+       // If we have not filtered out this geometry, read and parse the full
+       // string.
+       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
+       parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
+     } else if (id.getDatatype() == Datatype::GeoPoint) {
+       const auto& p = id.getGeoPoint();
+       const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
 
-      // If point is not contained in the prefilter box, we can skip it
-      // immediately instead of feeding it to the parser.
-      if (prefilterLatLngBox.has_value() &&
-          !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
-        prefilterCounter++;
-        continue;
-      }
+       // If point is not contained in the prefilter box, we can skip it
+       // immediately instead of feeding it to the parser.
+       if (prefilterLatLngBox.has_value() &&
+           !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
+         prefilterCounter++;
+         continue;
+       }
 
-      parser.parsePoint(utilPoint, row, leftOrRightSide);
-    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      // `LocalVocabEntry` has to be parsed in any case: we have no information
-      // except the string.
-      const auto& literalOrIri = *id.getLocalVocabIndex();
-      if (literalOrIri.isLiteral()) {
-        const auto& wkt =
-            asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-        parser.parseWKT(wkt, row, leftOrRightSide);
-      }
-    }
+       parser.parsePoint(utilPoint, row, leftOrRightSide);
+     } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+       // `LocalVocabEntry` has to be parsed in any case: we have no information
+       // except the string.
+       const auto& literalOrIri = *id.getLocalVocabIndex();
+       if (literalOrIri.isLiteral()) {
+         const auto& wkt =
+             asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+         parser.parseWKT(wkt, row, leftOrRightSide);
+       }
+     }*/
   }
 
   // Wait for all parser threads to finish, then return the bounding box of all
