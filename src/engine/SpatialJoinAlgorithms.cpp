@@ -101,6 +101,10 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
 
   const ad_utility::BoundingBoxCache& boundingBoxCache =
       qec_->getIndex().getVocab().getBoundingBoxCache();
+  if (boundingBoxCache.has_value()) {
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "in-mem-bounding-box-cache-size", boundingBoxCache.value().size());
+  }
 
   // If the prefilter box is larger than 50 x 50 coordinates, the
   // prefiltering overhead (cost of retrieving bounding boxes from disk) is
