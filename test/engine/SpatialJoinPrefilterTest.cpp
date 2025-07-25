@@ -672,7 +672,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   auto vIdGkAllee = getValId(nMap, "gk-allee");
 
   {
-    [[maybe_unused]] const auto& runtimeParameter =
+    auto cleanUp =
         setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
@@ -698,7 +698,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   EXPECT_LT(bbSize, 10'000);
 
   {
-    [[maybe_unused]] const auto& runtimeParameter =
+    auto cleanUp =
         setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
