@@ -21,6 +21,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
@@ -966,4 +967,10 @@ void SpatialJoinAlgorithms::throwIfCancelled() const {
   if (spatialJoin_.has_value()) {
     spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
   }
+}
+
+// ____________________________________________________________________________
+double SpatialJoinAlgorithms::maxAreaPrefilterBox() {
+  return static_cast<double>(
+      RuntimeParameters().get<"spatial-join-prefilter-max-size">());
 }
