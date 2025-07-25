@@ -4,7 +4,6 @@
 #ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
 #define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
 
-
 #include "SparqlAutomaticListener.h"
 #include "antlr4-runtime.h"
 
@@ -835,4 +834,4 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void visitErrorNode(antlr4::tree::ErrorNode* /*node*/) override {}
 };
 
-#endif // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
+#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H

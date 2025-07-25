@@ -680,13 +680,16 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("a:a*", WithLength(Iri("<http://www.example.com/a>"), 0, max),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a{1,3}", WithLength(Iri("<http://www.example.com/a>"), 1, 3),
+  expectPathOrVar("a:a{1,3}",
+                  WithLength(Iri("<http://www.example.com/a>"), 1, 3),
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("a:a{3}", WithLength(Iri("<http://www.example.com/a>"), 3, 3),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a{1,}", WithLength(Iri("<http://www.example.com/a>"), 1, max),
+  expectPathOrVar("a:a{1,}",
+                  WithLength(Iri("<http://www.example.com/a>"), 1, max),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a{,3}", WithLength(Iri("<http://www.example.com/a>"), 0, 3),
+  expectPathOrVar("a:a{,3}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 3),
                   {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
@@ -700,23 +703,22 @@ TEST(SparqlParser, propertyPaths) {
              Sequence({Iri("<http://www.example.com/a/a>"),
                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
              1, max),
-         Sequence({
-             WithLength(
-                Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
-                1, 4),
-             WithLength(
-                Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
-                3, 3)
-         }),
+         Sequence({WithLength(Sequence({Iri("<http://www.example.com/a/a>"),
+                                        Iri("<http://www.example.com/b/b>"),
+                                        Iri("<a/b/c>")}),
+                              1, 4),
+                   WithLength(Sequence({Iri("<http://www.example.com/a/a>"),
+                                        Iri("<http://www.example.com/b/b>"),
+                                        Iri("<a/b/c>")}),
+                              3, 3)}),
          Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
          Negated(
              {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
               Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
               Inverse(Iri("<http://www.example.com/a/a>"))})});
     expectPathOrVar(
-        "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|(a:a/b:b/<a/b/c>){1,4}/(a:a/b:b/<a/b/c>){3}|!a|!(^a|a|^a:a)", 
+        "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|(a:a/b:b/<a/b/c>){1,4}/(a:a/b:b/<a/b/"
+        "c>){3}|!a|!(^a|a|^a:a)",
         expected,
         {{"a", "<http://www.example.com/a/>"},
          {"b", "<http://www.example.com/b/>"},
