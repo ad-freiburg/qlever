@@ -168,7 +168,8 @@ class SpatialJoinAlgorithms {
   // built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
-      const Index& index, VocabIndex vocabIndex);
+      const ad_utility::BoundingBoxCache& bbCache, const Index& index,
+      VocabIndex vocabIndex);
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table

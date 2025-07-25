@@ -21,7 +21,9 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -40,19 +42,36 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
     const std::optional<util::geo::DBox>& prefilterLatLngBox,
-    const Index& index, VocabIndex vocabIndex) {
+    const ad_utility::BoundingBoxCache& bbCache, const Index& index,
+    VocabIndex vocabIndex) {
   if (prefilterLatLngBox.has_value()) {
-    auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
-    if (geoInfo.has_value()) {
-      // We have a bounding box: Check intersection with prefilter box.
-      auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
-          geoInfo.value().getBoundingBox());
-      return !util::geo::intersects(prefilterLatLngBox.value(), boundingBox);
+    if (bbCache.has_value()) {
+      static constexpr size_t mask = ad_utility::bitMaskForLowerBits(59);
+      auto encBB = (bbCache.value()->at(vocabIndex.get() & mask));
+      if (!encBB.has_value()) {
+        return true;
+      }
+      auto ll =
+          GeoPoint::fromBitRepresentation(encBB.value().lowerLeftEncoded_);
+      auto ur =
+          GeoPoint::fromBitRepresentation(encBB.value().upperRightEncoded_);
+      return !util::geo::intersects(
+          prefilterLatLngBox.value(),
+          util::geo::DBox{{ll.getLng(), ll.getLat()},
+                          {ur.getLng(), ur.getLat()}});
     } else {
-      // Since we know that this function is only called if we have a
-      // `GeoVocabulary`, we know that a geometry without precomputed bounding
-      // box must be invalid and can thus be skipped.
-      return true;
+      auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
+      if (geoInfo.has_value()) {
+        // We have a bounding box: Check intersection with prefilter box.
+        auto boundingBox = ad_utility::detail::boundingBoxToUtilBox(
+            geoInfo.value().getBoundingBox());
+        return !util::geo::intersects(prefilterLatLngBox.value(), boundingBox);
+      } else {
+        // Since we know that this function is only called if we have a
+        // `GeoVocabulary`, we know that a geometry without precomputed bounding
+        // box must be invalid and can thus be skipped.
+        return true;
+      }
     }
   }
   // If we don't have the required information, we cannot discard the geometry.
@@ -73,12 +92,20 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // info from vocabulary.
   std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
   size_t prefilterCounter = 0;
+  size_t prefilterCounterPoints = 0;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
         prefilterBox.value());
   }
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
                          qec_->getIndex().getVocab().isGeoInfoAvailable();
+
+  const ad_utility::BoundingBoxCache boundingBoxCache =
+      qec_->getIndex().getVocab().getBoundingBoxCache();
+  if (boundingBoxCache.has_value()) {
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "in-mem-bounding-box-cache-size", boundingBoxCache.value()->size());
+  }
 
   // If the prefilter box is larger than 50 x 50 coordinates, the
   // prefiltering overhead (cost of retrieving bounding boxes from disk) is
@@ -100,8 +127,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       // If we have a prefilter box, check if we also have a precomputed
       // bounding box for the geometry this `VocabIndex` is referring to.
       if (usePrefiltering &&
-          prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
-                                    id.getVocabIndex())) {
+          prefilterGeoByBoundingBox(prefilterLatLngBox, boundingBoxCache,
+                                    qec_->getIndex(), id.getVocabIndex())) {
         prefilterCounter++;
         continue;
       }
@@ -118,7 +145,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       // immediately instead of feeding it to the parser.
       if (prefilterLatLngBox.has_value() &&
           !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
-        prefilterCounter++;
+        prefilterCounterPoints++;
         continue;
       }
 
@@ -142,9 +169,12 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   if (spatialJoin_.has_value() && prefilterBox.has_value()) {
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", prefilterCounter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-points-dropped-by-prefilter", prefilterCounterPoints);
   }
 
-  return {parser.getBoundingBox(), idTable->size() - prefilterCounter};
+  return {parser.getBoundingBox(),
+          idTable->size() - (prefilterCounter + prefilterCounterPoints)};
 }
 
 // ____________________________________________________________________________

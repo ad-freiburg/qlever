@@ -286,6 +286,9 @@ class SplitVocabulary {
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
+
+  // //
+  // const BoundingBoxCache& getBoundingBoxCache(uint8_t vocab) const;
 };
 
 // Concrete implementations of split function and split filename function

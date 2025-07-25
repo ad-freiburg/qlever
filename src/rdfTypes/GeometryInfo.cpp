@@ -118,6 +118,11 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
+EncodedBoundingBox GeometryInfo::getEncodedBoundingBox() const {
+  return boundingBox_;
+}
+
+// ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }

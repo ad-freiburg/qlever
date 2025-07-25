@@ -155,4 +155,22 @@ bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
   }
 }
 
+// //
+// _____________________________________________________________________________
+// template <typename SF, typename SFN, typename... S>
+// requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+// const BoundingBoxCache& SplitVocabulary<SF, SFN, S...>::getBoundingBoxCache(
+//     uint8_t vocab) const {
+//   return std::visit(
+//       [](const auto& v) -> BoundingBoxCache {
+//         using T = std::decay_t<decltype(v)>;
+//         if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+//           return v.getBoundingBoxCache();
+//         } else {
+//           return std::nullopt;
+//         }
+//       },
+//       underlying_.at(vocab));
+// };
+
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H

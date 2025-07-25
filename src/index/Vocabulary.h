@@ -22,6 +22,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/TypeTraits.h"
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -141,6 +142,34 @@ class Vocabulary {
   // `std::nullopt` for any input, because no precomputed `GeometryInfo` is
   // available.
   bool isGeoInfoAvailable() const;
+
+  // TODO
+  const ad_utility::BoundingBoxCache getBoundingBoxCache() const {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      return std::visit(
+          [](const auto& v) -> const ad_utility::BoundingBoxCache {
+            using Tx = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<Tx, SplitVocabulary>) {
+              const auto& geoVocab = v.getUnderlyingVocabulary(1);
+              return std::visit(
+                  [](const auto& gv) -> const ad_utility::BoundingBoxCache {
+                    using T = std::decay_t<decltype(gv)>;
+                    if constexpr (ad_utility::isInstantiation<T,
+                                                              GeoVocabulary>) {
+                      return gv.getBoundingBoxCache();
+                    } else {
+                      return std::nullopt;
+                    }
+                  },
+                  geoVocab);
+            } else {
+              return std::nullopt;
+            }
+          },
+          vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary());
+    }
+    return std::nullopt;
+  };
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
