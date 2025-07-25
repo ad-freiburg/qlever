@@ -122,8 +122,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       // If we have a prefilter box, check if we also have a precomputed
       // bounding box for the geometry this `VocabIndex` is referring to.
       if (usePrefiltering &&
-          prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
-                                    id.getVocabIndex())) {
+          prefilterGeoByBoundingBox(prefilterLatLngBox, boundingBoxCache,
+                                    qec_->getIndex(), id.getVocabIndex())) {
         prefilterCounter++;
         continue;
       }
