@@ -106,6 +106,31 @@ class WktMetricDistGeoPoints {
   }
 };
 
+// Compute the length of a WKT geometry.
+class WktLength {
+ public:
+  ValueId operator()(
+      const std::optional<MetricLength>& len,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(
+        detail::kilometerToUnit(len.value().length() / 1000.0, unit));
+  }
+};
+
+// Compute the length of a WKT geometry in meters.
+class WktMetricLength {
+ public:
+  ValueId operator()(const std::optional<MetricLength>& len) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(len.value().length());
+  }
+};
+
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
@@ -113,7 +138,7 @@ class WktCentroid {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid_);
+    return ValueId::makeFromGeoPoint(geom.value().centroid());
   }
 };
 
@@ -145,7 +170,7 @@ class WktBoundingCoordinate {
   }
 };
 
-// Compute the distance between two WKT points in meters.
+// Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
