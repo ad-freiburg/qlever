@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <string>
 
 #include "concepts/concepts.hpp"
@@ -54,7 +55,7 @@ struct EncodedBoundingBox {
 // TODO
 using BoundingBoxVector =
     std::vector<std::optional<ad_utility::EncodedBoundingBox>>;
-using BoundingBoxCache = std::optional<BoundingBoxVector>;
+using BoundingBoxCache = std::optional<std::shared_ptr<BoundingBoxVector>>;
 
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.

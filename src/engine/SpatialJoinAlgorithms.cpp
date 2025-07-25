@@ -47,7 +47,7 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
   if (prefilterLatLngBox.has_value()) {
     if (bbCache.has_value()) {
       static constexpr size_t mask = ad_utility::bitMaskForLowerBits(59);
-      auto encBB = (bbCache.value().at(vocabIndex.get() & mask));
+      auto encBB = (bbCache.value()->at(vocabIndex.get() & mask));
       if (!encBB.has_value()) {
         return true;
       }
@@ -92,6 +92,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // info from vocabulary.
   std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
   size_t prefilterCounter = 0;
+  size_t prefilterCounterPoints = 0;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
         prefilterBox.value());
@@ -99,11 +100,11 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
                          qec_->getIndex().getVocab().isGeoInfoAvailable();
 
-  const ad_utility::BoundingBoxCache& boundingBoxCache =
+  const ad_utility::BoundingBoxCache boundingBoxCache =
       qec_->getIndex().getVocab().getBoundingBoxCache();
   if (boundingBoxCache.has_value()) {
     spatialJoin_.value()->runtimeInfo().addDetail(
-        "in-mem-bounding-box-cache-size", boundingBoxCache.value().size());
+        "in-mem-bounding-box-cache-size", boundingBoxCache.value()->size());
   }
 
   // If the prefilter box is larger than 50 x 50 coordinates, the
@@ -144,7 +145,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       // immediately instead of feeding it to the parser.
       if (prefilterLatLngBox.has_value() &&
           !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
-        prefilterCounter++;
+        prefilterCounterPoints++;
         continue;
       }
 
@@ -168,9 +169,12 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   if (spatialJoin_.has_value() && prefilterBox.has_value()) {
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", prefilterCounter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-points-dropped-by-prefilter", prefilterCounterPoints);
   }
 
-  return {parser.getBoundingBox(), idTable->size() - prefilterCounter};
+  return {parser.getBoundingBox(),
+          idTable->size() - (prefilterCounter + prefilterCounterPoints)};
 }
 
 // ____________________________________________________________________________

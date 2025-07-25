@@ -144,15 +144,15 @@ class Vocabulary {
   bool isGeoInfoAvailable() const;
 
   // TODO
-  const ad_utility::BoundingBoxCache& getBoundingBoxCache() const {
+  const ad_utility::BoundingBoxCache getBoundingBoxCache() const {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       return std::visit(
-          [](const auto& v) -> ad_utility::BoundingBoxCache {
+          [](const auto& v) -> const ad_utility::BoundingBoxCache {
             using Tx = std::decay_t<decltype(v)>;
             if constexpr (ad_utility::isInstantiation<Tx, SplitVocabulary>) {
               const auto& geoVocab = v.getUnderlyingVocabulary(1);
               return std::visit(
-                  [](const auto& gv) -> ad_utility::BoundingBoxCache {
+                  [](const auto& gv) -> const ad_utility::BoundingBoxCache {
                     using T = std::decay_t<decltype(gv)>;
                     if constexpr (ad_utility::isInstantiation<T,
                                                               GeoVocabulary>) {
@@ -168,6 +168,7 @@ class Vocabulary {
           },
           vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary());
     }
+    return std::nullopt;
   };
 
   // Get the index range for the given prefix or `std::nullopt` if no word with

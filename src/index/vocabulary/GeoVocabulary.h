@@ -62,7 +62,7 @@ class GeoVocabulary {
   std::optional<GeometryInfo> getGeoInfo(uint64_t index) const;
 
   // Access the bounding boxes cached in memory
-  const BoundingBoxCache& getBoundingBoxCache() const { return boundingBoxes_; }
+  const BoundingBoxCache getBoundingBoxCache() const { return boundingBoxes_; }
 
   // Construct a filename for the geo info file by appending a suffix to the
   // given filename.

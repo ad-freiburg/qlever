@@ -4,6 +4,7 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <memory>
 #include <stdexcept>
 
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -38,14 +39,15 @@ void GeoVocabulary<V>::open(const std::string& filename) {
 
   // Read all members of the `geoInfoFile_` and cache their bounding boxes in
   // memory.
-  boundingBoxes_ = BoundingBoxVector{};
-  boundingBoxes_.value().reserve(size());
+  boundingBoxes_ = std::make_shared<BoundingBoxVector>();
+  boundingBoxes_.value()->reserve(size());
   for (size_t i = 0; i < size(); i++) {
     auto geoInfo = getGeoInfo(i);
     if (geoInfo.has_value()) {
-      boundingBoxes_.value().push_back(geoInfo.value().getEncodedBoundingBox());
+      boundingBoxes_.value()->push_back(
+          geoInfo.value().getEncodedBoundingBox());
     } else {
-      boundingBoxes_.value().push_back(std::nullopt);
+      boundingBoxes_.value()->push_back(std::nullopt);
     }
   }
 };
