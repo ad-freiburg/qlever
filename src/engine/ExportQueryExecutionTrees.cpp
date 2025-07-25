@@ -12,6 +12,8 @@
 
 #include <ranges>
 
+#include "index/EncodedValues.h"
+#include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/ValueIdentity.h"
@@ -347,6 +349,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
+      // TODO<joka921> This is only to make the strange `toRdfLiteral` function
+      // work in the triple component class, remove that function which doesn't
+      // function properly anyway.
+    case EncodedVal:
+      return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
     default:
       AD_FAIL();
   }
@@ -433,6 +440,8 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
                                           std::string_view>);
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
+    case Datatype::EncodedVal:
+      return index.getImpl().encodedValueManager().toLiteralOrIri(id);
     default:
       AD_FAIL();
   }
@@ -496,6 +505,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab));
+    case EncodedVal:
+      return handleIriOrLiteral(
+          index.getImpl().encodedValueManager().toLiteralOrIri(id));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -516,6 +528,10 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   switch (datatype) {
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
+    case EncodedVal:
+      return handleIriOrLiteral(
+          index.getImpl().encodedValueManager().toLiteralOrIri(id),
+          onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
@@ -582,6 +598,7 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
+    case EncodedVal:
       return getLiteralOrIriFromVocabIndex(index, id, localVocab);
     case TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
