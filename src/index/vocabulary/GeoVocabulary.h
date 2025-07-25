@@ -32,7 +32,11 @@ class GeoVocabulary {
   // bounding box) is stored.
   ad_utility::File geoInfoFile_;
 
-  // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
+  // In-memory cache of bounding boxes
+  // TODO make this optional and determine via user flag to server if it is used
+  // TODO avoid std::optional
+  using BoundingBoxCache = ad_utility::BoundingBoxCache;
+  BoundingBoxCache boundingBoxes_;
 
   // Filename suffix for geometry information file
   static constexpr std::string_view geoInfoSuffix = ".geoinfo";
@@ -56,6 +60,9 @@ class GeoVocabulary {
   // Load the precomputed `GeometryInfo` object for the literal with
   // the given index from disk. Return `std::nullopt` for invalid geometries.
   std::optional<GeometryInfo> getGeoInfo(uint64_t index) const;
+
+  // Access the bounding boxes cached in memory
+  const BoundingBoxCache& getBoundingBoxCache() const { return boundingBoxes_; }
 
   // Construct a filename for the geo info file by appending a suffix to the
   // given filename.

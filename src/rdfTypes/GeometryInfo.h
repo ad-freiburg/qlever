@@ -51,6 +51,11 @@ struct EncodedBoundingBox {
   uint64_t upperRightEncoded_;
 };
 
+// TODO
+using BoundingBoxVector =
+    std::vector<std::optional<ad_utility::EncodedBoundingBox>>;
+using BoundingBoxCache = std::optional<BoundingBoxVector>;
+
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
 struct GeometryType {
@@ -124,6 +129,9 @@ class GeometryInfo {
 
   // Convert the bounding box to GeoPoints.
   BoundingBox getBoundingBox() const;
+
+  // Get the raw encoded bounding box.
+  EncodedBoundingBox getEncodedBoundingBox() const;
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);

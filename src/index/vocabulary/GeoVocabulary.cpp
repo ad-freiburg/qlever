@@ -13,6 +13,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
+using ad_utility::BoundingBoxVector;
 using ad_utility::GeometryInfo;
 
 // ____________________________________________________________________________
@@ -33,6 +34,19 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         versionOfFile, ", which is incompatible with version ",
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
+  }
+
+  // Read all members of the `geoInfoFile_` and cache their bounding boxes in
+  // memory.
+  boundingBoxes_ = BoundingBoxVector{};
+  boundingBoxes_.value().reserve(size());
+  for (size_t i = 0; i < size(); i++) {
+    auto geoInfo = getGeoInfo(i);
+    if (geoInfo.has_value()) {
+      boundingBoxes_.value().push_back(geoInfo.value().getEncodedBoundingBox());
+    } else {
+      boundingBoxes_.value().push_back(std::nullopt);
+    }
   }
 };
 
