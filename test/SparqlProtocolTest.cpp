@@ -6,7 +6,7 @@
 
 #include <boost/beast/http.hpp>
 
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/http/HttpUtils.h"
@@ -133,11 +133,11 @@ auto testAccessTokenCombinationsUrlEncoded =
 }  // namespace
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseGET) {
+TEST(SparqlProtocolTest, parseGET) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseGET(request);
+    return SparqlProtocol::parseGET(request);
   };
   // No SPARQL Operation
   EXPECT_THAT(parse(makeGetRequest("/")),
@@ -208,11 +208,11 @@ TEST(SPARQLProtocolTest, parseGET) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
+TEST(SparqlProtocolTest, parseUrlencodedPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseUrlencodedPOST(request);
+    return SparqlProtocol::parseUrlencodedPOST(request);
   };
 
   // No SPARQL Operation
@@ -326,12 +326,12 @@ TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseQueryPOST) {
+TEST(SparqlProtocolTest, parseQueryPOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Query>(
-        request, SPARQLProtocol::contentTypeSparqlQuery);
+    return SparqlProtocol::parseSPARQLPOST<Query>(
+        request, SparqlProtocol::contentTypeSparqlQuery);
   };
 
   // Query
@@ -372,12 +372,12 @@ TEST(SPARQLProtocolTest, parseQueryPOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseUpdatePOST) {
+TEST(SparqlProtocolTest, parseUpdatePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseSPARQLPOST<Update>(
-        request, SPARQLProtocol::contentTypeSparqlUpdate);
+    return SparqlProtocol::parseSPARQLPOST<Update>(
+        request, SparqlProtocol::contentTypeSparqlUpdate);
   };
 
   // Update
@@ -416,11 +416,11 @@ TEST(SPARQLProtocolTest, parseUpdatePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parsePOST) {
+TEST(SparqlProtocolTest, parsePOST) {
   auto parse =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parsePOST(request);
+    return SparqlProtocol::parsePOST(request);
   };
 
   // Query
@@ -474,11 +474,10 @@ TEST(SPARQLProtocolTest, parsePOST) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, parseHttpRequest) {
-  auto parse =
-      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
-          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
-    return SPARQLProtocol::parseHttpRequest(request);
+TEST(SparqlProtocolTest, parseHttpRequest) {
+  auto parse = CPP_template_lambda()(typename RequestT)(RequestT request)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    return SparqlProtocol::parseHttpRequest(request);
   };
 
   // Query
@@ -488,11 +487,29 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       parse(makePostRequest("/", URLENCODED, "access-token=foo&query=bar")),
       ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                       Query{"bar", {}}));
+  // TODO<qup42> remove once the conformance tests are fixed
+  // We add the leading `/` if it is missing.
+  EXPECT_THAT(parse(makeGetRequest("?query=foo")),
+              ParsedRequestIs("/", std::nullopt, {}, Query{"foo", {}}));
   // Update
   EXPECT_THAT(parse(makePostRequest("/?access-token=foo", UPDATE,
                                     "INSERT DATA { <a> <b> <c> }")),
               ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
                               Update{"INSERT DATA { <a> <b> <c> }", {}}));
+  // Graph Store Protocol (Direct Graph Identification)
+  {
+    auto path =
+        absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
+    EXPECT_THAT(parse(makeRequest(http::verb::get, path,
+                                  {{http::field::host, {"example.com"}}})),
+                ParsedRequestIs(path, std::nullopt, {},
+                                GraphStoreOperation{Iri(absl::StrCat(
+                                    "<http://example.com", path, ">"))}));
+  }
+  // Graph Store Protocol (Indirect Graph Identification)
+  EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
 
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -500,4 +517,31 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       testing::StrEq("Request method \"PATCH\" not supported (only GET and "
                      "POST are supported; PUT, DELETE, HEAD and PATCH for "
                      "graph store protocol are not yet supported)"));
+  AD_EXPECT_THROW_WITH_MESSAGE(parse(makeGetRequest(" ")),
+                               testing::StrEq("Failed to parse URL: \"/ \"."));
+}
+
+// _____________________________________________________________________________________________
+TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect) {
+  EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolIndirect(
+                  makeGetRequest("/?default&access-token=foo")),
+              ParsedRequestIs("/", "foo",
+                              {{"default", {""}}, {"access-token", {"foo"}}},
+                              GraphStoreOperation{DEFAULT{}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlProtocol::parseGraphStoreProtocolIndirect(
+          makeGetRequest(absl::StrCat(
+              "/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo.ttl"))),
+      testing::HasSubstr(
+          R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)"));
+}
+
+// _____________________________________________________________________________________________
+TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect) {
+  auto path = absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo");
+  EXPECT_THAT(SparqlProtocol::parseGraphStoreProtocolDirect(makeRequest(
+                  http::verb::get, path, {{http::field::host, "example.com"}})),
+              ParsedRequestIs(path, std::nullopt, {},
+                              GraphStoreOperation{Iri(absl::StrCat(
+                                  "<http://example.com", path, ">"))}));
 }
