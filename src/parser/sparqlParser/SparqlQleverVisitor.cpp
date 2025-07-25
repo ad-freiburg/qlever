@@ -2205,10 +2205,9 @@ std::pair<size_t, size_t> Visitor::visit(
     return {stepsMin, std::numeric_limits<size_t>::max()};
   }
 
-  if (ctx->onlyMax()) {
-    int64_t stepsMax = visit(ctx->onlyMax()->integer());
-    return {0, stepsMax};
-  }
+  AD_CORRECTNESS_CHECK(ctx->onlyMax());
+  int64_t stepsMax = visit(ctx->onlyMax()->integer());
+  return {0, stepsMax};
 }
 
 // ____________________________________________________________________________________
