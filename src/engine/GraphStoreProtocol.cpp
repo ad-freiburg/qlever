@@ -31,7 +31,7 @@ void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
 
 // ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
-    const std::string& body, const ad_utility::MediaType contentType) {
+    const std::string& body, ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   switch (contentType) {
     case ad_utility::MediaType::turtle:
@@ -48,24 +48,22 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
-    const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+    const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
     Quads::BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
   }
   auto transformTc =
-      [&blankNodeAdder](const TripleComponent& tc) -> TripleComponent {
+      [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
     if (tc.isString()) {
-      AD_CORRECTNESS_CHECK(tc.getString().starts_with("_"));
-      return blankNodeAdder.getBlankNodeIndex(tc.toString());
+      return blankNodeAdder.getBlankNodeIndex(tc.getString());
     } else {
-      return tc;
+      return std::move(tc);
     }
   };
-  auto transformTurtleTriple =
-      [&tripleGraph,
-       &transformTc](TurtleTriple&& triple) -> SparqlTripleSimpleWithGraph {
+  auto transformTurtleTriple = [&tripleGraph,
+                                &transformTc](TurtleTriple&& triple) {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
                          triple.graphIri_.getId() ==
                              qlever::specialIds().at(DEFAULT_GRAPH_IRI));
@@ -81,8 +79,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 
 // ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
-  // Construct the parsed query from its short equivalent SPARQL Update string.
-  // This is easier and also provides e.g. the `_originalString` field.
+  // Construct the parsed query from its short equivalent SPARQL Update
+  // string. This is easier and also provides e.g. the `_originalString` field.
   auto getQuery = [&graph]() -> std::string {
     if (const auto* iri =
             std::get_if<ad_utility::triple_component::Iri>(&graph)) {

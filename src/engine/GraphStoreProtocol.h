@@ -63,7 +63,7 @@ class GraphStoreProtocol {
   [[noreturn]] static void throwNotYetImplementedHTTPMethod(
       const std::string_view& method);
 
-  // Aborts the request with an HTTP 204 No Content if the request body is
+  // Abort the request with an `HTTP 204 No Content` if the request body is
   // empty.
   static void throwIfRequestBodyEmpty(const auto& request) {
     if (request.body().empty()) {
@@ -72,6 +72,8 @@ class GraphStoreProtocol {
     }
   }
 
+  // Return a truncated string with the graph store operation type and the
+  // (possibly truncated) request body.
   static std::string truncatedStringRepresentation(std::string type,
                                                    const auto& request) {
     // Graph store protocol requests might have a very large body. Limit
@@ -82,13 +84,13 @@ class GraphStoreProtocol {
 
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
-      const std::string& body, const ad_utility::MediaType contentType);
+      const std::string& body, ad_utility::MediaType contentType);
   FRIEND_TEST(GraphStoreProtocolTest, parseTriples);
 
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
   // and sets the correct graph.
   static updateClause::GraphUpdate::Triples convertTriples(
-      const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+      const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
       Quads::BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
@@ -106,6 +108,8 @@ class GraphStoreProtocol {
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
+    // Graph store protocol POST requests might have a very large body. Limit
+    // the length used for the string representation.
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
     return res;
   }

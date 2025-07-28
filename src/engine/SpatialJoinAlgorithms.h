@@ -145,6 +145,31 @@ class SpatialJoinAlgorithms {
     return getRtreeEntry(idTable, row, col);
   }
 
+  // This helper functions parses WKT geometries from the given `column` in
+  // `idTable` and adds them to `sweeper` (which will be used to perform the
+  // spatial join). The Boolean `leftOrRightSide` specifies whether these
+  // geometries are from the left or right side of the spatial join. The parsing
+  // is multithreaded, using up to `numThreads` threads. If a `prefilterBox` is
+  // given, geometries not intersecting this box will neither be parsed nor
+  // added to `sweeper`. The function returns the aggregated bounding box of all
+  // added geometries, which may be used as a prefilter at next call and the
+  // number of geometries added. This function is only `public` for testing
+  // purposes and should otherwise not be used outside of this class.
+  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  std::pair<util::geo::I32Box, size_t> libspatialjoinParse(
+      bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+      sj::Sweeper& sweeper, size_t numThreads,
+      std::optional<util::geo::I32Box> prefilterBox) const;
+
+  // Helper for `libspatialjoinParse` to check the bounding box (only if
+  // available from a `GeoVocabulary`) of a given vocabulary entry against the
+  // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
+  // by the bounding box. Should only be applied if the index is known to be
+  // built on a `GeoVocabulary`.
+  static bool prefilterGeoByBoundingBox(
+      const std::optional<util::geo::DBox>& prefilterLatLngBox,
+      const Index& index, VocabIndex vocabIndex);
+
  private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
@@ -201,17 +226,6 @@ class SpatialJoinAlgorithms {
   // If there is more than one box, the boxes are disjoint.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
-  // This helper functions parses WKT geometries from the given `column` in
-  // `idTable` and adds them to `sweeper` (which will be used to perform the
-  // spatial join). The Boolean `leftOrRightSide` specifies whether these
-  // geometries are from the left or right side of the spatial join. The parsing
-  // is multithreaded, using up to `numThreads` threads.
-  util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
-                                        const IdTable* idTable,
-                                        ColumnIndex column,
-                                        sj::Sweeper& sweeper,
-                                        size_t numThreads) const;
-
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
   void throwIfCancelled() const;
@@ -220,6 +234,11 @@ class SpatialJoinAlgorithms {
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
+
+  // Maximum area of bounding box in square coordinates for prefiltering
+  // libspatialjoin input by bounding box. If exceeded, prefiltering is
+  // disabled. See `libspatialjoinParse`.
+  static constexpr double maxAreaPrefilterBox_ = 2500.0;
 
   // if the distance calculation should be approximated, by the midpoint of
   // the area

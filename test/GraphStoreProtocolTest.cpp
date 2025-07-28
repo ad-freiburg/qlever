@@ -276,6 +276,13 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
+          ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
+                                           "/?default"),
+          index),
+      testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index),
       testing::HasSubstr("Unsupported HTTP method \"PUMPKIN\""));
 }
@@ -332,20 +339,55 @@ TEST(GraphStoreProtocolTest, parseTriples) {
 }
 
 // _____________________________________________________________________________________________
+// If the `TripleComponent` is a `ValueId` which is a `BlankNodeIndex` then
+// `sub` must match on it.
+MATCHER_P(IfBlankNode, sub, "") {
+  if (arg.isId()) {
+    auto id = arg.getId();
+    if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      return testing::ExplainMatchResult(sub, id.getBlankNodeIndex(),
+                                         result_listener);
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
   auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
                                                   TestIndexConfig{});
   Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
   auto expectConvert =
-      [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
+      [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
             const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,
             ad_utility::source_location l =
                 ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
+        auto convertedTriples =
+            GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
+        EXPECT_THAT(convertedTriples,
+                    AD_FIELD(updateClause::UpdateTriples, triples_,
+                             testing::Eq(expectedTriples)));
+        auto AllComponents =
+            [](const testing::Matcher<const TripleComponent&>& sub)
+            -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+          return testing::AllOf(AD_FIELD(SparqlTripleSimpleWithGraph, s_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, p_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, o_, sub));
+        };
+        auto BlankNodeContained = [](const LocalVocab& lv)
+            -> testing::Matcher<const BlankNodeIndex&> {
+          return testing::ResultOf(
+              [&lv](const BlankNodeIndex& i) {
+                return lv.isBlankNodeIndexContained(i);
+              },
+              testing::IsTrue());
+        };
         EXPECT_THAT(
-            GraphStoreProtocol::convertTriples(graph, std::move(triples), bn),
+            convertedTriples,
             AD_FIELD(updateClause::UpdateTriples, triples_,
-                     testing::Eq(expectedTriples)));
+                     testing::Each(AllComponents(IfBlankNode(
+                         BlankNodeContained(convertedTriples.localVocab_))))));
       };
   expectConvert(DEFAULT{}, {}, {});
   expectConvert(iri("<a>"), {}, {});
@@ -353,4 +395,20 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                 {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                              std::monostate{}}});
   expectConvert(iri("<a>"), {}, {});
+  expectConvert(
+      iri("<a>"), {{{iri("<a>")}, {iri("<b>")}, TC("_:a")}},
+      {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"),
+                                   bn.getBlankNodeIndex("_:a"), iri("<a>")}});
+
+  expectConvert(
+      iri("<a>"),
+      {{TC("_:b"), {iri("<b>")}, iri("<c>")},
+       {TC("_:b"), {iri("<d>")}, iri("<e>")},
+       {TC("_:c"), {iri("<f>")}, iri("<g>")}},
+      {SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<b>"),
+                                   iri("<c>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<d>"),
+                                   iri("<e>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:c"), iri("<f>"),
+                                   iri("<g>"), iri("<a>")}});
 }

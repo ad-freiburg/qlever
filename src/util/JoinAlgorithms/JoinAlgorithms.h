@@ -17,7 +17,6 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/Generator.h"
 #include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
@@ -1358,17 +1357,45 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     }
   }
 
+  // Skip undef blocks on the right, and always report undef blocks on the left
+  // as non-matching for MINUS. Then clear everything and continue without undef
+  // normally.
+  void handleUndefForMinus() {
+    if constexpr (potentiallyHasUndef) {
+      findFirstBlockWithoutUndef(leftSide_);
+      findFirstBlockWithoutUndef(rightSide_);
+      for (const auto& lBlock : leftSide_.undefBlocks_) {
+        compatibleRowAction_.setOnlyLeftInputForOptionalJoin(
+            lBlock.fullBlock());
+        for (size_t i : lBlock.getIndexRange()) {
+          compatibleRowAction_.addOptionalRow(i);
+        }
+      }
+      compatibleRowAction_.flush();
+      leftSide_.undefBlocks_.clear();
+      leftSide_.undefBlocks_.shrink_to_fit();
+      rightSide_.undefBlocks_.clear();
+      rightSide_.undefBlocks_.shrink_to_fit();
+    }
+  }
+
   // The actual join routine that combines all the previous functions.
-  template <bool DoOptionalJoin>
+  template <bool DoOptionalJoin, bool DoMinus>
   void runJoin() {
-    fetchAndProcessUndefinedBlocks();
+    if constexpr (DoMinus) {
+      handleUndefForMinus();
+    } else {
+      fetchAndProcessUndefinedBlocks();
+    }
     if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
       // Run the join without UNDEF values if there are none. No need to move
       // since LeftSide and RightSide are references.
       BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
                           AlwaysFalse>{leftSide_, rightSide_, lessThan_,
                                        compatibleRowAction_, AlwaysFalse{}}
-          .template runJoin<DoOptionalJoin>();
+          // We can safely pass false here, because at this point all UNDEF
+          // values have already been processed.
+          .template runJoin<DoOptionalJoin, false>();
       return;
     }
     while (true) {
@@ -1449,21 +1476,26 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
                                    compatibleRowAction};
-  impl.template runJoin<DoOptionalJoin>();
+  impl.template runJoin<DoOptionalJoin, false>();
 }
 
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
-// a single column join scenario.
+// a single column join scenario. For `MINUS` both `DoOptionalJoinTag` and
+// `DoMinusTag` need to be set to true.
+// TODO<RobinTF> use single parameter to indicate the type of join.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
-          typename DoOptionalJoinTag = std::false_type>
+          typename DoOptionalJoinTag = std::false_type,
+          typename DoMinusTag = std::false_type>
 void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
     const LessThan& lessThan, CompatibleRowAction& compatibleRowAction,
     LeftProjection leftProjection = {}, RightProjection rightProjection = {},
-    DoOptionalJoinTag = {}) {
+    DoOptionalJoinTag = {}, DoMinusTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
+  static constexpr bool DoMinus = DoMinusTag::value;
+  static_assert(!DoMinus || DoOptionalJoin);
 
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
@@ -1471,7 +1503,7 @@ void zipperJoinForBlocksWithPotentialUndef(
   detail::BlockZipperJoinImpl impl{
       leftSide, rightSide, lessThan, compatibleRowAction,
       [](const Id& id) { return id.isUndefined(); }};
-  impl.template runJoin<DoOptionalJoin>();
+  impl.template runJoin<DoOptionalJoin, DoMinus>();
 }
 
 }  // namespace ad_utility

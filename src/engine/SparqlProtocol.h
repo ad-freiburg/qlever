@@ -15,6 +15,8 @@ class SparqlProtocol {
   FRIEND_TEST(SparqlProtocolTest, parseQueryPOST);
   FRIEND_TEST(SparqlProtocolTest, parseUpdatePOST);
   FRIEND_TEST(SparqlProtocolTest, parsePOST);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect);
 
   static constexpr std::string_view contentTypeUrlEncoded =
       "application/x-www-form-urlencoded";
@@ -48,7 +50,7 @@ class SparqlProtocol {
 
   // Parse a Graph Store Protocol request with direct or indirect graph
   // identification.
-  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocol(
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolIndirect(
       const RequestType& request);
   static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolDirect(
       const RequestType& request);
