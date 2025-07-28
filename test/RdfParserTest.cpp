@@ -33,6 +33,13 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+auto ev = []() -> const EncodedValues* {
+  static EncodedValues evManager;
+  return &evManager;
+};
+
+auto re2Parser = []() { return Re2Parser{ev()}; };
+auto ctreParser = []() { return CtreParser{ev()}; };
 }  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
@@ -41,7 +48,7 @@ auto iri = [](std::string_view s) {
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
 template <typename Parser, auto rule, size_t blankNodePrefix = 0>
 std::optional<Parser> parseRule(const std::string& input) {
-  Parser parser;
+  Parser parser{ev()};
   parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
   parser.setInputStream(input);
   if (!std::invoke(rule, parser)) {
@@ -114,7 +121,7 @@ TEST(RdfParserTest, prefixedName) {
                  typename std::decay_t<decltype(parser)>::ParseException);
   };
   {
-    Re2Parser p;
+    Re2Parser p{ev()};
     runCommonTests(p);
     p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
@@ -134,7 +141,7 @@ TEST(RdfParserTest, prefixedName) {
   }
 
   {
-    CtreParser p;
+    CtreParser p{ev()};
     runCommonTests(p);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
@@ -246,13 +253,15 @@ TEST(RdfParserTest, rdfLiteral) {
               lit("\"valuePrefixed\"", "^^<www.doof.org/sometype>"));
     ASSERT_EQ(p.getPosition(), s.size());
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
-  auto ladttc =
-      TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent;
+  auto ladttc = [](auto&&... inp) {
+    return TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
+        AD_FWD(inp)..., *ev());
+  };
   auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
 
   ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
@@ -263,7 +272,7 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
   auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
-  auto vid = result.toValueIdIfNotString();
+  auto vid = result.toValueIdIfNotString(ev());
   ASSERT_TRUE(vid.has_value() &&
               vid.value().getDatatype() == Datatype::GeoPoint);
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
@@ -320,8 +329,8 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  testPropertyListAsObject(Re2Parser{});
-  testPropertyListAsObject(CtreParser{});
+  testPropertyListAsObject(re2Parser());
+  testPropertyListAsObject(ctreParser());
 
   auto testPropertyListAsSubject = [](auto p) {
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>] <p1> <ob1>";
@@ -339,8 +348,8 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  testPropertyListAsSubject(Re2Parser{});
-  testPropertyListAsSubject(CtreParser{});
+  testPropertyListAsSubject(re2Parser());
+  testPropertyListAsSubject(ctreParser());
 }
 
 TEST(RdfParserTest, base) {
@@ -354,8 +363,8 @@ TEST(RdfParserTest, base) {
     parser.setInputStream("@base \"no iriref\" .");
     ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
   };
-  testForGivenParser(Re2Parser{});
-  testForGivenParser(CtreParser{});
+  testForGivenParser(re2Parser());
+  testForGivenParser(ctreParser());
 }
 
 TEST(RdfParserTest, sparqlBase) {
@@ -369,8 +378,8 @@ TEST(RdfParserTest, sparqlBase) {
     parser.setInputStream("BASE \"no iriref\" .");
     ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
   };
-  testForGivenParser(Re2Parser{});
-  testForGivenParser(CtreParser{});
+  testForGivenParser(re2Parser());
+  testForGivenParser(ctreParser());
 }
 
 TEST(RdfParserTest, object) {
@@ -402,8 +411,8 @@ TEST(RdfParserTest, object) {
     exp = TurtleTriple{sub, pred, "_:u_someblank"};
     ASSERT_EQ(p.triples_.back(), exp);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, objectList) {
@@ -426,8 +435,8 @@ TEST(RdfParserTest, objectList) {
     parser.setInputStream("<obj1>, @illFormed");
     ASSERT_THROW(parser.objectList(), TurtleParser<Tokenizer>::ParseException);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, predicateObjectList) {
@@ -443,8 +452,8 @@ TEST(RdfParserTest, predicateObjectList) {
     ASSERT_EQ(parser.triples_, exp);
     ASSERT_EQ(parser.getPosition(), predL.size());
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, numericLiteral) {
@@ -501,7 +510,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer",
           "<a> <b> \"kartoffelsalat\"^^xsd:double",
           "<a> <b> \"123kartoffel\"^^xsd:decimal"};
-      Parser parser;
+      Parser parser{ev()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       for (const auto& input : inputs) {
         assertParsingFails(parser, input);
@@ -519,7 +528,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           99999999999999999999999.0, -9999999999999999999999.0,
           9999999999999999999999.0, 99999999999999999999E4,
           99999999999999999999E4};
-      Parser parser;
+      Parser parser{ev()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       testTripleObjects(parser, inputs, expectedObjects);
     }
@@ -532,7 +541,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"9999E4\"^^xsd:int",
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
-      Parser parser;
+      Parser parser{ev()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
@@ -552,7 +561,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<std::string> nonWorkingInputs{
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
-      Parser parser;
+      Parser parser{ev()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
@@ -586,7 +595,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
       std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
                                          {iri("<e>"), iri("<f>"), 234}};
-      Parser parser;
+      Parser parser{ev()};
       parser.invalidLiteralsAreSkipped() = true;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
@@ -600,7 +609,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{
           {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
           {iri("<e>"), iri("<f>"), 234}};
-      Parser parser;
+      Parser parser{ev()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
       parser.integerOverflowBehavior() =
@@ -609,8 +618,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       ASSERT_EQ(result, expected);
     }
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, DateLiterals) {
@@ -801,8 +810,8 @@ TEST(RdfParserTest, iriref) {
     ASSERT_FALSE(parser.iriref());
   };
   // Run tests for both parsers and reset std::cout.
-  runTestsForParser(Re2Parser{});
-  runTestsForParser(CtreParser{});
+  runTestsForParser(re2Parser());
+  runTestsForParser(ctreParser());
 }
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
@@ -817,9 +826,10 @@ std::vector<TurtleTriple> parseFromFile(
   auto parserChild = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
+                    ev(),
                     bufferSize};
     } else {
-      return Parser{filename, bufferSize};
+      return Parser{filename, ev(), bufferSize};
     }
   }();
   RdfParserBase& parser = parserChild;
@@ -1135,10 +1145,10 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-          return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
-                        40_B};
+          return Parser{
+              {{filename, qlever::Filetype::Turtle, std::nullopt}}, ev(), 40_B};
         } else {
-          return Parser{filename, 40_B, 10ms};
+          return Parser{filename, ev(), 40_B, 10ms};
         }
       }();
       timer.cont();
@@ -1178,7 +1188,7 @@ TEST(RdfParserTest, nQuadParser) {
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {
-      auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
+      auto parser = RdfStringParser<NQuadParser<Tokenizer>>(ev());
       parser.setInputStream(input);
       EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
     };
@@ -1191,8 +1201,8 @@ TEST(RdfParserTest, nQuadParser) {
                                                 // NQuad
     // format.
   };
-  runTestsForParser(NQuadRe2Parser{});
-  runTestsForParser(NQuadCtreParser{});
+  runTestsForParser(NQuadRe2Parser{ev()});
+  runTestsForParser(NQuadCtreParser{ev()});
 }
 
 // _____________________________________________________________________________
@@ -1202,17 +1212,17 @@ TEST(RdfParserTest, noGetlineInStringParser) {
     TurtleTriple t;
     EXPECT_ANY_THROW(parser.getLine(t));
   };
-  runTestsForParser(NQuadRe2Parser{});
-  runTestsForParser(NQuadCtreParser{});
-  runTestsForParser(Re2Parser{});
-  runTestsForParser(CtreParser{});
+  runTestsForParser(NQuadRe2Parser{ev()});
+  runTestsForParser(NQuadCtreParser{ev()});
+  runTestsForParser(re2Parser());
+  runTestsForParser(ctreParser());
 }
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, noGetlineInMultifileParsers) {
   auto runTestsForParser = [](auto t, [[maybe_unused]] bool interface) {
     using Parser = typename decltype(t)::type;
-    Parser parser{};
+    Parser parser{ev()};
     TurtleTriple triple;
     // Also test the dummy parse position member.
     EXPECT_EQ(parser.getParsePosition(), 0u);
@@ -1251,7 +1261,7 @@ TEST(RdfParserTest, multifileParser) {
                        useParallelParser);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
-    Parser p{specs};
+    Parser p{specs, ev()};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));

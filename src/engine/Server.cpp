@@ -474,11 +474,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           std::move(request), send, timeLimit.value(), plannedQuery);
     }
   };
-  auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery =
-        SparqlParser::parseQuery(query.query_, query.datasetClauses_);
+    auto parsedQuery = SparqlParser::parseQuery(
+        &index_.encodedValuesManager(), query.query_, query.datasetClauses_);
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
@@ -491,18 +491,20 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // We need to copy the update string because `visitOperation` below also
     // needs it.
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index().getBlankNodeManager(), update.update_, update.datasetClauses_);
+        index().getBlankNodeManager(), &index().encodedValuesManager(),
+        update.update_, update.datasetClauses_);
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
-  auto visitGraphStore = [&request, &visitOperation, &requireValidAccessToken](
+  auto visitGraphStore = [this, &request, &visitOperation,
+                          &requireValidAccessToken](
                              GraphStoreOperation operation) -> Awaitable<void> {
     ParsedQuery parsedOperation =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, &index().encodedValuesManager());
 
     if (parsedOperation.hasUpdateClause()) {
       requireValidAccessToken("Update from Graph Store Protocol");

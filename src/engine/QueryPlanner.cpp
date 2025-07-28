@@ -580,7 +580,8 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+  static EncodedValues ev;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
                     .parseTypesafe(&SparqlAutomaticParser::filterR)
                     .resultOfParse_;
 

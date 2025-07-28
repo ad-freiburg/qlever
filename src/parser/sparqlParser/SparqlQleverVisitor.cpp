@@ -2584,7 +2584,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
-          tripleComponent.toValueIdIfNotString().value());
+          tripleComponent.toValueIdIfNotString(encodedValuesManager_).value());
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {

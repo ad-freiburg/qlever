@@ -101,7 +101,8 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.
-  static ParsedQuery transformGet(const GraphOrDefault& graph);
+  static ParsedQuery transformGet(const GraphOrDefault& graph,
+                                  const EncodedValues* encodedValuesManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
  public:
@@ -113,13 +114,13 @@ class GraphStoreProtocol {
       transformGraphStoreProtocol(
           ad_utility::url_parser::sparqlOperation::GraphStoreOperation
               operation,
-          const RequestT& rawRequest) {
+          const RequestT& rawRequest, const EncodedValues* evManager) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
     auto method = rawRequest.method();
     if (method == get) {
-      return transformGet(operation.graph_);
+      return transformGet(operation.graph_, evManager);
     } else if (method == put) {
       throwUnsupportedHTTPMethod("PUT");
     } else if (method == delete_) {

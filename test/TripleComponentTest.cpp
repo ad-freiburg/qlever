@@ -19,6 +19,10 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
+constexpr auto ev = []() -> const EncodedValues* {
+  static EncodedValues evM;
+  return &evM;
+};
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
@@ -140,31 +144,31 @@ TEST(TripleComponent, toRdfLiteral) {
 
 TEST(TripleComponent, toValueIdIfNotString) {
   TripleComponent tc{42};
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+  ASSERT_EQ(tc.toValueIdIfNotString(ev()).value(), I(42));
   tc = 131.4;
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
+  ASSERT_EQ(tc.toValueIdIfNotString(ev()).value(), D(131.4));
 
   tc = TripleComponent{GeoPoint(47.9, 7.8)};
-  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+  ASSERT_EQ(tc.toValueIdIfNotString(ev()).value().getDatatype(),
             Datatype::GeoPoint);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(ev()).value().getGeoPoint().getLat(),
                   47.9);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLng(),
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(ev()).value().getGeoPoint().getLng(),
                   7.8);
 
   DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), Id::makeFromDate(date));
+  ASSERT_EQ(tc.toValueIdIfNotString(ev()).value(), Id::makeFromDate(date));
   tc = "<x>";
-  ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
+  ASSERT_FALSE(tc.toValueIdIfNotString(ev()).has_value());
   tc = lit("\"a\"");
-  ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
+  ASSERT_FALSE(tc.toValueIdIfNotString(ev()).has_value());
 
   tc = Variable{"?x"};
   // Note: we cannot simply write `ASSERT_THROW(tc.toValueIdIfNotString(),
   // Exception)` because `toValueIdIfNotString` is marked `nodiscard` and we
   // would get a compiler warning.
-  auto f = [&]() { [[maybe_unused]] auto x = tc.toValueIdIfNotString(); };
+  auto f = [&]() { [[maybe_unused]] auto x = tc.toValueIdIfNotString(ev()); };
   ASSERT_THROW(f(), ad_utility::Exception);
 }
 
@@ -175,20 +179,20 @@ TEST(TripleComponent, toValueId) {
   TripleComponent tc = iri("<x>");
   auto getId = makeGetId(qec->getIndex());
   Id id = getId("<x>");
-  ASSERT_EQ(tc.toValueId(vocab).value(), id);
+  ASSERT_EQ(tc.toValueId(vocab, *ev()).value(), id);
 
   tc = lit("\"alpha\"");
   id = getId("\"alpha\"");
-  EXPECT_EQ(tc.toValueId(vocab).value(), id);
+  EXPECT_EQ(tc.toValueId(vocab, *ev()).value(), id);
 
   tc = iri("<notexisting>");
-  ASSERT_FALSE(tc.toValueId(vocab).has_value());
+  ASSERT_FALSE(tc.toValueId(vocab, *ev()).has_value());
   tc = 42;
 
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+  ASSERT_EQ(tc.toValueIdIfNotString(ev()).value(), I(42));
 
   tc = iri(HAS_PATTERN_PREDICATE);
-  ASSERT_EQ(tc.toValueId(vocab).value(),
+  ASSERT_EQ(tc.toValueId(vocab, *ev()).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 }
 

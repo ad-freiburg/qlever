@@ -16,10 +16,21 @@
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 
+namespace {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
+constexpr auto ev = []() -> const EncodedValues* {
+  static EncodedValues evM;
+  return &evM;
+};
+auto parseQuery(std::string query,
+                const std::vector<DatasetClause>& datasets = {}) {
+  return SparqlParser::parseQuery(ev(), std::move(query), datasets);
+}
+
+}  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
                   {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
@@ -81,9 +92,9 @@ TEST(ServerTest, determineMediaType) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
-  auto askQuery = SparqlParser::parseQuery("ASK {}");
-  auto selectQuery = SparqlParser::parseQuery("SELECT * {}");
-  auto constructQuery = SparqlParser::parseQuery("CONSTRUCT WHERE {}");
+  auto askQuery = parseQuery("ASK {}");
+  auto selectQuery = parseQuery("SELECT * {}");
+  auto constructQuery = parseQuery("CONSTRUCT WHERE {}");
   using enum ad_utility::MediaType;
 
   auto choose = &Server::chooseBestFittingMediaType;
@@ -213,7 +224,7 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
-  auto pqs = SparqlParser::parseUpdate(&bnm, update);
+  auto pqs = SparqlParser::parseUpdate(&bnm, ev(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
@@ -256,7 +267,7 @@ TEST(ServerTest, createResponseMetadata) {
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
-    ParsedQuery parsed = SparqlParser::parseQuery(std::move(operation));
+    ParsedQuery parsed = parseQuery(std::move(operation));
     QueryExecutionTree qet =
         QueryPlanner{ad_utility::testing::getQec(),
                      std::make_shared<ad_utility::CancellationHandle<>>()}

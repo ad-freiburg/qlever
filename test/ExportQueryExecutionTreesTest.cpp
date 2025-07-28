@@ -27,6 +27,12 @@ using ::testing::Eq;
 using ::testing::HasSubstr;
 
 namespace {
+auto parseQuery(std::string query,
+                const std::vector<DatasetClause>& datasets = {}) {
+  static EncodedValues evM;
+  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
+}
+
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
 std::string runQueryStreamableResult(
@@ -42,7 +48,7 @@ std::string runQueryStreamableResult(
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
@@ -70,7 +76,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -1427,8 +1433,8 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   auto* qec = ad_utility::testing::getQec(
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(
-      GetParam() == turtle ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
+  auto pq = parseQuery(GetParam() == turtle
+                           ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
                            : "SELECT * WHERE { ?x ?y ?z }");
   auto qet = qp.createExecutionTree(pq);
 
@@ -1659,7 +1665,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       "<s> <p1> 40,41,42,43,44,45,46,47,48,49"
       " ; <p2> 50,51,52,53,54,55,56,57,58,59");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(std::string{query});
+  auto pq = parseQuery(std::string{query});
   auto qet = qp.createExecutionTree(pq);
 
   ad_utility::Timer timer{ad_utility::Timer::Started};

@@ -69,7 +69,8 @@ std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
 }
 
 // ____________________________________________________________________________
-ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
+ParsedQuery GraphStoreProtocol::transformGet(
+    const GraphOrDefault& graph, const EncodedValues* encodedValuesManager) {
   // Construct the parsed query from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
   std::string query;
@@ -80,5 +81,5 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   } else {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
-  return SparqlParser::parseQuery(query);
+  return SparqlParser::parseQuery(encodedValuesManager, query);
 }

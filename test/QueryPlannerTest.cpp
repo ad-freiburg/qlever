@@ -33,13 +33,18 @@ QueryPlanner makeQueryPlanner() {
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
+auto parseQuery(std::string query) {
+  static EncodedValues evM;
+  return SparqlParser::parseQuery(&evM, std::move(query));
+}
+
 TEST(QueryPlanner, createTripleGraph) {
   using TripleGraph = QueryPlanner::TripleGraph;
   using Node = QueryPlanner::TripleGraph::Node;
   using std::vector;
 
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
+    ParsedQuery pq = parseQuery(
         "PREFIX : <http://rdf.myprefix.com/>\n"
         "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
         "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
@@ -74,8 +79,8 @@ TEST(QueryPlanner, createTripleGraph) {
   }
 
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    ParsedQuery pq =
+        parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     TripleGraph expected =
@@ -96,7 +101,7 @@ TEST(QueryPlanner, createTripleGraph) {
   }
 
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
         "?x <Author> <Anthony_Newman_(Author)> }");
     QueryPlanner qp = makeQueryPlanner();
@@ -120,8 +125,8 @@ TEST(QueryPlanner, createTripleGraph) {
 
 TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    ParsedQuery pq =
+        parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
@@ -176,8 +181,8 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
 
 TEST(QueryPlanner, testBFSLeaveOut) {
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    ParsedQuery pq =
+        parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(3u, tg._adjLists.size());
@@ -196,8 +201,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     ASSERT_EQ(1u, out.size());
   }
   {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
+    ParsedQuery pq =
+        parseQuery("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ad_utility::HashSet<size_t> lo;
@@ -485,7 +490,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 }
 
 TEST(QueryExecutionTreeTest, testCyclicQuery) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  ParsedQuery pq = parseQuery(
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
   QueryPlanner qp = makeQueryPlanner();
@@ -596,7 +601,7 @@ qet-width: 3
 }
 
 TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
       "SELECT DISTINCT ?1 ?0 WHERE {\n"
       "fb:m.0fkvn fb:government.government_office_category.officeholders "
@@ -3176,8 +3181,7 @@ TEST(QueryPlanner, TextIndexScanForWord) {
       qec);
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "SELECT * WHERE { ?text ql:contains-word <test> . }"),
+      parseQuery("SELECT * WHERE { ?text ql:contains-word <test> . }"),
       ::testing::ContainsRegex(
           "ql:contains-word has to be followed by a string in quotes"));
 }
@@ -3223,8 +3227,8 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
                         wordScan(Var{"?text"}, "picking*")),
       qec);
 
-  ParsedQuery pq = SparqlParser::parseQuery(
-      "SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
+  ParsedQuery pq =
+      parseQuery("SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
   QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
@@ -3237,164 +3241,152 @@ TEST(QueryPlanner, TextSearchService) {
   // Check query errors
   // No BasicGraphPattern in SERVICE
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?fail ."
-          "?fail qlts:contains-word \"fail\" ."
-          "}"
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?fail ."
+                 "?fail qlts:contains-word \"fail\" ."
+                 "}"
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "Unsupported element in textSearchQuery. textSearchQuery may only "
           "consist of triples for configuration"));
 
   // Predicate contains
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains \"fail\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains \"fail\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "The predicate <contains> needs a variable as subject and one as "
           "object. The subject given was: ?t. The object given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t1 qlts:contains ?conf ."
-          "?t2 qlts:contains ?conf ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t1 qlts:contains ?conf ."
+                 "?t2 qlts:contains ?conf ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr("Each text search config should only be linked to a "
                            "single text variable. The second text variable "
                            "given was: ?t2. The config variable was: ?conf"));
 
   // Predicate word
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "\"fail\" qlts:word \"test\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "\"fail\" qlts:word \"test\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr("The predicate <word> needs a variable as "
                            "subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"test\" ."
-          "?conf qlts:word \"fail\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"test\" ."
+                 "?conf qlts:word \"fail\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "Each text search config should have exactly one occurrence of "
           "either <word> or <entity>."));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word ?word ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word ?word ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr("The predicate <word> needs a literal as "
                            "object. The object given was: ?word"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr("The predicate <word> shouldn't have an "
                            "empty literal as object."));
 
   // Predicate entity
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "\"fail\" qlts:entity ?e ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "\"fail\" qlts:entity ?e ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr("The predicate <entity> needs a variable "
                            "as subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:entity ?e ."
-          "?conf qlts:word \"fail\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:entity ?e ."
+                 "?conf qlts:word \"fail\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "Each text search config should have exactly one occurrence of "
           "either <word> or <entity>."));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:entity 13 ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:entity 13 ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "The predicate <entity> needs a variable as subject and an "
           "IRI, literal or variable as object. The object given was: 13"));
 
   // Predicate prefix-match
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"test\" ."
-          "?conf qlts:prefix-match \"fail\" ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"test\" ."
+                 "?conf qlts:prefix-match \"fail\" ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "The predicate <prefix-match> needs a variable as subject and one "
           "as object. The subject given was: ?conf. The object given was: "
           "\"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"test\" ."
-          "?conf qlts:prefix-match ?match1 ."
-          "?conf qlts:prefix-match ?match2 ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"test\" ."
+                 "?conf qlts:prefix-match ?match1 ."
+                 "?conf qlts:prefix-match ?match2 ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "Each text search config should only contain at most one "
           "<prefix-match>. The second match variable given was: ?match2. The "
@@ -3402,31 +3394,29 @@ TEST(QueryPlanner, TextSearchService) {
 
   // Predicate score
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"test\" ."
-          "?conf qlts:score 100 ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"test\" ."
+                 "?conf qlts:score 100 ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "The predicate <score> needs a variable as subject and one "
           "as object. The subject given was: ?conf. The object given was: "
           "100"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-          "SELECT * WHERE {"
-          "SERVICE qlts: {"
-          "?t qlts:contains ?conf ."
-          "?conf qlts:word \"test\" ."
-          "?conf qlts:score ?score1 ."
-          "?conf qlts:score ?score2 ."
-          "}"
-          "}"),
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 "?t qlts:contains ?conf ."
+                 "?conf qlts:word \"test\" ."
+                 "?conf qlts:score ?score1 ."
+                 "?conf qlts:score ?score2 ."
+                 "}"
+                 "}"),
       ::testing::HasSubstr(
           "Each text search config should only contain at most one "
           "<score>. The second match variable given was: ?score2. The "
@@ -3434,7 +3424,7 @@ TEST(QueryPlanner, TextSearchService) {
 
   // toConfigs errors
   // No word or entity
-  ParsedQuery pq = SparqlParser::parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
@@ -3449,7 +3439,7 @@ TEST(QueryPlanner, TextSearchService) {
           "either <word> or <entity>."));
 
   // No text variable defined
-  pq = SparqlParser::parseQuery(
+  pq = parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
@@ -3484,7 +3474,7 @@ TEST(QueryPlanner, TextSearchService) {
           "The config variable was: ?t"));
 
   // <prefix-match> in a word search on a non prefix
-  pq = SparqlParser::parseQuery(
+  pq = parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
@@ -3502,7 +3492,7 @@ TEST(QueryPlanner, TextSearchService) {
           "?conf. The word was: \"test\". The text variable bound to was: ?t"));
 
   // Entity search on a text variable that has no word-search
-  pq = SparqlParser::parseQuery(
+  pq = parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
@@ -3846,7 +3836,7 @@ TEST(QueryPlanner, TooManyTriples) {
     query = absl::StrCat(query, " ?x <p> ?y .");
   }
   query = absl::StrCat(query, "}");
-  ParsedQuery pq = SparqlParser::parseQuery(query);
+  ParsedQuery pq = parseQuery(query);
   QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
@@ -3892,7 +3882,7 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
       std::make_shared<ad_utility::CancellationHandle<>>();
 
   QueryPlanner qp{ad_utility::testing::getQec(), cancellationHandle};
-  auto pq = SparqlParser::parseQuery("SELECT * WHERE { ?x ?y ?z }");
+  auto pq = parseQuery("SELECT * WHERE { ?x ?y ?z }");
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
 
@@ -4190,7 +4180,7 @@ TEST(QueryPlanner, FilterOnNeutralElement) {
 TEST(QueryPlanner, ContainsWordInGraphClause) {
   {
     auto qp = makeQueryPlanner();
-    auto query = SparqlParser::parseQuery(
+    auto query = parseQuery(
         "SELECT * { GRAPH ?g { ?s "
         "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
         "\"Test\" } }");
@@ -4203,7 +4193,7 @@ TEST(QueryPlanner, ContainsWordInGraphClause) {
   }
   {
     auto qp = makeQueryPlanner();
-    auto query = SparqlParser::parseQuery(
+    auto query = parseQuery(
         "SELECT * { GRAPH <my-iri> { ?s "
         "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
         "\"Test\" } }");
@@ -4216,7 +4206,7 @@ TEST(QueryPlanner, ContainsWordInGraphClause) {
   }
   {
     auto qp = makeQueryPlanner();
-    auto query = SparqlParser::parseQuery(
+    auto query = parseQuery(
         "SELECT * FROM <my-iri> WHERE { ?s "
         "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
         "\"Test\" }");
@@ -4327,7 +4317,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
   auto qp = makeQueryPlanner();
   {
-    auto query = SparqlParser::parseQuery(
+    auto query = parseQuery(
         "SELECT * WHERE { ?x <P31> ?o ."
         "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }}");
     auto plans = qp.createExecutionTrees(query);
@@ -4336,7 +4326,7 @@ TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
         std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
   }
   {
-    auto query = SparqlParser::parseQuery(
+    auto query = parseQuery(
         "SELECT * WHERE { ?x <P31> ?o . "
         "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
         "UNION "
@@ -4351,7 +4341,7 @@ TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, ensurePlanningIsSkippedWhenTransitivePathIsAlreadyBound) {
   auto qp = makeQueryPlanner();
-  auto query = SparqlParser::parseQuery(
+  auto query = parseQuery(
       "SELECT * { { VALUES ?x { 1 } } UNION { ?s <P279>+ 1 } . ?s <P31> ?o }");
   auto plans = qp.createExecutionTrees(query);
   ASSERT_EQ(plans.size(), 1);
@@ -4499,8 +4489,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
-  auto query = SparqlParser::parseQuery(
-      "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
+  auto query =
+      parseQuery("SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
   auto qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       qp.createExecutionTree(query),
