@@ -10,6 +10,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 
 class NestedLoopJoin {
@@ -32,9 +33,9 @@ class NestedLoopJoin {
 
  private:
   template <int JOIN_COLUMNS>
-  static void matchLeft(std::vector<char>& matchTracker,
-                        IdTableView<JOIN_COLUMNS> leftTable,
-                        IdTableView<JOIN_COLUMNS> rightTable) {
+  AD_ALWAYS_INLINE static void matchLeft(std::vector<char>& matchTracker,
+                                         IdTableView<JOIN_COLUMNS> leftTable,
+                                         IdTableView<JOIN_COLUMNS> rightTable) {
     AD_CORRECTNESS_CHECK(matchTracker.size() == leftTable.size());
     auto leftColumns = leftTable.getColumns();
     for (const auto& rightRow : rightTable) {
