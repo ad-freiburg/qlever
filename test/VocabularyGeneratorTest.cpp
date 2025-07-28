@@ -89,23 +89,23 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},
-        {"\"bla\"", true, 2},
-        {"\"gorilla\"", false, 3},
+        {"\"ape\"", false, true, 0},
+        {"\"bla\"", true, true, 2},
+        {"\"gorilla\"", false, true, 3},
         {"\"LINESTRING(1 2, 3 4)\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 0},
-        {"\"monkey\"", false, 4},
-        {"_:blank", false, 0},
-        {"_:blunk", false, 1}};
+         true, false, 0},
+        {"\"monkey\"", false, true, 4},
+        {"_:blank", false, false, 0},
+        {"_:blunk", false, false, 1}};
     std::vector<TripleComponentWithIndex> words1{
-        {"\"bear\"", false, 1},
-        {"\"monkey\"", true, 4},
+        {"\"bear\"", false, true, 1},
+        {"\"monkey\"", true, true, 4},
         {"\"POLYGON((1 2, 3 4))\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 1},
-        {"\"zebra\"", false, 5},
-        {"_:blunk", false, 1},
+         true, false, 1},
+        {"\"zebra\"", false, true, 5},
+        {"_:blunk", false, false, 1},
     };
 
     // Note that the word "monkey" appears in both vocabularies, buth with
@@ -189,9 +189,10 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   std::vector<std::pair<std::string, bool>> geoMergeResult;
   {
     // Simulate `Vocabulary::WordWriter::operation()` for testing purposes
-    auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
-                                        const auto& word,
-                                        bool isExternal) -> uint64_t {
+    auto internalVocabularyAction =
+        [&mergeResult, &geoMergeResult](
+            const auto& word, bool isExternal,
+            [[maybe_unused]] bool inTextIndexDummy) -> uint64_t {
       if (word.starts_with("\"") &&
           word.ends_with(
               "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {

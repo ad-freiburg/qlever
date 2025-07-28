@@ -29,6 +29,7 @@
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
+#include "index/TripleInTextIndexFilter.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -119,8 +120,13 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
+  // A list of all Ids of all Literals that have been added to the text index.
+  // (In the textIndexBuilder this is used to add them)
+  std::vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
+  TripleInTextIndexFilter tripleInTextIndexFilter_;
+  bool addWordsFromAllLiterals_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -412,9 +418,16 @@ class IndexImpl {
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;
 
+  // Returns the Text for a given TextRecordIndex. If the index is in the docsDB
+  // return the corresponding entry. If the index is bigger than the docsDB
+  // return the matching literal.
   std::string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
-      return "";
+      size_t index = cid.get() - docsDB_._size;
+      if (index >= textIndexIndices_.size()) {
+        return "";
+      }
+      return vocab_[VocabIndex::make(textIndexIndices_[index])];
     }
     return docsDB_.getTextExcerpt(cid);
   }
@@ -424,6 +437,10 @@ class IndexImpl {
   };
 
   void setKbName(const std::string& name);
+
+  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
+
+  void setAddWordsFromAllLiterals(bool value);
 
   void setTextName(const std::string& name);
 
