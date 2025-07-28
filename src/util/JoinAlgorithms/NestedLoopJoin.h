@@ -42,12 +42,10 @@ class NestedLoopJoin {
       size_t leftSize = leftTable.size();
       for (const auto& [rightId, leftCol] :
            ::ranges::zip_view(rightRow, leftColumns)) {
-        AD_CORRECTNESS_CHECK(!rightId.isUndefined());
-        ql::ranges::subrange rangeToCheck{
-            leftCol.begin() + leftOffset,
-            leftCol.begin() + leftOffset + leftSize};
-        auto subrange =
-            ql::ranges::equal_range(rangeToCheck, rightId, std::less{});
+        AD_EXPENSIVE_CHECK(!rightId.isUndefined());
+        auto currentStart = leftCol.begin() + leftOffset;
+        auto subrange = ql::ranges::equal_range(
+            currentStart, currentStart + leftSize, rightId, std::less{});
         leftSize = ql::ranges::size(subrange);
         if (subrange.empty()) {
           break;
