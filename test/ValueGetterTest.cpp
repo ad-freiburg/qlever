@@ -166,7 +166,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"LINESTRING(2 2, 4 "
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, {0}});  // TODO
+      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, {314635}});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"POLYGON(2 4, 4 4, 4 "
       "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
