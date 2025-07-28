@@ -60,19 +60,18 @@ class NestedLoopJoin {
 
  public:
   std::vector<char> computeTracker() {
-    return ad_utility::callFixedSize(
-        static_cast<int>(joinColumns_.size()), [this]<int JOIN_COLUMNS>() {
-          // Should conceptually be bool, but doesn't allow the compiler to use
-          // memset in `matchLeft`.
-          std::vector<char> matchTracker(leftTable_.size(), 0);
-          std::array<ColumnIndex, JOIN_COLUMNS> leftColumns;
-          std::array<ColumnIndex, JOIN_COLUMNS> rightColumns;
-          size_t idx = 0;
-          for (const auto& [leftCol, rightCol] : joinColumns_) {
-            leftColumns[idx] = leftCol;
-            rightColumns[idx] = rightCol;
-            ++idx;
-          }
+    // Should conceptually be bool, but doesn't allow the compiler to use
+    // memset in `matchLeft`.
+    std::vector<char> matchTracker(leftTable_.size(), 0);
+    std::vector<ColumnIndex> leftColumns;
+    std::vector<ColumnIndex> rightColumns;
+    for (const auto& [leftCol, rightCol] : joinColumns_) {
+      leftColumns.push_back(leftCol);
+      rightColumns.push_back(rightCol);
+    }
+    ad_utility::callFixedSize(
+        static_cast<int>(joinColumns_.size()),
+        [this, &matchTracker, &leftColumns, &rightColumns]<int JOIN_COLUMNS>() {
           IdTableView<JOIN_COLUMNS> leftTable =
               leftTable_.asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
@@ -89,8 +88,8 @@ class NestedLoopJoin {
               matchHelper(idTable);
             }
           }
-          return matchTracker;
         });
+    return matchTracker;
   }
 };
 
