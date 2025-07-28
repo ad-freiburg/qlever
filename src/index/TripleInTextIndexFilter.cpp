@@ -12,7 +12,7 @@ bool TripleInTextIndexFilter::operator()(const TripleComponent& p,
   if (!o.isLiteral() || !p.isIri()) {
     return false;
   }
-  RE2 matcher = RE2{regex_, RE2::Quiet};
+  auto matcher = RE2{regex_, RE2::Quiet};
   return (isWhitelist_ ==
           RE2::PartialMatch(p.getIri().toStringRepresentation(), matcher));
 }

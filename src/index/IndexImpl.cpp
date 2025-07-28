@@ -1276,7 +1276,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (addWordsFromAllLiterals_) {
-      if (vocab_.stringIsLiteral(iriOrLiteral.toString())) {
+      if (Index::Vocab::stringIsLiteral(iriOrLiteral.toString())) {
         component.inTextIndex_ = true;
       }
     } else {
