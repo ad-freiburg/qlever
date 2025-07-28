@@ -624,7 +624,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
-    TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+    TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
@@ -801,8 +801,10 @@ auto IndexImpl::convertPartialToGlobalIds(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                                     const string& fileName2, T&& sortedTriples,
+IndexImpl::createPermutationPairImpl(size_t numColumns,
+                                     const std::string& fileName1,
+                                     const std::string& fileName2,
+                                     T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
@@ -899,7 +901,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
+void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
                                       bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
@@ -1024,7 +1026,7 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setKbName(const string& name) {
+void IndexImpl::setKbName(const std::string& name) {
   pos_.setKbName(name);
   pso_.setKbName(name);
   sop_.setKbName(name);
@@ -1292,8 +1294,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 
 // ___________________________________________________________________________
 void IndexImpl::readIndexBuilderSettingsFromFile() {
-  json j;  // if we have no settings, we still have to initialize some default
-           // values
+  nlohmann::json j;  // if we have no settings, we still have to initialize some
+                     // default values
   if (!settingsFileName_.empty()) {
     auto f = ad_utility::makeIfstream(settingsFileName_);
     f >> j;
@@ -1439,9 +1441,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
-  string partialFilename =
+  std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  string partialCompressionFilename = absl::StrCat(
+  std::string partialCompressionFilename = absl::StrCat(
       onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
@@ -1624,7 +1626,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
@@ -1639,7 +1641,7 @@ vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
@@ -1669,9 +1671,11 @@ IdTable IndexImpl::scan(
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
-  return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, locatedTriplesSnapshot,
-                                limitOffset);
+  const auto& perm = getPermutation(p);
+  return perm.scan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
+      limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -1679,12 +1683,14 @@ size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
+  const auto& perm = getPermutation(permutation);
+  return perm.getResultSizeOfScan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________
-void IndexImpl::deleteTemporaryFile(const string& path) {
+void IndexImpl::deleteTemporaryFile(const std::string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }

@@ -23,7 +23,7 @@ class TripleInTextIndexFilter {
    *                  the text index. If set to falls the matching regex cases
    *                  will not be added but everything else.
    */
-  TripleInTextIndexFilter(string regex, bool whitelist = true)
+  TripleInTextIndexFilter(std::string regex, bool whitelist = true)
       : regex_{std::move(regex)}, isWhitelist_{whitelist} {
     if (const RE2 reg{regex_, RE2::Quiet}; !reg.ok()) {
       throw std::runtime_error{absl::StrCat(
@@ -41,7 +41,7 @@ class TripleInTextIndexFilter {
 
  private:
   // The regex string used to do the comparison
-  string regex_;
+  std::string regex_;
   // Determine whether the regex should act as whitelist or blacklist
   bool isWhitelist_;
 };

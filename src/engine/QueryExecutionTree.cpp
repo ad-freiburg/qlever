@@ -155,7 +155,7 @@ void QueryExecutionTree::readFromCache() {
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
-    const vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns) {
   const auto& sortedOn = qet->resultSortedOn();
   ql::span relevantSortedCols{sortedOn.begin(),
                               std::min(sortedOn.size(), sortColumns.size())};
@@ -169,7 +169,7 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns) {
   const auto& rootOperation = qet->getRootOperation();
   if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
@@ -209,7 +209,7 @@ std::pair<std::shared_ptr<QueryExecutionTree>,
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
-    const vector<std::array<ColumnIndex, 2>>& sortColumns) {
+    const std::vector<std::array<ColumnIndex, 2>>& sortColumns) {
   std::vector<ColumnIndex> sortColumnsA, sortColumnsB;
   for (auto [sortColumnA, sortColumnB] : sortColumns) {
     sortColumnsA.push_back(sortColumnA);

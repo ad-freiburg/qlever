@@ -9,7 +9,11 @@
 #include <optional>
 #include <vector>
 
+#include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "index/CompressedRelation.h"
+#include "index/Permutation.h"
 #include "util/Generators.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"

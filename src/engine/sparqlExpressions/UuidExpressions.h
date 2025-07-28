@@ -63,7 +63,7 @@ class UuidExpressionImpl : public SparqlExpression {
     return result;
   }
 
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return FuncKey(randId_);
   }

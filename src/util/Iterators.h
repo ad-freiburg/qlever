@@ -405,6 +405,8 @@ class InputRangeTypeErased {
   std::unique_ptr<InputRangeFromGet<ValueType>> impl_;
 
  public:
+  // Add value_type definition to make compatible with range-based functions
+  using value_type = ValueType;
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
@@ -412,6 +414,13 @@ class InputRangeTypeErased {
           InputRangeFromGet<ValueType>,
           Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
+
+  // Constructor for ranges that are not movable
+  CPP_template(typename Range)(
+      requires std::is_base_of_v<
+          InputRangeFromGet<ValueType>,
+          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+      : impl_{std::move(range)} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
@@ -433,6 +442,10 @@ class InputRangeTypeErased {
 
 template <typename Range>
 InputRangeTypeErased(Range)
+    -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
+
+template <typename Range>
+InputRangeTypeErased(std::unique_ptr<Range>)
     -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
 
 // A view that takes an iterator and a sentinel (similar to

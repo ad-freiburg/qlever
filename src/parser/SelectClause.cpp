@@ -19,7 +19,7 @@ void ClauseBase::addVisibleVariable(const Variable& variable) {
   }
 }
 
-const vector<Variable>& ClauseBase::getVisibleVariables() const {
+const std::vector<Variable>& ClauseBase::getVisibleVariables() const {
   return visibleVariables_;
 }
 

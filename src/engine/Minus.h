@@ -16,7 +16,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
@@ -25,19 +25,15 @@ class Minus : public Operation {
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right);
 
-  // Uninitialized Object for testing the computeMinus method
-  struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag) {}
-
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -46,10 +42,22 @@ class Minus : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  // Create a variant of functions that find undefined values in a range. In
+  // case the selected operation (via `left`) might conceptually contain
+  // undefined values all values are checked for undef values. If undef values
+  // are found an instance of `ad_utility::FindSmallerUndefRanges` will be
+  // returned, otherwise the function will be replaced with `ad_utility::Noop`,
+  // each wrapped in a `std::variant` respectively.
+  // `auto` is used instead of
+  // `std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>` to
+  // avoid including expensive headers that are only relevant for the
+  // implementation of this function.
+  auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
+
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
@@ -62,24 +70,21 @@ class Minus : public Operation {
    *        that should have resultWidth entries).
    *        This method is made public here for unit testing purposes.
    **/
-  template <int A_WIDTH, int B_WIDTH>
-  void computeMinus(const IdTable& a, const IdTable& b,
-                    const vector<std::array<ColumnIndex, 2>>& matchedColumns,
-                    IdTable* result) const;
+  IdTable computeMinus(
+      const IdTable& a, const IdTable& b,
+      const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  /**
-   * @brief Compares the two rows under the assumption that the first
-   * entries of the rows are equal.
-   */
-  template <int A_WIDTH, int B_WIDTH>
-  static RowComparison isRowEqSkipFirst(
-      const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-      size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
+  // Lazily compute the minus join of two results when at least one of the
+  // results is computed lazily. This currently only works if we have just a
+  // single join column, otherwise this function will throw.
+  Result lazyMinusJoin(std::shared_ptr<const Result> left,
+                       std::shared_ptr<const Result> right,
+                       bool requestLaziness);
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

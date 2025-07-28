@@ -9,8 +9,8 @@
 #include <variant>
 
 #include "backports/concepts.h"
-#include "parser/Iri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Iri.h"
 
 namespace ad_utility::triple_component {
 // A class to hold literal values.
