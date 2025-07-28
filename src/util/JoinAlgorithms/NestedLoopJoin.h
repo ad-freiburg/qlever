@@ -32,15 +32,16 @@ class NestedLoopJoin {
 
  private:
   template <int JOIN_COLUMNS>
-  void matchLeft(std::vector<char>& matchTracker,
-                 IdTableView<JOIN_COLUMNS> leftTable,
-                 IdTableView<JOIN_COLUMNS> rightTable) {
+  static void matchLeft(std::vector<char>& matchTracker,
+                        IdTableView<JOIN_COLUMNS> leftTable,
+                        IdTableView<JOIN_COLUMNS> rightTable) {
     AD_CORRECTNESS_CHECK(matchTracker.size() == leftTable.size());
+    auto leftColumns = leftTable.getColumns();
     for (const auto& rightRow : rightTable) {
       size_t leftOffset = 0;
       size_t leftSize = leftTable.size();
       for (const auto& [rightId, leftCol] :
-           ::ranges::zip_view(rightRow, leftTable.getColumns())) {
+           ::ranges::zip_view(rightRow, leftColumns)) {
         AD_CORRECTNESS_CHECK(!rightId.isUndefined());
         ql::ranges::subrange rangeToCheck{
             leftCol.begin() + leftOffset,
@@ -75,11 +76,11 @@ class NestedLoopJoin {
           IdTableView<JOIN_COLUMNS> leftTable =
               leftTable_.asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [this, &matchTracker, &leftTable,
+          auto matchHelper = [&matchTracker, &leftTable,
                               &rightColumns](const IdTable& idTable) {
-            this->matchLeft(matchTracker, leftTable,
-                            idTable.asColumnSubsetView(rightColumns)
-                                .template asStaticView<JOIN_COLUMNS>());
+            matchLeft(matchTracker, leftTable,
+                      idTable.asColumnSubsetView(rightColumns)
+                          .template asStaticView<JOIN_COLUMNS>());
           };
           if (rightResult_->isFullyMaterialized()) {
             matchHelper(rightResult_->idTable());
