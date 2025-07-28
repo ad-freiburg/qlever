@@ -32,10 +32,10 @@ class NestedLoopJoin {
 
  private:
   template <int JOIN_COLUMNS>
-  void matchLeft(std::vector<size_t>& matchCounter,
+  void matchLeft(std::vector<char>& matchTracker,
                  IdTableView<JOIN_COLUMNS> leftTable,
                  IdTableView<JOIN_COLUMNS> rightTable) {
-    AD_CORRECTNESS_CHECK(matchCounter.size() == leftTable.size());
+    AD_CORRECTNESS_CHECK(matchTracker.size() == leftTable.size());
     for (const auto& rightRow : rightTable) {
       size_t leftOffset = 0;
       size_t leftSize = leftTable.size();
@@ -53,17 +53,18 @@ class NestedLoopJoin {
         }
         leftOffset = ql::ranges::distance(leftCol.begin(), subrange.begin());
       }
-      for (size_t i = 0; i < leftSize; ++i) {
-        ++matchCounter[leftOffset + i];
-      }
+      ql::ranges::fill(matchTracker.begin() + leftOffset,
+                       matchTracker.begin() + leftOffset + leftSize, 1);
     }
   }
 
  public:
-  std::vector<size_t> computeCounter() {
+  std::vector<char> computeTracker() {
     return ad_utility::callFixedSize(
         static_cast<int>(joinColumns_.size()), [this]<int JOIN_COLUMNS>() {
-          std::vector<size_t> matchCounter(leftTable_.size(), 0);
+          // Should conceptually be bool, but doesn't allow the compiler to use
+          // memset in `matchLeft`.
+          std::vector<char> matchTracker(leftTable_.size(), 0);
           std::array<ColumnIndex, JOIN_COLUMNS> leftColumns;
           std::array<ColumnIndex, JOIN_COLUMNS> rightColumns;
           size_t idx = 0;
@@ -75,9 +76,9 @@ class NestedLoopJoin {
           IdTableView<JOIN_COLUMNS> leftTable =
               leftTable_.asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [this, &matchCounter, &leftTable,
+          auto matchHelper = [this, &matchTracker, &leftTable,
                               &rightColumns](const IdTable& idTable) {
-            this->matchLeft(matchCounter, leftTable,
+            this->matchLeft(matchTracker, leftTable,
                             idTable.asColumnSubsetView(rightColumns)
                                 .template asStaticView<JOIN_COLUMNS>());
           };
@@ -88,7 +89,7 @@ class NestedLoopJoin {
               matchHelper(idTable);
             }
           }
-          return matchCounter;
+          return matchTracker;
         });
   }
 };
