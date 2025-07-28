@@ -11,13 +11,18 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
+#include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
 using namespace ad_utility::testing;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = VocabId;
+constexpr auto U = Id::makeUndefined();
+constexpr auto T = Id::makeFromBool(true);
+constexpr auto F = Id::makeFromBool(false);
+constexpr auto I = Id::makeFromInt;
 
 // Helper function that computes an `ExistsJoin` of the given `left` and
 // `right` and checks that the result columns is equal to `expectedAsBool`.
@@ -107,6 +112,65 @@ void testExists(
   testExistsFromIdTable(std::move(left), std::move(right),
                         std::move(expectedAsBool), numJoinColumns,
                         std::move(loc));
+}
+// Helper function to test exists join implementations.
+void testExistsJoin(std::vector<IdTable> leftTables,
+                    std::vector<IdTable> rightTables,
+                    const std::vector<IdTable>& expectedResult,
+                    bool singleVar = false,
+                    ad_utility::source_location location =
+                        ad_utility::source_location::current()) {
+  auto g = generateLocationTrace(location);
+  auto qec = ad_utility::testing::getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(leftTables),
+      singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
+                : std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                       Variable{"?y"}},
+      false, std::vector<ColumnIndex>{0});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(rightTables),
+      singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
+                : std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                       Variable{"?z"}},
+      false, std::vector<ColumnIndex>{0});
+  ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = existsJoin.computeResultOnlyForTesting(true);
+
+    ASSERT_FALSE(result.isFullyMaterialized());
+
+    std::vector<IdTable> actualResult;
+
+    for (auto& [idTable, _] : result.idTables()) {
+      actualResult.push_back(std::move(idTable));
+    }
+
+    // Provide nicer error messages
+    EXPECT_EQ(actualResult.size(), expectedResult.size());
+    EXPECT_EQ(actualResult, expectedResult);
+  }
+
+  {
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = existsJoin.computeResultOnlyForTesting(false);
+
+    ASSERT_TRUE(result.isFullyMaterialized());
+
+    IdTable expected{existsJoin.getResultWidth(), qec->getAllocator()};
+
+    for (const IdTable& idTable : expectedResult) {
+      ASSERT_EQ(idTable.numColumns(), existsJoin.getResultWidth());
+      expected.insertAtEnd(idTable);
+    }
+
+    EXPECT_EQ(result.idTable(), expected);
+  }
 }
 
 }  // namespace
@@ -219,6 +283,292 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
             makeIdTableFromVector({{V(0), V(1), Id::makeFromBool(false)}}));
 
   EXPECT_EQ(++it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoin) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), T}, {V(1), V(11), F}}));
+  expected.push_back(
+      makeIdTableFromVector({{V(2), V(12), T}, {V(3), V(13), T}}));
+  expected.push_back(
+      makeIdTableFromVector({{V(4), V(14), F}, {V(5), V(15), F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
+  leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
+  leftTables.push_back(makeIdTableFromVector({{4, 14}, {5, 15}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{V(2), V(22)}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 23}}));
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithUndefRight) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), T}, {V(1), V(11), T}}));
+  expected.push_back(
+      makeIdTableFromVector({{V(2), V(12), T}, {V(3), V(13), T}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
+  leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}));
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithUndefLeft) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector(
+      {{U, V(10), T}, {V(1), V(11), T}, {V(2), V(12), F}, {V(3), V(13), T}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector(
+      {{U, V(10)}, {V(1), V(11)}, {V(2), V(12)}, {V(3), V(13)}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(
+      makeIdTableFromVector({{V(1), V(101)}, {V(3), V(303)}}));
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithUndefLeftInSeparateTable) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), T}}));
+  expected.push_back(makeIdTableFromVector(
+      {{V(1), V(11), T}, {V(2), V(12), F}, {V(3), V(13), T}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 101}, {3, 303}}));
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinFastForwardsCorrectlyOnEmptyRight) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), F}}));
+  expected.push_back(makeIdTableFromVector(
+      {{V(1), V(11), F}, {V(2), V(12), F}, {V(3), V(13), F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinSkipsEmptyTablesOnTheRight) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector(
+      {{V(1), V(11), F}, {V(2), V(12), F}, {V(3), V(13), F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {2, 12}, {3, 13}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(IdTable{2, leftTables.back().getAllocator()});
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
+  auto qec = ad_utility::testing::getQec();
+
+  {
+    auto expected =
+        makeIdTableFromVector({{U, 10, T}, {1, 11, F}, {2, 12, T}, {3, 13, F}});
+    std::vector<IdTable> rightTables;
+    rightTables.push_back(makeIdTableFromVector({{2, 22}}));
+
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{U, V(10)}, {1, 11}, {2, 12}, {3, 13}}),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(rightTables),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
+        false, std::vector<ColumnIndex>{0});
+    ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
+
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = existsJoin.computeResultOnlyForTesting(true);
+
+    ASSERT_FALSE(result.isFullyMaterialized());
+
+    auto lazyResult = result.idTables();
+    auto it = lazyResult.begin();
+    ASSERT_NE(it, lazyResult.end());
+
+    EXPECT_EQ(it->idTable_, expected);
+
+    EXPECT_EQ(++it, lazyResult.end());
+  }
+
+  {
+    auto expected0 = makeIdTableFromVector({{U, 10, T}, {1, 11, F}});
+    auto expected1 = makeIdTableFromVector({{2, 12, T}, {3, 13, F}});
+    std::vector<IdTable> leftTables;
+    leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
+    leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
+
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(leftTables),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0});
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{V(2), V(22)}}),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
+        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+    ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
+
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = existsJoin.computeResultOnlyForTesting(true);
+
+    ASSERT_FALSE(result.isFullyMaterialized());
+
+    auto lazyResult = result.idTables();
+    auto it = lazyResult.begin();
+    ASSERT_NE(it, lazyResult.end());
+
+    EXPECT_EQ(it->idTable_, expected0);
+    ++it;
+    ASSERT_NE(it, lazyResult.end());
+    EXPECT_EQ(it->idTable_, expected1);
+
+    EXPECT_EQ(++it, lazyResult.end());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinWithJoinColumnAtNonZeroIndex) {
+  auto qec = ad_utility::testing::getQec();
+
+  auto expected =
+      makeIdTableFromVector({{10, U, T}, {11, 1, F}, {12, 2, T}, {13, 3, F}});
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(
+      makeIdTableFromVector({{V(10), U}, {11, 1}, {12, 2}, {13, 3}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{22, 2}}));
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(leftTables),
+      std::vector<std::optional<Variable>>{Variable{"?y"}, Variable{"?x"}},
+      false, std::vector<ColumnIndex>{1});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(rightTables),
+      std::vector<std::optional<Variable>>{Variable{"?z"}, Variable{"?x"}},
+      false, std::vector<ColumnIndex>{1});
+  ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
+
+  qec->getQueryTreeCache().clearAll();
+
+  auto result = existsJoin.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto lazyResult = result.idTables();
+  auto it = lazyResult.begin();
+  ASSERT_NE(it, lazyResult.end());
+
+  EXPECT_EQ(it->idTable_, expected);
+
+  EXPECT_EQ(++it, lazyResult.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, lazyExistsJoinExceedingChunkSize) {
+  {
+    std::vector<IdTable> expected;
+    expected.push_back(
+        makeIdTableFromVector({{I(1), T}, {I(2), T}, {I(3), F}}));
+
+    std::vector<IdTable> leftTables;
+    leftTables.push_back(makeIdTableFromVector({{1}, {2}, {3}}, I));
+    std::vector<IdTable> rightTables;
+    rightTables.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
+    rightTables.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
+
+    testExistsJoin(std::move(leftTables), std::move(rightTables),
+                   std::move(expected), true);
+  }
+  {
+    auto addColumnFilledWith = [](bool value, IdTable& table) {
+      table.addEmptyColumn();
+      ql::ranges::fill(table.getColumn(table.numColumns() - 1),
+                       Id::makeFromBool(value));
+    };
+
+    std::vector<IdTable> expected;
+    expected.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
+    addColumnFilledWith(true, expected.back());
+    expected.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
+    addColumnFilledWith(false, expected.back());
+    expected.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(3)));
+    addColumnFilledWith(true, expected.back());
+
+    std::vector<IdTable> leftTables;
+    leftTables.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
+    leftTables.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
+    leftTables.push_back(createIdTableOfSizeWithValue(
+        qlever::joinHelpers::CHUNK_SIZE + 1, I(3)));
+    std::vector<IdTable> rightTables;
+    rightTables.push_back(makeIdTableFromVector({{1}, {3}}, I));
+
+    testExistsJoin(std::move(leftTables), std::move(rightTables),
+                   std::move(expected), true);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, repeatingMatchesDontProduceDuplicates) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{0, 10, F}, {1, 11, T}}));
+  expected.push_back(makeIdTableFromVector({{1, 110, T}}));
+  expected.push_back(makeIdTableFromVector({{1, 111, T}}));
+  expected.push_back(makeIdTableFromVector({{1, 12, T}, {2, 13, F}}));
+  expected.push_back(makeIdTableFromVector({{2, 14, F}, {2, 15, F}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{0, 10}, {1, 11}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 110}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 111}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 12}, {2, 13}}));
+  leftTables.push_back(makeIdTableFromVector({{2, 14}, {2, 15}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 23}}));
+
+  testExistsJoin(std::move(leftTables), std::move(rightTables),
+                 std::move(expected));
 }
 
 // _____________________________________________________________________________

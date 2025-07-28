@@ -73,32 +73,29 @@ Result Load::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   };
+
+  // In the syntax test mode we don't even try to compute the result, as this
+  // could run into timeouts which would be a waste of time and is hard to
+  // properly recover from.
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    return makeSilentResult();
+  }
   try {
-    try {
-      return computeResultImpl(requestLaziness);
-    } catch (const ad_utility::CancellationException&) {
-      throw;
-    } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
-      throw;
-    } catch (const std::exception&) {
-      // If the `SILENT` keyword is set, catch the error and return the neutral
-      // element for this operation (an empty `IdTable`). The `IdTable` is used
-      // to fill in the variables in the template triple `?s ?p ?o`. The empty
-      // `IdTable` results in no triples being updated.
-      if (loadClause_.silent_) {
-        return makeSilentResult();
-      } else {
-        throw;
-      }
-    }
-  } catch (const std::exception&) {
-    // Unfortunately, we cannot merge this with the `catch` clause for `SILENT`
-    // above, because in the syntax test mode of the conformance tests we
-    // sometimes also might encounter `CancellationException`s.
-    if (RuntimeParameters().get<"syntax-test-mode">()) {
-      return makeSilentResult();
-    }
+    return computeResultImpl(requestLaziness);
+  } catch (const ad_utility::CancellationException&) {
     throw;
+  } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+    throw;
+  } catch (const std::exception&) {
+    // If the `SILENT` keyword is set, catch the error and return the neutral
+    // element for this operation (an empty `IdTable`). The `IdTable` is used
+    // to fill in the variables in the template triple `?s ?p ?o`. The empty
+    // `IdTable` results in no triples being updated.
+    if (loadClause_.silent_) {
+      return makeSilentResult();
+    } else {
+      throw;
+    }
   }
 }
 
