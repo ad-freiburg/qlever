@@ -573,7 +573,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
-    auto extendedCallback = [&](string_view word, bool external,
+    auto extendedCallback = [&](std::string_view word, bool external,
                                 bool inTextIndex) {
       const auto idx = wordCallback(word, external);
       if (inTextIndex) {

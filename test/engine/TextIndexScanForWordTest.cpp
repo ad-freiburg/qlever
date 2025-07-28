@@ -156,7 +156,7 @@ auto getQecWithTextIndex(
 // Does the same as above but without the external files and only the literals
 // of the kb
 auto getQecWithLiteralTextIndex(
-    std::optional<string> regexFilter = std::nullopt,
+    std::optional<std::string> regexFilter = std::nullopt,
     bool regexIsWhitelist = true) {
   using namespace ad_utility::testing;
   TestIndexConfig config(kg);
