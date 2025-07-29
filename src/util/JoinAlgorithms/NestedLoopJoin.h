@@ -18,20 +18,20 @@ class NestedLoopJoin {
   std::shared_ptr<const Result> leftResult_;
   std::shared_ptr<const Result> rightResult_;
 
-  const IdTable& leftTable_;
-
-  std::optional<Result::IdTableVocabPair> currentRightTable_ = std::nullopt;
-
  public:
   NestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
                  std::shared_ptr<const Result> leftResult,
                  std::shared_ptr<const Result> rightResult)
       : joinColumns_{std::move(joinColumns)},
         leftResult_{std::move(leftResult)},
-        rightResult_{std::move(rightResult)},
-        leftTable_{leftResult_->idTable()} {}
+        rightResult_{std::move(rightResult)} {
+    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
+  }
 
  private:
+  // Checks with entries in `rightTable` match entries in `leftTable`, and
+  // writes for the matching row indices on the left the value `true` into
+  // `matchTracker`.
   template <int JOIN_COLUMNS>
   AD_ALWAYS_INLINE static void matchLeft(std::vector<char>& matchTracker,
                                          IdTableView<JOIN_COLUMNS> leftTable,
@@ -62,7 +62,7 @@ class NestedLoopJoin {
   std::vector<char> computeTracker() {
     // Should conceptually be bool, but doesn't allow the compiler to use
     // memset in `matchLeft`.
-    std::vector<char> matchTracker(leftTable_.size(), 0);
+    std::vector<char> matchTracker(leftResult_->idTable().size(), 0);
     std::vector<ColumnIndex> leftColumns;
     std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
@@ -73,7 +73,8 @@ class NestedLoopJoin {
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, &leftColumns, &rightColumns]<int JOIN_COLUMNS>() {
           IdTableView<JOIN_COLUMNS> leftTable =
-              leftTable_.asColumnSubsetView(leftColumns)
+              leftResult_->idTable()
+                  .asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
           auto matchHelper = [&matchTracker, &leftTable,
                               &rightColumns](const IdTable& idTable) {
