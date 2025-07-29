@@ -272,10 +272,24 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
+  auto alwaysDefined = [this]() {
+    auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
+      return tree->getVariableAndInfoByColumnIndex(index)
+                 .second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    };
+    return ql::ranges::all_of(
+        joinColumns_, [this, alwaysDefHelper = std::move(alwaysDefHelper)](
+                          const auto& indices) {
+          return alwaysDefHelper(left_, indices[0]) &&
+                 alwaysDefHelper(right_, indices[1]);
+        });
+  };
   // This algorithm only works well if the left side is smaller and we can avoid
-  // sorting the right side.
+  // sorting the right side. It currently doesn't support undef.
   if (!std::dynamic_pointer_cast<Sort>(right_->getRootOperation()) ||
-      left_->getSizeEstimate() > right_->getSizeEstimate()) {
+      left_->getSizeEstimate() > right_->getSizeEstimate() ||
+      !alwaysDefined()) {
     return std::nullopt;
   }
   auto leftRes = left_->getResult(false);
