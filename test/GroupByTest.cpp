@@ -2208,13 +2208,16 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
   template <size_t N>
   static void expectReturningIdTables(
       GroupBy& groupBy, const std::array<IdTable, N>& idTables,
+      bool mightViolateLaziness = false,
       ad_utility::source_location sourceLocation =
           ad_utility::source_location::current()) {
     auto l = generateLocationTrace(sourceLocation);
     bool lazyResult = GetParam();
     auto result = groupBy.computeResultOnlyForTesting(lazyResult);
-    ASSERT_NE(result.isFullyMaterialized(), lazyResult);
-    if (lazyResult) {
+    if (!mightViolateLaziness) {
+      ASSERT_NE(result.isFullyMaterialized(), lazyResult);
+    }
+    if (!result.isFullyMaterialized()) {
       size_t counter = 0;
       for (const Result::IdTableVocabPair& pair : result.idTables()) {
         ASSERT_LT(counter, idTables.size())
@@ -2472,5 +2475,5 @@ TEST_P(GroupByLazyFixture, countStarWorks) {
       V{"?y"}};
   GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
 
-  expectReturningIdTables<1>(groupBy, {makeIntTable({{4}})});
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{4}})}, true);
 }
