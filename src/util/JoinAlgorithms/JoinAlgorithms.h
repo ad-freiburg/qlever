@@ -752,6 +752,22 @@ struct AlwaysFalse {
   }
 };
 
+// A helper struct that is used to move the `addRow` and `addRows` function of
+// the `AddCombinedRowToTable` (which requires integers as arguments) to a
+// class with a similar interface that takes `iterators` as expected by the
+// `zipperJoinWithUndef` function that is called for each block.
+// It simply takes two callables, the first one will be the `operator()` and
+// the second one the `addRow` function.
+template <typename F1, typename F2>
+struct RowIndexAdder {
+  F1 f1;
+  F2 f2;
+  void operator()(auto&&... args) const { return f1(AD_FWD(args)...); }
+  void addRows(auto&&... args) const { return f2(AD_FWD(args)...); }
+};
+template <typename F1, typename F2>
+RowIndexAdder(F1, F2) -> RowIndexAdder<std::decay_t<F1>, std::decay_t<F2>>;
+
 // How many blocks we want to read at once when fetching new ones.
 static constexpr size_t FETCH_BLOCKS = 3;
 
@@ -1073,22 +1089,6 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
                                             currentSide.get().undefBlocks_);
     };
   }
-
-  // A helper struct that is used to move the `addRow` and `addRows` function of
-  // the `AddCombinedRowToTable` (which requires integers as arguments) to a
-  // class with a similar interface that takes `iterators` as expected by the
-  // `zipperJoinWithUndef` function that is called for each block.
-  // It simply takes two callables, the first one will be the `operator()` and
-  // the second one the `addRow` function.
-  template <typename F1, typename F2>
-  struct RowIndexAdder {
-    F1 f1;
-    F2 f2;
-    void operator()(auto&&... args) const { return f1(AD_FWD(args)...); }
-    void addRows(auto&&... args) const { return f2(AD_FWD(args)...); }
-  };
-  template <typename F1, typename F2>
-  RowIndexAdder(F1, F2) -> RowIndexAdder<std::decay_t<F1>, std::decay_t<F2>>;
 
   // Join the first block in `currentBlocksLeft` with the first block in
   // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
