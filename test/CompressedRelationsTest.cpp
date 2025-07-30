@@ -97,7 +97,6 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 
   VectorTable exp;
   for (const auto& row : expected) {
-    // exp.emplace_back(row.begin(), row.end());
     exp.emplace_back();
     for (auto& el : row) {
       exp.back().push_back(el);
@@ -760,6 +759,10 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   test({V(11), V(27), V(30)}, {block2, block3}, 2);
   test({V(12)}, {block2}, 1);
   test({V(13)}, {block3}, 2);
+
+  // Test empty blocks edge case
+  metadataAndBlocks.emplace(SpecBlocksBounds{{scanSpec, {}}, {}});
+  test({V(1)}, {}, 0);
 }
 
 TEST(CompressedRelationReader, getBlocksForJoin) {
