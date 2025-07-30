@@ -336,19 +336,27 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
     ad_utility::gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{},
                               addRow, {}, cancellationCallback);
   } else {
-    auto findSmallerUndefRangeLeft =
-        [undefRangeA](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
-      for (auto it = undefRangeA.first; it != undefRangeA.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeLeft = [undefRangeA](auto&&...) {
+      using IteratorType = decltype(undefRangeA.first);
+      return ad_utility::InputRangeFromGetCallable{
+          [current = undefRangeA.first,
+           end = undefRangeA.second]() mutable -> std::optional<IteratorType> {
+            if (current != end) {
+              return current++;
+            }
+            return std::nullopt;
+          }};
     };
-    auto findSmallerUndefRangeRight =
-        [undefRangeB](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeB.first)> {
-      for (auto it = undefRangeB.first; it != undefRangeB.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeRight = [undefRangeB](auto&&...) {
+      using IteratorType = decltype(undefRangeB.first);
+      return ad_utility::InputRangeFromGetCallable{
+          [current = undefRangeB.first,
+           end = undefRangeB.second]() mutable -> std::optional<IteratorType> {
+            if (current != end) {
+              return current++;
+            }
+            return std::nullopt;
+          }};
     };
 
     auto numOutOfOrder = [&]() {
