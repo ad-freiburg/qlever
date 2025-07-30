@@ -256,9 +256,9 @@ std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
   auto leftRes = _left->getResult(false);
   const IdTable& leftTable = leftRes->idTable();
   auto child = _right->getRootOperation()->getChildren().at(0);
-  auto runTimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
   _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {runTimeInfoChildren});
+      {runtimeInfoChildren});
   auto rightRes = child->getResult(true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();

@@ -294,9 +294,9 @@ std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
   }
   auto leftRes = left_->getResult(false);
   auto child = right_->getRootOperation()->getChildren().at(0);
-  auto runTimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
   right_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {runTimeInfoChildren});
+      {runtimeInfoChildren});
   auto rightRes = child->getResult(true);
 
   IdTable result = leftRes->idTable().clone();
