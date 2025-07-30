@@ -91,7 +91,7 @@ class TextMetaData {
 
   void addBlock(const TextBlockMetaData& md);
 
-  off_t getOffsetAfter();
+  off_t getOffsetAfter() const;
 
   const TextBlockMetaData& getBlockById(size_t id) const { return _blocks[id]; }
 

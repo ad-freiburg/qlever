@@ -26,7 +26,7 @@ void TextBlockWriter::writeTextIndexFile(const std::string& filename,
 
 // _____________________________________________________________________________
 void TextBlockWriter::writeTextMetaDataToFile(ad_utility::File& out,
-                                              TextMetaData& textMeta) {
+                                              const TextMetaData& textMeta) {
   LOG(DEBUG) << "Writing Meta data to index file ..." << std::endl;
   ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
   serializer << textMeta;
@@ -43,10 +43,10 @@ void TextBlockWriter::calculateAndWriteTextBlocks(
   AD_CONTRACT_CHECK(
       nofWordPostingsInTextBlock > 0,
       "Number of word postings in text block has to be larger than zero.");
-  auto currentWordTextVecWordIndex = WordVocabIndex::make(0);
   for (auto&& chunk :
        ::ranges::views::chunk(::ranges::views::ref(wordTextVecView_),
                               nofWordPostingsInTextBlock)) {
+    auto currentWordTextVecWordIndex = WordVocabIndex::make(0);
     for (const auto& row : chunk) {
       currentWordTextVecWordIndex = row[0].getWordVocabIndex();
       addWordPosting(row);
@@ -56,10 +56,9 @@ void TextBlockWriter::calculateAndWriteTextBlocks(
 }
 
 // _____________________________________________________________________________
-void TextBlockWriter::finishBlock(WordVocabIndex upperBoundWordVocabIndex) {
+void TextBlockWriter::finishBlock(WordVocabIndex highestWordInBlock) {
   // Add all co-occurring entities to entityPostings_
-  auto entityPostings =
-      addEntityPostingsUpToWordIndex(upperBoundWordVocabIndex);
+  auto entityPostings = getEntityPostingsForBlock(highestWordInBlock);
 
   // This is possible since the wordPostings are filled in ascending WordIndex
   // order.
@@ -78,30 +77,21 @@ void TextBlockWriter::finishBlock(WordVocabIndex upperBoundWordVocabIndex) {
   entityPostings.erase(::ranges::unique(entityPostings), entityPostings.end());
 
   writeTextBlockToFile(wordPostings_, entityPostings, out_, minWordIndexOfBlock,
-                       upperBoundWordVocabIndex);
+                       highestWordInBlock);
 
   // Reset Variables
   wordPostings_.clear();
 }
 
 // _____________________________________________________________________________
-std::vector<EntityPosting> TextBlockWriter::addEntityPostingsUpToWordIndex(
-    WordVocabIndex upperBoundWordVocabIndex) {
-  if (entityTextVecIterator_ == entityTextVecSentinel_) {
-    return {};
-  }
-
+std::vector<EntityPosting> TextBlockWriter::getEntityPostingsForBlock(
+    WordVocabIndex highestWordInBlock) {
   std::vector<EntityPosting> entityPostings;
-
-  auto getWVI = [](const auto& row) { return row[0].getWordVocabIndex(); };
-
-  for (; entityTextVecIterator_ != entityTextVecSentinel_;
-       ++entityTextVecIterator_) {
-    auto currentEntityTextVecWordIndex = getWVI(*entityTextVecIterator_);
-    if (currentEntityTextVecWordIndex > upperBoundWordVocabIndex) {
-      break;
-    }
+  while (entityTextVecIterator_ != entityTextVecSentinel_ &&
+         (*entityTextVecIterator_)[0].getWordVocabIndex() <=
+             highestWordInBlock) {
     addEntityPosting(entityPostings, *entityTextVecIterator_);
+    ++entityTextVecIterator_;
   }
   return entityPostings;
 }
@@ -110,6 +100,13 @@ std::vector<EntityPosting> TextBlockWriter::addEntityPostingsUpToWordIndex(
 template <typename EntityRow>
 void TextBlockWriter::addEntityPosting(std::vector<EntityPosting>& vecToAddTo,
                                        const EntityRow& entityTextVecRow) {
+  // The WordVocabIndex is not tracked in the EntityPostings. It only matters
+  // that all entityPostings are in the same block with the words they share a
+  // text with. (In detail, if a word appears in multiple blocks the respective
+  // entities are only added to the first block.) This is the reason why during
+  // retrieval entity scans can only work with a corresponding word scan. This
+  // word scan is then used to join on the textRecordIndex thus reducing this
+  // superset to only the relevant entity mentions.
   vecToAddTo.emplace_back(entityTextVecRow[1].getTextRecordIndex(),
                           entityTextVecRow[2].getVocabIndex(),
                           entityTextVecRow[3].getDouble());

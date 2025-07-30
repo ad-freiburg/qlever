@@ -14,9 +14,7 @@ TextMetaData::getBlockInfoByWordRange(const WordVocabIndex lower,
   AD_CONTRACT_CHECK(upper >= lower);
   AD_CORRECTNESS_CHECK(!_blocks.empty());
 
-  auto projection = [](const auto& block) -> const auto& {
-    return block._lastWordId;
-  };
+  auto projection = &TextBlockMetaData::_lastWordId;
 
   // Binary search in the sorted _blocks vector using the lastWordIds of the
   // blocks. This points to the first block having a lastWordId >= lower.
@@ -88,6 +86,6 @@ void TextMetaData::addBlock(const TextBlockMetaData& md) {
 }
 
 // _____________________________________________________________________________
-off_t TextMetaData::getOffsetAfter() {
+off_t TextMetaData::getOffsetAfter() const {
   return _blocks.back()._entityCl._lastByte + 1;
 }

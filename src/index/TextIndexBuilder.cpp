@@ -4,6 +4,7 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include "index/TextBlockWriter.h"
 #include "index/TextIndexReadWrite.h"
 
 // _____________________________________________________________________________

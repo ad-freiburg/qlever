@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 #define QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 
+#include "TextIndexBuilderTypes.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/IndexTypes.h"
 #include "index/ExternalSortFunctors.h"
@@ -12,14 +13,6 @@
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
 #include "util/File.h"
-
-// WordVocabIndex, TextRecordIndex, Score
-using WordTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 3>;
-// WordVocabIndex, TextRecordIndex, VocabIndex, Score
-using EntityTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
-
-using WordTextVecView = decltype(std::declval<WordTextVec&>().sortedView());
-using EntityTextVecView = decltype(std::declval<EntityTextVec&>().sortedView());
 
 /**
  * @brief This struct is used to calculate and write the text blocks.
@@ -41,7 +34,7 @@ using EntityTextVecView = decltype(std::declval<EntityTextVec&>().sortedView());
  *         This adds all entities that co-occur with any word of the block.
  *         Once both posting lists are collected they are written to disk in one
  *         text block.
- *         DISCLAIMER: Entity postings corresponding to a certain word are only
+ *         NOTE: Entity postings corresponding to a certain word are only
  *         added to the first block this word occurs in. This leads to less
  *         duplication. During retrieval all blocks containing the word
  *         are fetched. This guarantees the entityList to be fetched too.
@@ -70,7 +63,7 @@ struct TextBlockWriter {
 
  private:
   static void writeTextMetaDataToFile(ad_utility::File& out,
-                                      TextMetaData& textMeta);
+                                      const TextMetaData& textMeta);
 
   // Uses the text vecs given during construction to write text blocks to disk
   // that contain exactly nofWordPostingsInTextBlock word postings in the text
@@ -96,14 +89,14 @@ struct TextBlockWriter {
   off_t currentOffset_ = 0;
 
   // Is called after block boundary is reached to add all co-occuring entities
-  // up to upperBoundWordVocabIndex to entityPostings_ and then write the whole
-  // block to disk
-  void finishBlock(WordVocabIndex upperBoundWordVocabIndex);
+  // up to and including highestWordInBlock to entityPostings_ and then write
+  // the whole block to disk
+  void finishBlock(WordVocabIndex highestWordInBlock);
 
-  // Iterates over entityTextVec_ up to and including
-  // upperBoundWordVocabIndex. All entries are written to entityPostings_.
-  std::vector<EntityPosting> addEntityPostingsUpToWordIndex(
-      WordVocabIndex upperBoundWordVocabIndex);
+  // Iterates over entityTextVec_ up to and including highestWordInBlock. All
+  // entries are written to entityPostings_.
+  std::vector<EntityPosting> getEntityPostingsForBlock(
+      WordVocabIndex highestWordInBlock);
 
   template <typename WordRow>
   void addWordPosting(const WordRow& wordTextVecRow);
