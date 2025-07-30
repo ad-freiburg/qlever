@@ -736,8 +736,12 @@ ad_utility::JoinColumnMapping Join::getJoinColumnMapping() const {
 ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
     std::function<void(IdTable&, LocalVocab&)> callback) const {
   return ad_utility::AddCombinedRowToIdTable{
-      1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-      CHUNK_SIZE, std::move(callback)};
+      1,
+      IdTable{getResultWidth(), allocator()},
+      cancellationHandle_,
+      keepJoinColumn_,
+      CHUNK_SIZE,
+      std::move(callback)};
 }
 
 // _____________________________________________________________________________

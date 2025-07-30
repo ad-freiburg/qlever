@@ -12,24 +12,33 @@ static constexpr auto U = Id::makeUndefined();
 
 template <typename F>
 void testWithAllBuffersizes(const F& testFunction) {
-  for (auto bufferSize : ql::views::iota(0, 10)) {
-    testFunction(bufferSize);
-  }
-  testFunction(100'000);
+  auto eval = [&](int bufferSize) {
+    if constexpr (std::is_invocable_v<F, int, bool>) {
+      testFunction(bufferSize, true);
+      testFunction(bufferSize, false);
+    } else {
+      testFunction(bufferSize);
+    }
+  };
+  EXPECT_ANY_THROW(eval(0));
+  ql::ranges::for_each(ql::views::iota(1, 10), eval);
+  eval(100'000);
 }
 }  // namespace
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, OneJoinColumn) {
-  auto testWithBufferSize = [](size_t bufferSize) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinColumns) {
     auto left = makeIdTableFromVector({{3, 4}, {7, 8}, {11, 10}, {14, 11}});
     auto right =
         makeIdTableFromVector({{7, 14, 0}, {9, 10, 1}, {14, 8, 2}, {33, 5, 3}});
     auto result = makeIdTableFromVector({});
-    result.setNumColumns(4);
+    size_t numColsResult = keepJoinColumns ? 4 : 3;
+    result.setNumColumns(numColsResult);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
+        bufferSize);
     adder.addRow(1, 0);
     adder.setOnlyLeftInputForOptionalJoin(left);
     adder.addOptionalRow(2);
@@ -40,25 +49,97 @@ TEST(AddCombinedRowToTable, OneJoinColumn) {
 
     auto expected =
         makeIdTableFromVector({{7, 8, 14, 0}, {11, 10, U, U}, {14, 11, 8, 2}});
-    ASSERT_EQ(result, expected);
-
     auto expectedUndefined = std::vector<size_t>{0, 0, 1, 1};
-    ASSERT_EQ(numUndefined, expectedUndefined);
+    if (!keepJoinColumns) {
+      expected.deleteColumn(0);
+      expectedUndefined.erase(expectedUndefined.begin());
+    }
+    EXPECT_EQ(result, expected);
+
+    EXPECT_EQ(numUndefined, expectedUndefined);
+  };
+  testWithAllBuffersizes(testWithBufferSize);
+}
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, AddRows) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinColumns) {
+    auto left = makeIdTableFromVector({{3, 4}, {7, 8}, {7, 10}, {14, 11}});
+    auto right =
+        makeIdTableFromVector({{7, 14, 0}, {7, 12, 1}, {14, 8, 2}, {33, 5, 3}});
+    auto result = makeIdTableFromVector({});
+    size_t numColsResult = keepJoinColumns ? 4 : 3;
+    result.setNumColumns(numColsResult);
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
+        bufferSize);
+    adder.addOptionalRow(0);
+    adder.addRows(ql::views::iota(1u, 3u), ql::views::iota(0u, 2u));
+    auto numUndefined = adder.numUndefinedPerColumn();
+    result = std::move(adder).resultTable();
+
+    auto expected = makeIdTableFromVector({{3, 4, U, U},
+                                           {7, 8, 14, 0},
+                                           {7, 8, 12, 1},
+                                           {7, 10, 14, 0},
+                                           {7, 10, 12, 1}});
+    auto expectedUndefined = std::vector<size_t>{0, 0, 1, 1};
+    if (!keepJoinColumns) {
+      expected.deleteColumn(0);
+      expectedUndefined.erase(expectedUndefined.begin());
+    }
+    EXPECT_EQ(result, expected);
+
+    EXPECT_EQ(numUndefined, expectedUndefined);
+  };
+  testWithAllBuffersizes(testWithBufferSize);
+}
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, AddRowsZeroColumns) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinColumns) {
+    auto left = makeIdTableFromVector({{3}, {3}, {3}, {7}});
+    auto right = makeIdTableFromVector({{2}, {3}, {3}, {5}});
+    auto result = makeIdTableFromVector({});
+    size_t numColsResult = keepJoinColumns ? 1 : 0;
+    result.setNumColumns(numColsResult);
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
+        bufferSize);
+    adder.addRows(ql::views::iota(0u, 3u), ql::views::iota(1u, 3u));
+    adder.addOptionalRow(3);
+    auto numUndefined = adder.numUndefinedPerColumn();
+    result = std::move(adder).resultTable();
+
+    auto expected = makeIdTableFromVector({{3}, {3}, {3}, {3}, {3}, {3}, {7}});
+    auto expectedUndefined = std::vector<size_t>{0};
+    if (!keepJoinColumns) {
+      expected.deleteColumn(0);
+      expectedUndefined.erase(expectedUndefined.begin());
+    }
+    EXPECT_EQ(result, expected);
+
+    EXPECT_EQ(numUndefined, expectedUndefined);
   };
   testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, TwoJoinColumns) {
-  auto testWithBufferSize = [](size_t bufferSize) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinColumns) {
     auto left = makeIdTableFromVector({{3, 4}, {7, 8}, {11, 10}, {14, U}});
     auto right =
         makeIdTableFromVector({{U, 8, 0}, {9, 10, 1}, {14, 11, 2}, {33, 5, 3}});
     auto result = makeIdTableFromVector({});
-    result.setNumColumns(3);
+    static constexpr size_t numJoinCols = 2;
+    size_t numColsResult = keepJoinColumns ? 3 : 1;
+    result.setNumColumns(numColsResult);
     auto adder = ad_utility::AddCombinedRowToIdTable(
-        2, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+        numJoinCols, left.asStaticView<0>(), right.asStaticView<0>(),
+        std::move(result), std::make_shared<ad_utility::CancellationHandle<>>(),
+        keepJoinColumns, bufferSize);
     adder.addRow(1, 0);
     adder.addOptionalRow(2);
     adder.addRow(3, 2);
@@ -67,24 +148,31 @@ TEST(AddCombinedRowToTable, TwoJoinColumns) {
 
     auto expected =
         makeIdTableFromVector({{7, 8, 0}, {11, 10, U}, {14, 11, 2}});
-    ASSERT_EQ(result, expected);
-
     auto expectedUndefined = std::vector<size_t>{0, 0, 1};
-    ASSERT_EQ(numUndefined, expectedUndefined);
+    if (!keepJoinColumns) {
+      for ([[maybe_unused]] auto _ : ad_utility::integerRange(numJoinCols)) {
+        expected.deleteColumn(0);
+      }
+      expectedUndefined.erase(expectedUndefined.begin(),
+                              expectedUndefined.begin() + numJoinCols);
+    }
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(numUndefined, expectedUndefined);
   };
   testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, UndefInInput) {
-  auto testWithBufferSize = [](size_t bufferSize) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinCol) {
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
     auto right = makeIdTableFromVector({{1}, {3}, {4}, {U}});
     auto result = makeIdTableFromVector({});
-    result.setNumColumns(2);
+    result.setNumColumns(keepJoinCol ? 2 : 1);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
+        bufferSize);
     adder.addRow(0, 0);
     adder.addRow(0, 1);
     adder.addRow(2, 1);
@@ -96,23 +184,29 @@ TEST(AddCombinedRowToTable, UndefInInput) {
 
     auto expected =
         makeIdTableFromVector({{1, 5}, {3, 5}, {3, U}, {4, 5}, {4, U}, {U, 5}});
-    ASSERT_EQ(result, expected);
-
     auto expectedUndefined = std::vector<size_t>{1, 2};
-    ASSERT_EQ(numUndefined, expectedUndefined);
+    if (!keepJoinCol) {
+      expected.deleteColumn(0);
+      expectedUndefined.erase(expectedUndefined.begin());
+    }
+
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(numUndefined, expectedUndefined);
   };
   testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, setInput) {
-  auto testWithBufferSize = [](size_t bufferSize) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinCol) {
     {
       auto result = makeIdTableFromVector({});
-      result.setNumColumns(2);
+      result.setNumColumns(keepJoinCol ? 2 : 1);
+      ;
       auto adder = ad_utility::AddCombinedRowToIdTable(
           1, std::move(result),
-          std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+          std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
+          bufferSize);
       // It is okay to flush even if no inputs were specified, as long as we
       // haven't pushed any rows yet.
       EXPECT_NO_THROW(adder.flush());
@@ -125,10 +219,11 @@ TEST(AddCombinedRowToTable, setInput) {
     }
 
     auto result = makeIdTableFromVector({});
-    result.setNumColumns(3);
+    result.setNumColumns(keepJoinCol ? 3 : 2);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, std::move(result),
-        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
+        bufferSize);
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
     auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
     adder.setInput(left, right);
@@ -159,19 +254,23 @@ TEST(AddCombinedRowToTable, setInput) {
                                            {4, 7, 5},
                                            {4, 7, U},
                                            {U, 8, 5}});
-    ASSERT_EQ(result, expected);
+    if (!keepJoinCol) {
+      expected.deleteColumn(0);
+    }
+    EXPECT_EQ(result, expected);
   };
   testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, cornerCases) {
-  auto testWithBufferSize = [](size_t bufferSize) {
+  auto testWithBufferSize = [](size_t bufferSize, bool keepJoinCol) {
     auto result = makeIdTableFromVector({});
-    result.setNumColumns(3);
+    result.setNumColumns(keepJoinCol ? 3 : 1);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         2, std::move(result),
-        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
+        bufferSize);
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
     auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
     // We have specified two join columns and our inputs have two columns each,
@@ -194,7 +293,7 @@ TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   ad_utility::AddCombinedRowToIdTable adder{0, std::move(result),
-                                            cancellationHandle, 10};
+                                            cancellationHandle, true, 10};
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   EXPECT_THROW(adder.flush(), ad_utility::CancellationException);
@@ -239,8 +338,11 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
   outputTable.setNumColumns(3);
   std::vector<LocalVocab> localVocabs;
   ad_utility::AddCombinedRowToIdTable adder{
-      1, std::move(outputTable),
-      std::make_shared<ad_utility::CancellationHandle<>>(), 1,
+      1,
+      std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      true,
+      2,
       [&localVocabs](IdTable& idTable, LocalVocab& localVocab) {
         localVocabs.push_back(std::move(localVocab));
         // Clear to trigger new merging of local vocabs, in practice
