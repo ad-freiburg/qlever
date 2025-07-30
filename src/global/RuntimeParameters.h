@@ -93,6 +93,8 @@ inline auto& RuntimeParameters() {
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
+        // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+        SizeT<"spatial-join-max-threads">{0},
     };
   }();
   return params;

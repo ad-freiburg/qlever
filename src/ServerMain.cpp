@@ -147,6 +147,10 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
+  add("spatial-join-max-threads",
+      optionFactory.getProgramOption<"spatial-join-max-threads">(),
+      "The maximal number of threads to be used for spatial join processing. "
+      "If this option is set to `0`, the number of CPU threads will be used.");
   po::variables_map optionsMap;
 
   try {
