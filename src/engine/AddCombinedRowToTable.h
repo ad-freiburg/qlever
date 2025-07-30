@@ -145,7 +145,7 @@ class AddCombinedRowToIdTable {
   // Concept for the `addRows` function below for a `sized_range` that has
   // unsigned integral values as its `value_type`.
   template <typename R>
-  static constexpr bool sizeTRange =
+  static constexpr bool sizedRangeOfUnsigned =
       ql::ranges::sized_range<R> &&
       ql::concepts::unsigned_integral<ql::ranges::range_value_t<R>>;
 
@@ -153,9 +153,9 @@ class AddCombinedRowToIdTable {
   // `rowIndicesA` and `rowIndicesB` with an optimization for the special case
   // that the `resultTable` has zero columns.
   CPP_template(typename R1, typename R2)(
-      requires sizeTRange<R1> CPP_and
-          sizeTRange<R2>) void addRows(const R1& rowIndicesA,
-                                       const R2& rowIndicesB) {
+      requires sizedRangeOfUnsigned<R1> CPP_and
+          sizedRangeOfUnsigned<R2>) void addRows(const R1& rowIndicesA,
+                                                 const R2& rowIndicesB) {
     size_t total =
         ql::ranges::size(rowIndicesA) * ql::ranges::size(rowIndicesB);
     if (resultTable_.numColumns() == 0) {
@@ -224,13 +224,14 @@ class AddCombinedRowToIdTable {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
+    using namespace ad_utility::memory_literals;
     inputLeftAndRight_ = std::array{
         detail::toView(inputLeft),
         IdTableView<0>{
             resultTable_.numColumns() +
-                static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_ -
+                (static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_) -
                 detail::toView(inputLeft).numColumns() + numJoinColumns_,
-            ad_utility::makeUnlimitedAllocator<Id>()}};
+            ad_utility::makeAllocatorWithLimit<Id>(0_B)}};
   }
 
   // The next free row in the output will be created from

@@ -1115,9 +1115,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     };
     auto addRowIndices = [&begL, &begR, this](auto itFromL, auto endFromL,
                                               auto itFromR, auto endFromR) {
-      AD_EXPENSIVE_CHECK(itFromL >= begL);
-      AD_EXPENSIVE_CHECK(itFromR >= begR);
-      // TODO<joka921> more expensive checks.
+      AD_EXPENSIVE_CHECK(itFromL >= begL && endFromL >= itFromL);
+      AD_EXPENSIVE_CHECK(itFromR >= begR && endFromR >= itFromR);
       auto io = [&](const auto& beg, const auto& it, const auto& end) {
         return ql::views::iota(static_cast<size_t>(it - beg),
                                static_cast<size_t>(end - beg));
