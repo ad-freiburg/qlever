@@ -350,6 +350,13 @@ int main(int argc, char** argv) {
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
+      // Check that flag to build from docsfile is set if only a docsfile is
+      // given
+      if (!docsfile.empty() && wordsfile.empty()) {
+        AD_CONTRACT_CHECK(useWordsFromDocsfile,
+                          "Only a docsfile was given but flag -D to build text "
+                          "index from docsfile was not used.");
+      }
       textIndexBuilder.buildTextIndexFile(TextIndexConfig{
           wordsfile.empty() ? std::nullopt
                             : std::optional<const string>(wordsfile),
