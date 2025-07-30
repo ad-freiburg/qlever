@@ -533,7 +533,7 @@ class CompressedRelationReader {
         size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
-    // be used if it is known that those are not needed anymnore, e.g. because
+    // be used if it is known that those are not needed anymore, e.g. because
     // they have already been dealt with by a lazy `IndexScan` or `Join`.
     void removePrefix(size_t numBlocksToRemove) {
       auto it = blockMetadata_.begin();
