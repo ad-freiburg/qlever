@@ -69,7 +69,8 @@ class JoinColumnMapping {
   // (leftColIndex, rightColIndex)`), and the total number of columns in the
   // left and right input respectively.
   JoinColumnMapping(const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-                    size_t numColsLeft, size_t numColsRight) {
+                    size_t numColsLeft, size_t numColsRight,
+                    bool keepJoinColumns = true) {
     permutationResult_.resize(numColsLeft + numColsRight - joinColumns.size());
     for (auto [colA, colB] : joinColumns) {
       permutationResult_.at(colA) = jcsLeft_.size();
@@ -95,6 +96,30 @@ class JoinColumnMapping {
         permutationRight_.push_back(i);
       } else {
         ++numSkippedJoinColumns;
+      }
+    }
+
+    // If the join columns are not kept, we have to fix the result permutation.
+    // The join columns (the first `numJoinColumns` in the input to the result
+    // permutation) have to be deleted, and the remaining entries have to be
+    // shifted to the left accordingly.
+    if (!keepJoinColumns) {
+      auto jcls = joinColumns;
+      // For each join column and for every value in the result permutation that
+      // is larger than the index of the join column, we have to decrease the
+      // actual value in the permutation by one. We do so in the reversed order
+      // of the join columns to be able to perform this logic in place,
+      // otherwise we would for every entry have to count the number of smaller
+      // entries in the result permutation and also the deletion of the join
+      // columns would be more complex.
+      ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
+      for (auto i : ql::views::reverse(jcls)) {
+        for (auto& j : permutationResult_) {
+          if (j > i.at(0)) {
+            --j;
+          }
+        }
+        permutationResult_.erase(permutationResult_.begin() + i.at(0));
       }
     }
   }
