@@ -259,6 +259,12 @@ int main(int argc, char** argv) {
           "The value of bm25-b must be between and "
           "including 0 and 1");
     }
+    if (!docsfile.empty() && wordsfile.empty() && !useWordsFromDocsfile) {
+      throw std::invalid_argument(
+          "A docsfile was given without a wordsfile and without the flag -D to "
+          "specify building the text "
+          "index from docsfile.");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
@@ -350,13 +356,6 @@ int main(int argc, char** argv) {
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
-      // Check that flag to build from docsfile is set if only a docsfile is
-      // given
-      if (!docsfile.empty() && wordsfile.empty()) {
-        AD_CONTRACT_CHECK(useWordsFromDocsfile,
-                          "Only a docsfile was given but flag -D to build text "
-                          "index from docsfile was not used.");
-      }
       textIndexBuilder.buildTextIndexFile(TextIndexConfig{
           wordsfile.empty() ? std::nullopt
                             : std::optional<const string>(wordsfile),
