@@ -162,7 +162,6 @@ TEST_P(RowAdderTest, setInput) {
   {
     auto result = makeIdTableFromVector({});
     result.setNumColumns(keepJoinCol ? 2 : 1);
-    ;
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, std::move(result),
         std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
@@ -170,7 +169,8 @@ TEST_P(RowAdderTest, setInput) {
     // It is okay to flush even if no inputs were specified, as long as we
     // haven't pushed any rows yet.
     EXPECT_NO_THROW(adder.flush());
-    if (ad_utility::areExpensiveChecksEnabled || bufferSize == 0) {
+
+    if (ad_utility::areExpensiveChecksEnabled || bufferSize <= 1) {
       EXPECT_ANY_THROW(adder.addRow(0, 0));
     } else {
       adder.addRow(0, 0);
