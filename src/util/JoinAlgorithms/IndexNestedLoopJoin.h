@@ -10,6 +10,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
@@ -34,8 +35,12 @@ struct Adder {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
   std::vector<char> missingIndices_;
+  ad_utility::SharedCancellationHandle cancellationHandle_;
 
-  explicit Adder(size_t size) : missingIndices_(size, true) {}
+  explicit Adder(size_t size,
+                 ad_utility::SharedCancellationHandle cancellationHandle)
+      : missingIndices_(size, true),
+        cancellationHandle_{std::move(cancellationHandle)} {}
 
   AD_ALWAYS_INLINE void track(size_t offset, size_t size, size_t rightIndex) {
     for (size_t i = 0; i < size; i++) {
@@ -57,7 +62,7 @@ struct Adder {
         target[offset] = source[leftIdx];
         ++offset;
       }
-      // TODO<RobinTF> Add cancellation check.
+      cancellationHandle_->throwIfCancelled();
       ++colIdx;
     }
     size_t numJoinColumns =
@@ -71,7 +76,7 @@ struct Adder {
         target[offset] = source[rightIdx];
         ++offset;
       }
-      // TODO<RobinTF> Add cancellation check.
+      cancellationHandle_->throwIfCancelled();
       ++colIdx;
     }
     matchingPairs_.clear();
@@ -92,15 +97,15 @@ struct Adder {
           ++targetIndex;
         }
       }
-      // TODO<RobinTF> Add cancellation check.
+      cancellationHandle_->throwIfCancelled();
       ++colIdx;
     }
     while (colIdx < result.numColumns()) {
-      // TODO<RobinTF> Add cancellation check.
       auto col = result.getColumn(colIdx);
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
-          Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE, []() {});
+          Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
+          [this]() { cancellationHandle_->throwIfCancelled(); });
       ++colIdx;
     }
   }
@@ -256,10 +261,12 @@ class IndexNestedLoopJoin {
 
  public:
   // ___________________________________________________________________________
-  Result::LazyResult computeOptionalJoin(bool yieldOnce,
-                                         size_t resultWidth) && {
+  Result::LazyResult computeOptionalJoin(
+      bool yieldOnce, size_t resultWidth,
+      ad_utility::SharedCancellationHandle cancellationHandle) && {
     AD_CONTRACT_CHECK(leftResult_->idTable().numColumns() <= resultWidth);
-    Adder matchTracker{leftResult_->idTable().size()};
+    Adder matchTracker{leftResult_->idTable().size(),
+                       std::move(cancellationHandle)};
     return ad_utility::callFixedSize(
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, yieldOnce,
