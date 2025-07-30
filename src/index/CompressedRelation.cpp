@@ -488,15 +488,24 @@ auto CompressedRelationReader::getBlocksForJoin(
   auto [blockIt, blockEnd] = getBeginAndEnd(mdView);
   GetBlocksForJoinResult res;
 
-  // Manually count the blocks that we pass in the `mdView`.
+  // Manually count the number of blocks that have been fully processed in the
+  // `mdView`. This includes blocks that are returned as part of the result as
+  // well as blocks that are completely skipped, because they are
+  // `< joinColumn.back()` but don't match any of the entries in the
+  // `joinColumn`.
   auto& blockIdx = res.numHandledBlocks;
   while (true) {
+    // Skip all IDs in the `joinColumn` that are strictly smaller than any block
+    // that hasn't been handled so far.
     while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
       ++colIt;
     }
     if (colIt == colEnd) {
       return res;
     }
+
+    // At this point, `*blockIt <= *colIt`.
+    // Now skip all blocks that are `< *colIt`.
     while (blockIt != blockEnd && blockLessThanId(*blockIt, *colIt)) {
       ++blockIt;
       ++blockIdx;
@@ -504,9 +513,10 @@ auto CompressedRelationReader::getBlocksForJoin(
     if (blockIt == blockEnd) {
       return res;
     }
-    // It holds that `*blockIt >= *colIt`. As the entries in the `joinColumn`
-    // are sorted, it suffices to additionally find the values where
-    // `*blockIt <= *colIt` to find possibly matching blocks.
+    // Now it holds that `*blockIt >= *colIt`. As the entries in the
+    // `joinColumn` as well as the blocks are sorted, it suffices to
+    // additionally find the values where `*blockIt <= *colIt` to find possibly
+    // matching blocks.
     while (blockIt != blockEnd && !idLessThanBlock(*colIt, *blockIt)) {
       res.matchingBlocks_.push_back(*blockIt);
       ++blockIt;

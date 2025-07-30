@@ -742,8 +742,8 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // Largest value contained in the first block.
   test({V(3)}, {block2}, 1);
 
-  // Although only `block2` matches, we have completely handled `block3` also,
-  // because the `29` is larger than the largest value in `block3`, we thus have
+  // Although only `block2` matches, we have also completely handled `block3`
+  // since `V(29)` is larger than the largest value in `block3`, we thus have
   // two blocks handled.
   test({V(1), V(3), V(17), V(29)}, {block2}, 2);
   test({V(2), V(3), V(4), V(5)}, {block2, block3}, 2);
