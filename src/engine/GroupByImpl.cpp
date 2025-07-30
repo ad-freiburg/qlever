@@ -1653,16 +1653,17 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   if (!isSingleGlobalAggregateFunction) {
     return std::nullopt;
   }
-  if (auto* countStar =
-          dynamic_cast<const sparqlExpression::CountStarExpression*>(
-              _aliases[0]._expression.getPimpl())) {
-    // We can't optimize `COUNT(DISTINCT *)`.
-    if (countStar->isDistinct()) {
-      return std::nullopt;
-    }
-  } else {
+  // We can't optimize `COUNT(DISTINCT *)`.
+  const bool singleAggregateIsNonDistinctCountStar = [&]() {
+    auto* countStar =
+        dynamic_cast<const sparqlExpression::CountStarExpression*>(
+            _aliases[0]._expression.getPimpl());
+    return countStar && !countStar->isDistinct();
+  }();
+  if (!singleAggregateIsNonDistinctCountStar) {
     return std::nullopt;
   }
+
   auto childRes = _subtree->getResult(true);
   // Compute the result as a single `size_t`.
   auto res = [&input = *childRes]() -> size_t {
