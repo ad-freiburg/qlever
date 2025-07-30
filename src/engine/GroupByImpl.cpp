@@ -1648,10 +1648,19 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeCountStar() const {
-  bool isCountStar = _groupByVariables.empty() && _aliases.size() == 1 &&
-                     dynamic_cast<const sparqlExpression::CountStarExpression*>(
-                         _aliases[0]._expression.getPimpl());
-  if (!isCountStar) {
+  bool isSingleGlobalAggregateFunction =
+      _groupByVariables.empty() && _aliases.size() == 1;
+  if (!isSingleGlobalAggregateFunction) {
+    return std::nullopt;
+  }
+  if (auto* countStar =
+          dynamic_cast<const sparqlExpression::CountStarExpression*>(
+              _aliases[0]._expression.getPimpl())) {
+    // We can't optimize `COUNT(DISTINCT *)`.
+    if (countStar->isDistinct()) {
+      return std::nullopt;
+    }
+  } else {
     return std::nullopt;
   }
   auto childRes = _subtree->getResult(true);
