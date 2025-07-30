@@ -113,13 +113,14 @@ class JoinColumnMapping {
       // entries in the result permutation and also the deletion of the join
       // columns would be more complex.
       ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
-      for (auto i : ql::views::reverse(jcls)) {
+      for (auto jcl : ql::views::reverse(jcls) | ql::views::keys) {
+        auto posOfJclBeforeFinalPermutation = permutationResult_.at(jcl);
         for (auto& j : permutationResult_) {
-          if (j > i.at(0)) {
+          if (j > posOfJclBeforeFinalPermutation) {
             --j;
           }
         }
-        permutationResult_.erase(permutationResult_.begin() + i.at(0));
+        permutationResult_.erase(permutationResult_.begin() + jcl);
       }
     }
   }
