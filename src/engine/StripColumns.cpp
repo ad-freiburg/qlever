@@ -112,9 +112,8 @@ Result StripColumns::computeResult(bool requestLaziness) {
     // implement moving the tables from materialized results that are too big
     // for the cache or having a `shared_ptr<IdTable+SubsetView>` type in the
     // result.
-    auto table = res->idTable().clone();
-    table.setColumnSubset(subset_);
-    return {std::move(table), resultSortedOn(), res->localVocab().clone()};
+    auto table = res->idTable().asColumnSubsetView(subset_).clone();
+    return {std::move(table), resultSortedOn(), res->getSharedLocalVocab()};
   } else {
     return {Result::LazyResult{ad_utility::CachingTransformInputRange(
                 res->idTables(),

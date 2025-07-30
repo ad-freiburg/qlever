@@ -32,8 +32,9 @@ StripColumns makeStrip(QueryExecutionContext* qec, IdTable idTable,
 
 // _____________________________________________________________________________
 TEST(StripColumns, basicMembers) {
-  auto strip = makeStrip(getQec(), makeIdTableFromVector({{1, 2, 3}}),
-                         {Variable{"?b"}, Variable{"?c"}});
+  auto strip =
+      makeStrip(getQec(), makeIdTableFromVector({{1, 2, 3}}),
+                {Variable{"?b"}, Variable{"?notFoundInChild"} Variable{"?c"}});
 
   EXPECT_EQ(strip.getDescriptor(), "Strip Columns");
   EXPECT_THAT(strip.getChildren(),
