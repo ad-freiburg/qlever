@@ -13,6 +13,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 // The implementations of the join algorithms (merge/zipper join, galloping
@@ -113,7 +114,8 @@ class JoinColumnMapping {
       // entries in the result permutation and also the deletion of the join
       // columns would be more complex.
       ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
-      for (auto jcl : ql::views::reverse(jcls) | ql::views::keys) {
+      for (auto jcl :
+           ql::views::reverse(jcls) | ql::views::transform(ad_utility::first)) {
         auto posOfJclBeforeFinalPermutation = permutationResult_.at(jcl);
         for (auto& j : permutationResult_) {
           if (j > posOfJclBeforeFinalPermutation) {
