@@ -1372,7 +1372,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
-      if (ql::ranges::empty(el) || !isUndefined_(el.front())) {
+      if (ql::ranges::empty(el)) {
+        continue;
+      }
+      if (!isUndefined_(el.front())) {
         return;
       }
       bool endIsUndefined = isUndefined_(el.back());
@@ -1417,7 +1420,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       // Handle case where the left has undef values in optional join, but the
       // right doesn't contain any values.
       if (doOptionalJoin && rightSide_.undefBlocks_.empty() &&
-          rightSide_.currentBlocks_.empty()) {
+          rightSide_.currentBlocks_.empty() &&
+          rightSide_.it_ == rightSide_.end_) {
         matchLeftUndefValuesWithNothing();
       }
     }
