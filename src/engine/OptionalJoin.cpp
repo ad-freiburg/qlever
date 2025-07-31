@@ -67,10 +67,11 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "OPTIONAL_JOIN\n" << _left->getCacheKey() << " ";
+  os << "OPTIONAL_JOIN\n";
   if (!keepJoinColumns_) {
-    os << "Dropping join-columns";
+    os << "Dropping join-columns\n";
   }
+  os << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
@@ -211,8 +212,6 @@ size_t OptionalJoin::getCostEstimate() {
 
 // _____________________________________________________________________________
 void OptionalJoin::computeSizeEstimateAndMultiplicities() {
-  // TODO<joka921> This is very wrong for stripped join columns, as all the
-  // indices are off.
   // The number of distinct entries in the result is at most the minimum of
   // the numbers of distinc entries in all join columns.
   // The multiplicity in the result is approximated by the product of the
@@ -354,14 +353,27 @@ void OptionalJoin::optionalJoin(
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
       cancellationHandle_, keepJoinColumns_);
-  auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
-                 beginRight = joinColumnsRight.begin()](const auto& itLeft,
-                                                        const auto& itRight) {
-    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
-  };
+  auto rowAdderOnIterators = [&]() {
+    auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
+                   beginRight = joinColumnsRight.begin()](const auto& itLeft,
+                                                          const auto& itRight) {
+      rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+    };
+    auto addRows = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
+                    beginRight = joinColumnsRight.begin()](
+                       const auto& itLeft, const auto& endLeft,
+                       const auto& itRight, const auto& endRight) {
+      auto getRng = [](const auto& it, const auto& end, const auto& beg) {
+        return ql::views::iota(static_cast<size_t>(it - beg),
+                               static_cast<size_t>(end - beg));
+      };
+      rowAdder.addRows(getRng(itLeft, endLeft, beginLeft),
+                       getRng(itRight, endRight, beginRight));
+    };
+    return ad_utility::detail::RowIndexAdder{std::move(addRow),
+                                             std::move(addRows)};
+  }();
 
-  // TODO<joka921> Also add the `addRows` function for higher multiplicities
-  // for this materialized case.
   auto addOptionalRow = [&rowAdder,
                          begin = joinColumnsLeft.begin()](const auto& itLeft) {
     rowAdder.addOptionalRow(itLeft - begin);
@@ -375,25 +387,26 @@ void OptionalJoin::optionalJoin(
   const size_t numOutOfOrder = [&]() {
     auto checkCancellationLambda = [this] { checkCancellation(); };
     if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
-      ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
-                                      addOptionalRow, checkCancellationLambda);
+      ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight,
+                                      rowAdderOnIterators, addOptionalRow,
+                                      checkCancellationLambda);
       return 0UL;
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
-                                  lessThanBoth, addRow, addOptionalRow,
-                                  checkCancellationLambda);
+                                  lessThanBoth, rowAdderOnIterators,
+                                  addOptionalRow, checkCancellationLambda);
       } else {
         auto shouldBeZero = ad_utility::zipperJoinWithUndef(
-            joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
-            ad_utility::noop, ad_utility::noop, addOptionalRow,
-            checkCancellationLambda);
+            joinColumnsLeft, joinColumnsRight, lessThanBoth,
+            rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
+            addOptionalRow, checkCancellationLambda);
         AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
       }
       return 0UL;
     } else {
       return ad_utility::zipperJoinWithUndef(
-          joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
+          joinColumnsLeft, joinColumnsRight, lessThanBoth, rowAdderOnIterators,
           findUndefDispatch, findUndefDispatch, addOptionalRow,
           checkCancellationLambda);
     }

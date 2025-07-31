@@ -31,7 +31,7 @@ class Join : public Operation {
   std::vector<float> _multiplicities;
 
   // If set to false, the join column will not be part of the result.
-  bool _keepJoinColumn = true;
+  bool keepJoinColumn_ = true;
 
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
