@@ -12,8 +12,8 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/JoinAlgorithms/NestedLoopJoin.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -273,39 +273,31 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
   auto alwaysDefined = [this]() {
-    auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
-      return tree->getVariableAndInfoByColumnIndex(index)
-                 .second.mightContainUndef_ ==
-             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    };
-    return ql::ranges::all_of(
-        joinColumns_, [this, alwaysDefHelper = std::move(alwaysDefHelper)](
-                          const auto& indices) {
-          return alwaysDefHelper(left_, indices[0]) &&
-                 alwaysDefHelper(right_, indices[1]);
-        });
+    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                            right_);
   };
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
-  if (!std::dynamic_pointer_cast<Sort>(right_->getRootOperation()) ||
-      left_->getSizeEstimate() > right_->getSizeEstimate() ||
+  auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
+  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate() ||
       !alwaysDefined()) {
     return std::nullopt;
   }
-  auto leftRes = left_->getResult(false);
-  auto child = right_->getRootOperation()->getChildren().at(0);
+
+  auto child = sort->getChildren().at(0);
   auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  right_->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {runtimeInfoChildren});
+  sort->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
+
+  auto leftRes = left_->getResult(false);
   auto rightRes = child->getResult(true);
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  NestedLoopJoin nestedLoopJoin{joinColumns_, std::move(leftRes),
-                                std::move(rightRes)};
+  IndexNestedLoopJoin nestedLoopJoin{joinColumns_, std::move(leftRes),
+                                     std::move(rightRes)};
   result.addEmptyColumn();
   ad_utility::chunkedCopy(
-      ql::ranges::transform_view(
+      ql::views::transform(
           ad_utility::OwningView{nestedLoopJoin.computeTracker()},
           [](char tracker) { return Id::makeFromBool(tracker != 0); }),
       result.getColumn(result.numColumns() - 1).begin(),

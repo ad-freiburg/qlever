@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_NESTEDLOOPJOIN_H
-#define QLEVER_SRC_UTIL_JOINALGORITHMS_NESTEDLOOPJOIN_H
+#ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H
+#define QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H
 
 #include <vector>
 
@@ -13,15 +13,21 @@
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 
-class NestedLoopJoin {
+// This class implements an index nested loop join using binary search to match
+// entries. The benefit of this method over the "regular" join algorithms is
+// that it doesn't require the right side to be sorted, potentially allowing you
+// to skip an expensive sort operation entirely. The downside is that the left
+// side has to be fully materialized. Currently handling undef values is
+// unsupported.
+class IndexNestedLoopJoin {
   std::vector<std::array<ColumnIndex, 2>> joinColumns_;
   std::shared_ptr<const Result> leftResult_;
   std::shared_ptr<const Result> rightResult_;
 
  public:
-  NestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
-                 std::shared_ptr<const Result> leftResult,
-                 std::shared_ptr<const Result> rightResult)
+  IndexNestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
+                      std::shared_ptr<const Result> leftResult,
+                      std::shared_ptr<const Result> rightResult)
       : joinColumns_{std::move(joinColumns)},
         leftResult_{std::move(leftResult)},
         rightResult_{std::move(rightResult)} {
@@ -33,9 +39,9 @@ class NestedLoopJoin {
   // writes for the matching row indices on the left the value `true` into
   // `matchTracker`.
   template <int JOIN_COLUMNS>
-  AD_ALWAYS_INLINE static void matchLeft(std::vector<char>& matchTracker,
-                                         IdTableView<JOIN_COLUMNS> leftTable,
-                                         IdTableView<JOIN_COLUMNS> rightTable) {
+  static void matchLeft(std::vector<char>& matchTracker,
+                        IdTableView<JOIN_COLUMNS> leftTable,
+                        IdTableView<JOIN_COLUMNS> rightTable) {
     AD_CORRECTNESS_CHECK(matchTracker.size() == leftTable.size());
     auto leftColumns = leftTable.getColumns();
     for (const auto& rightRow : rightTable) {
@@ -69,15 +75,15 @@ class NestedLoopJoin {
       leftColumns.push_back(leftCol);
       rightColumns.push_back(rightCol);
     }
-    ad_utility::callFixedSize(
+    ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
-        [this, &matchTracker, &leftColumns, &rightColumns]<int JOIN_COLUMNS>() {
+        [this, &matchTracker, &leftColumns, &rightColumns](auto JOIN_COLUMNS) {
           IdTableView<JOIN_COLUMNS> leftTable =
               leftResult_->idTable()
                   .asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [&matchTracker, &leftTable,
-                              &rightColumns](const IdTable& idTable) {
+          auto matchHelper = [&matchTracker, &leftTable, &rightColumns,
+                              &JOIN_COLUMNS](const IdTable& idTable) {
             matchLeft(matchTracker, leftTable,
                       idTable.asColumnSubsetView(rightColumns)
                           .template asStaticView<JOIN_COLUMNS>());
@@ -94,4 +100,4 @@ class NestedLoopJoin {
   }
 };
 
-#endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_NESTEDLOOPJOIN_H
+#endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H

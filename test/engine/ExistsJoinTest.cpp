@@ -198,9 +198,11 @@ TEST(Exists, computeResult) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinNestedLoopJoinOptimization) {
+  // From this table columns 1 and 2 will be used for the join.
   IdTable a = makeIdTableFromVector(
       {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
 
+  // From this table columns 2 and 1 will be used for the join.
   // This is deliberately not sorted to check the optimization that avoids
   // sorting on the right if bigger
   IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
