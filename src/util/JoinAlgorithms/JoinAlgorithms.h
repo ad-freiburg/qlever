@@ -1397,12 +1397,29 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     }
   }
 
+  // Call `addOptionalRow` for all undef values on the left side.
+  void matchLeftUndefValuesWithNothing() {
+    for (const auto& lBlock : leftSide_.undefBlocks_) {
+      compatibleRowAction_.setOnlyLeftInputForOptionalJoin(lBlock.fullBlock());
+      for (size_t i : lBlock.getIndexRange()) {
+        compatibleRowAction_.addOptionalRow(i);
+      }
+      compatibleRowAction_.flush();
+    }
+  }
+
   // Find and process all leading undefined values from the blocks.
-  void fetchAndProcessUndefinedBlocks() {
+  void fetchAndProcessUndefinedBlocks([[maybe_unused]] bool doOptionalJoin) {
     if constexpr (potentiallyHasUndef) {
       findFirstBlockWithoutUndef(leftSide_);
       findFirstBlockWithoutUndef(rightSide_);
       addCartesianProduct(leftSide_.undefBlocks_, rightSide_.undefBlocks_);
+      // Handle case where the left has undef values in optional join, but the
+      // right doesn't contain any values.
+      if (doOptionalJoin && rightSide_.undefBlocks_.empty() &&
+          rightSide_.currentBlocks_.empty()) {
+        matchLeftUndefValuesWithNothing();
+      }
     }
   }
 
@@ -1413,14 +1430,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     if constexpr (potentiallyHasUndef) {
       findFirstBlockWithoutUndef(leftSide_);
       findFirstBlockWithoutUndef(rightSide_);
-      for (const auto& lBlock : leftSide_.undefBlocks_) {
-        compatibleRowAction_.setOnlyLeftInputForOptionalJoin(
-            lBlock.fullBlock());
-        for (size_t i : lBlock.getIndexRange()) {
-          compatibleRowAction_.addOptionalRow(i);
-        }
-      }
-      compatibleRowAction_.flush();
+      matchLeftUndefValuesWithNothing();
       leftSide_.undefBlocks_.clear();
       leftSide_.undefBlocks_.shrink_to_fit();
       rightSide_.undefBlocks_.clear();
@@ -1434,7 +1444,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     if constexpr (DoMinus) {
       handleUndefForMinus();
     } else {
-      fetchAndProcessUndefinedBlocks();
+      fetchAndProcessUndefinedBlocks(DoOptionalJoin);
     }
     if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
       // Run the join without UNDEF values if there are none. No need to move
