@@ -654,7 +654,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  if (indexScan->getResultWidth() <= 1 ||
+  if (indexScan->numVariables() <= 1 ||
       indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
     return std::nullopt;
   }
@@ -667,7 +667,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   // Distinct counts are only supported for triples with three variables.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
-  if (countIsDistinct && indexScan->getResultWidth() != 3) {
+  if (countIsDistinct && indexScan->numVariables() != 3) {
     return std::nullopt;
   }
 
@@ -677,7 +677,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
-  } else if (indexScan->getResultWidth() == 3) {
+  } else if (indexScan->numVariables() == 3) {
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
@@ -818,7 +818,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || indexScan->graphsToFilter().has_value() ||
-      indexScan->getResultWidth() != 3) {
+      indexScan->numVariables() != 3) {
     return std::nullopt;
   }
   {
@@ -1666,6 +1666,14 @@ GroupByImpl::getVariableForCountOfSingleAlias() const {
 
 // _____________________________________________________________________________
 bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
+  // It might be that the variable is stripped because we never need it.
+  // TODO<joka921> Verify that this is correct.
+  if (auto* indexScan =
+          dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
+    return indexScan->subject() == variable ||
+           indexScan->object() == variable ||
+           indexScan->predicate() == variable;
+  }
   return _subtree->getVariableColumnOrNullopt(variable).has_value();
 }
 
