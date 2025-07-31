@@ -21,6 +21,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
@@ -145,6 +146,16 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   }
 
   return {parser.getBoundingBox(), idTable->size() - prefilterCounter};
+}
+
+// ____________________________________________________________________________
+size_t SpatialJoinAlgorithms::getNumThreads() {
+  size_t maxHwConcurrency = std::thread::hardware_concurrency();
+  size_t userPreference = RuntimeParameters().get<"spatial-join-max-threads">();
+  if (userPreference == 0 || maxHwConcurrency < userPreference) {
+    return maxHwConcurrency;
+  }
+  return userPreference;
 }
 
 // ____________________________________________________________________________
@@ -379,7 +390,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
               joinType] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
-  size_t NUM_THREADS = std::thread::hardware_concurrency();
+  size_t NUM_THREADS = getNumThreads();
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
