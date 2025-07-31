@@ -150,9 +150,9 @@ IdTable Minus::copyMatchingRows(const IdTable& left, T reference,
   }
   result.resize(nonMatchingIndices.size());
 
-  using O = ad_utility::OwningView;
   for (const auto& [outputCol, inputCol] :
-       ::ranges::views::zip(O{result.getColumns()}, O{left.getColumns()})) {
+       ::ranges::views::zip(ad_utility::OwningView{result.getColumns()},
+                            ad_utility::OwningView{left.getColumns()})) {
     ad_utility::chunkedCopy(
         ql::views::transform(nonMatchingIndices,
                              [&inputCol](size_t row) { return inputCol[row]; }),
