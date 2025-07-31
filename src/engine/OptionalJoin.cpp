@@ -478,17 +478,8 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
 // _____________________________________________________________________________
 bool OptionalJoin::isNestedLoopJoinSuitable() const {
   auto alwaysDefined = [this]() {
-    auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
-      return tree->getVariableAndInfoByColumnIndex(index)
-                 .second.mightContainUndef_ ==
-             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    };
-    return ql::ranges::all_of(
-        _joinColumns, [this, alwaysDefHelper = std::move(alwaysDefHelper)](
-                          const auto& indices) {
-          return alwaysDefHelper(_left, indices[0]) &&
-                 alwaysDefHelper(_right, indices[1]);
-        });
+    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_joinColumns, _left,
+                                                            _right);
   };
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
@@ -504,10 +495,10 @@ std::optional<Result> OptionalJoin::tryNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);
-  auto child = _right->getRootOperation()->getChildren().at(0);
+  auto rightOp = _right->getRootOperation();
+  auto child = rightOp->getChildren().at(0);
   auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {runtimeInfoChildren});
+  rightOp->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
   auto rightRes = child->getResult(true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
