@@ -262,6 +262,7 @@ class IndexScan final : public Operation {
   }
 
   // TODO<joka921> mark this as `override` as soon as it actually overrides.
+ public:
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const ad_utility::HashSet<Variable>& variables) const;
