@@ -57,13 +57,6 @@ void testExistsFromIdTable(
   // below) doesn't affect it, as the `ExistsJoin` internally sorts its inputs.
   IdTable expected = left.clone();
 
-  if (numJoinColumns > 0) {
-    // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
-    // pre-sorts its inputs.
-    ad_utility::randomShuffle(left.begin(), left.end());
-    ad_utility::randomShuffle(right.begin(), right.end());
-  }
-
   auto qec = getQec();
   using V = Variable;
   using Vars = std::vector<std::optional<Variable>>;
@@ -77,15 +70,17 @@ void testExistsFromIdTable(
 
   auto makeChild = [&](const IdTable& input, const auto& columnPermutation) {
     Vars vars;
+    std::vector<ColumnIndex> sortedCols;
     for (auto colIdx : columnPermutation) {
       if (colIdx < numJoinColumns) {
         vars.push_back(joinCol(colIdx));
+        sortedCols.push_back(colIdx);
       } else {
         vars.push_back(nonJoinCol());
       }
     }
-    return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
-                                                           vars);
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, input.clone(), vars, false, std::move(sortedCols));
   };
 
   // Compute the `ExistsJoin` and check the result.
