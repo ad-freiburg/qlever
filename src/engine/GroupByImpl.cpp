@@ -937,6 +937,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   if (auto result = computeGroupByObjectWithCount()) {
     return result;
   }
+  if (auto result = computeCountStar()) {
+    return result;
+  }
   return std::nullopt;
 }
 
@@ -1641,4 +1644,43 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeCountStar() const {
+  bool isSingleGlobalAggregateFunction =
+      _groupByVariables.empty() && _aliases.size() == 1;
+  if (!isSingleGlobalAggregateFunction) {
+    return std::nullopt;
+  }
+  // We can't optimize `COUNT(DISTINCT *)`.
+  const bool singleAggregateIsNonDistinctCountStar = [&]() {
+    auto* countStar =
+        dynamic_cast<const sparqlExpression::CountStarExpression*>(
+            _aliases[0]._expression.getPimpl());
+    return countStar && !countStar->isDistinct();
+  }();
+  if (!singleAggregateIsNonDistinctCountStar) {
+    return std::nullopt;
+  }
+
+  auto childRes = _subtree->getResult(true);
+  // Compute the result as a single `size_t`.
+  auto res = [&input = *childRes]() -> size_t {
+    if (input.isFullyMaterialized()) {
+      return input.idTable().size();
+    } else {
+      auto gen = input.idTables();
+      auto sz = gen | ql::views::transform([](const auto& pair) {
+                  return pair.idTable_.numRows();
+                }) |
+                ql::views::common;
+      return std::accumulate(sz.begin(), sz.end(), size_t{0});
+    }
+  }();
+
+  // Wrap the result in an IdTable with a single row and column.
+  IdTable result{1, getExecutionContext()->getAllocator()};
+  result.push_back(std::array{Id::makeFromInt(res)});
+  return result;
 }

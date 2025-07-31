@@ -44,6 +44,16 @@ CPP_concept BinaryIteratorFunction =
 // for each position they are equal, or at least one of them is UNDEF. This is
 // exactly the semantics of the SPARQL standard for rows that match in a JOIN
 // operation.
+namespace joinAlgorithms::detail {
+
+template <typename F, typename It1, typename It2>
+CPP_requires(HasAddRowsRequires,
+             requires(F& p, It1 it1, It2 it2)(p.addRows(it1, it1, it2, it2)));
+
+template <typename F, typename It1, typename It2>
+CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
+
+}  // namespace joinAlgorithms::detail
 
 /**
  * @brief This function performs a merge/zipper join that also handles UNDEF
@@ -264,11 +274,24 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
         mergeWithUndefLeft(it, std::begin(left), it1);
       }
 
-      for (; it1 != endSame1; ++it1) {
-        checkCancellation();
-        cover(it1);
-        for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
-          compatibleRowAction(it1, innerIt2);
+      // Add all the matching rows to the result.
+      // TODO<joka921> We should at some point enforce that all the
+      // `CompatibleRowAction`s support adding multiple rows at once.
+      if constexpr (joinAlgorithms::detail::HasAddRows<
+                        CompatibleRowAction, decltype(it1), decltype(it2)>) {
+        compatibleRowAction.addRows(it1, endSame1, it2, endSame2);
+        if constexpr (hasNotFoundAction) {
+          for (; it1 != endSame1; ++it1) {
+            cover(it1);
+          }
+        }
+      } else {
+        for (; it1 != endSame1; ++it1) {
+          checkCancellation();
+          cover(it1);
+          for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
+            compatibleRowAction(it1, innerIt2);
+          }
         }
       }
       it1 = endSame1;
@@ -729,6 +752,22 @@ struct AlwaysFalse {
   }
 };
 
+// A helper struct that is used to move the `addRow` and `addRows` function of
+// the `AddCombinedRowToTable` (which requires integers as arguments) to a
+// class with a similar interface that takes `iterators` as expected by the
+// `zipperJoinWithUndef` function that is called for each block.
+// It simply takes two callables, the first one will be the `operator()` and
+// the second one the `addRow` function.
+template <typename F1, typename F2>
+struct RowIndexAdder {
+  F1 f1;
+  F2 f2;
+  void operator()(auto&&... args) const { return f1(AD_FWD(args)...); }
+  void addRows(auto&&... args) const { return f2(AD_FWD(args)...); }
+};
+template <typename F1, typename F2>
+RowIndexAdder(F1, F2) -> RowIndexAdder<std::decay_t<F1>, std::decay_t<F2>>;
+
 // How many blocks we want to read at once when fetching new ones.
 static constexpr size_t FETCH_BLOCKS = 3;
 
@@ -849,7 +888,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
         return true;
       }
-      AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(*it, lessThan_));
+      AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(*it, lessThan_));
       side.currentBlocks_.emplace_back(std::move(*it));
     }
     return it == end;
@@ -932,11 +971,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-        for (size_t i : lBlock.getIndexRange()) {
-          for (size_t j : rBlock.getIndexRange()) {
-            compatibleRowAction_.addRow(i, j);
-          }
-        }
+        compatibleRowAction_.addRows(lBlock.getIndexRange(),
+                                     rBlock.getIndexRange());
       }
     }
   }
@@ -1071,10 +1107,22 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
     auto begL = fullBlockLeft.get().begin();
     auto begR = fullBlockRight.get().begin();
+
     auto addRowIndex = [&begL, &begR, this](auto itFromL, auto itFromR) {
       AD_EXPENSIVE_CHECK(itFromL >= begL);
       AD_EXPENSIVE_CHECK(itFromR >= begR);
       compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
+    };
+    auto addRowIndices = [&begL, &begR, this](auto itFromL, auto endFromL,
+                                              auto itFromR, auto endFromR) {
+      AD_EXPENSIVE_CHECK(itFromL >= begL && endFromL >= itFromL);
+      AD_EXPENSIVE_CHECK(itFromR >= begR && endFromR >= itFromR);
+      auto io = [&](const auto& beg, const auto& it, const auto& end) {
+        return ql::views::iota(static_cast<size_t>(it - beg),
+                               static_cast<size_t>(end - beg));
+      };
+      compatibleRowAction_.addRows(io(begL, itFromL, endFromL),
+                                   io(begR, itFromR, endFromR));
     };
 
     auto addNotFoundRowIndex = [&]() {
@@ -1101,7 +1149,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          addRowIndex,
+          RowIndexAdder{addRowIndex, addRowIndices},
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
           addNotFoundRowIndex, noop, std::false_type{});
@@ -1109,7 +1157,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          addRowIndex, noop, noop, addNotFoundRowIndex);
+          RowIndexAdder{addRowIndex, addRowIndices}, noop, noop,
+          addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();
 
@@ -1127,7 +1176,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     while (targetBuffer.empty() && it != end) {
       auto& el = *it;
       if (!el.empty()) {
-        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(el, lessThan_));
+        AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(el, lessThan_));
         targetBuffer.emplace_back(std::move(el));
       }
       ++it;
