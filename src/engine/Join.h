@@ -30,6 +30,9 @@ class Join : public Operation {
 
   std::vector<float> _multiplicities;
 
+  // Specify whether the join column will be contained in the result.
+  static constexpr bool keepJoinColumn_ = true;
+
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
