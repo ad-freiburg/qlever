@@ -29,6 +29,10 @@ namespace ad_utility {
 // (also in the same order). The following struct stores the information, which
 // permutations have to be applied to the input and the result to convert from
 // one of those formats to the other.
+// NOTE: This mapping always has to be consistent with the one created by
+// `makeVarToColMapForJoinOperation` in
+// `VariableToColumnMap.hmakeVarToColMapForJoinOperation` in
+// `VariableToColumnMap.h`.
 class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
@@ -100,30 +104,14 @@ class JoinColumnMapping {
       }
     }
 
-    // If the join columns are not kept, we have to fix the result permutation.
-    // The join columns (the first `numJoinColumns` in the input to the result
-    // permutation) have to be deleted, and the remaining entries have to be
-    // shifted to the left accordingly.
+    // If the join columns are not kept, the result permutation is just the
+    // identity, because the original permutation preserves the order of the
+    // non-join-columns.
     if (!keepJoinColumns) {
-      auto jcls = joinColumns;
-      // For each join column and for every value in the result permutation that
-      // is larger than the index of the join column, we have to decrease the
-      // actual value in the permutation by one. We do so in the reversed order
-      // of the join columns to be able to perform this logic in place,
-      // otherwise we would for every entry have to count the number of smaller
-      // entries in the result permutation and also the deletion of the join
-      // columns would be more complex.
-      ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
-      for (auto jcl :
-           ql::views::reverse(jcls) | ql::views::transform(ad_utility::first)) {
-        auto posOfJclBeforeFinalPermutation = permutationResult_.at(jcl);
-        for (auto& j : permutationResult_) {
-          if (j > posOfJclBeforeFinalPermutation) {
-            --j;
-          }
-        }
-        permutationResult_.erase(permutationResult_.begin() + jcl);
-      }
+      permutationResult_.clear();
+      ql::ranges::copy(ad_utility::integerRange(numColsLeft + numColsRight -
+                                                2 * joinColumns.size()),
+                       std::back_inserter(permutationResult_));
     }
   }
 };

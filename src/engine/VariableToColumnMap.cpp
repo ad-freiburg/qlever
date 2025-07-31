@@ -43,9 +43,10 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
         continue;
       }
       // Find the number of join columns that appear beofore this column.
-      size_t shift = std::count_if(jcls.begin(), jcls.end(),
-                                   [col = columnIndexWithType.columnIndex_](
-                                       ColumnIndex jcl) { return jcl < col; });
+      size_t shift = ql::ranges::count_if(
+          jcls, [col = columnIndexWithType.columnIndex_](ColumnIndex jcl) {
+            return jcl < col;
+          });
       columnIndexWithType.columnIndex_ -= shift;
       res.insert(std::move(el));
     }

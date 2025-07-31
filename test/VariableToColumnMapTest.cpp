@@ -27,13 +27,12 @@ TEST_P(VariableToColumnMapTest, gapsInRightCols) {
   auto joinCols = makeVarToColMapForJoinOperation(
       leftCols, rightCols, {{0, 1}}, BinOpType::Join, 2, keepJoinCols);
   VariableToColumnMap expected;
-  bool k = keepJoinCols;
-  if (k) {
+  if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
   }
-  expected[V{"?y"}] = makeAlwaysDefinedColumn(k ? 1 : 0);
-  expected[V{"?a"}] = makePossiblyUndefinedColumn(k ? 3 : 2);
-  expected[V{"?b"}] = makeAlwaysDefinedColumn(k ? 6 : 5);
+  expected[V{"?y"}] = makeAlwaysDefinedColumn(keepJoinCols ? 1 : 0);
+  expected[V{"?a"}] = makePossiblyUndefinedColumn(keepJoinCols ? 3 : 2);
+  expected[V{"?b"}] = makeAlwaysDefinedColumn(keepJoinCols ? 6 : 5);
   EXPECT_THAT(joinCols, ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -55,12 +54,11 @@ TEST_P(VariableToColumnMapTest, gapsInLeftCols) {
   auto joinCols = makeVarToColMapForJoinOperation(
       leftCols, rightCols, {{2, 0}}, BinOpType::Join, 4, keepJoinCols);
   VariableToColumnMap expected;
-  auto k = keepJoinCols;
-  if (k) {
+  if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(2);
   }
   expected[V{"?y"}] = makeAlwaysDefinedColumn(0);
-  expected[V{"?a"}] = makeAlwaysDefinedColumn(k ? 4 : 3);
+  expected[V{"?a"}] = makeAlwaysDefinedColumn(keepJoinCols ? 4 : 3);
   EXPECT_THAT(joinCols, ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -83,20 +81,19 @@ TEST_P(VariableToColumnMapTest, mixedJoinAndNonJoinColumns) {
   auto joinCols = makeVarToColMapForJoinOperation(
       leftCols, rightCols, {{2, 0}, {0, 1}}, BinOpType::Join, 4, keepJoinCols);
   VariableToColumnMap expected;
-  auto k = keepJoinCols;
-  if (k) {
+  if (keepJoinCols) {
     expected[V{"?y"}] = makeAlwaysDefinedColumn(0);
   }
-  expected[V{"?a"}] = makeAlwaysDefinedColumn(k ? 1 : 0);
-  if (k) {
+  expected[V{"?a"}] = makeAlwaysDefinedColumn(keepJoinCols ? 1 : 0);
+  if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(2);
   }
   // Two join columns before `?b` so it has to be shifted by two when the join
   // columns are dropped.
-  expected[V{"?b"}] = makeAlwaysDefinedColumn(k ? 3 : 1);
+  expected[V{"?b"}] = makeAlwaysDefinedColumn(keepJoinCols ? 3 : 1);
 
   // Same for `?c`.
-  expected[V{"?c"}] = makeAlwaysDefinedColumn(k ? 4 : 2);
+  expected[V{"?c"}] = makeAlwaysDefinedColumn(keepJoinCols ? 4 : 2);
   EXPECT_THAT(joinCols, ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -119,8 +116,7 @@ TEST_P(VariableToColumnMapTest, undefinedJoinColumn) {
       leftCols, rightCols, {{0, 0}, {1, 2}, {2, 1}}, BinOpType::Join, 3,
       keepJoinCols);
   VariableToColumnMap expected;
-  auto k = keepJoinCols;
-  if (k) {
+  if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
     expected[V{"?y"}] = makeAlwaysDefinedColumn(1);
     expected[V{"?z"}] = makePossiblyUndefinedColumn(2);
@@ -146,12 +142,11 @@ TEST_P(VariableToColumnMapTest, optionalJoin) {
       makeVarToColMapForJoinOperation(leftCols, rightCols, {{0, 0}, {1, 2}},
                                       BinOpType::OptionalJoin, 2, keepJoinCols);
   VariableToColumnMap expected;
-  bool k = keepJoinCols;
-  if (k) {
+  if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
     expected[V{"?y"}] = makePossiblyUndefinedColumn(1);
   }
-  expected[V{"?a"}] = makePossiblyUndefinedColumn(k ? 2 : 0);
+  expected[V{"?a"}] = makePossiblyUndefinedColumn(keepJoinCols ? 2 : 0);
   EXPECT_THAT(joinCols, ::testing::UnorderedElementsAreArray(expected));
 }
 
