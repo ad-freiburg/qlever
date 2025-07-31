@@ -193,7 +193,7 @@ class OptionalJoinRange
 // that it doesn't require the right side to be sorted, potentially allowing you
 // to skip an expensive sort operation entirely. The downside is that the left
 // side has to be fully materialized. Currently handling undef values is
-// unsupported. `matchLeft` can be used with different types to accomodate
+// unsupported. `matchLeft` can be used with different types to accommodate
 // different types of joins.
 class IndexNestedLoopJoin {
   std::vector<std::array<ColumnIndex, 2>> joinColumns_;
