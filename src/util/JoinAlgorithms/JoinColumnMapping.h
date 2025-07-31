@@ -30,9 +30,7 @@ namespace ad_utility {
 // permutations have to be applied to the input and the result to convert from
 // one of those formats to the other.
 // NOTE: This mapping always has to be consistent with the one created by
-// `makeVarToColMapForJoinOperation` in
-// `VariableToColumnMap.hmakeVarToColMapForJoinOperation` in
-// `VariableToColumnMap.h`.
+// `makeVarToColMapForJoinOperation` in `VariableToColumnMap.h.
 class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
