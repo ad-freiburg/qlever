@@ -57,8 +57,9 @@ class Minus : public Operation {
   // Helper function to copy all rows from `left` that have a corresponding
   // value of `reference` in `keepEntry`.
   template <typename T>
-  IdTable copyMatchingRows(const IdTable& left, T reference,
-                           const std::vector<T>& keepEntry) const;
+  IdTable copyMatchingRows(
+      const IdTable& left, T reference,
+      const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const;
 
  public:
   size_t getCostEstimate() override;

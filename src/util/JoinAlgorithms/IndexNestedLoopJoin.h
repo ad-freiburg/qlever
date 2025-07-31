@@ -21,9 +21,11 @@
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char> matchTracker_;
+  std::vector<char, ad_utility::AllocatorWithLimit<char>> matchTracker_;
 
-  explicit Filler(size_t size) : matchTracker_(size, 0) {}
+  explicit Filler(size_t size,
+                  const ad_utility::AllocatorWithLimit<char>& allocator)
+      : matchTracker_(size, 0, allocator) {}
 
   AD_ALWAYS_INLINE void track(size_t offset, size_t size, size_t) {
     AD_EXPENSIVE_CHECK(offset + size <= matchTracker_.size());
@@ -38,12 +40,13 @@ struct Adder {
   std::vector<std::array<size_t, 2>> matchingPairs_;
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char> missingIndices_;
+  std::vector<char, ad_utility::AllocatorWithLimit<char>> missingIndices_;
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
   explicit Adder(size_t size,
+                 const ad_utility::AllocatorWithLimit<char>& allocator,
                  ad_utility::SharedCancellationHandle cancellationHandle)
-      : missingIndices_(size, true),
+      : missingIndices_(size, true, allocator),
         cancellationHandle_{std::move(cancellationHandle)} {}
 
   AD_ALWAYS_INLINE void track(size_t offset, size_t size, size_t rightIndex) {
@@ -238,8 +241,9 @@ class IndexNestedLoopJoin {
 
  public:
   // Main function for MINUS and EXISTS operations.
-  std::vector<char> computeExistance() {
-    Filler matchTracker{leftResult_->idTable().size()};
+  std::vector<char, ad_utility::AllocatorWithLimit<char>> computeExistance() {
+    Filler matchTracker{leftResult_->idTable().size(),
+                        leftResult_->idTable().getAllocator().as<char>()};
     std::vector<ColumnIndex> leftColumns;
     std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
@@ -277,6 +281,7 @@ class IndexNestedLoopJoin {
       ad_utility::SharedCancellationHandle cancellationHandle) && {
     AD_CONTRACT_CHECK(leftResult_->idTable().numColumns() <= resultWidth);
     Adder matchTracker{leftResult_->idTable().size(),
+                       leftResult_->idTable().getAllocator().as<char>(),
                        std::move(cancellationHandle)};
     return ad_utility::callFixedSize(
         static_cast<int>(joinColumns_.size()),

@@ -136,8 +136,9 @@ auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
 
 // _____________________________________________________________________________
 template <typename T>
-IdTable Minus::copyMatchingRows(const IdTable& left, T reference,
-                                const std::vector<T>& keepEntry) const {
+IdTable Minus::copyMatchingRows(
+    const IdTable& left, T reference,
+    const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const {
   IdTable result{getResultWidth(), left.getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
@@ -189,7 +190,7 @@ IdTable Minus::computeMinus(
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
   // Keep all entries by default, set to false when matching.
-  std::vector keepEntry(left.size(), true);
+  std::vector keepEntry(left.size(), true, allocator().as<bool>());
 
   auto markForRemoval = [&keepEntry, &joinColumnsLeft](const auto& leftIt) {
     keepEntry.at(ql::ranges::distance(joinColumnsLeft.begin(), leftIt)) = false;
@@ -258,7 +259,7 @@ std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
   IndexNestedLoopJoin nestedLoopJoin{_matchedColumns, std::move(leftRes),
                                      std::move(rightRes)};
 
-  std::vector<char> nonMatchingEntries = nestedLoopJoin.computeExistance();
+  auto nonMatchingEntries = nestedLoopJoin.computeExistance();
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};
