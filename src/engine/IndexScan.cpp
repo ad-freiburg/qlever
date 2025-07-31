@@ -143,8 +143,7 @@ string IndexScan::getDescriptor() const {
 // _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
   if (varsToKeep_.has_value()) {
-    auto res = varsToKeep_.value().size();
-    return res;
+    return varsToKeep_.value().size();
   }
   return numVariables_ + additionalVariables_.size();
 }
@@ -316,11 +315,7 @@ void IndexScan::determineMultiplicities() {
       return idx.getMultiplicities(permutation_);
     }
   }();
-  for ([[maybe_unused]] size_t i :
-       ql::views::iota(multiplicity_.size(),
-                       std::max(multiplicity_.size(), getResultWidth()))) {
-    multiplicity_.emplace_back(1);
-  }
+  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;
@@ -716,8 +711,9 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     }
   }
   for (const auto& var : additionalVariables_) {
-    AD_CONTRACT_CHECK(v.contains(var));
-    result.push_back(idx);
+    if (v.contains(var)) {
+      result.push_back(idx);
+    }
     ++idx;
   }
   return result;

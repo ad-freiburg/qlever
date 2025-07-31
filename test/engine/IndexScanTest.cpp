@@ -1296,4 +1296,11 @@ TEST(IndexScanTest, StripColumns) {
   testStrippedBySingleColumn(Var{"?x"}, {0});
   testStrippedBySingleColumn(Var{"?y"}, {});
   testStrippedBySingleColumn(Var{"?z"}, {});
+
+  // TODO<joka921/RobinTF:
+  // 1. Also test cases with multiple variables that are being kept.
+  // 2. Also test cases where the underlying scan has a different number of
+  // variables.
+  // 3. Test the case of additional variables (in particular with GRAPHs).
+  // 4. Verify that all possible members are tested in the infrastructure.
 }

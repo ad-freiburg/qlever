@@ -249,6 +249,11 @@ class IndexScan final : public Operation {
   // columns stripped, and applies the column subset that leads to the correct
   // stripping of the columns. This function can also be used if no columns are
   // stripped and hence `varsToKeep_` is `nullopt`.
+  // Note: In theory, we could inform the underlying `CompressedRelationReader`
+  // of the required columns to not read the stripped columns at all. But in
+  // practice the effect would be limited, because the reader has to read all
+  // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
+  // filtering etc.)
   auto makeApplyColumnSubset() const {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
