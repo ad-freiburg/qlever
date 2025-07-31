@@ -38,19 +38,6 @@ void testExistsFromIdTable(
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
   AD_CORRECTNESS_CHECK(right.numColumns() >= numJoinColumns);
 
-  // Randomly permute the columns of the `input` and return the permutation that
-  // was applied
-  auto permuteColumns = [](auto& table) {
-    auto colsView = ad_utility::integerRange(table.numColumns());
-    std::vector<ColumnIndex> permutation;
-    ql::ranges::copy(colsView, std::back_inserter(permutation));
-    table.setColumnSubset(permutation);
-    return permutation;
-  };
-  // Permute the columns.
-  auto leftPermutation = permuteColumns(left);
-  auto rightPermutation = permuteColumns(right);
-
   // We have to make the deep copy of `left` for the expected result at exactly
   // this point: The permutation of the columns (above) also affects the
   // expected result, while the permutation of the rows (which will be applied
@@ -68,10 +55,10 @@ void testExistsFromIdTable(
     return V{absl::StrCat("?nonJoinCol_", i++)};
   };
 
-  auto makeChild = [&](const IdTable& input, const auto& columnPermutation) {
+  auto makeChild = [&](const IdTable& input) {
     Vars vars;
     std::vector<ColumnIndex> sortedCols;
-    for (auto colIdx : columnPermutation) {
+    for (auto colIdx : ad_utility::integerRange(input.numColumns())) {
       if (colIdx < numJoinColumns) {
         vars.push_back(joinCol(colIdx));
         sortedCols.push_back(colIdx);
@@ -84,8 +71,8 @@ void testExistsFromIdTable(
   };
 
   // Compute the `ExistsJoin` and check the result.
-  auto exists = ExistsJoin{qec, makeChild(left, leftPermutation),
-                           makeChild(right, rightPermutation), V{"?exists"}};
+  auto exists =
+      ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
   auto res = exists.computeResultOnlyForTesting();
   const auto& table = res.idTable();
