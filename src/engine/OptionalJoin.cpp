@@ -11,8 +11,8 @@
 #include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/JoinAlgorithms/NestedLoopJoin.h"
 
 using namespace qlever::joinHelpers;
 
@@ -511,8 +511,8 @@ std::optional<Result> OptionalJoin::tryNestedLoopJoinIfSuitable(
   auto rightRes = child->getResult(true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  NestedLoopJoin nestedLoopJoin{_joinColumns, std::move(leftRes),
-                                std::move(rightRes)};
+  IndexNestedLoopJoin nestedLoopJoin{_joinColumns, std::move(leftRes),
+                                     std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
