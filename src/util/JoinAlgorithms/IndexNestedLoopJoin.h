@@ -10,8 +10,10 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
@@ -24,6 +26,147 @@ struct Filler {
     AD_EXPENSIVE_CHECK(offset + size <= matchTracker_.size());
     ql::ranges::fill(matchTracker_.begin() + offset,
                      matchTracker_.begin() + offset + size, 1);
+  }
+};
+
+struct Adder {
+  std::vector<std::array<size_t, 2>> matchingPairs_;
+  // Should conceptually be bool, but doesn't allow the compiler to use
+  // memset in `matchLeft`.
+  std::vector<char> missingIndices_;
+
+  explicit Adder(size_t size) : missingIndices_(size, true) {}
+
+  AD_ALWAYS_INLINE void track(size_t offset, size_t size, size_t rightIndex) {
+    for (size_t i = 0; i < size; i++) {
+      matchingPairs_.push_back({offset + i, rightIndex});
+    }
+    ql::ranges::fill(missingIndices_.begin() + offset,
+                     missingIndices_.begin() + offset + size, false);
+  }
+
+  void materializeTables(IdTable& result, IdTableView<0> left,
+                         IdTableView<0> right) {
+    size_t originalSize = result.size();
+    result.resize(originalSize + matchingPairs_.size());
+    ColumnIndex colIdx = 0;
+    for (auto source : left.getColumns()) {
+      auto target = result.getColumn(colIdx);
+      size_t offset = originalSize;
+      for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
+        target[offset] = source[leftIdx];
+        ++offset;
+      }
+      // TODO<RobinTF> Add cancellation check.
+      ++colIdx;
+    }
+    size_t numJoinColumns =
+        left.numColumns() + right.numColumns() - result.numColumns();
+    for (size_t rightCol = numJoinColumns; rightCol < right.numColumns();
+         ++rightCol) {
+      auto source = right.getColumn(rightCol);
+      auto target = result.getColumn(colIdx);
+      size_t offset = originalSize;
+      for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
+        target[offset] = source[rightIdx];
+        ++offset;
+      }
+      // TODO<RobinTF> Add cancellation check.
+      ++colIdx;
+    }
+    matchingPairs_.clear();
+  }
+
+  void materializeMissing(IdTable& result, IdTableView<0> left) {
+    size_t counter = std::reduce(missingIndices_.begin(), missingIndices_.end(),
+                                 static_cast<size_t>(0));
+    size_t originalSize = result.size();
+    result.resize(originalSize + counter);
+    ColumnIndex colIdx = 0;
+    for (auto source : left.getColumns()) {
+      auto target = result.getColumn(colIdx);
+      size_t targetIndex = originalSize;
+      for (size_t i = 0; i < missingIndices_.size(); ++i) {
+        if (missingIndices_[i]) {
+          target[targetIndex] = source[i];
+          ++targetIndex;
+        }
+      }
+      // TODO<RobinTF> Add cancellation check.
+      ++colIdx;
+    }
+    while (colIdx < result.numColumns()) {
+      // TODO<RobinTF> Add cancellation check.
+      auto col = result.getColumn(colIdx);
+      ad_utility::chunkedFill(
+          ql::ranges::subrange{col.begin() + originalSize, col.end()},
+          Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE, []() {});
+      ++colIdx;
+    }
+  }
+};
+
+template <typename ComputeMatches>
+class OptionalJoinRange
+    : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  // Kept for correct lifetime.
+  std::shared_ptr<const Result> leftResult_;
+  std::shared_ptr<const Result> rightResult_;
+  const LocalVocab& leftVocab_;
+  const IdTable& leftTable_;
+  Result::LazyResult rightTables_;
+  Adder matchTracker_;
+  size_t resultWidth_;
+  ad_utility::JoinColumnMapping joinColumnData_;
+  ComputeMatches computeMatches_;
+  bool lastProcessed_ = false;
+
+ public:
+  OptionalJoinRange(std::shared_ptr<const Result> leftResult,
+                    std::shared_ptr<const Result> rightResult,
+                    const LocalVocab& leftVocab, const IdTable& leftTable,
+                    Result::LazyResult rightTables, Adder matchTracker,
+                    size_t resultWidth,
+                    ad_utility::JoinColumnMapping joinColumnData,
+                    ComputeMatches computeMatches)
+      : leftResult_{std::move(leftResult)},
+        rightResult_{std::move(rightResult)},
+        leftVocab_{leftVocab},
+        leftTable_{leftTable},
+        rightTables_{std::move(rightTables)},
+        matchTracker_{std::move(matchTracker)},
+        resultWidth_{resultWidth},
+        joinColumnData_{std::move(joinColumnData)},
+        computeMatches_{std::move(computeMatches)} {}
+
+  std::optional<Result::IdTableVocabPair> get() override {
+    if (lastProcessed_) {
+      return std::nullopt;
+    }
+    auto next = rightTables_.get();
+    if (next.has_value()) {
+      auto& [idTable, localVocab] = next.value();
+      computeMatches_(matchTracker_, idTable);
+      IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
+      matchTracker_.materializeTables(
+          resultTable,
+          leftTable_.asColumnSubsetView(joinColumnData_.permutationLeft()),
+          idTable.asColumnSubsetView(joinColumnData_.permutationRight()));
+      resultTable.setColumnSubset(joinColumnData_.permutationResult());
+      localVocab.mergeWith(leftVocab_);
+      return Result::IdTableVocabPair{std::move(resultTable),
+                                      std::move(localVocab)};
+    }
+    lastProcessed_ = true;
+    IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
+    matchTracker_.materializeMissing(
+        resultTable,
+        leftTable_.asColumnSubsetView(joinColumnData_.permutationLeft()));
+    if (resultTable.empty()) {
+      return std::nullopt;
+    }
+    resultTable.setColumnSubset(joinColumnData_.permutationResult());
+    return Result::IdTableVocabPair{std::move(resultTable), leftVocab_.clone()};
   }
 };
 
@@ -109,6 +252,80 @@ class IndexNestedLoopJoin {
           }
         });
     return std::move(matchTracker.matchTracker_);
+  }
+
+ public:
+  // ___________________________________________________________________________
+  Result::LazyResult computeOptionalJoin(bool yieldOnce,
+                                         size_t resultWidth) && {
+    AD_CONTRACT_CHECK(leftResult_->idTable().numColumns() <= resultWidth);
+    Adder matchTracker{leftResult_->idTable().size()};
+    return ad_utility::callFixedSize(
+        static_cast<int>(joinColumns_.size()),
+        [this, &matchTracker, yieldOnce,
+         resultWidth]<int JOIN_COLUMNS>() -> Result::LazyResult {
+          const IdTable& leftTable = leftResult_->idTable();
+          size_t numColsLeft = leftTable.numColumns();
+          ad_utility::JoinColumnMapping joinColumnData{
+              joinColumns_, numColsLeft,
+              resultWidth - numColsLeft + joinColumns_.size()};
+          IdTableView<JOIN_COLUMNS> leftTableView =
+              leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
+                  .template asStaticView<JOIN_COLUMNS>();
+          auto matchHelper = [&matchTracker, &leftTableView,
+                              rightColumns = joinColumnData.jcsRight()](
+                                 const IdTable& idTable) {
+            matchLeft(matchTracker, leftTableView,
+                      idTable.asColumnSubsetView(rightColumns)
+                          .template asStaticView<JOIN_COLUMNS>());
+          };
+          IdTable resultTable{resultWidth, leftTable.getAllocator()};
+          LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
+          if (rightResult_->isFullyMaterialized()) {
+            matchHelper(rightResult_->idTable());
+            matchTracker.materializeTables(
+                resultTable,
+                leftTable.asColumnSubsetView(joinColumnData.permutationLeft()),
+                rightResult_->idTable().asColumnSubsetView(
+                    joinColumnData.permutationRight()));
+            matchTracker.materializeMissing(
+                resultTable,
+                leftTable.asColumnSubsetView(joinColumnData.permutationLeft()));
+            mergedVocab.mergeWith(rightResult_->localVocab());
+          } else if (yieldOnce) {
+            for (const auto& [idTable, localVocab] : rightResult_->idTables()) {
+              matchHelper(idTable);
+              matchTracker.materializeTables(
+                  resultTable,
+                  leftTable.asColumnSubsetView(
+                      joinColumnData.permutationLeft()),
+                  idTable.asColumnSubsetView(
+                      joinColumnData.permutationRight()));
+              mergedVocab.mergeWith(localVocab);
+            }
+            matchTracker.materializeMissing(
+                resultTable,
+                leftTable.asColumnSubsetView(joinColumnData.permutationLeft()));
+          } else {
+            const LocalVocab& leftVocab = leftResult_->localVocab();
+            auto rightTables = rightResult_->idTables();
+            auto rightColumns = joinColumnData.jcsRight();
+            return Result::LazyResult{OptionalJoinRange{
+                std::move(leftResult_), std::move(rightResult_), leftVocab,
+                leftTable, std::move(rightTables), std::move(matchTracker),
+                resultWidth, std::move(joinColumnData),
+                [leftTableView = std::move(leftTableView),
+                 rightColumns = std::move(rightColumns)](
+                    Adder& adder, const IdTable& rightTable) {
+                  matchLeft(adder, leftTableView,
+                            rightTable.asColumnSubsetView(rightColumns)
+                                .template asStaticView<JOIN_COLUMNS>());
+                }}};
+          }
+          resultTable.setColumnSubset(joinColumnData.permutationResult());
+          return Result::LazyResult{std::array{Result::IdTableVocabPair{
+              std::move(resultTable), std::move(mergedVocab)}}};
+        });
   }
 };
 

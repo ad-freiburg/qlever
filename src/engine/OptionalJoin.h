@@ -85,6 +85,14 @@ class OptionalJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // Helper function for `tryNestedLoopJoinIfSuitable` which makes the logic
+  // reusable.
+  bool isNestedLoopJoinSuitable() const;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryNestedLoopJoinIfSuitable(bool requestLaziness);
+
   void computeSizeEstimateAndMultiplicities();
 
   Result computeResult(bool requestLaziness) override;

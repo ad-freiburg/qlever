@@ -10,7 +10,9 @@
 #include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Service.h"
+#include "engine/Sort.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/NestedLoopJoin.h"
 
 using namespace qlever::joinHelpers;
 
@@ -102,6 +104,10 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
+  if (auto res = tryNestedLoopJoinIfSuitable(requestLaziness)) {
+    return std::move(res).value();
+  }
+
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
@@ -156,6 +162,10 @@ size_t OptionalJoin::getResultWidth() const {
 // _____________________________________________________________________________
 std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   std::vector<ColumnIndex> sortedOn;
+  // This optimization doesn't allow preserving sort order.
+  if (isNestedLoopJoinSuitable()) {
+    return sortedOn;
+  }
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {
     (void)joinColumnRight;
@@ -463,4 +473,55 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool OptionalJoin::isNestedLoopJoinSuitable() const {
+  auto alwaysDefined = [this]() {
+    auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
+      return tree->getVariableAndInfoByColumnIndex(index)
+                 .second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    };
+    return ql::ranges::all_of(
+        _joinColumns, [this, alwaysDefHelper = std::move(alwaysDefHelper)](
+                          const auto& indices) {
+          return alwaysDefHelper(_left, indices[0]) &&
+                 alwaysDefHelper(_right, indices[1]);
+        });
+  };
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side. It currently doesn't support undef.
+  return std::dynamic_pointer_cast<Sort>(_right->getRootOperation()) &&
+         _left->getSizeEstimate() <= _right->getSizeEstimate() &&
+         alwaysDefined();
+}
+
+// _____________________________________________________________________________
+std::optional<Result> OptionalJoin::tryNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  if (!isNestedLoopJoinSuitable()) {
+    return std::nullopt;
+  }
+  auto leftRes = _left->getResult(false);
+  auto child = _right->getRootOperation()->getChildren().at(0);
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {runtimeInfoChildren});
+  auto rightRes = child->getResult(true);
+
+  LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
+  NestedLoopJoin nestedLoopJoin{_joinColumns, std::move(leftRes),
+                                std::move(rightRes)};
+
+  // This algorithm doesn't produce sorted output
+  AD_CORRECTNESS_CHECK(resultSortedOn().empty());
+
+  auto lazyResult =
+      std::move(nestedLoopJoin)
+          .computeOptionalJoin(!requestLaziness, getResultWidth());
+  return requestLaziness
+             ? Result{std::move(lazyResult), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(lazyResult)),
+                      resultSortedOn()};
 }
