@@ -32,14 +32,13 @@ class OptionalJoin : public Operation {
   bool _multiplicitiesComputed = false;
 
   // Specify whether the join columns should be part of the result.
-  // TODO<joka921> In the future this will be configurable, defined as a
-  // constant to make the splitting up into smaller PRs feasible.
-  static constexpr bool keepJoinColumns_ = true;
+  bool keepJoinColumns_ = true;
 
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2);
+               std::shared_ptr<QueryExecutionTree> t2,
+               bool keepJoinColumns = true);
 
  private:
   std::string getCacheKeyImpl() const override;

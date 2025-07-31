@@ -201,13 +201,11 @@ std::vector<ColumnIndex> Join::resultSortedOn() const {
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
-  // TODO<joka921> These multiplicities are off if we don't keep the join
-  // column.
   if (_multiplicities.empty()) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }
-  return _multiplicities[col];
+  return _multiplicities.at(col);
 }
 
 // _____________________________________________________________________________
@@ -272,7 +270,9 @@ void Join::computeSizeEstimateAndMultiplicities() {
       double newDist = std::min(oldDist, adaptSizeLeft);
       m = (_sizeEstimate / corrFactor) / newDist;
     }
-    _multiplicities.emplace_back(m);
+    if (i != _leftJoinCol || _keepJoinColumn) {
+      _multiplicities.emplace_back(m);
+    }
   }
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol) {
@@ -288,8 +288,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-  // TODO<joka921> as stated, the size is still wrong here.
-  // assert(_multiplicities.size() == getResultWidth());
+  assert(_multiplicities.size() == getResultWidth());
 }
 
 // ______________________________________________________________________________

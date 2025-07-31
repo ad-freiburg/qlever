@@ -20,11 +20,13 @@ using std::string;
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           std::shared_ptr<QueryExecutionTree> t2)
+                           std::shared_ptr<QueryExecutionTree> t2,
+                           bool keepJoinColumns)
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
-      _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)) {
+      _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)),
+      keepJoinColumns_{keepJoinColumns} {
   AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
   // If `_right` contains no UNDEF in the join columns and at most one column in
@@ -66,6 +68,9 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "OPTIONAL_JOIN\n" << _left->getCacheKey() << " ";
+  if (!keepJoinColumns_) {
+    os << "Dropping join-columns";
+  }
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
@@ -104,7 +109,8 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
-  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
+  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size() ||
+                    !keepJoinColumns_);
   // The optional join implementation does only work if there's just a single
   // join column. This might be extended in the future.
   bool lazyJoinIsSupported = _joinColumns.size() == 1;
@@ -142,7 +148,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(), _joinColumns,
-      BinOpType::OptionalJoin, _left->getResultWidth());
+      BinOpType::OptionalJoin, _left->getResultWidth(), keepJoinColumns_);
 }
 
 // _____________________________________________________________________________
@@ -150,11 +156,17 @@ size_t OptionalJoin::getResultWidth() const {
   size_t res =
       _left->getResultWidth() + _right->getResultWidth() - _joinColumns.size();
   AD_CONTRACT_CHECK(res > 0);
+  if (!keepJoinColumns_) {
+    res -= _joinColumns.size();
+  }
   return res;
 }
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+  if (!keepJoinColumns_) {
+    return {};
+  }
   std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {
@@ -199,6 +211,8 @@ size_t OptionalJoin::getCostEstimate() {
 
 // _____________________________________________________________________________
 void OptionalJoin::computeSizeEstimateAndMultiplicities() {
+  // TODO<joka921> This is very wrong for stripped join columns, as all the
+  // indices are off.
   // The number of distinct entries in the result is at most the minimum of
   // the numbers of distinc entries in all join columns.
   // The multiplicity in the result is approximated by the product of the
@@ -240,20 +254,17 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   // compute estimates for the multiplicities of the result columns
   _multiplicities.clear();
 
+  auto jcolsLeft = _joinColumns | ql::views::transform(ad_utility::first);
   for (size_t i = 0; i < _left->getResultWidth(); i++) {
     float mult = _left->getMultiplicity(i) * (multResult / multLeft);
-    _multiplicities.push_back(mult);
+    if (keepJoinColumns_ || !ad_utility::contains(jcolsLeft, i)) {
+      _multiplicities.push_back(mult);
+    }
   }
 
+  auto jcolsRight = _joinColumns | ql::views::transform(ad_utility::second);
   for (size_t i = 0; i < _right->getResultWidth(); i++) {
-    bool isJcl = false;
-    for (size_t j = 0; j < _joinColumns.size(); j++) {
-      if (_joinColumns[j][1] == i) {
-        isJcl = true;
-        break;
-      }
-    }
-    if (isJcl) {
+    if (ad_utility::contains(jcolsRight, i)) {
       continue;
     }
     float mult = _right->getMultiplicity(i) * (multResult / multRight);
@@ -324,8 +335,8 @@ void OptionalJoin::optionalJoin(
         computeImplementationFromIdTables(left, right, joinColumns);
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  ad_utility::JoinColumnMapping joinColumnData{
+      joinColumns, left.numColumns(), right.numColumns(), keepJoinColumns_};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -349,6 +360,8 @@ void OptionalJoin::optionalJoin(
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
+  // TODO<joka921> Also add the `addRows` function for higher multiplicities
+  // for this materialized case.
   auto addOptionalRow = [&rowAdder,
                          begin = joinColumnsLeft.begin()](const auto& itLeft) {
     rowAdder.addOptionalRow(itLeft - begin);
@@ -398,7 +411,7 @@ void OptionalJoin::optionalJoin(
   // Note: the merging only works if we don't have the arbitrary out of order
   // case.
   // TODO<joka921> We only have to do this if the sorting is required.
-  if (numOutOfOrder > 0) {
+  if (numOutOfOrder > 0 && keepJoinColumns_) {
     std::vector<ColumnIndex> cols;
     for (size_t i = 0; i < joinColumns.size(); ++i) {
       cols.push_back(i);
@@ -421,7 +434,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
   // Currently only supports a single join column.
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1);
   ad_utility::JoinColumnMapping joinColMap{
-      _joinColumns, _left->getResultWidth(), _right->getResultWidth()};
+      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
+      keepJoinColumns_};
 
   auto resultPermutation = joinColMap.permutationResult();
 
