@@ -258,7 +258,7 @@ std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
   IndexNestedLoopJoin nestedLoopJoin{_matchedColumns, std::move(leftRes),
                                      std::move(rightRes)};
 
-  std::vector<char> nonMatchingEntries = nestedLoopJoin.computeTracker();
+  std::vector<char> nonMatchingEntries = nestedLoopJoin.computeExistance();
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};
