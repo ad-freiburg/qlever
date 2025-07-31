@@ -197,6 +197,48 @@ TEST(Exists, computeResult) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, computeExistsJoinNestedLoopJoinOptimization) {
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+  IdTable expected = makeIdTableFromVector(
+      {{1, 1, 2, T}, {4, 2, 1, F}, {2, 8, 1, F}, {3, 8, 2, T}, {4, 8, 2, T}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool forceFullyMaterialized : {false, true}) {
+    ExistsJoin existsJoin{
+        qec,
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, a.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
+                                                 Variable{"?b"}},
+            false, std::vector<ColumnIndex>{1, 2}),
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, b.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
+                                                 Variable{"?a"}, std::nullopt},
+            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            forceFullyMaterialized),
+        Variable{"?result"}};
+    auto result = existsJoin.computeResultOnlyForTesting(true);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_EQ(result.idTable(), expected);
+    const auto& runtimeInfo =
+        existsJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Exists, clone) {
   auto* qec = getQec();
   ExistsJoin existsJoin{
