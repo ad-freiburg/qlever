@@ -83,9 +83,9 @@ TEST(StripColumns, computeResult) {
     return StripColumns{qec, std::move(valuesTree), {V{"?c"}, V{"?a"}}};
   };
 
-  auto getWords = [](const LocalVocab& v) { return v.getAllWordsForTesting(); };
   auto localVocabMatcher =
-      ResultOf(getWords, ElementsAre(LocalVocabEntry::iriref("<kartoffel>")));
+      ResultOf(std::mem_fn(&LocalVocab::getAllWordsForTesting),
+               ElementsAre(LocalVocabEntry::iriref("<kartoffel>")));
   // Test materialized result.
   {
     auto strip = makeOp();
