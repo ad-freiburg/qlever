@@ -16,6 +16,8 @@
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
+// Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
+// rows have found a match so far.
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
@@ -30,6 +32,8 @@ struct Filler {
   }
 };
 
+// Helper class for `IndexNestedLoopJoin::matchLeft` tracks matches to be used
+// by `OptionalJoin`.
 struct Adder {
   std::vector<std::array<size_t, 2>> matchingPairs_;
   // Should conceptually be bool, but doesn't allow the compiler to use
@@ -50,6 +54,8 @@ struct Adder {
                      missingIndices_.begin() + offset + size, false);
   }
 
+  // Turn collected indices in `matchingPairs_` and write them into an actual
+  // result table and clear `matchingPairs_` afterwards.
   void materializeTables(IdTable& result, IdTableView<0> left,
                          IdTableView<0> right) {
     size_t originalSize = result.size();
@@ -82,6 +88,8 @@ struct Adder {
     matchingPairs_.clear();
   }
 
+  // Scan `missingIndices_` for indices that haven't found a match so far and
+  // fill them with undef on the right side.
   void materializeMissing(IdTable& result, IdTableView<0> left) {
     size_t counter = std::reduce(missingIndices_.begin(), missingIndices_.end(),
                                  static_cast<size_t>(0));
@@ -111,6 +119,8 @@ struct Adder {
   }
 };
 
+// Range to consume and transform a lazy result and apply the `OptionalJoin`
+// algorithm to it. This does not preserve sort order.
 template <typename ComputeMatches>
 class OptionalJoinRange
     : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
@@ -180,7 +190,8 @@ class OptionalJoinRange
 // that it doesn't require the right side to be sorted, potentially allowing you
 // to skip an expensive sort operation entirely. The downside is that the left
 // side has to be fully materialized. Currently handling undef values is
-// unsupported.
+// unsupported. `matchLeft` can be used with different types to accomodate
+// different types of joins.
 class IndexNestedLoopJoin {
   std::vector<std::array<ColumnIndex, 2>> joinColumns_;
   std::shared_ptr<const Result> leftResult_;
@@ -226,7 +237,7 @@ class IndexNestedLoopJoin {
   }
 
  public:
-  // ___________________________________________________________________________
+  // Main function for MINUS and EXISTS operations.
   std::vector<char> computeExistance() {
     Filler matchTracker{leftResult_->idTable().size()};
     std::vector<ColumnIndex> leftColumns;
@@ -260,7 +271,7 @@ class IndexNestedLoopJoin {
   }
 
  public:
-  // ___________________________________________________________________________
+  // Main function for OPTIONAL operation.
   Result::LazyResult computeOptionalJoin(
       bool yieldOnce, size_t resultWidth,
       ad_utility::SharedCancellationHandle cancellationHandle) && {
