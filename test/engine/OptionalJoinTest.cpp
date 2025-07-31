@@ -49,17 +49,21 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     for (size_t i = 0; i < inputB.numColumns(); ++i) {
       varsRight.emplace_back(absl::StrCat("?right_", i));
     }
+    std::vector<ColumnIndex> leftSorted;
+    std::vector<ColumnIndex> rightSorted;
     size_t idx = 0;
     for (auto [left, right] : jcls) {
       varsLeft.at(left) = Variable(absl::StrCat("?joinColumn_", idx));
       varsRight.at(right) = Variable(absl::StrCat("?joinColumn_", idx));
+      leftSorted.push_back(left);
+      rightSorted.push_back(right);
       ++idx;
     }
     auto qec = ad_utility::testing::getQec();
     auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputA.clone(), varsLeft);
+        qec, inputA.clone(), varsLeft, false, std::move(leftSorted));
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputB.clone(), varsRight);
+        qec, inputB.clone(), varsRight, false, std::move(rightSorted));
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
