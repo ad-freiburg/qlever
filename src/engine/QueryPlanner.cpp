@@ -2382,7 +2382,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
-    if (!unionOperation || !hasUnboundTransitivePathInTree(*unionOperation)) {
+
+    // TODO<joka921> This changes the behavior to consider applying the
+    // distribution to ALL unions. Evaluate the impact and make sure that the
+    // documentation is correct.
+    if (!unionOperation) {
       return;
     }
 
