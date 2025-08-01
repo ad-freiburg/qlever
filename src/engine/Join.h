@@ -30,22 +30,23 @@ class Join : public Operation {
 
   std::vector<float> _multiplicities;
 
-  // Specify whether the join column will be contained in the result.
-  static constexpr bool keepJoinColumn_ = true;
+  // If set to false, the join column will not be part of the result.
+  bool keepJoinColumn_ = true;
 
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting = true);
+       ColumnIndex t2JoinCol, bool keepJoinColumn = true,
+       bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  virtual std::string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
