@@ -403,6 +403,14 @@ TEST(OptionalJoin, gallopingJoin) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
   // From this table columns 1 and 2 will be used for the join.
   IdTable a = makeIdTableFromVector(
       {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
@@ -432,17 +440,19 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
-            false, std::vector<ColumnIndex>{1, 2}),
+            false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
         ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
-            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            false, std::vector<ColumnIndex>{}, rightVocab.clone(), std::nullopt,
             forceFullyMaterialized)};
     auto result = optionalJoin.computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
 
     EXPECT_EQ(result.idTable(), expected);
+    EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                ::testing::UnorderedElementsAre(entryA, entryB));
 
     const auto& runtimeInfo =
         optionalJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
@@ -453,6 +463,14 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
   // From this table columns 1 and 2 will be used for the join.
   IdTable a = makeIdTableFromVector(
       {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
@@ -480,21 +498,30 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
           qec, std::move(a),
           std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                Variable{"?b"}},
-          false, std::vector<ColumnIndex>{1, 2}),
+          false, std::vector<ColumnIndex>{1, 2}, std::move(leftVocab)),
       ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, std::move(rightTables),
           std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                Variable{"?a"}, std::nullopt},
-          false, std::vector<ColumnIndex>{}, LocalVocab{})};
+          false, std::vector<ColumnIndex>{}, std::move(rightVocab))};
   auto result = optionalJoin.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
   std::vector<IdTable> actualTables;
+  std::vector<LocalVocab> actualVocabs;
   for (auto& [idTable, localVocab] : result.idTables()) {
     actualTables.emplace_back(std::move(idTable));
+    actualVocabs.emplace_back(std::move(localVocab));
   }
 
   EXPECT_THAT(actualTables, ::testing::ElementsAreArray(expected));
+  ASSERT_EQ(actualVocabs.size(), 3);
+  EXPECT_THAT(actualVocabs.at(0).getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(entryA, entryB));
+  EXPECT_THAT(actualVocabs.at(1).getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(entryA, entryB));
+  EXPECT_THAT(actualVocabs.at(2).getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(entryA));
 
   const auto& runtimeInfo =
       optionalJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
