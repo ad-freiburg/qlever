@@ -484,12 +484,10 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   rightTables.push_back(
       makeIdTableFromVector({{6, 2, 8, 12}, {14, 15, 16, 17}}));
 
-  std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector(
-      {{1, 1, 2, 7, 5}, {3, 8, 2, 7, 14}, {4, 8, 2, 7, 14}}));
-  expected.push_back(
-      makeIdTableFromVector({{3, 8, 2, 6, 12}, {4, 8, 2, 6, 12}}));
-  expected.push_back(makeIdTableFromVector({{4, 2, 1, U, U}, {2, 8, 1, U, U}}));
+  auto expected0 = makeIdTableFromVector(
+      {{1, 1, 2, 7, 5}, {3, 8, 2, 7, 14}, {4, 8, 2, 7, 14}});
+  auto expected1 = makeIdTableFromVector({{3, 8, 2, 6, 12}, {4, 8, 2, 6, 12}});
+  auto expected2 = makeIdTableFromVector({{4, 2, 1, U, U}, {2, 8, 1, U, U}});
 
   auto* qec = ad_utility::testing::getQec();
   OptionalJoin optionalJoin{
@@ -514,14 +512,18 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
     actualVocabs.emplace_back(std::move(localVocab));
   }
 
-  EXPECT_THAT(actualTables, ::testing::ElementsAreArray(expected));
+  using namespace ::testing;
+
+  EXPECT_THAT(actualTables,
+              ElementsAre(Eq(std::cref(expected0)), Eq(std::cref(expected1)),
+                          Eq(std::cref(expected2))));
   ASSERT_EQ(actualVocabs.size(), 3);
   EXPECT_THAT(actualVocabs.at(0).getAllWordsForTesting(),
-              ::testing::UnorderedElementsAre(entryA, entryB));
+              UnorderedElementsAre(entryA, entryB));
   EXPECT_THAT(actualVocabs.at(1).getAllWordsForTesting(),
-              ::testing::UnorderedElementsAre(entryA, entryB));
+              UnorderedElementsAre(entryA, entryB));
   EXPECT_THAT(actualVocabs.at(2).getAllWordsForTesting(),
-              ::testing::UnorderedElementsAre(entryA));
+              UnorderedElementsAre(entryA));
 
   const auto& runtimeInfo =
       optionalJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
