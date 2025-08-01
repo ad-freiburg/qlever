@@ -5,11 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 #define QLEVER_SRC_INDEX_TEXTBLOCKWRITER_H
 
-#include "TextIndexBuilderTypes.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/IndexTypes.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Postings.h"
+#include "index/TextIndexBuilderTypes.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
 #include "util/File.h"
