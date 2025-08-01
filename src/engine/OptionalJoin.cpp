@@ -495,11 +495,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);
-  auto rightOp = _right->getRootOperation();
-  auto child = rightOp->getChildren().at(0);
-  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  rightOp->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
-  auto rightRes = child->getResult(true);
+  auto rightRes = computeResultSkipChild(_right->getRootOperation());
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{

@@ -66,30 +66,30 @@ struct Adder {
                          IdTableView<0> right) {
     size_t originalSize = result.size();
     result.resize(originalSize + matchingPairs_.size());
-    ColumnIndex colIdx = 0;
+    ColumnIndex resultColIdx = 0;
     for (auto source : left.getColumns()) {
-      auto target = result.getColumn(colIdx);
+      auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
         target[offset] = source[leftIdx];
         ++offset;
       }
       cancellationHandle_->throwIfCancelled();
-      ++colIdx;
+      ++resultColIdx;
     }
     size_t numJoinColumns =
         left.numColumns() + right.numColumns() - result.numColumns();
     for (size_t rightCol = numJoinColumns; rightCol < right.numColumns();
          ++rightCol) {
       auto source = right.getColumn(rightCol);
-      auto target = result.getColumn(colIdx);
+      auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
         target[offset] = source[rightIdx];
         ++offset;
       }
       cancellationHandle_->throwIfCancelled();
-      ++colIdx;
+      ++resultColIdx;
     }
     matchingPairs_.clear();
   }
@@ -101,9 +101,9 @@ struct Adder {
                                  static_cast<size_t>(0));
     size_t originalSize = result.size();
     result.resize(originalSize + counter);
-    ColumnIndex colIdx = 0;
+    ColumnIndex resultColIdx = 0;
     for (auto source : left.getColumns()) {
-      auto target = result.getColumn(colIdx);
+      auto target = result.getColumn(resultColIdx);
       size_t targetIndex = originalSize;
       for (size_t i = 0; i < missingIndices_.size(); ++i) {
         if (missingIndices_[i]) {
@@ -112,15 +112,15 @@ struct Adder {
         }
       }
       cancellationHandle_->throwIfCancelled();
-      ++colIdx;
+      ++resultColIdx;
     }
-    while (colIdx < result.numColumns()) {
-      auto col = result.getColumn(colIdx);
+    while (resultColIdx < result.numColumns()) {
+      auto col = result.getColumn(resultColIdx);
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
           Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
           [this]() { cancellationHandle_->throwIfCancelled(); });
-      ++colIdx;
+      ++resultColIdx;
     }
   }
 };
@@ -288,10 +288,10 @@ class IndexNestedLoopJoin {
     detail::Adder matchTracker{leftResult_->idTable().size(),
                                leftResult_->idTable().getAllocator().as<char>(),
                                std::move(cancellationHandle)};
-    return ad_utility::callFixedSize(
+    return ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, yieldOnce,
-         resultWidth]<int JOIN_COLUMNS>() -> Result::LazyResult {
+         resultWidth](auto JOIN_COLUMNS) -> Result::LazyResult {
           const IdTable& leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
@@ -300,7 +300,7 @@ class IndexNestedLoopJoin {
           IdTableView<JOIN_COLUMNS> leftTableView =
               leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [&matchTracker, &leftTableView,
+          auto matchHelper = [&matchTracker, &leftTableView, &JOIN_COLUMNS,
                               rightColumns = joinColumnData.jcsRight()](
                                  const IdTable& idTable) {
             matchLeft(matchTracker, leftTableView,
@@ -343,7 +343,7 @@ class IndexNestedLoopJoin {
                 leftTable, std::move(rightTables), std::move(matchTracker),
                 resultWidth, std::move(joinColumnData),
                 [leftTableView = std::move(leftTableView),
-                 rightColumns = std::move(rightColumns)](
+                 rightColumns = std::move(rightColumns), JOIN_COLUMNS](
                     detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
                             rightTable.asColumnSubsetView(rightColumns)

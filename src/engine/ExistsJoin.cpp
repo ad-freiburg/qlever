@@ -284,12 +284,8 @@ std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
     return std::nullopt;
   }
 
-  auto child = sort->getChildren().at(0);
-  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  sort->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
-
   auto leftRes = left_->getResult(false);
-  auto rightRes = child->getResult(true);
+  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
