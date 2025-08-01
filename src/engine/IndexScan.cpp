@@ -685,7 +685,7 @@ bool IndexScan::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
+    const std::set<Variable>& variables) const {
   ad_utility::HashSet<Variable> newVariables;
   for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
     if (variables.contains(var)) {

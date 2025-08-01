@@ -27,6 +27,9 @@ namespace po = boost::program_options;
 
 // Main function.
 int main(int argc, char** argv) {
+  // TODO<joka921> This is a hack, because the unit tests currently don't work
+  // with the strip-columns feature.
+  RuntimeParameters().set<"strip-columns">(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();

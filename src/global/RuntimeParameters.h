@@ -93,6 +93,12 @@ inline auto& RuntimeParameters() {
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
+        // If set, then unneeded variables will not be emitted as the result of
+        // each operation.
+        // This makes the queries faster, but leads to more cache misses if e.g.
+        // variables in a SELECT clause change
+        // between otherwise equal queries.
+        Bool<"strip-columns">{false},
     };
   }();
   return params;

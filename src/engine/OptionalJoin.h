@@ -92,6 +92,10 @@ class OptionalJoin : public Operation {
   // can be avoided this way.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
   void computeSizeEstimateAndMultiplicities();
 
   Result computeResult(bool requestLaziness) override;
