@@ -143,8 +143,7 @@ string IndexScan::getDescriptor() const {
 // _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
   if (varsToKeep_.has_value()) {
-    auto res = varsToKeep_.value().size();
-    return res;
+    return varsToKeep_.value().size();
   }
   return numVariables_ + additionalVariables_.size();
 }
@@ -301,7 +300,6 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
-  // TODO<joka921> These are still wrong if we have a prefiltered column subset.
   multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
     if (numVariables_ == 0) {
@@ -317,15 +315,16 @@ void IndexScan::determineMultiplicities() {
       return idx.getMultiplicities(permutation_);
     }
   }();
-  // TODO<joka921> This is still wrong if we have a prefiltered column subset.
-  for ([[maybe_unused]] size_t i :
-       ql::views::iota(multiplicity_.size(),
-                       std::max(multiplicity_.size(), getResultWidth()))) {
-    multiplicity_.emplace_back(1);
+  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+
+  if (varsToKeep_.has_value()) {
+    std::vector<float> actualMultiplicites;
+    for (size_t column : getSubsetForStrippedColumns()) {
+      actualMultiplicites.push_back(multiplicity_.at(column));
+    }
+    multiplicity_ = std::move(actualMultiplicites);
   }
-  // TODO<joka921>
-  AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth() ||
-                    varsToKeep_.has_value());
+  AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
 
 // _____________________________________________________________________________
@@ -701,6 +700,7 @@ IndexScan::makeTreeWithStrippedColumns(
       VarsToKeep{std::move(newVariables)});
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
   AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
   const auto& v = varsToKeep_.value();
@@ -715,8 +715,9 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     }
   }
   for (const auto& var : additionalVariables_) {
-    AD_CONTRACT_CHECK(v.contains(var));
-    result.push_back(idx);
+    if (v.contains(var)) {
+      result.push_back(idx);
+    }
     ++idx;
   }
   return result;
