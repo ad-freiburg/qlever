@@ -774,3 +774,24 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  const auto* vars = &variables;
+  if (!variables.contains(_joinVar)) {
+    newVariables = variables;
+    newVariables.insert(_joinVar);
+    vars = &newVariables;
+  }
+
+  // TODO<joka921> Code duplication including a former copy-paste bug.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+  auto leftCol = left->getVariableColumn(_joinVar);
+  auto rightCol = right->getVariableColumn(_joinVar);
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), std::move(left), std::move(right), leftCol,
+      rightCol, variables.contains(_joinVar));
+}
