@@ -98,7 +98,7 @@ inline auto& RuntimeParameters() {
         // This makes the queries faster, but leads to more cache misses if e.g.
         // variables in a SELECT clause change
         // between otherwise equal queries.
-        Bool<"strip-columns">{true},
+        Bool<"strip-columns">{false},
     };
   }();
   return params;

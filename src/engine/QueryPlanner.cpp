@@ -3156,14 +3156,13 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
-    plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::move(plan._qet), selectedVariables);
-    // TODO<joka921> Make this configurable via the `strip-columns` parameter.
-    // ___________________________________________________________________
-    /*
-    plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        select.getSelectedVariables());
-        */
+    if (RuntimeParameters().get<"strip-columns">()) {
+      plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
+          std::move(plan._qet), selectedVariables);
+    } else {
+      plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
+          select.getSelectedVariables());
+    }
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
