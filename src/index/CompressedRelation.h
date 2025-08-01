@@ -112,6 +112,8 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  bool lastTripleIsDuplicateOfFirstTripleInNextBlock_ = false;
+
   // Check for constant values in `firstTriple_` and `lastTriple` over all
   // columns `< columnIndex`.
   // Returns `true` if the respective column values of `firstTriple_` and
@@ -178,6 +180,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.lastTriple_;
   serializer | arg.graphInfo_;
   serializer | arg.containsDuplicatesWithDifferentGraphs_;
+  serializer | arg.lastTripleIsDuplicateOfFirstTripleInNextBlock_;
   serializer | arg.blockIndex_;
 }
 
@@ -326,7 +329,7 @@ class CompressedRelationWriter {
     ql::ranges::sort(
         blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
           return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                          bl.firstTriple_.col2Id_);
+                          bl.firstTriple_.col2Id_, bl.firstTriple_.graphId_);
         });
 
     std::vector<CompressedBlockMetadata> result;
@@ -334,6 +337,16 @@ class CompressedRelationWriter {
     // Write the correct block indices
     for (size_t i : ad_utility::integerRange(blocks.size())) {
       result.emplace_back(std::move(blocks.at(i)), i);
+    }
+
+    auto tieWithoutGraph = [](const auto& triple) {
+      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+    };
+    for (auto&& adjacent : ::ranges::views::sliding(result, 2)) {
+      if (tieWithoutGraph(adjacent.front().lastTriple_) ==
+          tieWithoutGraph(adjacent.back().firstTriple_)) {
+        adjacent.front().lastTripleIsDuplicateOfFirstTripleInNextBlock_ = true;
+      }
     }
     return result;
   }
