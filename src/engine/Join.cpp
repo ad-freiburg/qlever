@@ -34,8 +34,9 @@ using std::string;
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec) {
+           ColumnIndex t2JoinCol, bool keepJoinColumn,
+           bool allowSwappingChildrenOnlyForTesting)
+    : Operation(qec), keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
@@ -84,6 +85,7 @@ string Join::getCacheKeyImpl() const {
      << _left->getCacheKey() << " join-column: [" << _leftJoinCol << "]\n";
   os << "|X|\n"
      << _right->getCacheKey() << " join-column: [" << _rightJoinCol << "]";
+  os << "keep join Col " << keepJoinColumn_;
   return std::move(os).str();
 }
 
@@ -176,19 +178,25 @@ Result Join::computeResult(bool requestLaziness) {
 VariableToColumnMap Join::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
-      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
-      _left->getResultWidth());
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join, _left->getResultWidth(),
+      keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
-  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1;
-  AD_CONTRACT_CHECK(res > 0);
-  return res;
+  auto sumOfChildWidths = _left->getResultWidth() + _right->getResultWidth();
+  AD_CORRECTNESS_CHECK(sumOfChildWidths >= 2);
+  return sumOfChildWidths - 1 - static_cast<size_t>(!keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
+std::vector<ColumnIndex> Join::resultSortedOn() const {
+  if (keepJoinColumn_) {
+    return {_leftJoinCol};
+  } else {
+    return {};
+  }
+}
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
@@ -196,7 +204,7 @@ float Join::getMultiplicity(size_t col) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }
-  return _multiplicities[col];
+  return _multiplicities.at(col);
 }
 
 // _____________________________________________________________________________
@@ -261,7 +269,9 @@ void Join::computeSizeEstimateAndMultiplicities() {
       double newDist = std::min(oldDist, adaptSizeLeft);
       m = (_sizeEstimate / corrFactor) / newDist;
     }
-    _multiplicities.emplace_back(m);
+    if (i != _leftJoinCol || keepJoinColumn_) {
+      _multiplicities.emplace_back(m);
+    }
   }
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol) {
@@ -302,7 +312,8 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_);
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
+      keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -729,7 +740,8 @@ Result Join::createEmptyResult() const {
 ad_utility::JoinColumnMapping Join::getJoinColumnMapping() const {
   return ad_utility::JoinColumnMapping{{{_leftJoinCol, _rightJoinCol}},
                                        _left->getResultWidth(),
-                                       _right->getResultWidth()};
+                                       _right->getResultWidth(),
+                                       keepJoinColumn_};
 }
 
 // _____________________________________________________________________________
