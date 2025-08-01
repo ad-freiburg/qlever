@@ -49,8 +49,8 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                   return !map.contains(var);
                 });
   if (RuntimeParameters().get<"strip-columns">()) {
-    ad_utility::HashSet<Variable> usedVariables{_groupByVariables.begin(),
-                                                _groupByVariables.end()};
+    std::set<Variable> usedVariables{_groupByVariables.begin(),
+                                     _groupByVariables.end()};
     for (const auto& alias : _aliases) {
       for (const auto* var : alias._expression.containedVariables()) {
         usedVariables.insert(*var);
@@ -335,31 +335,11 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  auto subtreeIfStripped =
-      [this]() -> std::optional<std::shared_ptr<QueryExecutionTree>> {
-    if (auto strip = dynamic_cast<const StripColumns*>(
-            _subtree->getRootOperation().get())) {
-      return strip->getSubtreePtr();
-    }
-    return std::nullopt;
-  }();
-  if (subtreeIfStripped.has_value()) {
-    std::swap(subtreeIfStripped.value(), _subtree);
-  }
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
     return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
-  }
-  if (subtreeIfStripped.has_value()) {
-    _subtree = subtreeIfStripped.value();
-  }
-
-  if (_groupByVariables.empty() && _aliases.size() == 1 &&
-      dynamic_cast<const sparqlExpression::CountStarExpression*>(
-          _aliases[0]._expression.getPimpl())) {
-    return computeCountStar(*_subtree->getResult(true));
   }
 
   std::vector<Aggregate> aggregates;
@@ -967,6 +947,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     return result;
   }
   if (auto result = computeGroupByObjectWithCount()) {
+    return result;
+  }
+  if (auto result = computeCountStar()) {
     return result;
   }
   return std::nullopt;
@@ -1666,14 +1649,6 @@ GroupByImpl::getVariableForCountOfSingleAlias() const {
 
 // _____________________________________________________________________________
 bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
-  // It might be that the variable is stripped because we never need it.
-  // TODO<joka921> Verify that this is correct.
-  if (auto* indexScan =
-          dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
-    return indexScan->subject() == variable ||
-           indexScan->object() == variable ||
-           indexScan->predicate() == variable;
-  }
   return _subtree->getVariableColumnOrNullopt(variable).has_value();
 }
 
@@ -1684,24 +1659,40 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-Result GroupByImpl::computeCountStar(const Result& input) {
-  auto res = [&input]() -> size_t {
+std::optional<IdTable> GroupByImpl::computeCountStar() const {
+  bool isSingleGlobalAggregateFunction =
+      _groupByVariables.empty() && _aliases.size() == 1;
+  if (!isSingleGlobalAggregateFunction) {
+    return std::nullopt;
+  }
+  // We can't optimize `COUNT(DISTINCT *)`.
+  const bool singleAggregateIsNonDistinctCountStar = [&]() {
+    auto* countStar =
+        dynamic_cast<const sparqlExpression::CountStarExpression*>(
+            _aliases[0]._expression.getPimpl());
+    return countStar && !countStar->isDistinct();
+  }();
+  if (!singleAggregateIsNonDistinctCountStar) {
+    return std::nullopt;
+  }
+
+  auto childRes = _subtree->getResult(true);
+  // Compute the result as a single `size_t`.
+  auto res = [&input = *childRes]() -> size_t {
     if (input.isFullyMaterialized()) {
       return input.idTable().size();
     } else {
       auto gen = input.idTables();
-      // TODO<joka921> There is an easier way to perform this.
       auto sz = gen | ql::views::transform([](const auto& pair) {
                   return pair.idTable_.numRows();
-                });
-      size_t x = 0;
-      for (const auto& s : sz) {
-        x += s;
-      }
-      return x;
+                }) |
+                ql::views::common;
+      return std::accumulate(sz.begin(), sz.end(), size_t{0});
     }
   }();
+
+  // Wrap the result in an IdTable with a single row and column.
   IdTable result{1, getExecutionContext()->getAllocator()};
   result.push_back(std::array{Id::makeFromInt(res)});
-  return {std::move(result), resultSortedOn(), LocalVocab()};
+  return result;
 }

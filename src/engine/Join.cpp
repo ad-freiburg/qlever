@@ -753,7 +753,7 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
       1,
       IdTable{getResultWidth(), allocator()},
       cancellationHandle_,
-      _keepJoinColumn,
+      keepJoinColumn_,
       CHUNK_SIZE,
       std::move(callback)};
 }
@@ -779,9 +779,8 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Join::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
-  ad_utility::HashSet<Variable> newVariables;
+Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
   const auto* vars = &variables;
   if (!variables.contains(_joinVar)) {
     newVariables = variables;

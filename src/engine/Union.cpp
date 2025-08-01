@@ -436,8 +436,7 @@ Result::LazyResult Union::computeResultKeepOrder(
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Union::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
+Union::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // TODO<joka921> Implement this optimization for the `sortedUnion` case, we
   // have to find out the names of the variables.
   if (!targetOrder_.empty()) {

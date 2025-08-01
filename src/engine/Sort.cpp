@@ -149,9 +149,8 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Sort::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
-  ad_utility::HashSet<Variable> newVariables;
+Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
   std::vector<Variable> sortVars;
   const auto* vars = &variables;
   for (const auto& jcl : sortColumnIndices_) {

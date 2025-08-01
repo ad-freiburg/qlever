@@ -1,6 +1,9 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023-2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR/QL
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// QL =  QLeverize AG
 
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
@@ -28,6 +31,9 @@ namespace ad_utility {
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
+  // If set to false, then the join columns will not be written to the output.
+  // The result table will also have no columns corresponding to the join
+  // columns, but will only consist of the remaining payload columns.
   bool keepJoinColumns_ = true;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
@@ -35,8 +41,6 @@ class AddCombinedRowToIdTable {
   std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
  public:
-  bool logStuff_ = false;
-
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
   // `targetIndex_`-th row in the output, you have to combine
@@ -98,6 +102,7 @@ class AddCombinedRowToIdTable {
     checkNumColumns();
     indexBuffer_.reserve(bufferSize);
   }
+
   // Similar to the previous constructor, but the inputs are not given.
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
@@ -128,11 +133,6 @@ class AddCombinedRowToIdTable {
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
-    /*
-    if (logStuff_) {
-      AD_LOG_INFO << "adding a row" << rowIndexA << ' ' <<  rowIndexB << '\n';
-    }
-     */
     AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
@@ -142,16 +142,23 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // TODO<joka921> concepts + C++17 etc.
-  void addRows(const auto& rowIndicesA, const auto& rowIndicesB) {
-    auto sz = [](const auto& ri) { return ql::ranges::size(ri); };
-    size_t total = sz(rowIndicesA) * sz(rowIndicesB);
+  // Concept for the `addRows` function below for a `sized_range` that has
+  // unsigned integral values as its `value_type`.
+  template <typename R>
+  static constexpr bool sizedRangeOfUnsigned =
+      ql::ranges::sized_range<R> &&
+      ql::concepts::unsigned_integral<ql::ranges::range_value_t<R>>;
+
+  // Same as calling `addRow` for each element in the Cartesian product of
+  // `rowIndicesA` and `rowIndicesB` with an optimization for the special case
+  // that the `resultTable` has zero columns.
+  CPP_template(typename R1, typename R2)(
+      requires sizedRangeOfUnsigned<R1> CPP_and
+          sizedRangeOfUnsigned<R2>) void addRows(const R1& rowIndicesA,
+                                                 const R2& rowIndicesB) {
+    size_t total =
+        ql::ranges::size(rowIndicesA) * ql::ranges::size(rowIndicesB);
     if (resultTable_.numColumns() == 0) {
-      /*
-      if (total > 0 && logStuff_) {
-        AD_LOG_INFO << "Adding " << total << "rows at once\n";
-      }
-       */
       while (total > 0) {
         auto chunkSz = std::min(bufferSize_ - nextIndex_, total);
         nextIndex_ += chunkSz;
@@ -217,12 +224,14 @@ class AddCombinedRowToIdTable {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
-    inputLeftAndRight_ =
-        std::array{detail::toView(inputLeft),
-                   IdTableView<0>{resultTable_.numColumns() -
-                                      detail::toView(inputLeft).numColumns() +
-                                      numJoinColumns_,
-                                  ad_utility::makeUnlimitedAllocator<Id>()}};
+    using namespace ad_utility::memory_literals;
+    inputLeftAndRight_ = std::array{
+        detail::toView(inputLeft),
+        IdTableView<0>{
+            resultTable_.numColumns() +
+                (static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_) -
+                detail::toView(inputLeft).numColumns() + numJoinColumns_,
+            ad_utility::makeAllocatorWithLimit<Id>(0_B)}};
   }
 
   // The next free row in the output will be created from
@@ -233,7 +242,7 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
     ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
+    if (nextIndex_ >= bufferSize_) {
       flush();
     }
   }
@@ -261,8 +270,6 @@ class AddCombinedRowToIdTable {
   // will throw an exception.
   void flush() {
     cancellationHandle_->throwIfCancelled();
-    // AD_LOG_INFO << "num columns in result " << resultTable_.numColumns() <<
-    // '\n';
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ == indexBuffer_.size() +
@@ -406,6 +413,7 @@ class AddCombinedRowToIdTable {
   }
 
   void checkNumColumns() const {
+    AD_CONTRACT_CHECK(bufferSize_ > 0);
     AD_CONTRACT_CHECK(inputLeft().numColumns() >= numJoinColumns_);
     AD_CONTRACT_CHECK(inputRight().numColumns() >= numJoinColumns_);
     AD_CONTRACT_CHECK(

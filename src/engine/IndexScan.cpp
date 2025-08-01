@@ -459,7 +459,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   }
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks.value());
-  auto result = getLazyScan(blocks);
+  auto result = getLazyScan(std::move(blocks.matchingBlocks_));
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
@@ -557,11 +557,12 @@ struct IndexScan::SharedGeneratorState {
         return;
       }
       AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
-      auto newBlocksAndIndex =
-          CompressedRelationReader::getBlocksForJoinAsIndices(joinColumn,
-                                                              metaBlocks_);
-      metaBlocks_.removePrefix(newBlocksAndIndex.lastRelevantIndex_);
-      auto& newBlocks = newBlocksAndIndex.matchingIndices_;
+      auto [newBlocks, numBlocksCompletelyHandled] =
+          CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
+      // The first `numBlocksCompletelyHandled` are either contained in
+      // `newBlocks` or can never match any entry that is larger than the
+      // entries in `joinColumn` and thus can be ignored from now on.
+      metaBlocks_.removePrefix(numBlocksCompletelyHandled);
       if (newBlocks.empty()) {
         // The current input table matches no blocks, so we don't have to yield
         // it.
@@ -685,7 +686,7 @@ bool IndexScan::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithStrippedColumns(
-    const ad_utility::HashSet<Variable>& variables) const {
+    const std::set<Variable>& variables) const {
   ad_utility::HashSet<Variable> newVariables;
   for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
     if (variables.contains(var)) {

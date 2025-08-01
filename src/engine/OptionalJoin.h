@@ -31,9 +31,10 @@ class OptionalJoin : public Operation {
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
-  // TODO<joka921> in the future we can extend this to only keep some join
-  // columns.
-  bool _keepJoinColumns = true;
+  // Specify whether the join columns should be part of the result.
+  // TODO<joka921> In the future this will be configurable, defined as a
+  // constant to make the splitting up into smaller PRs feasible.
+  bool keepJoinColumns_ = true;
 
  public:
   OptionalJoin(QueryExecutionContext* qec,
@@ -86,7 +87,7 @@ class OptionalJoin : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const ad_utility::HashSet<Variable>& variables) const override;
+      const std::set<Variable>& variables) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

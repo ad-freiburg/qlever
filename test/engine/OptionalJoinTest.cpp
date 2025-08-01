@@ -567,18 +567,18 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
 TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
   std::vector<IdTable> expected;
   expected.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(1)));
+      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(1)));
   expected.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(2)));
+      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(2)));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(
       makeIdTableFromVector({{Id::makeFromInt(1)}, {Id::makeFromInt(2)}}));
   std::vector<IdTable> rightTables;
   rightTables.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(1)));
+      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(1)));
   rightTables.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(2)));
+      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(2)));
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected), true);

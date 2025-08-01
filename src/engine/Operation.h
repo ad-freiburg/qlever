@@ -361,8 +361,7 @@ class Operation {
   // `variables`, and therefore strips away all other columns. The default
   // implementation returns `std::nullopt`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  makeTreeWithStrippedColumns(
-      const ad_utility::HashSet<Variable>& variables) const;
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
  protected:
   // The QueryExecutionContext for this particular element.

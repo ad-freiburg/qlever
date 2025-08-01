@@ -3162,8 +3162,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // visible.
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
-    ad_utility::HashSet<Variable> selectedVariables{selected.begin(),
-                                                    selected.end()};
+    std::set<Variable> selectedVariables{selected.begin(), selected.end()};
     plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
         std::move(plan._qet), selectedVariables);
     // plan._qet->getRootOperation()->setSelectedVariablesForSubquery(selected);

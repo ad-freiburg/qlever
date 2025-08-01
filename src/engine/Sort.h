@@ -81,7 +81,7 @@ class Sort : public Operation {
   std::string getCacheKeyImpl() const override;
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const ad_utility::HashSet<Variable>& variables) const override;
+      const std::set<Variable>& variables) const override;
 
   // TODO<joka921> Much to do in this function, Comment and fix and test
   template <size_t NUM_COLS>

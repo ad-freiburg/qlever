@@ -1,56 +1,65 @@
+// Copyright 2025 The QLever Authors, in particular:
 //
-// Created by kalmbacj on 7/22/25.
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR/QL
 //
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// QL =  QLeverize AG
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
+#define QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
+
+#include <set>
 
 #include "engine/Operation.h"
 
-#ifndef QLEVER_STRIPCOLUMNS_H
-#define QLEVER_STRIPCOLUMNS_H
-
+// An Operation that returns the result of its only child operation when being
+// evaluated, with only a subset of the child's variables.
 class StripColumns : public Operation {
  private:
+  // The child operation.
   std::shared_ptr<QueryExecutionTree> child_;
+  // The subset of the childrens' columns that are to be kept.
   std::vector<ColumnIndex> subset_;
+  // The mapping from variables to columns.
   VariableToColumnMap varToCol_;
 
  public:
+  // Construct from a child operation and the set of variables that are to be
+  // preserved by this operation. We deliberately use `std::set` to make the
+  // order deterministic for easier testing and caching.
   StripColumns(QueryExecutionContext* ctx,
                std::shared_ptr<QueryExecutionTree> child,
-               ad_utility::HashSet<Variable> keepVariables);
+               const std::set<Variable>& keepVariables);
 
   // The constructor needed for cloning.
   StripColumns(QueryExecutionContext* ctx,
                std::shared_ptr<QueryExecutionTree> child,
                std::vector<ColumnIndex> subset, VariableToColumnMap varToCol);
 
-  /// get non-owning pointers to all the held subtrees to actually use the
-  /// Execution Trees as trees
-  std::vector<QueryExecutionTree*> getChildren();
-  // The individual implementation of `getCacheKey` (see above) that has to
-  // be customized by every child class.
-  std::string getCacheKeyImpl() const;
-  // Gets a very short (one line without line ending) descriptor string for
-  // this Operation.  This string is used in the RuntimeInformation
-  std::string getDescriptor() const;
-  size_t getResultWidth() const;
+  // Member functions inherited from `Operation` that have to be implemented by
+  // each child class.
+  std::vector<QueryExecutionTree*> getChildren() override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
+  size_t getResultWidth() const override;
 
-  size_t getCostEstimate();
+  size_t getCostEstimate() override;
 
  private:
-  uint64_t getSizeEstimateBeforeLimit();
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
-  float getMultiplicity(size_t col);
-  bool knownEmptyResult();
-  // TODO<joka921> This should be handled differently by the GroupBy
-  // And in particular not violate the constness etc.
-  std::shared_ptr<QueryExecutionTree> getSubtreePtr() const { return child_; }
+  float getMultiplicity(size_t col) override;
+  bool knownEmptyResult() override;
 
  private:
-  std::unique_ptr<Operation> cloneImpl() const;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const;
-  Result computeResult(bool requestLaziness);
-  VariableToColumnMap computeVariableToColumnMap() const;
+  std::unique_ptr<Operation> cloneImpl() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  Result computeResult(bool requestLaziness) override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
-#endif  // QLEVER_STRIPCOLUMNS_H
+#endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H

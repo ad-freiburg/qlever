@@ -97,7 +97,6 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 
   VectorTable exp;
   for (const auto& row : expected) {
-    // exp.emplace_back(row.begin(), row.end());
     exp.emplace_back();
     for (auto& el : row) {
       exp.back().push_back(el);
@@ -719,21 +718,37 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
+                  size_t numHandledBlocksExpected,
                   source_location l = source_location::current()) {
     auto t = generateLocationTrace(l);
-    auto result = CompressedRelationReader::getBlocksForJoin(
-        joinColumn, *metadataAndBlocks);
+    auto [result, numHandledBlocks] =
+        CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                   *metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
+    EXPECT_EQ(numHandledBlocks, numHandledBlocksExpected);
   };
   // We have fixed the `col0Id` to be 42. The col1/2Ids of the matching blocks
   // are as follows (starting at `block2`)
   // [(3, 0)-(4, 12)], [(4, 13)-(6, 9)]
 
   // Tests for a fixed col0Id, so the join is on the middle column.
-  test({V(1), V(3), V(17), V(29)}, {block2});
-  test({V(2), V(3), V(4), V(5)}, {block2, block3});
-  test({V(4)}, {block2, block3});
-  test({V(6)}, {block3});
+  test({}, {}, 0);
+  // All values smaller than the smallest block.
+  test({V(1), V(2)}, {}, 0);
+  // None of the values matches a block, but the largest value is larger than
+  // the largest block.
+  test({V(1), V(2), V(7)}, {}, 2);
+
+  // Largest value contained in the first block.
+  test({V(3)}, {block2}, 1);
+
+  // Although only `block2` matches, we have also completely handled `block3`
+  // since `V(29)` is larger than the largest value in `block3`, we thus have
+  // two blocks handled.
+  test({V(1), V(3), V(17), V(29)}, {block2}, 2);
+  test({V(2), V(3), V(4), V(5)}, {block2, block3}, 2);
+  test({V(4)}, {block2, block3}, 2);
+  test({V(6)}, {block3}, 2);
 
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
@@ -741,9 +756,13 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   metadataAndBlocks.emplace(
       SpecBlocksBounds{{scanSpec, getBlockMetadataRangesfromVec(blocks)},
                        {{V(42), V(4), V(11), g}, {V(42), V(4), V(738), g}}});
-  test({V(11), V(27), V(30)}, {block2, block3});
-  test({V(12)}, {block2});
-  test({V(13)}, {block3});
+  test({V(11), V(27), V(30)}, {block2, block3}, 2);
+  test({V(12)}, {block2}, 1);
+  test({V(13)}, {block3}, 2);
+
+  // Test empty blocks edge case
+  metadataAndBlocks.emplace(SpecBlocksBounds{{scanSpec, {}}, {}});
+  test({V(1)}, {}, 0);
 }
 
 TEST(CompressedRelationReader, getBlocksForJoin) {

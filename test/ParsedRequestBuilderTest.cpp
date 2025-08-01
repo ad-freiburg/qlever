@@ -125,28 +125,49 @@ TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
 }
 
 // _____________________________________________________________________________________________
-TEST(ParsedRequestBuilderTest, isGraphStoreOperation) {
-  auto isGraphStoreOperation =
+TEST(ParsedRequestBuilderTest, isGraphStoreOperationIndirect) {
+  auto isGraphStoreOperationIndirect =
       CPP_template_lambda()(typename RequestT)(const RequestT& request)(
           requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     const auto builder = ParsedRequestBuilder(request);
-    return builder.isGraphStoreOperation();
+    return builder.isGraphStoreOperationIndirect();
   };
-  EXPECT_THAT(isGraphStoreOperation(makeGetRequest("/")), testing::IsFalse());
-  EXPECT_THAT(
-      isGraphStoreOperation(makeGetRequest("/?query=foo&access-token=bar")),
-      testing::IsFalse());
-  EXPECT_THAT(isGraphStoreOperation(makeGetRequest("/?default")),
+  EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationIndirect(
+                  makeGetRequest("/?query=foo&access-token=bar")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/?default")),
               testing::IsTrue());
-  EXPECT_THAT(isGraphStoreOperation(makeGetRequest("/?graph=foo")),
+  EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/?graph=foo")),
               testing::IsTrue());
-  EXPECT_THAT(isGraphStoreOperation(
+  EXPECT_THAT(isGraphStoreOperationIndirect(
                   makeGetRequest("/default?query=foo&access-token=bar")),
               testing::IsFalse());
 }
 
 // _____________________________________________________________________________________________
-TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
+TEST(ParsedRequestBuilderTest, isGraphStoreOperationDirect) {
+  auto isGraphOpDirect = [](std::string_view target) {
+    const auto builder = ParsedRequestBuilder(makeGetRequest(target));
+    return builder.isGraphStoreOperationDirect();
+  };
+  EXPECT_FALSE(isGraphOpDirect("/"));
+  EXPECT_FALSE(isGraphOpDirect("/?query=foo&access-token=bar"));
+  EXPECT_TRUE(isGraphOpDirect(
+      absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
+  EXPECT_TRUE(isGraphOpDirect(
+      absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo")));
+  EXPECT_TRUE(isGraphOpDirect(
+      absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo?bar")));
+  EXPECT_FALSE(isGraphOpDirect(
+      absl::StrCat("/foo/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
+  AD_EXPECT_THROW_WITH_MESSAGE(isGraphOpDirect(":"),
+                               testing::StrEq("Failed to parse URL: \":\"."));
+}
+
+// _____________________________________________________________________________________________
+TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto expect = [](const auto& request, const GraphOrDefault& graph,
                    const ad_utility::source_location l =
@@ -155,7 +176,7 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
                 testing::VariantWith<None>(None{}));
-    builder.extractGraphStoreOperation();
+    builder.extractGraphStoreOperationIndirect();
     EXPECT_THAT(builder.parsedRequest_.operation_,
                 testing::VariantWith<GraphStoreOperation>(
                     AD_FIELD(GraphStoreOperation, graph_, testing::Eq(graph))));
@@ -167,14 +188,60 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/?default&graph=foo"));
     AD_EXPECT_THROW_WITH_MESSAGE(
-        builder.extractGraphStoreOperation(),
+        builder.extractGraphStoreOperationIndirect(),
         testing::HasSubstr(
             R"(Parameters "graph" and "default" must not be set at the same time.)"));
   }
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/default"));
     builder.parsedRequest_.operation_ = Query{"foo", {}};
-    AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperation(),
+    AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperationIndirect(),
+                                 testing::HasSubstr(""));
+  }
+}
+
+// _____________________________________________________________________________________________
+TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto makeGet = [](const std::string_view target = "/",
+                    const std::string& host = "example.com") {
+    return makeRequest(http::verb::get, target, {{http::field::host, host}});
+  };
+  auto expect = [](const auto& request, const GraphOrDefault& graph,
+                   const ad_utility::source_location l =
+                       ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(l);
+    auto builder = ParsedRequestBuilder(request);
+    EXPECT_THAT(builder.parsedRequest_.operation_,
+                testing::VariantWith<None>(None{}));
+    builder.extractGraphStoreOperationDirect();
+    EXPECT_THAT(builder.parsedRequest_.operation_,
+                testing::VariantWith<GraphStoreOperation>(
+                    AD_FIELD(GraphStoreOperation, graph_, testing::Eq(graph))));
+  };
+  expect(makeGet(absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX,
+                              "/foo/bar/baz.ttl")),
+         Iri(absl::StrCat("<http://example.com/",
+                          GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX,
+                          "/foo/bar/baz.ttl>")));
+  expect(
+      makeGet(
+          absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/baz.ttl"),
+          "qlever.dev"),
+      Iri(absl::StrCat("<http://qlever.dev/",
+                       GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/baz.ttl>")));
+  {
+    auto builder = ParsedRequestBuilder(makeGetRequest(
+        absl::StrCat("/foo/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        builder.extractGraphStoreOperationDirect(),
+        testing::HasSubstr(
+            "Assertion `isGraphStoreOperationDirect()` failed."));
+  }
+  {
+    auto builder = ParsedRequestBuilder(makeGetRequest("/default"));
+    builder.parsedRequest_.operation_ = Query{"foo", {}};
+    AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperationDirect(),
                                  testing::HasSubstr(""));
   }
 }

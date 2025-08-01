@@ -194,7 +194,7 @@ class QueryExecutionTree {
 
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const ad_utility::HashSet<Variable>& variables);
+      const std::set<Variable>& variables);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is

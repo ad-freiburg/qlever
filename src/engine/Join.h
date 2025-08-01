@@ -31,6 +31,9 @@ class Join : public Operation {
   std::vector<float> _multiplicities;
   bool _keepJoinColumn = true;
 
+  // Specify whether the join column will be contained in the result.
+  static constexpr bool keepJoinColumn_ = true;
+
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   // TODO<joka921> Adapt the tests that use the `allowSwappingChildren`.
@@ -144,7 +147,7 @@ class Join : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const ad_utility::HashSet<Variable>& variables) const override;
+      const std::set<Variable>& variables) const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the

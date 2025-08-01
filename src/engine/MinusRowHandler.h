@@ -68,9 +68,10 @@ class MinusRowHandler {
     // `BlockZipperJoinImpl` expects this interface.
   }
 
-  // TODO<joka921>  make compliant with C++17
-  static void addRows(const auto&, const auto&) {
-    // Same as for `addRow`.
+  // No-op for `MINUS`.
+  template <typename R1, typename R2>
+  static void addRows(const R1&, const R2&) {
+    // `BlockZipperJoinImpl` expects this interface.
   }
 
   // Flush remaining pending entries before changing the input.

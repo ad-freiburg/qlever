@@ -13,6 +13,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 // The implementations of the join algorithms (merge/zipper join, galloping
@@ -28,6 +29,8 @@ namespace ad_utility {
 // (also in the same order). The following struct stores the information, which
 // permutations have to be applied to the input and the result to convert from
 // one of those formats to the other.
+// NOTE: This mapping always has to be consistent with the one created by
+// `makeVarToColMapForJoinOperation` in `VariableToColumnMap.h.
 class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
@@ -98,17 +101,15 @@ class JoinColumnMapping {
         ++numSkippedJoinColumns;
       }
     }
+
+    // If the join columns are not kept, the result permutation is just the
+    // identity, because the original permutation preserves the order of the
+    // non-join-columns.
     if (!keepJoinColumns) {
-      auto jcls = joinColumns;
-      ql::ranges::sort(jcls, ql::ranges::lexicographical_compare);
-      for (auto i : ql::views::reverse(jcls)) {
-        for (auto& j : permutationResult_) {
-          if (j > i.at(0)) {
-            --j;
-          }
-        }
-        permutationResult_.erase(permutationResult_.begin() + i.at(0));
-      }
+      permutationResult_.clear();
+      ql::ranges::copy(ad_utility::integerRange(numColsLeft + numColsRight -
+                                                2 * joinColumns.size()),
+                       std::back_inserter(permutationResult_));
     }
   }
 };

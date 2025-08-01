@@ -189,7 +189,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const ad_utility::HashSet<Variable>& variables) {
+    const std::set<Variable>& variables) {
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
   if (optTree.has_value()) {

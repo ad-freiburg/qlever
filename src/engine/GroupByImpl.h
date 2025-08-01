@@ -227,6 +227,10 @@ class GroupByImpl : public Operation {
   // `?z`.
   std::optional<IdTable> computeGroupByForJoinWithFullScan() const;
 
+  // Compute the result for a single `COUNT(*)` aggregate with a single
+  // (implicit) group.
+  std::optional<IdTable> computeCountStar() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {

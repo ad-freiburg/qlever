@@ -28,22 +28,25 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     if (keepJoinColumns) {
       return leftVars;
     }
-    // TODO<joka921> A lot to debug and test here, especially in the
-    // combinations with hidden variables.
+    // Don't include the join columns, shift all variables that appear after
+    // join columns to the left s.t. the result will be dense again.
     leftResultWidth -= joinColumns.size();
     VariableToColumnMap res;
-    const auto& jcls = joinColumns | ql::views::keys;
+    const auto& jcls = joinColumns | ql::views::transform(ad_utility::first);
+    // We deliberately copy the entries from the child map, as we have to insert
+    // them into the result later on anyway.
     for (auto el : leftVars) {
       auto& [variable, columnIndexWithType] = el;
-      if (ad_utility::contains(jcls, columnIndexWithType.columnIndex_)) {
+      auto colIdx = columnIndexWithType.columnIndex_;
+      if (ad_utility::contains(jcls, colIdx)) {
+        // Nothing to do for join columns, simply skip them.
         continue;
       }
-      size_t shift = 0;
-      for (const auto& jcl : jcls) {
-        if (jcl < columnIndexWithType.columnIndex_) {
-          ++shift;
-        }
-      }
+      // Find the number of join columns that appear beofore this column.
+      size_t shift = ql::ranges::count_if(
+          jcls, [col = columnIndexWithType.columnIndex_](ColumnIndex jcl) {
+            return jcl < col;
+          });
       columnIndexWithType.columnIndex_ -= shift;
       res.insert(std::move(el));
     }
@@ -82,13 +85,6 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
           static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
               static_cast<bool>(columnIndexWithType.mightContainUndef_) ||
               isOptionalJoin)};
-    }
-  }
-  if (!keepJoinColumns) {
-    std::cerr << "dumping varToColMap\n";
-    for (const auto& [variable, columnIndexWithType] : result) {
-      std::cerr << variable.name() << " " << columnIndexWithType.columnIndex_
-                << "\n";
     }
   }
   return result;
