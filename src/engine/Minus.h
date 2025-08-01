@@ -54,6 +54,12 @@ class Minus : public Operation {
   // implementation of this function.
   auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
 
+  // Helper function to copy all rows from `left` that have a corresponding
+  // value of `reference` in `keepEntry`.
+  template <typename T>
+  IdTable copyMatchingRows(const IdTable& left, T reference,
+                           const std::vector<T>& keepEntry) const;
+
  public:
   size_t getCostEstimate() override;
 
@@ -76,6 +82,10 @@ class Minus : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryNestedLoopJoinIfSuitable();
 
   // Lazily compute the minus join of two results when at least one of the
   // results is computed lazily. This currently only works if we have just a

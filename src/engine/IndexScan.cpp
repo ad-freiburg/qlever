@@ -71,7 +71,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
@@ -82,7 +82,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       additionalColumns_(std::move(additionalColumns)),
-      additionalVariables_(std::move(additionalVariables)) {
+      additionalVariables_(std::move(additionalVariables)),
+      varsToKeep_{std::move(varsToKeep)} {
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -121,6 +122,10 @@ string IndexScan::getCacheKeyImpl() const {
     os << "\nFiltered by Graphs:";
     os << absl::StrJoin(graphIdVec, " ");
   }
+
+  if (varsToKeep_.has_value()) {
+    os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+  }
   return std::move(os).str();
 }
 
@@ -137,6 +142,9 @@ string IndexScan::getDescriptor() const {
 
 // _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
+  if (varsToKeep_.has_value()) {
+    return varsToKeep_.value().size();
+  }
   return numVariables_ + additionalVariables_.size();
 }
 
@@ -149,6 +157,16 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
       result.push_back(numVariables_ + i);
+    }
+  }
+
+  if (varsToKeep_.has_value()) {
+    auto permutation = getSubsetForStrippedColumns();
+    for (auto it = result.begin(); it != result.end(); ++it) {
+      if (!ad_utility::contains(permutation, *it)) {
+        result.erase(it, result.end());
+        return result;
+      }
     }
   }
   return result;
@@ -193,8 +211,14 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
-  auto addCol = [&variableToColumnMap,
+  auto isContained = [&](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto addCol = [&isContained, &variableToColumnMap,
                  nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+    if (!isContained(var)) {
+      return;
+    }
     // All the columns of an index scan only contain defined values.
     variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
     ++nextColIdx;
@@ -216,7 +240,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks), true);
+      std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
 
 // _____________________________________________________________________________
@@ -231,9 +255,10 @@ IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
-  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
+  idTable = makeApplyColumnSubset()(std::move(idTable));
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
 
@@ -290,9 +315,14 @@ void IndexScan::determineMultiplicities() {
       return idx.getMultiplicities(permutation_);
     }
   }();
-  for ([[maybe_unused]] size_t i :
-       ql::views::iota(multiplicity_.size(), getResultWidth())) {
-    multiplicity_.emplace_back(1);
+  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+
+  if (varsToKeep_.has_value()) {
+    std::vector<float> actualMultiplicites;
+    for (size_t column : getSubsetForStrippedColumns()) {
+      actualMultiplicites.push_back(multiplicity_.at(column));
+    }
+    multiplicity_ = std::move(actualMultiplicites);
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
@@ -348,9 +378,16 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  return getScanPermutation().lazyScan(
+  auto lazyScanAllCols = getScanPermutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
+  auto& detailsRef = co_await cppcoro::getDetails;
+  lazyScanAllCols.setDetailsPointer(&detailsRef);
+  auto applySubset = makeApplyColumnSubset();
+
+  for (auto& table : lazyScanAllCols) {
+    co_yield applySubset(std::move(table));
+  }
 };
 
 // _____________________________________________________________________________
@@ -635,7 +672,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_);
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
 }
 
 // _____________________________________________________________________________
@@ -643,4 +680,45 @@ bool IndexScan::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == subject_ || variable == predicate_ || variable == object_;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeTreeWithStrippedColumns(
+    const ad_utility::HashSet<Variable>& variables) const {
+  ad_utility::HashSet<Variable> newVariables;
+  for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
+    if (variables.contains(var)) {
+      newVariables.insert(var);
+    }
+  }
+
+  return ad_utility::makeExecutionTree<IndexScan>(
+      _executionContext, permutation_, subject_, predicate_, object_,
+      additionalColumns_, additionalVariables_, graphsToFilter_,
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      VarsToKeep{std::move(newVariables)});
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
+  AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
+  const auto& v = varsToKeep_.value();
+  std::vector<ColumnIndex> result;
+  size_t idx = 0;
+  for (const auto& el : getPermutedTriple()) {
+    if (el->isVariable()) {
+      if (v.contains(el->getVariable())) {
+        result.push_back(idx);
+      }
+      ++idx;
+    }
+  }
+  for (const auto& var : additionalVariables_) {
+    if (v.contains(var)) {
+      result.push_back(idx);
+    }
+    ++idx;
+  }
+  return result;
 }

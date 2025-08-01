@@ -153,6 +153,25 @@ inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
   return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
          (rightInGraph && !rightUndef);
 }
+
+// Helper function to check if any of the join columns could potentially contain
+// undef values.
+inline bool joinColumnsAreAlwaysDefined(
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right) {
+  auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
+    return tree->getVariableAndInfoByColumnIndex(index)
+               .second.mightContainUndef_ ==
+           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  };
+  return ql::ranges::all_of(
+      joinColumns, [alwaysDefHelper = std::move(alwaysDefHelper), &left,
+                    &right](const auto& indices) {
+        return alwaysDefHelper(left, indices[0]) &&
+               alwaysDefHelper(right, indices[1]);
+      });
+}
 }  // namespace qlever::joinHelpers
 
 #endif  // JOINHELPERS_H
