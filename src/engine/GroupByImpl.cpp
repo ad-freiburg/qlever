@@ -391,9 +391,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // estimated number of groups
     if (shouldSkipHashMapGroupingDynamic(subresult)) {
       // Fall back to sort-based grouping
-      AD_LOG_DEBUG << "GroupBy: skipping hash-map grouping, using sort-based "
-                      "fallback due to high estimated group count"
-                   << std::endl;
+      runtimeInfo().addDetail("hash_map_optimization",
+                              "Skipped due to high estimated group count, "
+                              "falling back to sort-based grouping.");
       useHashMapOptimization = false;
     } else {
       subresult = child->getResult(true);
