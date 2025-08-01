@@ -321,3 +321,35 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  const auto* vars = &variables;
+  for (const auto& [jcl, _] : _matchedColumns) {
+    const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
+    if (!variables.contains(var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+
+  // TODO<joka921> The following could be done more efficiently in a constructor
+  // (like this it is done twice).
+  // TODO<joka921> apply the `keepJoinColumn` optimization.
+  auto jcls = QueryExecutionTree::getJoinColumns(*_left, *_right);
+  [[maybe_unused]] bool keepJoinColumns =
+      ql::ranges::any_of(jcls, [&](const auto& jcl) {
+        const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
+        return variables.contains(var);
+      });
+  return ad_utility::makeExecutionTree<Minus>(
+      getExecutionContext(), std::move(left), std::move(right));
+}

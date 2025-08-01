@@ -357,6 +357,12 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const;
 
+  // Try to create a version of this operation that only contains the given
+  // `variables`, and therefore strips away all other columns. The default
+  // implementation returns `std::nullopt`.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.

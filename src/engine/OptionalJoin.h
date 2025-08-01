@@ -83,6 +83,9 @@ class OptionalJoin : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

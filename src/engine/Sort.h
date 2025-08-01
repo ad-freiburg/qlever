@@ -79,6 +79,13 @@ class Sort : public Operation {
   }
 
   std::string getCacheKeyImpl() const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
+  // TODO<joka921> Much to do in this function, Comment and fix and test
+  template <size_t NUM_COLS>
+  Result lazySort(std::shared_ptr<const Result> res, size_t col);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

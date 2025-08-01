@@ -2382,9 +2382,16 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
+    // TODO<joka921> This is an experiment for the benchmark paper, properly
+    // analyze the impact
+    if (!unionOperation) {
+      return;
+    }
+    /*
     if (!unionOperation || !hasUnboundTransitivePathInTree(*unionOperation)) {
       return;
     }
+     */
 
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
@@ -3154,8 +3161,11 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // Make sure that variables that are not selected by the subquery are not
   // visible.
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
-    plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        select.getSelectedVariables());
+    const auto& selected = select.getSelectedVariables();
+    std::set<Variable> selectedVariables{selected.begin(), selected.end()};
+    plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::move(plan._qet), selectedVariables);
+    // plan._qet->getRootOperation()->setSelectedVariablesForSubquery(selected);
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses

@@ -93,7 +93,9 @@ inline auto& RuntimeParameters() {
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
-    };
+        // TODO<joka921> comment.
+        Bool<"strip-columns">{true},
+        Bool<"external-sort-highly-experimental">{false}};
   }();
   return params;
 }
