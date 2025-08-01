@@ -256,8 +256,8 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   auto rightRes = child->getResult(true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  IndexNestedLoopJoin nestedLoopJoin{_matchedColumns, std::move(leftRes),
-                                     std::move(rightRes)};
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _matchedColumns, std::move(leftRes), std::move(rightRes)};
 
   auto nonMatchingEntries = nestedLoopJoin.computeExistance();
   return std::optional{Result{

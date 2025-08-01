@@ -293,8 +293,8 @@ std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  IndexNestedLoopJoin nestedLoopJoin{joinColumns_, std::move(leftRes),
-                                     std::move(rightRes)};
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
   result.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(

@@ -16,8 +16,11 @@
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
+namespace joinAlgorithms::indexNestedLoop {
+
+namespace detail {
 // Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
-// rows have found a match so far.
+// rows from the left have found a match so far.
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
@@ -187,6 +190,7 @@ class OptionalJoinRange
     return Result::IdTableVocabPair{std::move(resultTable), leftVocab_.clone()};
   }
 };
+}  // namespace detail
 
 // This class implements an index nested loop join using binary search to match
 // entries. The benefit of this method over the "regular" join algorithms is
@@ -242,8 +246,9 @@ class IndexNestedLoopJoin {
  public:
   // Main function for MINUS and EXISTS operations.
   std::vector<char, ad_utility::AllocatorWithLimit<char>> computeExistance() {
-    Filler matchTracker{leftResult_->idTable().size(),
-                        leftResult_->idTable().getAllocator().as<char>()};
+    detail::Filler matchTracker{
+        leftResult_->idTable().size(),
+        leftResult_->idTable().getAllocator().as<char>()};
     std::vector<ColumnIndex> leftColumns;
     std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
@@ -280,9 +285,9 @@ class IndexNestedLoopJoin {
       bool yieldOnce, size_t resultWidth,
       ad_utility::SharedCancellationHandle cancellationHandle) && {
     AD_CONTRACT_CHECK(leftResult_->idTable().numColumns() <= resultWidth);
-    Adder matchTracker{leftResult_->idTable().size(),
-                       leftResult_->idTable().getAllocator().as<char>(),
-                       std::move(cancellationHandle)};
+    detail::Adder matchTracker{leftResult_->idTable().size(),
+                               leftResult_->idTable().getAllocator().as<char>(),
+                               std::move(cancellationHandle)};
     return ad_utility::callFixedSize(
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, yieldOnce,
@@ -333,13 +338,13 @@ class IndexNestedLoopJoin {
             const LocalVocab& leftVocab = leftResult_->localVocab();
             auto rightTables = rightResult_->idTables();
             auto rightColumns = joinColumnData.jcsRight();
-            return Result::LazyResult{OptionalJoinRange{
+            return Result::LazyResult{detail::OptionalJoinRange{
                 std::move(leftResult_), std::move(rightResult_), leftVocab,
                 leftTable, std::move(rightTables), std::move(matchTracker),
                 resultWidth, std::move(joinColumnData),
                 [leftTableView = std::move(leftTableView),
                  rightColumns = std::move(rightColumns)](
-                    Adder& adder, const IdTable& rightTable) {
+                    detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
                             rightTable.asColumnSubsetView(rightColumns)
                                 .template asStaticView<JOIN_COLUMNS>());
@@ -351,5 +356,6 @@ class IndexNestedLoopJoin {
         });
   }
 };
+}  // namespace joinAlgorithms::indexNestedLoop
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H

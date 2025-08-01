@@ -502,8 +502,8 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto rightRes = child->getResult(true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  IndexNestedLoopJoin nestedLoopJoin{_joinColumns, std::move(leftRes),
-                                     std::move(rightRes)};
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _joinColumns, std::move(leftRes), std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
