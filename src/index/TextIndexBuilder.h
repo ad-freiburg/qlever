@@ -19,7 +19,7 @@ class TextIndexBuilder : public IndexImpl {
   // in which documents words occur. This parameter governs the number of
   // postings saved in one block written to disk. On retrieval blocks are read
   // as a whole.
-  size_t nofWordPostingsInTextBlock_ = NOF_WORD_POSTINGS_IN_TEXT_BLOCK;
+  size_t nofWordPostingsPerTextBlock_ = NOF_WORD_POSTINGS_PER_TEXT_BLOCK;
 
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
@@ -43,8 +43,8 @@ class TextIndexBuilder : public IndexImpl {
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile) const;
 
-  void setNofWordPostingsInTextBlock(size_t nofWordPostingsInTextBlock) {
-    nofWordPostingsInTextBlock_ = nofWordPostingsInTextBlock;
+  void setNofWordPostingsPerTextBlock(size_t nofWordPostingsPerTextBlock) {
+    nofWordPostingsPerTextBlock_ = nofWordPostingsPerTextBlock;
   }
 
  private:

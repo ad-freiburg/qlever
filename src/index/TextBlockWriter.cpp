@@ -13,11 +13,11 @@ void TextBlockWriter::writeTextIndexFile(const std::string& filename,
                                          EntityTextVec& entityTextVec,
                                          TextScoringMetric textScoringMetric,
                                          TextMetaData& textMeta,
-                                         size_t nofWordPostingsInTextBlock) {
+                                         size_t nofWordPostingsPerTextBlock) {
   ad_utility::File out(filename.c_str(), "w");
   auto textBlockWriter = TextBlockWriter{wordTextVec, entityTextVec, out,
                                          textScoringMetric, textMeta};
-  textBlockWriter.calculateAndWriteTextBlocks(nofWordPostingsInTextBlock);
+  textBlockWriter.calculateAndWriteTextBlocks(nofWordPostingsPerTextBlock);
   LOG(DEBUG) << "Done creating text index." << std::endl;
   LOG(INFO) << "Statistics for text index: " << textMeta.statistics()
             << std::endl;
@@ -39,13 +39,13 @@ void TextBlockWriter::writeTextMetaDataToFile(ad_utility::File& out,
 
 // _____________________________________________________________________________
 void TextBlockWriter::calculateAndWriteTextBlocks(
-    size_t nofWordPostingsInTextBlock) {
+    size_t nofWordPostingsPerTextBlock) {
   AD_CONTRACT_CHECK(
-      nofWordPostingsInTextBlock > 0,
+      nofWordPostingsPerTextBlock > 0,
       "Number of word postings in text block has to be larger than zero.");
   for (auto&& chunk :
        ::ranges::views::chunk(::ranges::views::ref(wordTextVecView_),
-                              nofWordPostingsInTextBlock)) {
+                              nofWordPostingsPerTextBlock)) {
     auto currentWordTextVecWordIndex = WordVocabIndex::make(0);
     for (const auto& row : chunk) {
       currentWordTextVecWordIndex = row[0].getWordVocabIndex();

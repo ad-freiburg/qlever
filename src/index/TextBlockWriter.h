@@ -28,7 +28,7 @@
  *
  * @detail The calculation and writing works as follows:
  *         Parse the wordTextVec and add the entries as postings to
- *         wordPostings_. If nofWordPostingsInTextBlock number of words were
+ *         wordPostings_. If nofWordPostingsPerTextBlock number of words were
  *         added, start parsing the entityTextVec. Since the entityTextVec is
  *         also sorted by word id, it can be parsed up to the last word id.
  *         This adds all entities that co-occur with any word of the block.
@@ -59,16 +59,16 @@ struct TextBlockWriter {
                                  EntityTextVec& entityTextVec,
                                  TextScoringMetric textScoringMetric,
                                  TextMetaData& textMeta,
-                                 size_t nofWordPostingsInTextBlock);
+                                 size_t nofWordPostingsPerTextBlock);
 
  private:
   static void writeTextMetaDataToFile(ad_utility::File& out,
                                       const TextMetaData& textMeta);
 
   // Uses the text vecs given during construction to write text blocks to disk
-  // that contain exactly nofWordPostingsInTextBlock word postings in the text
+  // that contain exactly nofWordPostingsPerTextBlock word postings in the text
   // block except the last block which could potentially contain less
-  void calculateAndWriteTextBlocks(size_t nofWordPostingsInTextBlock);
+  void calculateAndWriteTextBlocks(size_t nofWordPostingsPerTextBlock);
 
   WordTextVecView wordTextVecView_;
   EntityTextVecView entityTextVecView_;

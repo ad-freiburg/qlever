@@ -30,7 +30,7 @@ constexpr inline uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 // in which documents words occur. This parameter governs the number of
 // postings saved in one block written to disk. On retrieval, blocks are read
 // as a whole.
-constexpr inline size_t NOF_WORD_POSTINGS_IN_TEXT_BLOCK = 50'000;
+constexpr inline size_t NOF_WORD_POSTINGS_PER_TEXT_BLOCK = 50'000;
 constexpr inline char PREFIX_CHAR = '*';
 
 constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;

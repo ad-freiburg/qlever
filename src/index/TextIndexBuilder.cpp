@@ -266,7 +266,7 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        EntityTextVec& entityTextVec) {
   TextBlockWriter::writeTextIndexFile(filename, wordTextVec, entityTextVec,
                                       textScoringMetric_, textMeta_,
-                                      nofWordPostingsInTextBlock_);
+                                      nofWordPostingsPerTextBlock_);
 }
 
 // _____________________________________________________________________________
