@@ -36,11 +36,18 @@ class IndexScan final : public Operation {
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
+  // If set, then only the specified variables will be part of the result.
+  // Can be used to strip some columns that are not needed by the remainder
+  // of the query.
+  using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
+  VarsToKeep varsToKeep_;
+
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
+
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const TripleComponent& s, const TripleComponent& p,
@@ -48,7 +55,7 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
 
   ~IndexScan() override = default;
 
@@ -231,6 +238,39 @@ class IndexScan final : public Operation {
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
+  // returns a subset of this actual columns, return the subset of columns that
+  // has to be applied to the "full" result (without any columns stripped) to
+  // get the final result. Throws if `varsToKee_` is `nullopt`.
+  std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+
+  // Return a lambda that takes an `idTable` that has the result without any
+  // columns stripped, and applies the column subset that leads to the correct
+  // stripping of the columns. This function can also be used if no columns are
+  // stripped and hence `varsToKeep_` is `nullopt`.
+  // Note: In theory, we could inform the underlying `CompressedRelationReader`
+  // of the required columns to not read the stripped columns at all. But in
+  // practice the effect would be limited, because the reader has to read all
+  // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
+  // filtering etc.)
+  auto makeApplyColumnSubset() const {
+    bool hasSubset = varsToKeep_.has_value();
+    auto cols =
+        hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
+    return [cols = std::move(cols)](auto&& table) {
+      if (cols.has_value()) {
+        table.setColumnSubset(cols.value());
+      }
+      return std::move(table);
+    };
+  }
+
+  // TODO<joka921> mark this as `override` as soon as it actually overrides.
+ public:
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const ad_utility::HashSet<Variable>& variables) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
