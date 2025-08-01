@@ -8,7 +8,6 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IndexTypes.h"
-#include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"

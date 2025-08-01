@@ -17,4 +17,7 @@ using EntityTextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 4>;
 using WordTextVecView = decltype(std::declval<WordTextVec&>().sortedView());
 using EntityTextVecView = decltype(std::declval<EntityTextVec&>().sortedView());
 
+using WordPosting = std::tuple<TextRecordIndex, WordVocabIndex, Score>;
+using EntityPosting = std::tuple<TextRecordIndex, VocabIndex, Score>;
+
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDERTYPES_H

@@ -4,6 +4,7 @@
 
 #include "index/TextIndexReadWrite.h"
 
+#include "index/TextIndexBuilderTypes.h"
 #include "index/TextScoringEnum.h"
 
 namespace textIndexReadWrite::detail {

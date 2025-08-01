@@ -8,7 +8,6 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/IndexTypes.h"
 #include "index/ExternalSortFunctors.h"
-#include "index/Postings.h"
 #include "index/TextIndexBuilderTypes.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
