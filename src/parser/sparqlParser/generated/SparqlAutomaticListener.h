@@ -457,6 +457,25 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
   virtual void exitPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
 
+  virtual void enterPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+  virtual void exitPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+
+  virtual void enterExactLength(
+      SparqlAutomaticParser::ExactLengthContext* ctx) = 0;
+  virtual void exitExactLength(
+      SparqlAutomaticParser::ExactLengthContext* ctx) = 0;
+
+  virtual void enterOnlyMin(SparqlAutomaticParser::OnlyMinContext* ctx) = 0;
+  virtual void exitOnlyMin(SparqlAutomaticParser::OnlyMinContext* ctx) = 0;
+
+  virtual void enterMinMax(SparqlAutomaticParser::MinMaxContext* ctx) = 0;
+  virtual void exitMinMax(SparqlAutomaticParser::MinMaxContext* ctx) = 0;
+
+  virtual void enterOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
+  virtual void exitOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
+
   virtual void enterPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* ctx) = 0;
   virtual void exitPathPrimary(
