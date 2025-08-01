@@ -8,7 +8,9 @@
 #include "engine/JoinHelpers.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
+#include "engine/Sort.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -44,6 +46,10 @@ Result Minus::computeResult(bool requestLaziness) {
   Service::precomputeSiblingResult(_left->getRootOperation(),
                                    _right->getRootOperation(), true,
                                    requestLaziness);
+
+  if (auto res = tryNestedLoopJoinIfSuitable()) {
+    return std::move(res).value();
+  }
 
   // The lazy minus implementation does only work if there's just a single
   // join column. This might be extended in the future.
@@ -129,6 +135,34 @@ auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
 }
 
 // _____________________________________________________________________________
+template <typename T>
+IdTable Minus::copyMatchingRows(const IdTable& left, T reference,
+                                const std::vector<T>& keepEntry) const {
+  IdTable result{getResultWidth(), left.getAllocator()};
+  AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
+
+  // Transform into dense vector of indices.
+  std::vector<size_t> nonMatchingIndices;
+  for (size_t row = 0; row < left.numRows(); ++row) {
+    if (keepEntry.at(row) == reference) {
+      nonMatchingIndices.push_back(row);
+    }
+  }
+  result.resize(nonMatchingIndices.size());
+
+  for (const auto& [outputCol, inputCol] :
+       ::ranges::views::zip(ad_utility::OwningView{result.getColumns()},
+                            ad_utility::OwningView{left.getColumns()})) {
+    ad_utility::chunkedCopy(
+        ql::views::transform(nonMatchingIndices,
+                             [&inputCol](size_t row) { return inputCol[row]; }),
+        outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
+        [this]() { checkCancellation(); });
+  }
+
+  return result;
+}
+// _____________________________________________________________________________
 IdTable Minus::computeMinus(
     const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
@@ -187,25 +221,7 @@ IdTable Minus::computeMinus(
       },
       makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
 
-  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
-
-  // Transform into dense vector of indices.
-  std::vector<size_t> nonMatchingIndices;
-  for (size_t row = 0; row < left.numRows(); ++row) {
-    if (keepEntry.at(row)) {
-      nonMatchingIndices.push_back(row);
-    }
-  }
-  result.resize(nonMatchingIndices.size());
-
-  for (ColumnIndex col = 0; col < result.numColumns(); col++) {
-    ql::ranges::transform(
-        nonMatchingIndices, result.getColumn(col).begin(),
-        [inputCol = left.getColumn(col)](size_t row) { return inputCol[row]; });
-  }
-
-  return result;
+  return copyMatchingRows(left, true, keepEntry);
 }
 
 // _____________________________________________________________________________
@@ -214,6 +230,38 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
+  auto alwaysDefined = [this]() {
+    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
+                                                            _left, _right);
+  };
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side. It currently doesn't support undef.
+  auto sort = std::dynamic_pointer_cast<Sort>(_right->getRootOperation());
+  if (!sort || _left->getSizeEstimate() > _right->getSizeEstimate() ||
+      !alwaysDefined()) {
+    return std::nullopt;
+  }
+
+  auto child = sort->getChildren().at(0);
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  sort->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
+
+  auto leftRes = _left->getResult(false);
+  const IdTable& leftTable = leftRes->idTable();
+  auto rightRes = child->getResult(true);
+
+  LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
+  IndexNestedLoopJoin nestedLoopJoin{_matchedColumns, std::move(leftRes),
+                                     std::move(rightRes)};
+
+  std::vector<char> nonMatchingEntries = nestedLoopJoin.computeTracker();
+  return std::optional{Result{
+      copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
+      resultSortedOn(), std::move(localVocab)}};
 }
 
 // _____________________________________________________________________________

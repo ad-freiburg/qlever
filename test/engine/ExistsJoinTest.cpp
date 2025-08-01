@@ -38,31 +38,11 @@ void testExistsFromIdTable(
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
   AD_CORRECTNESS_CHECK(right.numColumns() >= numJoinColumns);
 
-  // Randomly permute the columns of the `input` and return the permutation that
-  // was applied
-  auto permuteColumns = [](auto& table) {
-    auto colsView = ad_utility::integerRange(table.numColumns());
-    std::vector<ColumnIndex> permutation;
-    ql::ranges::copy(colsView, std::back_inserter(permutation));
-    table.setColumnSubset(permutation);
-    return permutation;
-  };
-  // Permute the columns.
-  auto leftPermutation = permuteColumns(left);
-  auto rightPermutation = permuteColumns(right);
-
   // We have to make the deep copy of `left` for the expected result at exactly
   // this point: The permutation of the columns (above) also affects the
   // expected result, while the permutation of the rows (which will be applied
   // below) doesn't affect it, as the `ExistsJoin` internally sorts its inputs.
   IdTable expected = left.clone();
-
-  if (numJoinColumns > 0) {
-    // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
-    // pre-sorts its inputs.
-    ad_utility::randomShuffle(left.begin(), left.end());
-    ad_utility::randomShuffle(right.begin(), right.end());
-  }
 
   auto qec = getQec();
   using V = Variable;
@@ -75,22 +55,24 @@ void testExistsFromIdTable(
     return V{absl::StrCat("?nonJoinCol_", i++)};
   };
 
-  auto makeChild = [&](const IdTable& input, const auto& columnPermutation) {
+  auto makeChild = [&](const IdTable& input) {
     Vars vars;
-    for (auto colIdx : columnPermutation) {
+    std::vector<ColumnIndex> sortedCols;
+    for (auto colIdx : ad_utility::integerRange(input.numColumns())) {
       if (colIdx < numJoinColumns) {
         vars.push_back(joinCol(colIdx));
+        sortedCols.push_back(colIdx);
       } else {
         vars.push_back(nonJoinCol());
       }
     }
-    return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
-                                                           vars);
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, input.clone(), vars, false, std::move(sortedCols));
   };
 
   // Compute the `ExistsJoin` and check the result.
-  auto exists = ExistsJoin{qec, makeChild(left, leftPermutation),
-                           makeChild(right, rightPermutation), V{"?exists"}};
+  auto exists =
+      ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
   auto res = exists.computeResultOnlyForTesting();
   const auto& table = res.idTable();
@@ -212,6 +194,50 @@ TEST(Exists, computeResult) {
                         makeIdTableFromVector({{U, U}, {3, 7}}), {}, 1);
   testExistsFromIdTable(makeIdTableFromVector({{U, U}, {3, 7}}),
                         IdTable(2, alloc), {false, false}, 2);
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, computeExistsJoinNestedLoopJoinOptimization) {
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+  IdTable expected = makeIdTableFromVector(
+      {{1, 1, 2, T}, {4, 2, 1, F}, {2, 8, 1, F}, {3, 8, 2, T}, {4, 8, 2, T}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool forceFullyMaterialized : {false, true}) {
+    ExistsJoin existsJoin{
+        qec,
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, a.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
+                                                 Variable{"?b"}},
+            false, std::vector<ColumnIndex>{1, 2}),
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, b.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
+                                                 Variable{"?a"}, std::nullopt},
+            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            forceFullyMaterialized),
+        Variable{"?result"}};
+    auto result = existsJoin.computeResultOnlyForTesting(true);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_EQ(result.idTable(), expected);
+    const auto& runtimeInfo =
+        existsJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
 }
 
 // _____________________________________________________________________________

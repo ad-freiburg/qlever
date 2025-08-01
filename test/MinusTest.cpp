@@ -144,6 +144,47 @@ TEST(Minus, computeMinus) {
 }
 
 // _____________________________________________________________________________
+TEST(Minus, computeMinusNestedLoopJoinOptimization) {
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+  IdTable expected = makeIdTableFromVector({{4, 2, 1}, {2, 8, 1}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool forceFullyMaterialized : {false, true}) {
+    Minus m{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, a.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?a"}, Variable{"?b"}},
+                false, std::vector<ColumnIndex>{1, 2}),
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, b.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
+                false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+                forceFullyMaterialized)};
+    auto result = m.computeResultOnlyForTesting(true);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_EQ(result.idTable(), expected);
+    const auto& runtimeInfo =
+        m.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Minus, computeMinusWithEmptyTables) {
   IdTable nonEmpty = makeIdTableFromVector({{1, 2}, {3, 3}, {1, 8}});
   IdTable empty = IdTable{2, nonEmpty.getAllocator()};

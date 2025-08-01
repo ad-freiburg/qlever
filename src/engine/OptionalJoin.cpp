@@ -342,7 +342,7 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_);
+      cancellationHandle_, keepJoinColumns_);
   auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                  beginRight = joinColumnsRight.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -430,7 +430,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     ad_utility::AddCombinedRowToIdTable rowAdder{
         _joinColumns.size(), IdTable{getResultWidth(), allocator()},
-        cancellationHandle_, CHUNK_SIZE, std::move(yieldTable)};
+        cancellationHandle_, keepJoinColumns_,
+        CHUNK_SIZE,          std::move(yieldTable)};
     auto leftRange = resultToView(*left, joinColMap.permutationLeft());
     auto rightRange = resultToView(*right, joinColMap.permutationRight());
     std::visit(
