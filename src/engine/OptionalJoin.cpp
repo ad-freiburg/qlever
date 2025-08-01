@@ -491,3 +491,35 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
   copy->_right = _right->clone();
   return copy;
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OptionalJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  const auto* vars = &variables;
+  for (const auto& [jcl, _] : _joinColumns) {
+    const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
+    if (!variables.contains(var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+
+  // TODO<joka921> The following could be done more efficiently in a constructor
+  // (like this it is done twice).
+  auto jcls = QueryExecutionTree::getJoinColumns(*_left, *_right);
+  bool keepJoinColumns = ql::ranges::any_of(jcls, [&](const auto& jcl) {
+    const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
+    return variables.contains(var);
+  });
+  return ad_utility::makeExecutionTree<OptionalJoin>(
+      getExecutionContext(), std::move(left), std::move(right),
+      keepJoinColumns);
+}
