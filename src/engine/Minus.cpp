@@ -47,7 +47,7 @@ Result Minus::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  if (auto res = tryNestedLoopJoinIfSuitable()) {
+  if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
     return std::move(res).value();
   }
 
@@ -234,7 +234,7 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
+std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   auto alwaysDefined = [this]() {
     return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
                                                             _left, _right);

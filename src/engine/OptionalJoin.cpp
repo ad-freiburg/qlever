@@ -104,7 +104,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  if (auto res = tryNestedLoopJoinIfSuitable(requestLaziness)) {
+  if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
     return std::move(res).value();
   }
 
@@ -163,7 +163,7 @@ size_t OptionalJoin::getResultWidth() const {
 std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   std::vector<ColumnIndex> sortedOn;
   // This optimization doesn't allow preserving sort order.
-  if (isNestedLoopJoinSuitable()) {
+  if (isIndexNestedLoopJoinSuitable()) {
     return sortedOn;
   }
   // The result is sorted on all join columns from the left subtree.
@@ -476,7 +476,7 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool OptionalJoin::isNestedLoopJoinSuitable() const {
+bool OptionalJoin::isIndexNestedLoopJoinSuitable() const {
   auto alwaysDefined = [this]() {
     return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_joinColumns, _left,
                                                             _right);
@@ -489,9 +489,9 @@ bool OptionalJoin::isNestedLoopJoinSuitable() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> OptionalJoin::tryNestedLoopJoinIfSuitable(
+std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
     bool requestLaziness) {
-  if (!isNestedLoopJoinSuitable()) {
+  if (!isIndexNestedLoopJoinSuitable()) {
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);

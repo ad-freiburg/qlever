@@ -86,7 +86,7 @@ class Minus : public Operation {
 
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
-  std::optional<Result> tryNestedLoopJoinIfSuitable();
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
 
   // Lazily compute the minus join of two results when at least one of the
   // results is computed lazily. This currently only works if we have just a

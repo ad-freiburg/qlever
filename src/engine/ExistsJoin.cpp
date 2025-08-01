@@ -104,7 +104,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
 
   if (!noJoinNecessary) {
-    if (auto res = tryNestedLoopJoinIfSuitable()) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
       return std::move(res).value();
     }
   }
@@ -271,7 +271,7 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
   auto alwaysDefined = [this]() {
     return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
                                                             right_);
