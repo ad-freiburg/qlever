@@ -212,7 +212,7 @@ size_t Union::getCostEstimate() {
   auto ownEstimate = getSizeEstimateBeforeLimit();
   if (targetOrder_.empty()) {
     // A simple union is very cheap to compute.
-    ownEstimate = std::max(size_t{1}, ownEstimate / 30);
+    ownEstimate = std::max(uint64_t{1}, ownEstimate / 30);
   } else {
     // A sorted UNION is rather expensive.
     ownEstimate *= 3;
