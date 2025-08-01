@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 
+#include <absl/container/inlined_vector.h>
+
 #include <memory>
 
 #include "engine/TransitivePathImpl.h"
@@ -18,18 +20,30 @@
  * implements the successors function, which is used in transitiveHull function.
  *
  */
-struct HashMapWrapper {
+class HashMapWrapper {
+ public:
   // We deliberately use the `std::` variants of a hash map because `absl`s
   // types are not exception safe.
   using Map = std::unordered_map<
       Id, Set, absl::Hash<Id>, std::equal_to<Id>,
       ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+  using MapOfMaps = std::unordered_map<
+      Id, Map, absl::Hash<Id>, std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Map>>>;
 
-  Map map_;
+ private:
+  MapOfMaps graphMap_;
+  Map* map_;
   Set emptySet_;
+  Map emptyMap_;
 
-  HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)
-      : map_(std::move(map)), emptySet_(allocator) {}
+ public:
+  // Constructor with no graph column.
+  HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator);
+
+  // Constructor with graph column.
+  HashMapWrapper(MapOfMaps graphMap,
+                 const ad_utility::AllocatorWithLimit<Id>& allocator);
 
   /**
    * @brief Return the successors for the given Id. The successors are all ids,
@@ -39,24 +53,14 @@ struct HashMapWrapper {
    * @return A const Set&, consisting of all target ids which have an ingoing
    * edge from 'node'
    */
-  const auto& successors(const Id node) const {
-    auto iterator = map_.find(node);
-    if (iterator == map_.end()) {
-      return emptySet_;
-    }
-    return iterator->second;
-  }
+  const Set& successors(Id node) const;
 
-  // Retrieve pointer to equal id from `map_`, or nullptr if not present.
-  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
-  // but instead are backed by the index.
-  const Id* getEquivalentId(Id node) const {
-    auto iterator = map_.find(node);
-    if (iterator == map_.end()) {
-      return nullptr;
-    }
-    return &iterator->first;
-  }
+  // Return equivalent ids from the index, along with an associated graph id in
+  // case these are available.
+  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
+
+  // Prefilter the map for values of a certain graph.
+  void setGraphId(Id graphId);
 };
 
 /**
@@ -64,8 +68,6 @@ struct HashMapWrapper {
  * @brief This class implements the transitive path operation. The
  * implementation uses a hash map to represent the graph and find successors
  * of given nodes.
- *
- *
  */
 class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
@@ -74,15 +76,10 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  // initialize the map from the subresult
+  // Initialize the map from the subresult.
   HashMapWrapper setupEdgesMap(
-      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const IdTable& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
-
-  template <size_t SUB_WIDTH>
-  HashMapWrapper setupEdgesMap(const IdTable& dynSub,
-                               const TransitivePathSide& startSide,
-                               const TransitivePathSide& targetSide) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
