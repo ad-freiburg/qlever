@@ -229,12 +229,12 @@ TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
-            false, std::vector<ColumnIndex>{1, 2}),
+            false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
         ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
-            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            false, std::vector<ColumnIndex>{}, rightVocab.clone(), std::nullopt,
             forceFullyMaterialized),
         Variable{"?result"}};
     auto result = existsJoin.computeResultOnlyForTesting(true);

@@ -175,13 +175,13 @@ TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
                 qec, a.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?a"}, Variable{"?b"}},
-                false, std::vector<ColumnIndex>{1, 2}),
+                false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, b.clone(),
                 std::vector<std::optional<Variable>>{
                     std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
-                false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
-                forceFullyMaterialized)};
+                false, std::vector<ColumnIndex>{}, rightVocab.clone(),
+                std::nullopt, forceFullyMaterialized)};
     auto result = m.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
     EXPECT_EQ(result.idTable(), expected);
