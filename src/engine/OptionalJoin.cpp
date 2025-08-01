@@ -531,9 +531,11 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
 
-  auto lazyResult = std::move(nestedLoopJoin)
-                        .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                                             cancellationHandle_);
+  auto lazyResult =
+      std::move(nestedLoopJoin)
+          .computeOptionalJoin(!requestLaziness, getResultWidth(),
+                               cancellationHandle_, _right->getResultWidth(),
+                               keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(lazyResult)),

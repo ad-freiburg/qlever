@@ -45,12 +45,17 @@ struct Adder {
   // memset in `matchLeft`.
   std::vector<char, ad_utility::AllocatorWithLimit<char>> missingIndices_;
   ad_utility::SharedCancellationHandle cancellationHandle_;
+  size_t numJoinColumns_;
+  bool keepJoinColumns_;
 
   explicit Adder(size_t size,
                  const ad_utility::AllocatorWithLimit<char>& allocator,
-                 ad_utility::SharedCancellationHandle cancellationHandle)
+                 ad_utility::SharedCancellationHandle cancellationHandle,
+                 size_t numJoinColumns, bool keepJoinColumns)
       : missingIndices_(size, true, allocator),
-        cancellationHandle_{std::move(cancellationHandle)} {}
+        cancellationHandle_{std::move(cancellationHandle)},
+        numJoinColumns_{numJoinColumns},
+        keepJoinColumns_{keepJoinColumns} {}
 
   AD_ALWAYS_INLINE void track(size_t offset, size_t size, size_t rightIndex) {
     for (size_t i = 0; i < size; i++) {
@@ -66,8 +71,14 @@ struct Adder {
                          IdTableView<0> right) {
     size_t originalSize = result.size();
     result.resize(originalSize + matchingPairs_.size());
+    auto numColsInResult = left.numColumns() + right.numColumns() -
+                           (1 + (!keepJoinColumns_)) * numJoinColumns_;
+    AD_CORRECTNESS_CHECK(result.numColumns() == numColsInResult);
     ColumnIndex resultColIdx = 0;
-    for (auto source : left.getColumns()) {
+    auto numColsToDrop =
+        static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
+    for (auto source : ad_utility::OwningView{left.getColumns()} |
+                           ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -77,11 +88,8 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    size_t numJoinColumns =
-        left.numColumns() + right.numColumns() - result.numColumns();
-    for (size_t rightCol = numJoinColumns; rightCol < right.numColumns();
-         ++rightCol) {
-      auto source = right.getColumn(rightCol);
+    for (auto source : ad_utility::OwningView{right.getColumns()} |
+                           ql::views::drop(numJoinColumns_)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -102,7 +110,10 @@ struct Adder {
     size_t originalSize = result.size();
     result.resize(originalSize + counter);
     ColumnIndex resultColIdx = 0;
-    for (auto source : left.getColumns()) {
+    auto numColsToDrop =
+        static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
+    for (auto source : ad_utility::OwningView{left.getColumns()} |
+                           ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t targetIndex = originalSize;
       for (size_t i = 0; i < missingIndices_.size(); ++i) {
@@ -283,20 +294,20 @@ class IndexNestedLoopJoin {
   // Main function for OPTIONAL operation.
   Result::LazyResult computeOptionalJoin(
       bool yieldOnce, size_t resultWidth,
-      ad_utility::SharedCancellationHandle cancellationHandle) && {
-    AD_CONTRACT_CHECK(leftResult_->idTable().numColumns() <= resultWidth);
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      size_t numColsRight, bool keepJoinColumns) && {
     detail::Adder matchTracker{leftResult_->idTable().size(),
                                leftResult_->idTable().getAllocator().as<char>(),
-                               std::move(cancellationHandle)};
+                               std::move(cancellationHandle),
+                               joinColumns_.size(), keepJoinColumns};
     return ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
-        [this, &matchTracker, yieldOnce,
-         resultWidth](auto JOIN_COLUMNS) -> Result::LazyResult {
+        [this, &matchTracker, yieldOnce, resultWidth, numColsRight,
+         keepJoinColumns](auto JOIN_COLUMNS) -> Result::LazyResult {
           const IdTable& leftTable = leftResult_->idTable();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
-              joinColumns_, numColsLeft,
-              resultWidth - numColsLeft + joinColumns_.size()};
+              joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
           IdTableView<JOIN_COLUMNS> leftTableView =
               leftTable.asColumnSubsetView(joinColumnData.jcsLeft())
                   .template asStaticView<JOIN_COLUMNS>();
