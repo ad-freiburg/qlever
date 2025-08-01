@@ -374,9 +374,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // estimated number of groups
     if (shouldSkipHashMapGroupingDynamic(subresult)) {
       // Fall back to sort-based grouping
-      AD_LOG_DEBUG << "GroupBy: skipping hash-map grouping, using sort-based "
-                      "fallback due to high estimated group count"
-                   << std::endl;
+      runtimeInfo().addDetail("hash_map_optimization",
+                              "Skipped due to high estimated group count, "
+                              "falling back to sort-based grouping.");
       useHashMapOptimization = false;
     } else {
       subresult = child->getResult(true);
@@ -1697,7 +1697,7 @@ bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
   // Reservoir-sample indices only
   std::vector<size_t> indices(sampleSize);
   for (size_t i = 0; i < sampleSize; ++i) indices[i] = i;
-  std::mt19937_64 gen{std::random_device{}()};
+  std::mt19937_64 gen{42};
   for (size_t i = sampleSize; i < totalSize; ++i) {
     std::uniform_int_distribution<size_t> dist(0, i);
     size_t randIdx = dist(gen);
@@ -1706,22 +1706,22 @@ bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
     }
   }
   // Use absl::flat_hash_set to estimate distinct groups
-  absl::flat_hash_set<std::vector<Id>> uniqueGroups;
-  uniqueGroups.reserve(sampleSize);
+  absl::flat_hash_set<RowKey> uniqueGroups;
+  const auto& varCols = _subtree->getVariableColumns();
+  std::vector<ColumnIndex> groupByCols;
+  groupByCols.reserve(_groupByVariables.size());
+  for (const auto& var : _groupByVariables) {
+      groupByCols.push_back(varCols.at(var).columnIndex_);
+  }
   for (size_t idx : indices) {
-    std::vector<Id> key;
-    key.reserve(_groupByVariables.size());
-    const auto& varCols = _subtree->getVariableColumns();
-    for (auto& var : _groupByVariables) {
-      key.push_back(table(idx, varCols.at(var).columnIndex_));
-    }
-    uniqueGroups.insert(std::move(key));
+      uniqueGroups.insert(RowKey{&table, idx, &groupByCols});
   }
   size_t estGroups = uniqueGroups.size();
   size_t estGroupsScaled =
       static_cast<size_t>(double(estGroups) / sampleSize * totalSize);
-  AD_LOG_DEBUG << "Estimated groups: " << estGroupsScaled
-               << " (threshold: " << groupThreshold << ")" << std::endl;
+  AD_LOG_DEBUG << "Distinct groups: " << estGroups << ", scaled: "
+               << estGroupsScaled << " (threshold: " << groupThreshold << ")"
+               << std::endl;
   return estGroupsScaled > groupThreshold;
 }
 

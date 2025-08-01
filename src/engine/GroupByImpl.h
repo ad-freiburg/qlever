@@ -592,12 +592,44 @@ class GroupByImpl : public Operation {
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
 
+  FRIEND_TEST(GroupBySamplingTest, belowThreshold);
+  FRIEND_TEST(GroupBySamplingTest, aboveThreshold);
+  FRIEND_TEST(GroupBySamplingTest, edgeCaseEmptyInput);
+  FRIEND_TEST(GroupBySamplingTest, edgeCaseAllUnique);
+  FRIEND_TEST(GroupBySamplingTest, edgeCaseAllSame);
+
  private:
   // Check via sampling if the hash-map path should be skipped due to too many
   // groups
   bool shouldSkipHashMapGrouping(const IdTable& table) const;
   bool shouldSkipHashMapGroupingDynamic(
       const std::shared_ptr<const Result>& subresult) const;
+  
+  struct RowKey {
+    const IdTable* table;
+    size_t rowIndex;
+    const std::vector<ColumnIndex>* groupByCols;
+
+    // We store RowKeys in absl::flat_hash_set. Therefore, we need to
+    // implement a Hash method and an equality operator.
+
+    template <typename H>
+    friend H AbslHashValue(H h, const RowKey& key) {
+      for (const auto& colIdx : *key.groupByCols) {
+        h = H::combine(std::move(h), (*key.table)(key.rowIndex, colIdx));
+      }
+      return h;
+    }
+
+    bool operator==(const RowKey& other) const {
+      for (const auto& colIdx : *groupByCols) {
+        if ((*table)(rowIndex, colIdx) != (*other.table)(other.rowIndex, colIdx)) {
+          return false;
+        }
+      }
+      return true;
+    }
+  };
 
 };  // class GroupByImpl
 
