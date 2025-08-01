@@ -18,6 +18,11 @@ using namespace ad_utility::url_parser::sparqlOperation;
 using Var = Variable;
 using TC = TripleComponent;
 
+const EncodedValues* evm() {
+  static EncodedValues ev;
+  return &ev;
+}
+
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
   auto expectTransformPost = CPP_template_lambda()(typename RequestT)(
@@ -78,7 +83,7 @@ TEST(GraphStoreProtocolTest, transformGet) {
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
+        EXPECT_THAT(GraphStoreProtocol::transformGet(graph, evm()), matcher);
       };
   expectTransformGet(
       DEFAULT{},
@@ -99,7 +104,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makeGetRequest("/?default")),
+          ad_utility::testing::makeGetRequest("/?default"), evm()),
       m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
                         m::GraphPattern(matchers::Triples({SparqlTriple(
                             TC(Var{"?s"}), Var{"?p"}, TC(Var{"?o"}))}))));
@@ -107,7 +112,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makePostRequest(
-              "/?default", "application/n-triples", "<foo> <bar> <baz> .")),
+              "/?default", "application/n-triples", "<foo> <bar> <baz> ."),
+          evm()),
       m::UpdateClause(m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"),
                                            iri("<baz>"), std::monostate{}}}),
                       m::GraphPattern()));
@@ -118,7 +124,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             GraphStoreProtocol::transformGraphStoreProtocol(
                 GraphStoreOperation{DEFAULT{}},
-                ad_utility::testing::makeRequest(method, "/?default")),
+                ad_utility::testing::makeRequest(method, "/?default"), evm()),
             testing::HasSubstr(
                 absl::StrCat(std::string{boost::beast::http::to_string(method)},
                              " in the SPARQL Graph Store HTTP Protocol")));
@@ -131,7 +137,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
-                                           "/?default")),
+                                           "/?default"),
+          evm()),
       testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
 }
 

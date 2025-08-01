@@ -37,6 +37,11 @@ PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
+
+const EncodedValues* evm() {
+  static EncodedValues ev;
+  return &ev;
+}
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -68,7 +73,8 @@ TEST(SparqlParser, Prefix) {
 
   {
     static ad_utility::BlankNodeManager blankNodeManager;
-    ParserAndVisitor p{&blankNodeManager, "PREFIX wd: <www.wikidata.org/>"};
+    ParserAndVisitor p{&blankNodeManager, evm(),
+                       "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -1597,8 +1603,9 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  EncodedValues encodedValuesManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(std::move(query)),
+      SparqlParser::parseQuery(&encodedValuesManager, std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(

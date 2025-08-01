@@ -14,11 +14,17 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
+
+const EncodedValues* evm() {
+  static EncodedValues ev;
+  return &ev;
+}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -31,6 +37,7 @@ MATCHER_P(AlwaysFalse, msg, "") {
   *result_listener << msg;
   return false;
 }
+}  // namespace
 
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
@@ -42,7 +49,7 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, evm(), update);
         for (auto& pq : pqs) {
           QueryPlanner qp{&qec, sharedHandle};
           const auto qet = qp.createExecutionTree(pq);
@@ -216,7 +223,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, evm(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -442,7 +449,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
             ExecuteUpdate::transformTriplesTemplate(
-                <#initializer #>, vocab, variableColumns, std::move(triples));
+                *evm(), vocab, variableColumns, std::move(triples));
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -461,7 +468,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                const Matcher<const std::string&>& messageMatcher) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             ExecuteUpdate::transformTriplesTemplate(
-                <#initializer #>, vocab, variableColumns, std::move(triples)),
+                *evm(), vocab, variableColumns, std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
