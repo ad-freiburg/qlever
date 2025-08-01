@@ -114,6 +114,7 @@ class TextMetaData {
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
+  std::vector<uint64_t> _blockUpperBoundWordIdDummy = {};
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
@@ -122,6 +123,7 @@ class TextMetaData {
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
+    serializer | arg._blockUpperBoundWordIdDummy;
     serializer | arg._nofTextRecords;
     serializer | arg._nofWordPostings;
     serializer | arg._nofEntityPostings;
