@@ -206,20 +206,19 @@ uint64_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 
+// _____________________________________________________________________________
 size_t Union::getCostEstimate() {
-  // TODO<joka921> These factors should be evaluated properly/ made
-  // configurable.
-  auto estimate = _subtrees[0]->getCostEstimate() +
-                  _subtrees[1]->getCostEstimate() +
-                  getSizeEstimateBeforeLimit();
+  // TODO<joka921> Analyze the magic numbers here, and make them configurable.
+  auto ownEstimate = getSizeEstimateBeforeLimit();
   if (targetOrder_.empty()) {
     // A simple union is very cheap to compute.
-    estimate = std::max(size_t{1}, estimate / 30);
+    ownEstimate = std::max(size_t{1}, ownEstimate / 30);
   } else {
     // A sorted UNION is rather expensive.
-    estimate *= 3;
+    ownEstimate *= 3;
   }
-  return estimate;
+  return _subtrees[0]->getCostEstimate() + _subtrees[1]->getCostEstimate() +
+         ownEstimate;
 }
 
 Result Union::computeResult(bool requestLaziness) {
