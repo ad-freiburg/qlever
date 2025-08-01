@@ -197,7 +197,14 @@ TEST(Exists, computeResult) {
 }
 
 // _____________________________________________________________________________
-TEST(ExistsJoin, computeExistsJoinNestedLoopJoinOptimization) {
+TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
   // From this table columns 1 and 2 will be used for the join.
   IdTable a = makeIdTableFromVector(
       {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
@@ -222,17 +229,19 @@ TEST(ExistsJoin, computeExistsJoinNestedLoopJoinOptimization) {
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
-            false, std::vector<ColumnIndex>{1, 2}),
+            false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
         ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
-            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            false, std::vector<ColumnIndex>{}, rightVocab.clone(), std::nullopt,
             forceFullyMaterialized),
         Variable{"?result"}};
     auto result = existsJoin.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
     EXPECT_EQ(result.idTable(), expected);
+    EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
         existsJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
     EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);

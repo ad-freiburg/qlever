@@ -49,17 +49,21 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     for (size_t i = 0; i < inputB.numColumns(); ++i) {
       varsRight.emplace_back(absl::StrCat("?right_", i));
     }
+    std::vector<ColumnIndex> leftSorted;
+    std::vector<ColumnIndex> rightSorted;
     size_t idx = 0;
     for (auto [left, right] : jcls) {
       varsLeft.at(left) = Variable(absl::StrCat("?joinColumn_", idx));
       varsRight.at(right) = Variable(absl::StrCat("?joinColumn_", idx));
+      leftSorted.push_back(left);
+      rightSorted.push_back(right);
       ++idx;
     }
     auto qec = ad_utility::testing::getQec();
     auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputA.clone(), varsLeft);
+        qec, inputA.clone(), varsLeft, false, std::move(leftSorted));
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputB.clone(), varsRight);
+        qec, inputB.clone(), varsRight, false, std::move(rightSorted));
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
@@ -395,6 +399,136 @@ TEST(OptionalJoin, gallopingJoin) {
 
     testOptionalJoin(a, b, jcls, expectedResult);
   }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable b = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {6, 2, 8, 12},
+                                     {14, 15, 16, 17}});
+  IdTable expected = makeIdTableFromVector({{1, 1, 2, 7, 5},
+                                            {3, 8, 2, 7, 14},
+                                            {4, 8, 2, 7, 14},
+                                            {3, 8, 2, 6, 12},
+                                            {4, 8, 2, 6, 12},
+                                            {4, 2, 1, U, U},
+                                            {2, 8, 1, U, U}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool forceFullyMaterialized : {false, true}) {
+    OptionalJoin optionalJoin{
+        qec,
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, a.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
+                                                 Variable{"?b"}},
+            false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, b.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
+                                                 Variable{"?a"}, std::nullopt},
+            false, std::vector<ColumnIndex>{}, rightVocab.clone(), std::nullopt,
+            forceFullyMaterialized)};
+    auto result = optionalJoin.computeResultOnlyForTesting(false);
+    ASSERT_TRUE(result.isFullyMaterialized());
+
+    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                ::testing::UnorderedElementsAre(entryA, entryB));
+
+    const auto& runtimeInfo =
+        optionalJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable a = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+
+  // From these tables columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector(
+      {{7, 2, 1, 5}, {1, 3, 3, 5}, {1, 8, 1, 5}, {7, 2, 8, 14}}));
+  rightTables.push_back(
+      makeIdTableFromVector({{6, 2, 8, 12}, {14, 15, 16, 17}}));
+
+  auto expected0 = makeIdTableFromVector(
+      {{1, 1, 2, 7, 5}, {3, 8, 2, 7, 14}, {4, 8, 2, 7, 14}});
+  auto expected1 = makeIdTableFromVector({{3, 8, 2, 6, 12}, {4, 8, 2, 6, 12}});
+  auto expected2 = makeIdTableFromVector({{4, 2, 1, U, U}, {2, 8, 1, U, U}});
+
+  auto* qec = ad_utility::testing::getQec();
+  OptionalJoin optionalJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(a),
+          std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
+                                               Variable{"?b"}},
+          false, std::vector<ColumnIndex>{1, 2}, std::move(leftVocab)),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(rightTables),
+          std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
+                                               Variable{"?a"}, std::nullopt},
+          false, std::vector<ColumnIndex>{}, std::move(rightVocab))};
+  auto result = optionalJoin.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  std::vector<IdTable> actualTables;
+  std::vector<LocalVocab> actualVocabs;
+  for (auto& [idTable, localVocab] : result.idTables()) {
+    actualTables.emplace_back(std::move(idTable));
+    actualVocabs.emplace_back(std::move(localVocab));
+  }
+
+  using namespace ::testing;
+
+  EXPECT_THAT(actualTables,
+              ElementsAre(Eq(std::cref(expected0)), Eq(std::cref(expected1)),
+                          Eq(std::cref(expected2))));
+  ASSERT_EQ(actualVocabs.size(), 3);
+  EXPECT_THAT(actualVocabs.at(0).getAllWordsForTesting(),
+              UnorderedElementsAre(entryA, entryB));
+  EXPECT_THAT(actualVocabs.at(1).getAllWordsForTesting(),
+              UnorderedElementsAre(entryA, entryB));
+  EXPECT_THAT(actualVocabs.at(2).getAllWordsForTesting(),
+              UnorderedElementsAre(entryA));
+
+  const auto& runtimeInfo =
+      optionalJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
+  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+  EXPECT_EQ(runtimeInfo.numRows_, 0);
 }
 
 // _____________________________________________________________________________

@@ -47,7 +47,7 @@ Result Minus::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  if (auto res = tryNestedLoopJoinIfSuitable()) {
+  if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
     return std::move(res).value();
   }
 
@@ -136,8 +136,9 @@ auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
 
 // _____________________________________________________________________________
 template <typename T>
-IdTable Minus::copyMatchingRows(const IdTable& left, T reference,
-                                const std::vector<T>& keepEntry) const {
+IdTable Minus::copyMatchingRows(
+    const IdTable& left, T reference,
+    const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const {
   IdTable result{getResultWidth(), left.getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
@@ -189,7 +190,7 @@ IdTable Minus::computeMinus(
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
   // Keep all entries by default, set to false when matching.
-  std::vector keepEntry(left.size(), true);
+  std::vector keepEntry(left.size(), true, allocator().as<bool>());
 
   auto markForRemoval = [&keepEntry, &joinColumnsLeft](const auto& leftIt) {
     keepEntry.at(ql::ranges::distance(joinColumnsLeft.begin(), leftIt)) = false;
@@ -233,7 +234,7 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
+std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   auto alwaysDefined = [this]() {
     return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
                                                             _left, _right);
@@ -246,19 +247,15 @@ std::optional<Result> Minus::tryNestedLoopJoinIfSuitable() {
     return std::nullopt;
   }
 
-  auto child = sort->getChildren().at(0);
-  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  sort->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
-
   auto leftRes = _left->getResult(false);
   const IdTable& leftTable = leftRes->idTable();
-  auto rightRes = child->getResult(true);
+  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  IndexNestedLoopJoin nestedLoopJoin{_matchedColumns, std::move(leftRes),
-                                     std::move(rightRes)};
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _matchedColumns, std::move(leftRes), std::move(rightRes)};
 
-  std::vector<char> nonMatchingEntries = nestedLoopJoin.computeTracker();
+  auto nonMatchingEntries = nestedLoopJoin.computeExistance();
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};

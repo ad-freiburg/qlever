@@ -14,6 +14,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/CompressedRelation.h"
 #include "index/Permutation.h"
+#include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
@@ -171,6 +172,19 @@ inline bool joinColumnsAreAlwaysDefined(
         return alwaysDefHelper(left, indices[0]) &&
                alwaysDefHelper(right, indices[1]);
       });
+}
+
+// Helper function that is commonly used to skip sort operations and use an
+// alternative algorithm that doesn't require sorting instead.
+inline std::shared_ptr<const Result> computeResultSkipChild(
+    const std::shared_ptr<Operation>& operation) {
+  auto children = operation->getChildren();
+  AD_CONTRACT_CHECK(children.size() == 1);
+  auto child = children.at(0);
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  operation->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
+
+  return child->getResult(true);
 }
 }  // namespace qlever::joinHelpers
 

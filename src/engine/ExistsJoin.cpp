@@ -104,7 +104,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
 
   if (!noJoinNecessary) {
-    if (auto res = tryNestedLoopJoinIfSuitable()) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
       return std::move(res).value();
     }
   }
@@ -271,7 +271,7 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
   auto alwaysDefined = [this]() {
     return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
                                                             right_);
@@ -284,21 +284,17 @@ std::optional<Result> ExistsJoin::tryNestedLoopJoinIfSuitable() {
     return std::nullopt;
   }
 
-  auto child = sort->getChildren().at(0);
-  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
-  sort->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
-
   auto leftRes = left_->getResult(false);
-  auto rightRes = child->getResult(true);
+  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  IndexNestedLoopJoin nestedLoopJoin{joinColumns_, std::move(leftRes),
-                                     std::move(rightRes)};
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
   result.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(
-          ad_utility::OwningView{nestedLoopJoin.computeTracker()},
+          ad_utility::OwningView{nestedLoopJoin.computeExistance()},
           [](char tracker) { return Id::makeFromBool(tracker != 0); }),
       result.getColumn(result.numColumns() - 1).begin(),
       qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });

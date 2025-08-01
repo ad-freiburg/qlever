@@ -84,6 +84,14 @@ class OptionalJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
+  // logic reusable.
+  bool isIndexNestedLoopJoinSuitable() const;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
+
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

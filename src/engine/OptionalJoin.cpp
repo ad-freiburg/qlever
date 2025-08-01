@@ -10,6 +10,8 @@
 #include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Service.h"
+#include "engine/Sort.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
@@ -108,6 +110,10 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
+  if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
+    return std::move(res).value();
+  }
+
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size() ||
@@ -169,6 +175,10 @@ std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
     return {};
   }
   std::vector<ColumnIndex> sortedOn;
+  // This optimization doesn't allow preserving sort order.
+  if (isIndexNestedLoopJoinSuitable()) {
+    return sortedOn;
+  }
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {
     (void)joinColumnRight;
@@ -490,6 +500,46 @@ std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool OptionalJoin::isIndexNestedLoopJoinSuitable() const {
+  auto alwaysDefined = [this]() {
+    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_joinColumns, _left,
+                                                            _right);
+  };
+  // This algorithm only works well if the left side is smaller and we can avoid
+  // sorting the right side. It currently doesn't support undef.
+  return std::dynamic_pointer_cast<Sort>(_right->getRootOperation()) &&
+         _left->getSizeEstimate() <= _right->getSizeEstimate() &&
+         alwaysDefined();
+}
+
+// _____________________________________________________________________________
+std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
+  if (!isIndexNestedLoopJoinSuitable()) {
+    return std::nullopt;
+  }
+  auto leftRes = _left->getResult(false);
+  auto rightRes = computeResultSkipChild(_right->getRootOperation());
+
+  LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _joinColumns, std::move(leftRes), std::move(rightRes)};
+
+  // This algorithm doesn't produce sorted output
+  AD_CORRECTNESS_CHECK(resultSortedOn().empty());
+
+  auto lazyResult =
+      std::move(nestedLoopJoin)
+          .computeOptionalJoin(!requestLaziness, getResultWidth(),
+                               cancellationHandle_, _right->getResultWidth(),
+                               keepJoinColumns_);
+  return requestLaziness
+             ? Result{std::move(lazyResult), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(lazyResult)),
+                      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
