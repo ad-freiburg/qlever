@@ -21,6 +21,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
+#include "index/EncodedValues.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -120,6 +121,7 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  EncodedValues encodedValues_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -264,6 +266,8 @@ class IndexImpl {
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
   }
+
+  const auto& encodedValueManager() const { return encodedValues_; }
 
   // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
   // details.

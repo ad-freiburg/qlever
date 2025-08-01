@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/EncodedValues.h"
 #include "index/InputFileSpecification.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
@@ -35,9 +36,11 @@ enum class TurtleParserIntegerOverflowBehavior {
 };
 
 struct TurtleTriple {
-  // TODO<joka921> The subject can only be IRI or BlankNode.
+  // The subject can be IRI or BlankNode, but the IRI can also be directly
+  // folded into the ID.
   TripleComponent subject_;
-  TripleComponent::Iri predicate_;
+  // The predicate can an IRI which can also be directly folded into the ID.
+  TripleComponent predicate_;
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
@@ -52,8 +55,13 @@ class RdfParserBase {
       TurtleParserIntegerOverflowBehavior::Error;
   bool invalidLiteralsAreSkipped_ = false;
 
+  const EncodedValues* encodedValues_;
+
  public:
   virtual ~RdfParserBase() = default;
+
+  explicit RdfParserBase(const EncodedValues* encodedValues)
+      : encodedValues_{encodedValues} {}
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLineImpl(&triple); }
 
@@ -87,6 +95,9 @@ class RdfParserBase {
   // Return a batch of the next 100'000 triples at once. If the parser is
   // exhausted, return `nullopt`.
   virtual std::optional<std::vector<TurtleTriple>> getBatch();
+
+ protected:
+  const auto& encodedValuesManager() const { return *encodedValues_; }
 };
 
 /**
@@ -120,7 +131,8 @@ class TurtleParser : public RdfParserBase {
   // integer).
   static TripleComponent literalAndDatatypeToTripleComponent(
       std::string_view normalizedLiteralContent,
-      const TripleComponent::Iri& typeIri);
+      const TripleComponent::Iri& typeIri,
+      const EncodedValues& encodedValuesManager);
 
  private:
   // Impl of the method above, also used in rdfLiteral parsing.
@@ -215,9 +227,12 @@ class TurtleParser : public RdfParserBase {
   bool prefixAndBaseDisabled_ = false;
 
  public:
-  TurtleParser() = default;
-  explicit TurtleParser(TripleComponent defaultGraphIri)
-      : defaultGraphIri_{std::move(defaultGraphIri)} {}
+  explicit TurtleParser(const EncodedValues* encodedValues)
+      : RdfParserBase{encodedValues} {}
+  explicit TurtleParser(const EncodedValues* encodedValues,
+                        TripleComponent defaultGraphIri)
+      : RdfParserBase{encodedValues},
+        defaultGraphIri_{std::move(defaultGraphIri)} {}
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
 
@@ -367,9 +382,9 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  public:
-  NQuadParser() = default;
-  explicit NQuadParser(TripleComponent defaultGraphId)
-      : defaultGraphId_{std::move(defaultGraphId)} {}
+  NQuadParser(const EncodedValues* ev) : Base{ev} {};
+  explicit NQuadParser(const EncodedValues* ev, TripleComponent defaultGraphId)
+      : Base{ev}, defaultGraphId_{std::move(defaultGraphId)} {}
 
  protected:
   bool statement() override;
@@ -392,9 +407,10 @@ CPP_template(typename Parser)(
  public:
   using Parser::getLine;
   using Parser::prefixMap_;
-  RdfStringParser() = default;
-  explicit RdfStringParser(TripleComponent defaultGraph)
-      : Parser{std::move(defaultGraph)} {}
+  RdfStringParser(const EncodedValues* encodedValues) : Parser{encodedValues} {}
+  explicit RdfStringParser(const EncodedValues* encodedValues,
+                           TripleComponent defaultGraph)
+      : Parser{encodedValues, std::move(defaultGraph)} {}
   bool getLineImpl(TurtleTriple* triple) override {
     (void)triple;
     throw std::runtime_error(
@@ -433,7 +449,9 @@ CPP_template(typename Parser)(
 
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
-    RdfStringParser parser;
+    // TODO<joka921> Make it possible to use an optional here.
+    EncodedValues encodedValuesManager;
+    RdfStringParser parser{&encodedValuesManager};
     parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);
@@ -516,13 +534,13 @@ class RdfStreamParser : public Parser {
 
  public:
   // Default construction needed for tests
-  RdfStreamParser() = default;
+  RdfStreamParser(const EncodedValues* ev) : Parser{ev} {};
   explicit RdfStreamParser(
-      const std::string& filename,
+      const std::string& filename, const EncodedValues* ev,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       TripleComponent defaultGraphIri =
           qlever::specialIds().at(DEFAULT_GRAPH_IRI))
-      : Parser{std::move(defaultGraphIri)} {
+      : Parser{ev, std::move(defaultGraphIri)} {
     LOG(DEBUG) << "Initialize RDF parsing from uncompressed file or stream "
                << filename << std::endl;
     initialize(filename, bufferSize);
@@ -575,17 +593,17 @@ class RdfParallelParser : public Parser {
  public:
   using Triple = std::array<std::string, 3>;
   // Default construction needed for tests
-  RdfParallelParser() = default;
+  RdfParallelParser(const EncodedValues* ev) : Parser{ev} {};
 
   // If the `sleepTimeForTesting` is set, then after the initialization the
   // parser will sleep for the specified time before parsing each batch s.t.
   // certain corner cases can be tested.
   explicit RdfParallelParser(
-      const std::string& filename,
+      const std::string& filename, const EncodedValues* ev,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       std::chrono::milliseconds sleepTimeForTesting =
           std::chrono::milliseconds{0})
-      : sleepTimeForTesting_(sleepTimeForTesting) {
+      : Parser{ev}, sleepTimeForTesting_(sleepTimeForTesting) {
     LOG(DEBUG)
         << "Initialize parallel Turtle Parsing from uncompressed file or "
            "stream "
@@ -594,10 +612,10 @@ class RdfParallelParser : public Parser {
   }
 
   // Construct a parser from a file and a given default graph iri.
-  RdfParallelParser(const std::string& filename,
+  RdfParallelParser(const std::string& filename, const EncodedValues* ev,
                     ad_utility::MemorySize bufferSize,
                     const TripleComponent& defaultGraphIri)
-      : Parser{defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
+      : Parser{ev, defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
     initialize(filename, bufferSize);
   }
 
@@ -676,12 +694,14 @@ class RdfParallelParser : public Parser {
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
-  RdfMultifileParser() = default;
+  RdfMultifileParser(const EncodedValues* encodedValues)
+      : RdfParserBase{encodedValues} {};
 
   // Construct the parser from a vector of file specifications and eagerly start
   // parsing them on background threads.
-  explicit RdfMultifileParser(
+  RdfMultifileParser(
       const std::vector<qlever::InputFileSpecification>& files,
+      const EncodedValues* encodedValues,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
   // This function is needed for the interface, but always throws an exception.
