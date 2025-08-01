@@ -125,13 +125,12 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    while (resultColIdx < result.numColumns()) {
-      auto col = result.getColumn(resultColIdx);
+    for (auto col : ad_utility::OwningView{result.getColumns()} |
+                        ql::views::drop(resultColIdx)) {
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
           Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
           [this]() { cancellationHandle_->throwIfCancelled(); });
-      ++resultColIdx;
     }
   }
 };
