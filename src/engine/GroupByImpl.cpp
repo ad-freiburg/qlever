@@ -7,16 +7,17 @@
 
 #include "engine/GroupByImpl.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>  // for std::min
-#include <numeric>    // for std::iota
-#include <random>     // for std::mt19937_64, std::uniform_int_distribution
-#include <sstream>    // for std::ostringstream
+#include <cmath>
+#include <numeric>  // for std::iota
+#include <random>   // for std::mt19937_64, std::uniform_int_distribution
+#include <sstream>  // for std::ostringstream
 #include <type_traits>
 #include <unordered_set>
 
+#include "absl/container/flat_hash_map.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
