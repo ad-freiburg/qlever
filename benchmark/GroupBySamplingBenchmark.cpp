@@ -22,8 +22,8 @@
 
 namespace ad_benchmark {
 // Bring in needed test utilities and helpers
-using ad_utility::makeExecutionTree;
 using ad_utility::AllocatorWithLimit;
+using ad_utility::makeExecutionTree;
 using ad_utility::testing::getQec;
 using ad_utility::testing::makeAllocator;
 // ValuesForTesting is declared in the global namespace in test/engine
@@ -36,7 +36,8 @@ class GroupBySamplingBenchmark : public BenchmarkInterface {
     BenchmarkResults results;
     QueryExecutionContext* qec = getQec();
 
-    // choose a few table sizes and cardinalities, including small and unit cardinalities
+    // choose a few table sizes and cardinalities, including small and unit
+    // cardinalities
     for (size_t n : {1'000u, 10'000u, 100'000u, 1'000'000u}) {
       // test also a single-group scenario to see if sort wins on tiny outputs
       std::vector<size_t> cards = {1u, n / 10, n / 2, n};
@@ -59,7 +60,8 @@ class GroupBySamplingBenchmark : public BenchmarkInterface {
         auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(table), varsOpt, false, sortedOn);
 
-        // descriptor for this parameter combination, and prepare vars for GroupBy
+        // descriptor for this parameter combination, and prepare vars for
+        // GroupBy
         std::ostringstream desc;
         desc << "n=" << n << ", card=" << card;
         auto& group = results.addGroup(desc.str());

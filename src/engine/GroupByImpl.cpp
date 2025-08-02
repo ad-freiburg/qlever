@@ -7,16 +7,17 @@
 
 #include "engine/GroupByImpl.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>  // for std::min
-#include <numeric>    // for std::iota
-#include <random>     // for std::mt19937_64, std::uniform_int_distribution
-#include <sstream>    // for std::ostringstream
+#include <cmath>
+#include <numeric>  // for std::iota
+#include <random>   // for std::mt19937_64, std::uniform_int_distribution
+#include <sstream>  // for std::ostringstream
 #include <type_traits>
 #include <unordered_set>
 
+#include "absl/container/flat_hash_map.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
@@ -1680,14 +1681,14 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
 // threshold
 bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
   // Fetch runtime parameters
-  double samplePercent = RuntimeParameters().get<"group-by-sample-percent">();
+  // sample size = k * sqrt(n)
   size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-sample-group-threshold">();
   size_t totalSize = table.size();
-
-  size_t sampleSize =
-      std::min(static_cast<size_t>(totalSize * samplePercent), maxSampleRows);
+  size_t k = RuntimeParameters().get<"group-by-sample-constant">();
+  size_t sampleSize = std::min(
+      k * static_cast<size_t>(std::sqrt(double(totalSize))), maxSampleRows);
   if (sampleSize == 0) {
     return false;
   }
@@ -1705,24 +1706,33 @@ bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
       indices[randIdx] = i;
     }
   }
-  // Use absl::flat_hash_set to estimate distinct groups
-  absl::flat_hash_set<RowKey> uniqueGroups;
+  // Use absl::flat_hash_map to count frequencies for Chao1 estimator
+  absl::flat_hash_map<RowKey, size_t> groupCounts;
   const auto& varCols = _subtree->getVariableColumns();
   std::vector<ColumnIndex> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
-      groupByCols.push_back(varCols.at(var).columnIndex_);
+    groupByCols.push_back(varCols.at(var).columnIndex_);
   }
   for (size_t idx : indices) {
-      uniqueGroups.insert(RowKey{&table, idx, &groupByCols});
+    RowKey key{&table, idx, &groupByCols};
+    ++groupCounts[key];
   }
-  size_t estGroups = uniqueGroups.size();
-  size_t estGroupsScaled =
-      static_cast<size_t>(double(estGroups) / sampleSize * totalSize);
-  AD_LOG_DEBUG << "Distinct groups: " << estGroups << ", scaled: "
-               << estGroupsScaled << " (threshold: " << groupThreshold << ")"
-               << std::endl;
-  return estGroupsScaled > groupThreshold;
+  // Chao1 estimator: D = d_obs + (f1 * f1) / (2 * f2)
+  size_t dObs = groupCounts.size();
+  size_t f1 = 0, f2 = 0;
+  for (auto& [key, cnt] : groupCounts) {
+    if (cnt == 1)
+      ++f1;
+    else if (cnt == 2)
+      ++f2;
+  }
+  double chaoCorrection = double(f1 * f1) / (f2 > 0 ? 2.0 * f2 : 1.0);
+  size_t estGroups = dObs + static_cast<size_t>(chaoCorrection);
+  AD_LOG_DEBUG << "Chao1 est: " << estGroups << " (dObs=" << dObs
+               << ", f1=" << f1 << ", f2=" << f2
+               << "), threshold: " << groupThreshold << std::endl;
+  return estGroups > groupThreshold;
 }
 
 // _____________________________________________________________________________

@@ -55,6 +55,8 @@ inline auto& RuntimeParameters() {
         Double<"group-by-sample-percent">{0.01},
         // cap on sample size
         SizeT<"group-by-sample-max-rows">{50000},
+        // constant multiplier for sample size (k * sqrt(n)) in Chao1
+        SizeT<"group-by-sample-constant">{1},
         // LAZY CASE: switch to sort if the fraction (sampled
         // distinct groups / sample size) exceeds this ratio
         Double<"group-by-sample-distinct-ratio">{0.95},
