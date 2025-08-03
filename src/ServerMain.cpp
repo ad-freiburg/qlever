@@ -182,9 +182,6 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"group-by-sample-distinct-ratio">(),
       "Switch to sort if the fraction (sampled distinct groups / sample size) "
       "exceeds this ratio.");
-  add("group-by-hash-map-group-threshold",
-      optionFactory.getProgramOption<"group-by-hash-map-group-threshold">(),
-      "Maximum number of groups for hash-map GROUP BY optimization.");
   po::variables_map optionsMap;
 
   try {
