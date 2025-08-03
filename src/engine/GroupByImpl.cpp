@@ -373,9 +373,10 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     subresult = child->getResult(true);
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
-    if (shouldSkipHashMapGroupingDynamic(subresult)) {
-      // Fall back to sort-based grouping
-      runtimeInfo().addDetail("hash_map_optimization",
+    if (subresult->isFullyMaterialized() &&
+        shouldSkipHashMapGrouping(subresult->idTable())) {
+      // You will see this if you use qlever with --verbose-runtime-info
+      runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
                               "falling back to sort-based grouping.");
       useHashMapOptimization = false;
@@ -1682,19 +1683,24 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
 bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
   // Fetch runtime parameters
   // sample size = k * sqrt(n)
+  if (!RuntimeParameters().get<"group-by-sample-enabled">()) {
+    return false;
+  }
   size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-sample-group-threshold">();
+  double distinctRatio =
+      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
   size_t totalSize = table.size();
   size_t k = RuntimeParameters().get<"group-by-sample-constant">();
-  size_t sampleSize = std::min(
-      k * static_cast<size_t>(std::sqrt(double(totalSize))), maxSampleRows);
+
+  size_t sampleSize = k * static_cast<size_t>(std::sqrt(double(totalSize)));
   if (sampleSize == 0) {
     return false;
   }
-
-  AD_LOG_DEBUG << "Sampling " << sampleSize << " rows out of " << totalSize
-               << " for group estimation" << std::endl;
+  if (maxSampleRows != 0) {
+    sampleSize = std::min(sampleSize, maxSampleRows);
+  }
   // Reservoir-sample indices only
   std::vector<size_t> indices(sampleSize);
   for (size_t i = 0; i < sampleSize; ++i) indices[i] = i;
@@ -1729,17 +1735,10 @@ bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
   }
   double chaoCorrection = double(f1 * f1) / (f2 > 0 ? 2.0 * f2 : 1.0);
   size_t estGroups = dObs + static_cast<size_t>(chaoCorrection);
-  AD_LOG_DEBUG << "Chao1 est: " << estGroups << " (dObs=" << dObs
-               << ", f1=" << f1 << ", f2=" << f2
-               << "), threshold: " << groupThreshold << std::endl;
+  runtimeInfo().addDetail(
+      "chao1Estimate",
+      absl::StrFormat(
+          "size=%zu, total=%zu, est=%zu, dObs=%zu, f1=%zu, f2=%zu, thr=%zu",
+          sampleSize, totalSize, estGroups, dObs, f1, f2, groupThreshold));
   return estGroups > groupThreshold;
-}
-
-// _____________________________________________________________________________
-bool GroupByImpl::shouldSkipHashMapGroupingDynamic(
-    const std::shared_ptr<const Result>& subresult) const {
-  if (!subresult->isFullyMaterialized()) {
-    return false;
-  }
-  return shouldSkipHashMapGrouping(subresult->idTable());
 }
