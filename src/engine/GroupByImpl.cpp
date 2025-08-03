@@ -11,7 +11,6 @@
 
 #include <algorithm>  // for std::min
 #include <cmath>
-#include <numeric>  // for std::iota
 #include <random>   // for std::mt19937_64, std::uniform_int_distribution
 #include <sstream>  // for std::ostringstream
 #include <type_traits>

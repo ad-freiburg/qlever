@@ -11,7 +11,6 @@ inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::DurationParameter;
-  using ad_utility::detail::parameterShortNames::Int;
   using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
   // NOTE: It is important that the value of the static variable is created by
