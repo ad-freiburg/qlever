@@ -1739,5 +1739,6 @@ bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
       absl::StrFormat(
           "size=%zu, total=%zu, est=%zu, dObs=%zu, f1=%zu, f2=%zu, thr=%zu",
           sampleSize, totalSize, estGroups, dObs, f1, f2, groupThreshold));
-  return estGroups > groupThreshold;
+  return (groupThreshold > 0 && estGroups > groupThreshold) ||
+         (distinctRatio > 0 && estGroups > totalSize * distinctRatio);
 }
