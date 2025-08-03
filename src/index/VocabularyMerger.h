@@ -164,7 +164,22 @@ class VocabularyMerger {
 
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
-  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  struct EqualWords {
+    std::string iriOrLiteral_;
+    bool isExternal_;
+    bool inTextIndex_;
+    uint64_t index_ = 0;
+    Id targetId_ = Id::makeUndefined();
+    // partialVocabAndPartialFileIds
+    struct PartialIds {
+      size_t fileId_;
+      size_t localIndex_;
+    };
+    std::vector<PartialIds> partialIds_ = {};
+
+    bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
+  };
+  std::optional<EqualWords> lastEqualWords_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs_;
 
@@ -234,7 +249,7 @@ class VocabularyMerger {
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
-    lastTripleComponent_ = std::nullopt;
+    lastEqualWords_ = std::nullopt;
     idVecs_.clear();
   }
 

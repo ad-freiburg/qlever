@@ -138,7 +138,31 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
+    // This can still leave some QueueWords in the buffer.
     writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
+  }
+  // If last words have not been written yet, write them
+  if (lastEqualWords_.has_value()) {
+    // TODO make nice and wrt to buffer size
+    auto& word = lastEqualWords_.value();
+    if (word.isBlankNode()) {
+      word.index_ = metaData_.getNextBlankNodeIndex();
+    } else {
+      word.index_ =
+          wordCallback(word.iriOrLiteral_, word.isExternal_, word.inTextIndex_);
+      metaData_.addWord(word.iriOrLiteral_, word.index_);
+    }
+    word.targetId_ =
+        word.isBlankNode()
+            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
+            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
+    // Write pair of local and global IDs to buffer.
+    std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
+    for (const auto& idPair : word.partialIds_) {
+      writeBuffer.emplace_back(idPair.fileId_,
+                               std::pair{idPair.localIndex_, word.targetId_});
+    }
+    doActualWrite(writeBuffer);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -148,7 +172,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   return metaData;
 }
 
-// ________________________________________________________________________________
+// _____________________________________________________________________________
 CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
@@ -166,63 +190,77 @@ CPP_template_def(typename C, typename L)(
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
-    if (!lastTripleComponent_.has_value() ||
-        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        LOG(WARN) << "Total vocabulary order violated for "
-                  << lastTripleComponent_->iriOrLiteral() << " and "
-                  << top.iriOrLiteral() << std::endl;
-      }
-      lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
-          metaData_.numWordsTotal()};
-
-      // TODO<optimization> If we aim to further speed this up, we could
-      // order all the write requests to _outfile _externalOutfile and all the
-      // idVecs to have a more useful external access pattern.
-
-      // Write the new word to the vocabulary.
-      auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
-        nextWord.index_ = metaData_.getNextBlankNodeIndex();
+    if (lastEqualWords_.has_value()) {
+      // If the same word, add to EqualWords
+      if (lastEqualWords_.value().iriOrLiteral_ == top.iriOrLiteral()) {
+        lastEqualWords_.value().isExternal_ =
+            lastEqualWords_.value().isExternal_ || top.isExternal();
+        lastEqualWords_.value().inTextIndex_ =
+            lastEqualWords_.value().inTextIndex_ || top.inTextIndex();
+        lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
+                                                         top.id());
       } else {
-        nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal(),
-                         nextWord.inTextIndex());
-        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
-      }
-      if (progressBar.update()) {
-        LOG(INFO) << progressBar.getProgressString() << std::flush;
+        // Here code only gets executed if a new iriOrLiteral is seen
+
+        // Dummy values for isExternal, inTextIndex and index can bes used since
+        // lessThan only extracts iriOrLiteral_
+        if (!lessThan(
+                TripleComponentWithIndex{lastEqualWords_.value().iriOrLiteral_,
+                                         false, false, 0},
+                top.entry_)) {
+          LOG(WARN) << "Total vocabulary order violated for "
+                    << lastEqualWords_->iriOrLiteral_ << " and "
+                    << top.iriOrLiteral() << std::endl;
+        }
+
+        // TODO<optimization> If we aim to further speed this up, we could
+        // order all the write requests to _outfile _externalOutfile and all the
+        // idVecs to have a more useful external access pattern.
+
+        // Write the last words to the vocabulary. Since one iriOrLiteral gets
+        // exactly one index this mapping has to be done only once.
+        auto& word = lastEqualWords_.value();
+        if (word.isBlankNode()) {
+          word.index_ = metaData_.getNextBlankNodeIndex();
+        } else {
+          word.index_ = wordCallback(word.iriOrLiteral_, word.isExternal_,
+                                     word.inTextIndex_);
+          metaData_.addWord(word.iriOrLiteral_, word.index_);
+        }
+        word.targetId_ =
+            word.isBlankNode()
+                ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
+                : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
+        // Write pair of local and global IDs to buffer.
+        for (const auto& idPair : word.partialIds_) {
+          writeBuffer.emplace_back(
+              idPair.fileId_, std::pair{idPair.localIndex_, word.targetId_});
+          if (writeBuffer.size() >= bufSize) {
+            auto task = [this, buffer = std::move(writeBuffer)]() {
+              this->doActualWrite(buffer);
+            };
+            if (writeFut.valid()) {
+              writeFut.get();
+            }
+            writeFut = std::async(task);
+            writeBuffer.clear();
+            writeBuffer.reserve(bufSize);
+          }
+        }
+        if (progressBar.update()) {
+          LOG(INFO) << progressBar.getProgressString() << std::flush;
+        }
+        // Set new lastEqualWords_ since old have been written
+        lastEqualWords_ = {top.iriOrLiteral(), top.isExternal(),
+                           top.inTextIndex(), metaData_.numWordsTotal()};
+        lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
+                                                         top.id());
       }
     } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it.
-      bool& external = lastTripleComponent_.value().isExternal();
-      external = external || top.isExternal();
-      // Also if a word appears with different values for `inTextIndex`, then
-      // it gets into the text index
-      bool& inText = lastTripleComponent_.value().inTextIndex();
-      inText = inText || top.inTextIndex();
-    }
-    const auto& word = lastTripleComponent_.value();
-    Id targetId =
-        word.isBlankNode()
-            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
-    // Write pair of local and global ID to buffer.
-    writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
-
-    if (writeBuffer.size() >= bufSize) {
-      auto task = [this, buffer = std::move(writeBuffer)]() {
-        this->doActualWrite(buffer);
-      };
-      if (writeFut.valid()) {
-        writeFut.get();
-      }
-      writeFut = std::async(task);
-      writeBuffer.clear();
-      writeBuffer.reserve(bufSize);
+      lastEqualWords_ = {top.iriOrLiteral(), top.isExternal(),
+                         top.inTextIndex(), metaData_.numWordsTotal()};
+      lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
+                                                       top.id());
     }
   }
 
@@ -235,7 +273,7 @@ CPP_template_def(typename C, typename L)(
   }
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   for (const auto& [id, value] : buffer) {
@@ -244,7 +282,7 @@ inline void VocabularyMerger::doActualWrite(
   }
 }
 
-// ____________________________________________________________________________________________________________
+// _____________________________________________________________________________
 inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
     ItemVec* elsPtr) {
   auto& els = *elsPtr;
