@@ -390,9 +390,10 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     subresult = child->getResult(true);
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
-    if (shouldSkipHashMapGroupingDynamic(subresult)) {
-      // Fall back to sort-based grouping
-      runtimeInfo().addDetail("hash_map_optimization",
+    if (subresult->isFullyMaterialized() &&
+        shouldSkipHashMapGrouping(subresult->idTable())) {
+      // You will see this if you use qlever with --verbose-runtime-info
+      runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
                               "falling back to sort-based grouping.");
       useHashMapOptimization = false;
@@ -1735,13 +1736,4 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   IdTable result{1, getExecutionContext()->getAllocator()};
   result.push_back(std::array{Id::makeFromInt(res)});
   return result;
-}
-
-// _____________________________________________________________________________
-bool GroupByImpl::shouldSkipHashMapGroupingDynamic(
-    const std::shared_ptr<const Result>& subresult) const {
-  if (!subresult->isFullyMaterialized()) {
-    return false;
-  }
-  return shouldSkipHashMapGrouping(subresult->idTable());
 }

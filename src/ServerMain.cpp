@@ -166,6 +166,12 @@ int main(int argc, char** argv) {
       "intermediate results. This is faster for small groups, but uses more "
       "memory. If not set, the GROUP BY operation will use a sort-based "
       "algorithm.");
+  add("group-by-sample-enabled",
+      optionFactory.getProgramOption<"group-by-sample-enabled">(),
+      "If set, then the GROUP BY operation will use a sampling-based hybrid "
+      "algorithm to decide whether to use a hash map or a sort-based algorithm "
+      "for grouping. If not set, the GROUP BY operation will always use a "
+      "sort-based algorithm.");
   add("group-by-sample-max-rows",
       optionFactory.getProgramOption<"group-by-sample-max-rows">(),
       "Maximum number of rows to sample for the GROUP BY sampling guard. "

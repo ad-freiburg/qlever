@@ -51,18 +51,20 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
         // === Sampling-based hybrid GROUP BY thresholds ===
-        // percent of rows to sample (1%)
-        Double<"group-by-sample-percent">{0.01},
-        // cap on sample size
+        Bool<"group-by-sample-enabled">{true},
+        // Cap on sample size. If set to 0, then the sample size is
+        // k * sqrt(n), where n is the number of rows in the table.
         SizeT<"group-by-sample-max-rows">{50000},
-        // constant multiplier for sample size (k * sqrt(n)) in Chao1
+        // Constant multiplier for sample size (k * sqrt(n)) in Chao1
         SizeT<"group-by-sample-constant">{1},
-        // LAZY CASE: switch to sort if the fraction (sampled
-        // distinct groups / sample size) exceeds this ratio
-        Double<"group-by-sample-distinct-ratio">{0.95},
-        // MATERIALIZED CASE: switch to sort if the estimated
-        // number of distinct groups exceeds this number
-        SizeT<"group-by-sample-group-threshold">{1'000'000},
+        // Avoid HashMap path if the fraction (sampled distinct groups / sample
+        // size) exceeds the distinct ratio OR the estimated number of
+        // distinct groups exceeds the group threshold.
+        // If set to 0, then respective limit is ignored (so the threshold is
+        // ignored per default).
+        Double<"group-by-sample-distinct-ratio">{0.9},
+        SizeT<"group-by-sample-group-threshold">{0},
+
         // switch to sort if the number of HashMap groups exceeds this limit
         SizeT<"group-by-hash-map-group-threshold">{1'000'000},
         SizeT<"service-max-value-rows">{10'000},

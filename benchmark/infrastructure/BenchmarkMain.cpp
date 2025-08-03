@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
   namespace po = boost::program_options;
 
   // sampling guard parameters
-  double samplePercent = RuntimeParameters().get<"group-by-sample-percent">();
+  bool sampleEnabled = RuntimeParameters().get<"group-by-sample-enabled">();
   size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
   double sampleDistinctRatio =
       RuntimeParameters().get<"group-by-sample-distinct-ratio">();
@@ -156,8 +156,8 @@ int main(int argc, char** argv) {
       ("configuration-options,o",
        "Prints all available benchmark configuration options.")
       // GROUP BY sampling options
-      ("group-by-sample-percent,e", po::value<double>(&samplePercent),
-       "Fraction of rows sampled for GROUP BY sampling guard.")
+      ("group-by-sample-enabled,e", po::bool_switch(&sampleEnabled),
+       "Enable sampling-based hybrid GROUP BY optimization.")
       //
       ("group-by-sample-max-rows,m", po::value<size_t>(&maxSampleRows),
        "Max sample rows for GROUP BY sampling guard.")
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
   po::notify(vm);
 
   // Apply GROUP BY sampling params to runtime parameters
-  RuntimeParameters().set<"group-by-sample-percent">(samplePercent);
+  RuntimeParameters().set<"group-by-sample-enabled">(sampleEnabled);
   RuntimeParameters().set<"group-by-sample-max-rows">(maxSampleRows);
   RuntimeParameters().set<"group-by-sample-distinct-ratio">(
       sampleDistinctRatio);
