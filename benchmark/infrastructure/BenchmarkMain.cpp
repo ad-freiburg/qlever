@@ -126,8 +126,6 @@ int main(int argc, char** argv) {
       RuntimeParameters().get<"group-by-sample-distinct-ratio">();
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-sample-group-threshold">();
-  size_t hashMapGroupThreshold =
-      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
   // Declaring the supported options.
   po::options_description options("Options for the benchmark");
@@ -169,11 +167,7 @@ int main(int argc, char** argv) {
       //
       ("group-by-sample-group-threshold,t", po::value<size_t>(&groupThreshold),
        "Switch to sort if estimated number of distinct groups "
-       "exceeds this number.")
-      //
-      ("group-by-hash-map-group-threshold,g",
-       po::value<size_t>(&hashMapGroupThreshold),
-       "Max number of groups for hash-map GROUP BY optimization.");
+       "exceeds this number.");
 
   // Prints how to use the file correctly and exits.
   auto printUsageAndExit = [&options]() {
@@ -199,8 +193,6 @@ int main(int argc, char** argv) {
   RuntimeParameters().set<"group-by-sample-distinct-ratio">(
       sampleDistinctRatio);
   RuntimeParameters().set<"group-by-sample-group-threshold">(groupThreshold);
-  RuntimeParameters().set<"group-by-hash-map-group-threshold">(
-      hashMapGroupThreshold);
 
   // If write was chosen, then the given file must be a json file.
   if (vm.count("write") && !writeFileName.ends_with(".json")) {

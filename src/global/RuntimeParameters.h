@@ -64,9 +64,6 @@ inline auto& RuntimeParameters() {
         // ignored per default).
         Double<"group-by-sample-distinct-ratio">{0.9},
         SizeT<"group-by-sample-group-threshold">{0},
-
-        // switch to sort if the number of HashMap groups exceeds this limit
-        SizeT<"group-by-hash-map-group-threshold">{1'000'000},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},
