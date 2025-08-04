@@ -114,6 +114,8 @@ class TextMetaData {
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
+  // Dummy for a member that is not needed anymore. Removing it would
+  // by an index-breaking change.
   std::vector<uint64_t> _blockUpperBoundWordIdDummy = {};
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
