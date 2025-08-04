@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#ifndef TRIPLEINTEXTINDEX_H
-#define TRIPLEINTEXTINDEX_H
+#ifndef QLEVER_SRC_INDEX_TRIPLEINTEXTINDEX_H
+#define QLEVER_SRC_INDEX_TRIPLEINTEXTINDEX_H
 
 #include <string>
 
@@ -26,11 +26,14 @@ class TripleInTextIndexFilter {
   explicit TripleInTextIndexFilter(std::string regex, bool whitelist = true)
       : regex_{std::move(regex)}, isWhitelist_{whitelist} {
     if (const RE2 reg{regex_, RE2::Quiet}; !reg.ok()) {
-      throw std::runtime_error{absl::StrCat(
-          "The regex \"", regex_,
-          "\" is not supported by QLever (which uses Google's RE2 library); "
-          "the error from RE2 is: ",
-          reg.error())};
+      throw std::runtime_error{
+          absl::StrCat("The regex supposed to filter predicates for which the "
+                       "objects are stored in the text index was \"",
+                       regex_,
+                       "\". This is not supported by QLever (which uses "
+                       "Google's RE2 library); "
+                       "the error from RE2 is: ",
+                       reg.error())};
     }
   }
 
@@ -46,4 +49,4 @@ class TripleInTextIndexFilter {
   bool isWhitelist_;
 };
 
-#endif  // TRIPLEINTEXTINDEX_H
+#endif  // QLEVER_SRC_INDEX_TRIPLEINTEXTINDEX_H

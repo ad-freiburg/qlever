@@ -561,7 +561,7 @@ TEST(TextindexScanForWord, LiteralFiltering) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       getQecWithLiteralTextIndex(regex4),
       ::testing::HasSubstr(
-          R"(The regex "(abc" is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
+          R"(The regex supposed to filter predicates for which the objects are stored in the text index was "(abc". This is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
       std::runtime_error);
 
   // Check if a literal appears with one predicate in text index and one not it

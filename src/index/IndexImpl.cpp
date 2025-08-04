@@ -573,6 +573,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
+    // Extends the word callback by the functionality to add a word to the
+    // fulltext index.
     auto extendedCallback = [&](std::string_view word, bool external,
                                 bool inTextIndex) {
       const auto idx = wordCallback(word, external);
@@ -1263,11 +1265,9 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
-  size_t index = 0;
-  for (auto& el : resultTriple) {
+  for (auto [index, el] : ::ranges::views::enumerate(resultTriple)) {
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
-      ++index;
       continue;
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
@@ -1287,7 +1287,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }
-    ++index;
   }
   return result;
 }

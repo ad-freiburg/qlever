@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#include "TripleInTextIndexFilter.h"
+#include "index/TripleInTextIndexFilter.h"
 
 #include <re2/re2.h>
 

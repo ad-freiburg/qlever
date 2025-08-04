@@ -142,8 +142,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   // If last words have not been written yet, write them
-  if (lastEqualWords_.has_value()) {
-    auto& word = lastEqualWords_.value();
+  if (currentWord_.has_value()) {
+    auto& word = currentWord_.value();
     writeAndGetEqualWordIds(word, wordCallback);
     // Write pair of local and global IDs to buffer.
     std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
@@ -179,14 +179,13 @@ CPP_template_def(typename C, typename L)(
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
-    if (!lastEqualWords_.has_value()) {
-      lastEqualWords_ = {top.iriOrLiteral(), top.isExternal(),
-                         top.inTextIndex(), metaData_.numWordsTotal()};
-      lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
-                                                       top.id());
+    if (!currentWord_.has_value()) {
+      currentWord_ =
+          EqualWords(top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
+                     top.partialFileId_, top.id());
       continue;
     }
-    auto& word = lastEqualWords_.value();
+    auto& word = currentWord_.value();
     // If the same word, add to EqualWords
     if (word.iriOrLiteral_ == top.iriOrLiteral()) {
       word.isExternal_ = word.isExternal_ || top.isExternal();
@@ -197,12 +196,11 @@ CPP_template_def(typename C, typename L)(
 
       // Dummy values for isExternal, inTextIndex and index can be used since
       // lessThan only extracts iriOrLiteral_
-      if (!lessThan(
-              TripleComponentWithIndex{lastEqualWords_.value().iriOrLiteral_,
-                                       false, false, 0},
-              top.entry_)) {
+      if (!lessThan(TripleComponentWithIndex{currentWord_.value().iriOrLiteral_,
+                                             false, false, 0},
+                    top.entry_)) {
         LOG(WARN) << "Total vocabulary order violated for "
-                  << lastEqualWords_->iriOrLiteral_ << " and "
+                  << currentWord_->iriOrLiteral_ << " and "
                   << top.iriOrLiteral() << std::endl;
       }
 
@@ -230,11 +228,10 @@ CPP_template_def(typename C, typename L)(
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
-      // Set new lastEqualWords_ since old have been written
-      lastEqualWords_ = {top.iriOrLiteral(), top.isExternal(),
-                         top.inTextIndex(), metaData_.numWordsTotal()};
-      lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
-                                                       top.id());
+      // Set new currentWord_ since old have been written
+      currentWord_ =
+          EqualWords(top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
+                     top.partialFileId_, top.id());
     }
   }
 

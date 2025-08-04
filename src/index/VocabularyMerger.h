@@ -168,18 +168,28 @@ class VocabularyMerger {
     std::string iriOrLiteral_;
     bool isExternal_;
     bool inTextIndex_;
-    uint64_t index_ = 0;
-    Id targetId_ = Id::makeUndefined();
+    uint64_t index_;
+    Id targetId_;
     // partialVocabAndPartialFileIds
     struct PartialIds {
       size_t fileId_;
       size_t localIndex_;
     };
-    std::vector<PartialIds> partialIds_ = {};
+    std::vector<PartialIds> partialIds_;
+
+    EqualWords(std::string iriOrLiteral, bool isExternal, bool inTextIndex,
+               size_t fileId, size_t localIndex)
+        : iriOrLiteral_(std::move(iriOrLiteral)),
+          isExternal_(isExternal),
+          inTextIndex_(inTextIndex),
+          partialIds_({{fileId, localIndex}}) {
+      index_ = 0;
+      targetId_ = Id::makeUndefined();
+    }
 
     bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
   };
-  std::optional<EqualWords> lastEqualWords_ = std::nullopt;
+  std::optional<EqualWords> currentWord_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs_;
 
@@ -214,7 +224,7 @@ class VocabularyMerger {
                                       // and if it will be in the text index
     size_t partialFileId_;  // from which partial vocabulary did this word come
 
-    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
+    bool isExternal() const { return entry_.isExternal(); }
     [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
 
     [[nodiscard]] const std::string& iriOrLiteral() const {
@@ -223,9 +233,7 @@ class VocabularyMerger {
 
     [[nodiscard]] const auto& id() const { return entry_.index_; }
 
-    [[nodiscard]] const bool& inTextIndex() const {
-      return entry_.inTextIndex();
-    }
+    bool inTextIndex() const { return entry_.inTextIndex(); }
   };
 
   constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
@@ -257,7 +265,7 @@ class VocabularyMerger {
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
-    lastEqualWords_ = std::nullopt;
+    currentWord_ = std::nullopt;
     idVecs_.clear();
   }
 
