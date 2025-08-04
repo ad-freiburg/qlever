@@ -1233,35 +1233,66 @@ TEST(IndexScanTest, StripColumns) {
   auto def = makeAlwaysDefinedColumn;
 
   ad_utility::HashSet<std::string> cacheKeys;
-  auto testStrippedBySingleColumn = [&](Variable var,
-                                        const std::vector<ColumnIndex>&
-                                            sortedOn) {
+  // Generic lambda to test stripping with any number of columns
+  auto testStrippedColumns = [&](const std::vector<Variable>& varsToKeep,
+                                 const std::vector<ColumnIndex>& sortedOn) {
+    // Create set with variables to keep, plus non-existent variables to test
+    // filtering
+    std::set<Variable> varsWithNonExistent(varsToKeep.begin(),
+                                           varsToKeep.end());
+    varsWithNonExistent.insert(Var{"?notFound"});
+    // Note: duplicates are automatically handled by std::set
+
     auto subsetScan =
-        fullScan.makeTreeWithStrippedColumns({var, var, Var{"?notFound"}})
-            .value();
-    EXPECT_EQ(subsetScan->getResultWidth(), 1);
+        fullScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
+    EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
+
     auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
     EXPECT_TRUE(wasNew);
+
     using namespace ::testing;
-    VariableToColumnMap expected{{var, def(0)}};
+
+    // Create pairs of (variable, original_column_index) and sort by original
+    // index
+    std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
+    for (const auto& var : varsToKeep) {
+      auto colIdxInFullScan =
+          fullScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
+      varColPairs.emplace_back(var, colIdxInFullScan);
+    }
+    ql::ranges::sort(varColPairs, [](const auto& a, const auto& b) {
+      return a.second < b.second;
+    });
+
+    // Build expected variable to column mapping with dense, ordered column
+    // indices
+    VariableToColumnMap expected;
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (size_t i = 0; i < varColPairs.size(); ++i) {
+      expected[varColPairs[i].first] = def(i);
+      originalColumnIndices.push_back(varColPairs[i].second);
+    }
+
     EXPECT_THAT(subsetScan->getVariableColumns(),
                 UnorderedElementsAreArray(expected));
 
+    // Test multiplicity preservation
     for (const auto& [v, colIdxAndInfo] : subsetScan->getVariableColumns()) {
       auto colIdxInFullScan =
           fullScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
       EXPECT_FLOAT_EQ(subsetScan->getMultiplicity(colIdxAndInfo.columnIndex_),
                       fullScan.getMultiplicity(colIdxInFullScan));
     }
-    auto colIndexInOrig =
-        fullScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
+
+    // Create expected result by selecting the right columns
     auto expectedResult =
-        fullRes.asColumnSubsetView(std::array{colIndexInOrig}).clone();
+        fullRes.asColumnSubsetView(originalColumnIndices).clone();
 
     EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
     EXPECT_THAT(subsetScan->getResult(false)->idTable(),
                 matchesIdTable(expectedResult.clone()));
 
+    // Test lazy evaluation
     qec->clearCacheUnpinnedOnly();
     auto res = subsetScan->getResult(true);
     auto lazyResToTable = [&subsetScan, &qec](auto&& gen) {
@@ -1276,11 +1307,14 @@ TEST(IndexScanTest, StripColumns) {
                     ql::views::transform(&Result::IdTableVocabPair::idTable_)),
                 matchesIdTable(expectedResult.clone()));
 
-    if (!sortedOn.empty()) {
+    // Test lazy scan functionality only for single-column results that are
+    // sorted
+    if (varsToKeep.size() == 1 && !sortedOn.empty()) {
       const auto& scanOp1 =
           dynamic_cast<const IndexScan&>(*subsetScan->getRootOperation());
       auto subsetScan2 =
-          fullScanDifferentVars.makeTreeWithStrippedColumns({var}).value();
+          fullScanDifferentVars.makeTreeWithStrippedColumns({varsToKeep[0]})
+              .value();
       const auto& scanOp2 =
           dynamic_cast<const IndexScan&>(*subsetScan2->getRootOperation());
       auto [s1, s2] = IndexScan::lazyScanForJoinOfTwoScans(scanOp1, scanOp2);
@@ -1293,12 +1327,32 @@ TEST(IndexScanTest, StripColumns) {
     }
   };
 
+  // Convenience wrapper for single column (maintains backward compatibility)
+  auto testStrippedBySingleColumn =
+      [&](Variable var, const std::vector<ColumnIndex>& sortedOn) {
+        testStrippedColumns({var}, sortedOn);
+      };
+
+  // Test zero column case
+  testStrippedColumns({}, {});
+
+  // Test all single column cases
   testStrippedBySingleColumn(Var{"?x"}, {0});
   testStrippedBySingleColumn(Var{"?y"}, {});
   testStrippedBySingleColumn(Var{"?z"}, {});
 
+  // Test all two column combinations
+  testStrippedColumns({Var{"?x"}, Var{"?y"}},
+                      {0, 1});  // ?x, ?y -> columns 0,1 -> sorted on 0
+  testStrippedColumns({Var{"?x"}, Var{"?z"}},
+                      {0});  // ?x, ?z -> columns 0,2 -> sorted on 0
+  testStrippedColumns({Var{"?y"}, Var{"?z"}},
+                      {});  // ?y, ?z -> columns 1,2 -> not sorted
+
+  // Test three column case (should be equivalent to original)
+  testStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}}, {0, 1, 2});
+
   // TODO<joka921/RobinTF:
-  // 1. Also test cases with multiple variables that are being kept.
   // 2. Also test cases where the underlying scan has a different number of
   // variables.
   // 3. Test the case of additional variables (in particular with GRAPHs).
