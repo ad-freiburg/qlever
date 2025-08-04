@@ -664,8 +664,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
   const auto& vocabulary = getIndex().getVocab();
-  std::optional<Id> col0Id = permutedTriple[0]->toValueId(
-      vocabulary, getIndex().encodedValuesManager());
+  std::optional<Id> col0Id =
+      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }

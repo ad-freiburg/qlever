@@ -16,7 +16,7 @@ namespace {
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
 auto parseOperation(BnodeMgr bnodeMgr,
-                    const EncodedValues* encodedValuesManager,
+                    const EncodedIriManager* encodedIriManager,
                     ContextType* (SparqlAutomaticParser::*f)(void),
                     std::string operation,
                     const std::vector<DatasetClause>& datasets) {
@@ -26,7 +26,7 @@ auto parseOperation(BnodeMgr bnodeMgr,
   // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
       bnodeMgr,
-      encodedValuesManager,
+      encodedIriManager,
       std::move(operation),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
@@ -43,11 +43,11 @@ auto parseOperation(BnodeMgr bnodeMgr,
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
-    const EncodedValues* encodedValuesManager, std::string query,
+    const EncodedIriManager* encodedIriManager, std::string query,
     const std::vector<DatasetClause>& datasets) {
   ad_utility::BlankNodeManager bnodeMgr;
-  auto res = parseOperation(&bnodeMgr, encodedValuesManager,
-                            &AntlrParser::query, std::move(query), datasets);
+  auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
+                            std::move(query), datasets);
   // Queries never contain blank nodes in the body since they are always turned
   // into internal variables.
   AD_CORRECTNESS_CHECK(bnodeMgr.numBlocksUsed() == 0);
@@ -56,8 +56,8 @@ ParsedQuery SparqlParser::parseQuery(
 
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
-    BnodeMgr bnodeMgr, const EncodedValues* encodedValuesManager,
+    BnodeMgr bnodeMgr, const EncodedIriManager* encodedIriManager,
     std::string update, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(bnodeMgr, encodedValuesManager, &AntlrParser::update,
+  return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
                         std::move(update), datasets);
 }

@@ -25,8 +25,8 @@ ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
 
-auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 }  // namespace

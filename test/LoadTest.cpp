@@ -133,7 +133,7 @@ TEST_F(LoadTest, computeResult) {
           for (auto& field : row) {
             const auto& idx = testQec->getIndex();
             auto idOpt =
-                field.toValueId(idx.getVocab(), idx.encodedValuesManager());
+                field.toValueId(idx.getVocab(), idx.encodedIriManager());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
@@ -274,7 +274,7 @@ TEST_F(LoadTest, clone) {
 
 TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
-      &blankNodeManager_, &testQec->getIndex().encodedValuesManager(),
+      &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
       "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =

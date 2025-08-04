@@ -1216,7 +1216,7 @@ auto parse =
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
-      static EncodedValues ev;
+      static EncodedIriManager ev;
       ParserAndVisitor p{&blankNodeManager,
                          &ev,
                          input,

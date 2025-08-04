@@ -14,7 +14,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
-#include "index/EncodedValues.h"
+#include "index/EncodedIriManager.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -623,8 +623,8 @@ template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     std::string_view normalizedLiteralContent,
     const TripleComponent::Iri& typeIri,
-    const EncodedValues& encodedValuesManager) {
-  RdfStringParser<TurtleParser<T>> parser{&encodedValuesManager};
+    const EncodedIriManager& encodedIriManager) {
+  RdfStringParser<TurtleParser<T>> parser{&encodedIriManager};
 
   return parser.literalAndDatatypeToTripleComponentImpl(
       normalizedLiteralContent, typeIri);
@@ -706,7 +706,7 @@ bool TurtleParser<T>::iri() {
     return res;
   }
   const auto& s = lastParseResult_.getIri().toStringRepresentation();
-  auto optId = encodedValuesManager().encode(s);
+  auto optId = encodedIriManager().encode(s);
   if (optId.has_value()) {
     lastParseResult_ = optId.value();
   }
@@ -1096,7 +1096,7 @@ template <typename T>
 template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
-    RdfStringParser<T> parser{&this->encodedValuesManager(), defaultGraphIri_};
+    RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
     parser.disablePrefixParsing();
     parser.setPositionOffset(parsePosition);
@@ -1171,7 +1171,7 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_->open(filename);
-  RdfStringParser<T> declarationParser{&this->encodedValuesManager()};
+  RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
     if (auto batch = fileBuffer_->getNextBlock()) {
@@ -1272,7 +1272,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const Index::InputFileSpecification& file, const EncodedValues* ev,
+    const Index::InputFileSpecification& file, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
   auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
@@ -1325,18 +1325,18 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files,
-    const EncodedValues* encodedValuesManager,
+    const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
-    : RdfParserBase(encodedValuesManager) {
+    : RdfParserBase(encodedIriManager) {
   using namespace qlever;
   // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this, encodedValuesManager](
+  auto parseFile = [this, encodedIriManager](
                        const InputFileSpecification& file,
                        ad_utility::MemorySize bufferSize) {
     try {
-      auto parser = makeSingleRdfParser<Tokenizer>(file, encodedValuesManager,
-                                                   bufferSize);
+      auto parser =
+          makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {

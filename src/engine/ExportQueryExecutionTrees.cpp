@@ -12,7 +12,7 @@
 
 #include <ranges>
 
-#include "index/EncodedValues.h"
+#include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
@@ -20,6 +20,7 @@
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
+namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.
@@ -32,6 +33,12 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
     });
   }
 }
+
+LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
+  const auto& mgr = index.getImpl().encodedValueManager();
+  return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator computeResultForAsk(
@@ -441,7 +448,7 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
     case Datatype::EncodedVal:
-      return index.getImpl().encodedValueManager().toLiteralOrIri(id);
+      return encodedIdToLiteralOrIri(id, index);
     default:
       AD_FAIL();
   }
@@ -506,8 +513,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab));
     case EncodedVal:
-      return handleIriOrLiteral(
-          index.getImpl().encodedValueManager().toLiteralOrIri(id));
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -529,9 +535,8 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
     case EncodedVal:
-      return handleIriOrLiteral(
-          index.getImpl().encodedValueManager().toLiteralOrIri(id),
-          onlyReturnLiteralsWithXsdString);
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index),
+                                onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(

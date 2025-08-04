@@ -61,7 +61,7 @@ struct PathQuery : MagicServiceQuery {
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
       std::vector<TripleComponent> side, const Index::Vocab& vocab,
-      const EncodedValues& encodedValuesManager) const;
+      const EncodedIriManager& encodedIriManager) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
@@ -76,7 +76,7 @@ struct PathQuery : MagicServiceQuery {
    */
   PathSearchConfiguration toPathSearchConfiguration(
       const Index::Vocab& vocab,
-      const EncodedValues& encodedValuesManager) const;
+      const EncodedIriManager& encodedIriManager) const;
 };
 
 }  // namespace parsedQuery

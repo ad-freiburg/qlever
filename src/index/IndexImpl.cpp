@@ -1179,6 +1179,9 @@ void IndexImpl::readConfiguration() {
   blankNodeManager_ =
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
+  loadDataMember("encoded-iri-prefixes", encodedIriManager_,
+                 EncodedIriManager{});
+
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
@@ -1820,4 +1823,11 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValues(
+    std::vector<std::string> prefixesWithoutAngleBrackets) {
+  encodedIriManager_ =
+      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }

@@ -25,8 +25,8 @@
 namespace {
 using namespace deltaTriplesTestHelpers;
 
-constexpr auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+constexpr auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 }  // namespace

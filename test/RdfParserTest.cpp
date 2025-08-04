@@ -33,8 +33,8 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
-auto ev = []() -> const EncodedValues* {
-  static EncodedValues evManager;
+auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evManager;
   return &evManager;
 };
 

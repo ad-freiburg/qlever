@@ -38,8 +38,8 @@ PropertyPath PathIri(std::string_view iri) {
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
 
-const EncodedValues* evm() {
-  static EncodedValues ev;
+const EncodedIriManager* evm() {
+  static EncodedIriManager ev;
   return &ev;
 }
 }  // namespace
@@ -1603,9 +1603,9 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
-  EncodedValues encodedValuesManager;
+  EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(&encodedValuesManager, std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(

@@ -19,8 +19,8 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
-constexpr auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+constexpr auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 }  // namespace

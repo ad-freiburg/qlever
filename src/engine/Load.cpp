@@ -128,8 +128,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         "\". Supported `Content-Type`s are ", supportedMediatypes));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-  const auto& encodedValuesManager = getIndex().encodedValuesManager();
-  auto parser = Re2Parser(&encodedValuesManager);
+  const auto& encodedIriManager = getIndex().encodedIriManager();
+  auto parser = Re2Parser(&encodedIriManager);
   std::string body;
   for (const auto& bytes : response.body_) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
@@ -137,9 +137,9 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   parser.setInputStream(body);
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  auto toId = [this, &lv, &encodedValuesManager](TripleComponent&& tc) {
+  auto toId = [this, &lv, &encodedIriManager](TripleComponent&& tc) {
     return std::move(tc).toValueId(getIndex().getVocab(), lv,
-                                   encodedValuesManager);
+                                   encodedIriManager);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(

@@ -147,6 +147,7 @@ int main(int argc, char** argv) {
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
   std::optional<ad_utility::VocabularyType> vocabType;
+  std::vector<std::string> prefixesForIdEncodedIris;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -221,6 +222,13 @@ int main(int argc, char** argv) {
       ad_utility::VocabularyType::getListOfSupportedValues());
   add("vocabulary-type", po::value(&vocabType), msg.c_str());
 
+  add("encode-as-id",
+      po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
+      ""
+      "Encoded IRIs that start with this prefix, followed by a sequence of "
+      "digits, directly within the ID. Note: The result of `ORDER BY` between "
+      "encoded and non-encoded IRIs currently violates the SPARQL standard.");
+
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&indexMemoryLimit),
       "The amount of memory in to use for sorting during the index build. "
@@ -294,6 +302,7 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
+    index.getImpl().setPrefixesForEncodedValues(prefixesForIdEncodedIris);
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

@@ -17,12 +17,12 @@ using std::string;
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
     ad_utility::BlankNodeManager* blankNodeManager,
-    const EncodedValues* encodedValuesManager, std::string input,
+    const EncodedIriManager* encodedIriManager, std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : Base{unescapeUnicodeSequences(std::move(input)),
            SparqlQleverVisitor{blankNodeManager,
-                               encodedValuesManager,
+                               encodedIriManager,
                                {},
                                std::move(datasetClauses),
                                disableSomeChecks}} {}
@@ -30,11 +30,11 @@ ParserAndVisitor::ParserAndVisitor(
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
     ad_utility::BlankNodeManager* blankNodeManager,
-    const EncodedValues* encodedValuesManager, std::string input,
+    const EncodedIriManager* encodedIriManager, std::string input,
     SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{blankNodeManager, encodedValuesManager, std::move(input),
+    : ParserAndVisitor{blankNodeManager, encodedIriManager, std::move(input),
                        std::move(datasetClauses), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }

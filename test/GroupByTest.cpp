@@ -2017,7 +2017,7 @@ TEST(GroupBy, AddedHavingRows) {
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
   auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedValuesManager(), query);
+      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 

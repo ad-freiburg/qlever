@@ -72,7 +72,7 @@ class SparqlQleverVisitor {
   ad_utility::BlankNodeManager* blankNodeManager_;
 
   // Needed to efficiently encode common IRIs directly into the ID.
-  const EncodedValues* encodedValuesManager_;
+  const EncodedIriManager* encodedIriManager_;
 
   size_t _blankNodeCounter = 0;
   // Counter that increments for every variable generated using
@@ -153,12 +153,12 @@ class SparqlQleverVisitor {
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
       ad_utility::BlankNodeManager* bnodeManager,
-      const EncodedValues* encodedValuesManager, PrefixMap prefixMap,
+      const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : blankNodeManager_{bnodeManager},
-        encodedValuesManager_{encodedValuesManager},
+        encodedIriManager_{encodedIriManager},
         prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {

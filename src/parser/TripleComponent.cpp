@@ -52,7 +52,7 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 
 // ____________________________________________________________________________
 std::optional<Id> TripleComponent::toValueIdIfNotString(
-    const EncodedValues* evManager) const {
+    const EncodedIriManager* evManager) const {
   auto visitor = [evManager](const auto& value) -> std::optional<Id> {
     using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, Iri>) {
@@ -95,7 +95,7 @@ std::string TripleComponent::toRdfLiteral() const {
   } else if (isIri()) {
     return getIri().toStringRepresentation();
   } else {
-    EncodedValues ev;
+    EncodedIriManager ev;
     auto [value, type] =
         ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
             toValueIdIfNotString(&ev).value())

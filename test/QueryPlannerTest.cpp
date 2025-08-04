@@ -34,7 +34,7 @@ QueryPlanner makeQueryPlanner() {
 }
 
 auto parseQuery(std::string query) {
-  static EncodedValues evM;
+  static EncodedIriManager evM;
   return SparqlParser::parseQuery(&evM, std::move(query));
 }
 

@@ -29,7 +29,7 @@ using ::testing::HasSubstr;
 namespace {
 auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {
-  static EncodedValues evM;
+  static EncodedIriManager evM;
   return SparqlParser::parseQuery(&evM, std::move(query), datasets);
 }
 

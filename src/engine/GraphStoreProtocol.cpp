@@ -38,8 +38,8 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
       // TODO<joka921> We could pass in the actual manager here,
       // then the resulting triples could (possibly) be already much
       // smaller.
-      EncodedValues encodedValuesManager;
-      auto parser = Re2Parser(&encodedValuesManager);
+      EncodedIriManager encodedIriManager;
+      auto parser = Re2Parser(&encodedIriManager);
       parser.setInputStream(body);
       return parser.parseAndReturnAllTriples();
     }
@@ -70,7 +70,7 @@ std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
 
 // ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(
-    const GraphOrDefault& graph, const EncodedValues* encodedValuesManager) {
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
   // Construct the parsed query from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
   std::string query;
@@ -81,5 +81,5 @@ ParsedQuery GraphStoreProtocol::transformGet(
   } else {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
-  return SparqlParser::parseQuery(encodedValuesManager, query);
+  return SparqlParser::parseQuery(encodedIriManager, query);
 }

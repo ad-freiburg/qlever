@@ -18,8 +18,8 @@ using namespace ad_utility::url_parser::sparqlOperation;
 using Var = Variable;
 using TC = TripleComponent;
 
-const EncodedValues* evm() {
-  static EncodedValues ev;
+const EncodedIriManager* evm() {
+  static EncodedIriManager ev;
   return &ev;
 }
 

@@ -22,7 +22,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
-#include "index/EncodedValues.h"
+#include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -133,7 +133,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
-  EncodedValues encodedValues_;
+  EncodedIriManager encodedIriManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -279,7 +279,13 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
-  const auto& encodedValueManager() const { return encodedValues_; }
+  const auto& encodedValueManager() const { return encodedIriManager_; }
+
+  // For the index building, set the prefixes that are to be encoded directly in
+  // an ID if they are followed by a plain number. The prefixes have to be
+  // without the `<>` for IRIs.
+  void setPrefixesForEncodedValues(
+      std::vector<std::string> prefixesWithoutAngleBrackets);
 
   // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
   // details.

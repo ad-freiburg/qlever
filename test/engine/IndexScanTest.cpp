@@ -25,8 +25,8 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
-constexpr auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+constexpr auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 

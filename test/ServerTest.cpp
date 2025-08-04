@@ -21,8 +21,8 @@ using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
-constexpr auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+constexpr auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 auto parseQuery(std::string query,

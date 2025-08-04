@@ -30,7 +30,7 @@ const std::string& getIriString(
 }
 auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {
-  static EncodedValues evM;
+  static EncodedIriManager evM;
   return SparqlParser::parseQuery(&evM, std::move(query), datasets);
 }
 }  // namespace
@@ -1452,7 +1452,7 @@ TEST(ParserTest, parseWithDatasets) {
       datasets, noGraphs));
 
   ad_utility::BlankNodeManager bnm;
-  EncodedValues ev;
+  EncodedIriManager ev;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(

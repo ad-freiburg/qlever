@@ -666,7 +666,7 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   // Blank Nodes.
   EXPECT_EQ(blankNodeMap.size(), 0);
 
-  const EncodedValues ev;
+  const EncodedIriManager ev;
   Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
              .toValueIdIfNotString(&ev)
              .value();

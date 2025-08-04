@@ -12,8 +12,8 @@ namespace {
 using namespace checkUsePatternTrick;
 using ad_utility::source_location;
 
-constexpr auto ev = []() -> const EncodedValues* {
-  static EncodedValues evM;
+constexpr auto ev = []() -> const EncodedIriManager* {
+  static EncodedIriManager evM;
   return &evM;
 };
 

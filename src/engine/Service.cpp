@@ -224,7 +224,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
-                                        getIndex().encodedValuesManager());
+                                        getIndex().encodedIriManager());
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -409,7 +409,7 @@ TripleComponent Service::bindingToTripleComponent(
           value,
           TripleComponent::Iri::fromIrirefWithoutBrackets(
               binding["datatype"].get<std::string_view>()),
-          getIndex().encodedValuesManager());
+          getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),

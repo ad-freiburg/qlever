@@ -21,8 +21,8 @@ auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
 
-const EncodedValues* evm() {
-  static EncodedValues ev;
+const EncodedIriManager* evm() {
+  static EncodedIriManager ev;
   return &ev;
 }
 
