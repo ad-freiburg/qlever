@@ -16,5 +16,5 @@ add_library(engine
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp)
+        NeutralOptional.cpp Load.cpp StripColumns.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)

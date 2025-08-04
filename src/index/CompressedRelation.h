@@ -531,6 +531,29 @@ class CompressedRelationReader {
     static void checkBlockMetadataInvariant(
         std::span<const CompressedBlockMetadata> blocks,
         size_t firstFreeColIndex);
+
+    // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
+    // be used if it is known that those are not needed anymore, e.g. because
+    // they have already been dealt with by a lazy `IndexScan` or `Join`.
+    void removePrefix(size_t numBlocksToRemove) {
+      auto it = blockMetadata_.begin();
+      auto end = blockMetadata_.end();
+      while (it != end) {
+        auto& subspan = *it;
+        auto sz = ql::ranges::size(subspan);
+        if (numBlocksToRemove < sz) {
+          // Partially remove a subspan if it contains less blocks than we have
+          // to remove.
+          subspan.advance(numBlocksToRemove);
+          break;
+        } else {
+          // Completely remove the subspan (via the `erase` at the end).
+          numBlocksToRemove -= sz;
+        }
+      }
+      // Remove all the blocks that are to be erased completely.
+      blockMetadata_.erase(blockMetadata_.begin(), it);
+    }
   };
 
   // This struct additionally contains the first and last triple of the scan
@@ -604,7 +627,15 @@ class CompressedRelationReader {
   // is not fixed by the `metadataAndBlocks`, so the middle column (col1) in
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
-  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
+  // Additionally, return the number of blocks in the input that (according to
+  // their metadata) might contain IDs `<=` any value in the `joinColumn`. Note
+  // that this is an offset into `metadataAndBlocks` and not to be
+  // confused with the globally assigned `blockIndex_`.
+  struct GetBlocksForJoinResult {
+    std::vector<CompressedBlockMetadata> matchingBlocks_;
+    size_t numHandledBlocks{0};
+  };
+  static GetBlocksForJoinResult getBlocksForJoin(
       ql::span<const Id> joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 

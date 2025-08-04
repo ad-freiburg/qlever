@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
 
 using std::string;
@@ -183,6 +184,21 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   return ad_utility::makeExecutionTree<Sort>(
       rootOperation->getExecutionContext(), std::move(qet), sortColumns);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree>
+QueryExecutionTree::makeTreeWithStrippedColumns(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const std::set<Variable>& variables) {
+  const auto& rootOperation = qet->getRootOperation();
+  auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
+  if (optTree.has_value()) {
+    AD_CORRECTNESS_CHECK(optTree.value() != nullptr);
+    return std::move(optTree.value());
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      rootOperation->getExecutionContext(), std::move(qet), variables);
 }
 
 // _____________________________________________________________________________
