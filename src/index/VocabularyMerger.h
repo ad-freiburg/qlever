@@ -245,6 +245,14 @@ class VocabularyMerger {
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
+  // Gets the index and target index for EqualWords. This has to be set only
+  // once for EqualWords and does some form of writing since the metaData is
+  // modified.
+  CPP_template(typename C)(
+      requires WordCallback<C>) void writeAndGetEqualWordIds(EqualWords&
+                                                                 equalWords,
+                                                             C& wordCallback);
+
   // Close all associated files and MmapVectors and reset all internal
   // variables.
   void clear() {
