@@ -191,14 +191,12 @@ CPP_template_def(typename C, typename L)(
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
     if (lastEqualWords_.has_value()) {
+      auto& word = lastEqualWords_.value();
       // If the same word, add to EqualWords
-      if (lastEqualWords_.value().iriOrLiteral_ == top.iriOrLiteral()) {
-        lastEqualWords_.value().isExternal_ =
-            lastEqualWords_.value().isExternal_ || top.isExternal();
-        lastEqualWords_.value().inTextIndex_ =
-            lastEqualWords_.value().inTextIndex_ || top.inTextIndex();
-        lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
-                                                         top.id());
+      if (word.iriOrLiteral_ == top.iriOrLiteral()) {
+        word.isExternal_ = word.isExternal_ || top.isExternal();
+        word.inTextIndex_ = word.inTextIndex_ || top.inTextIndex();
+        word.partialIds_.emplace_back(top.partialFileId_, top.id());
       } else {
         // Here code only gets executed if a new iriOrLiteral is seen
 
@@ -219,7 +217,6 @@ CPP_template_def(typename C, typename L)(
 
         // Write the last words to the vocabulary. Since one iriOrLiteral gets
         // exactly one index this mapping has to be done only once.
-        auto& word = lastEqualWords_.value();
         if (word.isBlankNode()) {
           word.index_ = metaData_.getNextBlankNodeIndex();
         } else {
@@ -256,6 +253,7 @@ CPP_template_def(typename C, typename L)(
         lastEqualWords_.value().partialIds_.emplace_back(top.partialFileId_,
                                                          top.id());
       }
+      // Case lastEqualWords_ has no value yet so assign the top value
     } else {
       lastEqualWords_ = {top.iriOrLiteral(), top.isExternal(),
                          top.inTextIndex(), metaData_.numWordsTotal()};
