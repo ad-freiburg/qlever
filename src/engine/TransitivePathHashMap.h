@@ -55,9 +55,17 @@ class HashMapWrapper {
    */
   const Set& successors(Id node) const;
 
-  // Return equivalent ids from the index, along with an associated graph id in
-  // case these are available.
-  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
+  // Return a pair of matching ids + graph ids. The first id of the pair is
+  // always the same element. It is flattened out because all callers of this
+  // function need it in this format for convenience. The most common case is
+  // that there's a single matching entry, (especially when using this without
+  // an active graph,) which is why `absl::InlinedVector` is used with size 1.
+  // If no entry matches an empty vector is returned. If an active graph is set,
+  // entries will be limited to just that graph. If `node` is undefined, it will
+  // return all elements in the currently active graph, or all elements if no
+  // graph is set.
+  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIdAndMatchingGraphs(
+      Id node) const;
 
   // Prefilter the map for values of a certain graph.
   void setGraphId(Id graphId);

@@ -16,7 +16,7 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
     : startIds_{startIds},
       targetIds_{targetIds},
       graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},
-      size_{startIds_.size()} {
+      sizeOfActiveGraph_{startIds_.size()} {
   AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
   AD_CORRECTNESS_CHECK(startIds.size() == graphIds_.size() ||
                        !graphIds.has_value());
@@ -24,7 +24,8 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
 
 // _____________________________________________________________________________
 ql::span<const Id> BinSearchMap::successors(Id node) const {
-  auto range = ql::ranges::equal_range(startIds_.subspan(offset_, size_), node);
+  auto range = ql::ranges::equal_range(
+      startIds_.subspan(offsetOfActiveGraph_, sizeOfActiveGraph_), node);
 
   auto startIndex = std::distance(startIds_.begin(), range.begin());
 
@@ -32,8 +33,8 @@ ql::span<const Id> BinSearchMap::successors(Id node) const {
 }
 
 // _____________________________________________________________________________
-absl::InlinedVector<std::pair<Id, Id>, 1> BinSearchMap::getEquivalentIds(
-    Id node) const {
+absl::InlinedVector<std::pair<Id, Id>, 1>
+BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
   absl::InlinedVector<std::pair<Id, Id>, 1> result;
   if (graphIds_.empty()) {
     if (node.isUndefined()) {
@@ -70,8 +71,8 @@ void BinSearchMap::setGraphId(Id graphId) {
     auto range = ql::ranges::equal_range(graphIds_, graphId);
     auto startIndex = std::distance(graphIds_.begin(), range.begin());
 
-    offset_ = startIndex;
-    size_ = range.size();
+    offsetOfActiveGraph_ = startIndex;
+    sizeOfActiveGraph_ = range.size();
   }
 }
 

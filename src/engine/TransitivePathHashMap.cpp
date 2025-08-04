@@ -39,8 +39,8 @@ const Set& HashMapWrapper::successors(const Id node) const {
 }
 
 // _____________________________________________________________________________
-absl::InlinedVector<std::pair<Id, Id>, 1> HashMapWrapper::getEquivalentIds(
-    Id node) const {
+absl::InlinedVector<std::pair<Id, Id>, 1>
+HashMapWrapper::getEquivalentIdAndMatchingGraphs(Id node) const {
   absl::InlinedVector<std::pair<Id, Id>, 1> result;
   for (const auto& [graph, map] : graphMap_) {
     if (node.isUndefined()) {

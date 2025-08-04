@@ -290,7 +290,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways.
-    const auto& idsWithGraph = edges.getEquivalentIds(startId);
+    const auto& idsWithGraph = edges.getEquivalentIdAndMatchingGraphs(startId);
     for (const auto& [id, graphId] : idsWithGraph) {
       result.insert(id);
     }
