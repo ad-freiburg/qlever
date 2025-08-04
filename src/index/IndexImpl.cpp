@@ -1038,14 +1038,10 @@ void IndexImpl::setKbName(const std::string& name) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setTripleInTextIndexFilter(const std::string& regex,
-                                           bool isWhitelist) {
-  tripleInTextIndexFilter_ = TripleInTextIndexFilter(regex, isWhitelist);
-}
-
-// _____________________________________________________________________________
-void IndexImpl::setAddWordsFromAllLiterals(bool value) {
-  addWordsFromAllLiterals_ = value;
+void IndexImpl::setTextIndexLiteralFilter(
+    const TextIndexLiteralConfiguration& config) {
+  textIndexLiteralFilter_ = TextIndexLiteralFilter{
+      config.regex_, config.whitelist_, config.addAllLiterals_};
 }
 
 // ____________________________________________________________________________
@@ -1220,15 +1216,15 @@ void IndexImpl::readConfiguration() {
 
 // ___________________________________________________________________________
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
-    TurtleTriple&& triple) const {
+    TurtleTriple&& triple) {
+  // Here changes can be made whether literals should be in the text index.
+  // This has to be done this early on since "triple" values will be moved later
+  // on.
+  textIndexLiteralFilter_.computeInTextIndexMap(
+      triple.subject_, triple.predicate_, triple.object_);
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
-  // Here changes can be made whether literals should be in the text index
-  bool inTextIndex = addWordsFromAllLiterals_;
-  if (!addWordsFromAllLiterals_) {
-    inTextIndex = tripleInTextIndexFilter_(triple.predicate_, triple.object_);
-  }
   resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
@@ -1275,15 +1271,9 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (addWordsFromAllLiterals_) {
-      if (Index::Vocab::stringIsLiteral(iriOrLiteral.toString())) {
-        component.inTextIndex_ = true;
-      }
-    } else {
-      if (inTextIndex && index == 2) {
-        component.inTextIndex_ = true;
-      }
-    }
+
+    // Retrieve the inTextIndex value for subject, predicate and object.
+    component.inTextIndex_ = textIndexLiteralFilter_(index);
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }

@@ -27,9 +27,10 @@
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
+#include "index/TextIndexLiteralConfiguration.h"
+#include "index/TextIndexLiteralFilter.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
-#include "index/TripleInTextIndexFilter.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -125,8 +126,7 @@ class IndexImpl {
   std::vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
-  TripleInTextIndexFilter tripleInTextIndexFilter_;
-  bool addWordsFromAllLiterals_;
+  TextIndexLiteralFilter textIndexLiteralFilter_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -438,9 +438,7 @@ class IndexImpl {
 
   void setKbName(const std::string& name);
 
-  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
-
-  void setAddWordsFromAllLiterals(bool value);
+  void setTextIndexLiteralFilter(const TextIndexLiteralConfiguration& config);
 
   void setTextName(const std::string& name);
 
@@ -673,7 +671,7 @@ class IndexImpl {
   bool isLiteral(std::string_view object) const;
 
  public:
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
+  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple);
 
  protected:
   /**

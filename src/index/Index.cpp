@@ -141,14 +141,9 @@ void Index::setKbName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setTripleInTextIndexFilter(const std::string& regex,
-                                       bool isWhitelist) {
-  return pimpl_->setTripleInTextIndexFilter(regex, isWhitelist);
-}
-
-// ____________________________________________________________________________
-void Index::setAddWordsFromAllLiterals(bool value) {
-  return pimpl_->setAddWordsFromAllLiterals(value);
+void Index::setTextIndexLiteralFilter(
+    const TextIndexLiteralConfiguration& config) {
+  return pimpl_->setTextIndexLiteralFilter(config);
 }
 
 // ____________________________________________________________________________

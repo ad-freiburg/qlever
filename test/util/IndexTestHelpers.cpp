@@ -183,10 +183,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
-    index.setTripleInTextIndexFilter(c.literalRegex.value_or(""),
-                                     c.literalRegexIsWhitelist);
-    index.setAddWordsFromAllLiterals(!c.literalRegex.has_value() &&
-                                     c.addWordsFromLiterals);
+    index.setTextIndexLiteralFilter(
+        {c.literalRegex.value_or(""), c.literalRegexIsWhitelist,
+         !c.literalRegex.has_value() && c.addWordsFromLiterals});
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations

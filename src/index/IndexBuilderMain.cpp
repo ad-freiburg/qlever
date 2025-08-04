@@ -326,9 +326,9 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    index.setTripleInTextIndexFilter(tripleInTextIndexRegex,
-                                     tripleInTextIndexRegexIsWhitelist);
-    index.setAddWordsFromAllLiterals(addWordsFromAllLiterals);
+    index.setTextIndexLiteralFilter({tripleInTextIndexRegex,
+                                     tripleInTextIndexRegexIsWhitelist,
+                                     addWordsFromAllLiterals});
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

@@ -9,9 +9,10 @@
 
 #include "parser/RdfParser.h"
 
-class TripleInTextIndexFilter {
+class TextIndexLiteralFilter {
  public:
-  TripleInTextIndexFilter() : regex_{"(?s).*"}, isWhitelist_{true} {};
+  TextIndexLiteralFilter()
+      : regex_{std::make_unique<RE2>("(?s).*")}, isWhitelist_{true} {};
 
   /**
    * @brief Class to determine whether the literal of a triple should be part of
@@ -22,31 +23,43 @@ class TripleInTextIndexFilter {
    * @param whitelist If set to true the matching regex cases will be added to
    *                  the text index. If set to falls the matching regex cases
    *                  will not be added but everything else.
+   * @param addAllLiterals If set to true this can later be used to not only
+   *        add objects of triples but all literals.
    */
-  explicit TripleInTextIndexFilter(std::string regex, bool whitelist = true)
-      : regex_{std::move(regex)}, isWhitelist_{whitelist} {
-    if (const RE2 reg{regex_, RE2::Quiet}; !reg.ok()) {
+  explicit TextIndexLiteralFilter(std::string regex, bool whitelist,
+                                  bool addAllLiterals)
+      : regex_{std::make_unique<RE2>(regex, RE2::Quiet)},
+        isWhitelist_{whitelist},
+        addAllLiterals_(addAllLiterals) {
+    if (!regex_->ok()) {
       throw std::runtime_error{
           absl::StrCat("The regex supposed to filter predicates for which the "
                        "objects are stored in the text index was \"",
-                       regex_,
+                       regex_->pattern(),
                        "\". This is not supported by QLever (which uses "
                        "Google's RE2 library); "
                        "the error from RE2 is: ",
-                       reg.error())};
+                       regex_->error())};
     }
   }
 
-  // Returns true iff object of triple is literal or IRI and should be added to
-  // the text index depending on the given regex and whitelist parameter. The
-  // regex looks for a partial match.
-  bool operator()(const TripleComponent& p, const TripleComponent& o) const;
+  bool operator()(size_t index) const;
+  // Computes inTextIndexMap_ depending on the values for regex, whitelist and
+  // addAllLiterals. Later the values can be retrieved using the operator().
+  void computeInTextIndexMap(const TripleComponent& s, const TripleComponent& p,
+                             const TripleComponent& o);
+
+  bool addAllLiterals() const { return addAllLiterals_; }
 
  private:
   // The regex string used to do the comparison
-  std::string regex_;
+  std::unique_ptr<RE2> regex_ = nullptr;
   // Determine whether the regex should act as whitelist or blacklist
-  bool isWhitelist_;
+  bool isWhitelist_ = true;
+  // True when all literals not only objects should be added
+  bool addAllLiterals_ = false;
+  // This maps subject, predicate and object to their inTextIndex values
+  std::tuple<bool, bool, bool> inTextIndexMap_ = {false, false, false};
 };
 
 #endif  // QLEVER_SRC_INDEX_TRIPLEINTEXTINDEX_H

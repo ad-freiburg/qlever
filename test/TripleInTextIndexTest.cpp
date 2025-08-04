@@ -5,20 +5,25 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "index/TripleInTextIndexFilter.h"
+#include "index/TextIndexLiteralFilter.h"
 #include "parser/RdfParser.h"
 #include "util/GTestHelpers.h"
 
 namespace {
 
-auto testMultipleTriples = [](const TripleInTextIndexFilter& filter,
+using EqualityVector = std::vector<std::tuple<bool, bool, bool>>;
+
+auto testMultipleTriples = [](TextIndexLiteralFilter& filter,
                               const std::vector<TurtleTriple>& triplesToTest,
-                              const std::vector<bool>& equality) {
+                              const EqualityVector& equality) {
   ASSERT_EQ(triplesToTest.size(), equality.size());
   for (size_t i = 0; i < triplesToTest.size(); ++i) {
-    ASSERT_EQ(filter(TripleComponent{triplesToTest[i].predicate_},
-                     triplesToTest[i].object_),
-              equality[i]);
+    filter.computeInTextIndexMap(triplesToTest[i].subject_,
+                                 triplesToTest[i].predicate_,
+                                 triplesToTest[i].object_);
+    ASSERT_EQ(filter(0), std::get<0>(equality[i]));
+    ASSERT_EQ(filter(1), std::get<1>(equality[i]));
+    ASSERT_EQ(filter(2), std::get<2>(equality[i]));
   }
 };
 
@@ -41,34 +46,43 @@ std::vector<TurtleTriple> testVector = {
 
 TEST(TripleInTextIndex, FaultyRegex) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      TripleInTextIndexFilter("(abc"),
+      TextIndexLiteralFilter("(abc", false, false),
       ::testing::HasSubstr(
           R"(The regex supposed to filter predicates for which the objects are stored in the text index was "(abc". This is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
       std::runtime_error);
 }
 
 TEST(TripleInTextIndex, NoLiteralObject) {
-  TripleInTextIndexFilter filter{"(?s).*"};
+  TextIndexLiteralFilter filter{"(?s).*", true, false};
   TurtleTriple triple{iri("<Scientist>"), iri("<has-description>"),
                       TripleComponent{4}};
-  ASSERT_FALSE(filter(TripleComponent{triple.predicate_}, triple.object_));
+  testMultipleTriples(filter, {triple}, {std::make_tuple(false, false, false)});
 }
 
 TEST(TripleInTextIndex, PartialMatch) {
-  TripleInTextIndexFilter filter{"descri"};
-  std::vector<bool> equality{true, true, false, false};
+  TextIndexLiteralFilter filter{"descri", true, false};
+  EqualityVector equality{{false, false, true},
+                          {false, false, true},
+                          {false, false, false},
+                          {false, false, false}};
   testMultipleTriples(filter, testVector, equality);
 }
 
 TEST(TripleInTextIndex, Blacklist) {
-  TripleInTextIndexFilter filter{"descri", false};
-  std::vector<bool> equality{false, false, true, true};
+  TextIndexLiteralFilter filter{"descri", false, false};
+  EqualityVector equality{{false, false, false},
+                          {false, false, false},
+                          {false, false, true},
+                          {false, false, true}};
   testMultipleTriples(filter, testVector, equality);
 }
 
 TEST(TripleInTextIndex, NoCaseSensitivity) {
-  TripleInTextIndexFilter filter{"(?i)descri"};
-  std::vector<bool> equality{true, true, false, true};
+  TextIndexLiteralFilter filter{"(?i)descri", true, false};
+  EqualityVector equality{{false, false, true},
+                          {false, false, true},
+                          {false, false, false},
+                          {false, false, true}};
   testMultipleTriples(filter, testVector, equality);
 }
 
