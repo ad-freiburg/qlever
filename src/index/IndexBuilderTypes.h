@@ -189,6 +189,14 @@ struct alignas(256) ItemMapManager {
                                 &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
+      // If same key appears multiple times make sure to set isExternal and
+      // inTextIndex to true if it was detected true at least once.
+      if (key.isExternal_) {
+        it->second.splitVal_.isExternalized_ = true;
+      }
+      if (key.inTextIndex_) {
+        it->second.splitVal_.inTextIndex_ = true;
+      }
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
     }
   }
