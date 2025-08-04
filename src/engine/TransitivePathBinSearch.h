@@ -5,7 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
-#include <iterator>
+#include <absl/container/inlined_vector.h>
+
 #include <memory>
 
 #include "engine/Operation.h"
@@ -34,9 +35,16 @@
  *       5 |        6
  *
  */
-struct BinSearchMap {
+class BinSearchMap {
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
+  ql::span<const Id> graphIds_;
+  size_t offset_ = 0;
+  size_t size_;
+
+ public:
+  BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
+               std::optional<ql::span<const Id>> graphIds = std::nullopt);
 
   /**
    * @brief Return the successors for the given id.
@@ -47,24 +55,13 @@ struct BinSearchMap {
    * @return A ql::span<Id>, which consists of all targetIds_ where
    * startIds_ == node.
    */
-  auto successors(const Id node) const {
-    auto range = ql::ranges::equal_range(startIds_, node);
+  ql::span<const Id> successors(Id node) const;
 
-    auto startIndex = std::distance(startIds_.begin(), range.begin());
+  // Return equivalent ids from the index, along with an associated graph id in
+  // case these are available.
+  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
 
-    return targetIds_.subspan(startIndex, range.size());
-  }
-
-  // Retrieve pointer to equal id from `startIds_`, or nullptr if not present.
-  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
-  // but instead are backed by the index.
-  const Id* getEquivalentId(Id node) const {
-    auto range = ql::ranges::equal_range(startIds_, node);
-    if (range.empty()) {
-      return nullptr;
-    }
-    return &range.front();
-  }
+  void setGraphId(Id graphId);
 };
 
 /**
@@ -79,7 +76,8 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           std::shared_ptr<QueryExecutionTree> child,
                           TransitivePathSide leftSide,
                           TransitivePathSide rightSide, size_t minDist,
-                          size_t maxDist, Graphs activeGraphs);
+                          size_t maxDist, Graphs activeGraphs,
+                          const std::optional<Variable>& graphVariable);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
