@@ -873,6 +873,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
                      {b18GapIriAndLiteral, b28});
   makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
                      {b14, b15, b16, b18GapIriAndLiteral});
+  // Test inlined literals
+  makeTestIsDatatype(isLit(), {b6, b7}, false, {b1, b6, b7});
+  makeTestIsDatatype(isLit(), {b16, b13}, false, {b16, b13});
+  makeTestIsDatatype(isLit(), {b27}, false, {b27});
 
   // Test isIri
   // Blocks b22 - b25 contain IRI values.
