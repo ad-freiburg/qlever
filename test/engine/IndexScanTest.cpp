@@ -1228,14 +1228,22 @@ TEST(IndexScanTest, StripColumns) {
       qec, Permutation::SPO,
       SparqlTripleSimple{Var{"?x"}, Var{"?a"}, Var{"?b"}}};
 
-  auto fullRes = fullScan.computeResultOnlyForTesting(false).idTable().clone();
+  IdTable fullRes =
+      fullScan.computeResultOnlyForTesting(false).idTable().clone();
 
   auto def = makeAlwaysDefinedColumn;
 
   ad_utility::HashSet<std::string> cacheKeys;
-  // Generic lambda to test stripping with any number of columns
-  auto testStrippedColumns = [&](const std::vector<Variable>& varsToKeep,
-                                 const std::vector<ColumnIndex>& sortedOn) {
+  // Generic lambda to test stripping with any number of columns for any
+  // IndexScan
+  auto testStrippedColumns = [&](IndexScan& baseScan,
+                                 IndexScan& baseScanDifferentVars,
+                                 const IdTable& baseResult,
+                                 const std::vector<Variable>& varsToKeep,
+                                 const std::vector<ColumnIndex>& sortedOn,
+                                 ad_utility::source_location l =
+                                     ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(l);
     // Create set with variables to keep, plus non-existent variables to test
     // filtering
     std::set<Variable> varsWithNonExistent(varsToKeep.begin(),
@@ -1244,7 +1252,7 @@ TEST(IndexScanTest, StripColumns) {
     // Note: duplicates are automatically handled by std::set
 
     auto subsetScan =
-        fullScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
+        baseScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
     EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
 
     auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
@@ -1256,9 +1264,9 @@ TEST(IndexScanTest, StripColumns) {
     // index
     std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
     for (const auto& var : varsToKeep) {
-      auto colIdxInFullScan =
-          fullScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
-      varColPairs.emplace_back(var, colIdxInFullScan);
+      auto colIdxInBaseScan =
+          baseScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
+      varColPairs.emplace_back(var, colIdxInBaseScan);
     }
     ql::ranges::sort(varColPairs, [](const auto& a, const auto& b) {
       return a.second < b.second;
@@ -1278,15 +1286,15 @@ TEST(IndexScanTest, StripColumns) {
 
     // Test multiplicity preservation
     for (const auto& [v, colIdxAndInfo] : subsetScan->getVariableColumns()) {
-      auto colIdxInFullScan =
-          fullScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
+      auto colIdxInBaseScan =
+          baseScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
       EXPECT_FLOAT_EQ(subsetScan->getMultiplicity(colIdxAndInfo.columnIndex_),
-                      fullScan.getMultiplicity(colIdxInFullScan));
+                      baseScan.getMultiplicity(colIdxInBaseScan));
     }
 
     // Create expected result by selecting the right columns
     auto expectedResult =
-        fullRes.asColumnSubsetView(originalColumnIndices).clone();
+        baseResult.asColumnSubsetView(originalColumnIndices).clone();
 
     EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
     EXPECT_THAT(subsetScan->getResult(false)->idTable(),
@@ -1313,7 +1321,7 @@ TEST(IndexScanTest, StripColumns) {
       const auto& scanOp1 =
           dynamic_cast<const IndexScan&>(*subsetScan->getRootOperation());
       auto subsetScan2 =
-          fullScanDifferentVars.makeTreeWithStrippedColumns({varsToKeep[0]})
+          baseScanDifferentVars.makeTreeWithStrippedColumns({varsToKeep[0]})
               .value();
       const auto& scanOp2 =
           dynamic_cast<const IndexScan&>(*subsetScan2->getRootOperation());
@@ -1327,34 +1335,71 @@ TEST(IndexScanTest, StripColumns) {
     }
   };
 
-  // Convenience wrapper for single column (maintains backward compatibility)
+  // Convenience wrapper for the fullScan (maintains backward compatibility)
+  auto testFullScanStrippedColumns =
+      [&](const std::vector<Variable>& varsToKeep,
+          const std::vector<ColumnIndex>& sortedOn,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        testStrippedColumns(fullScan, fullScanDifferentVars, fullRes,
+                            varsToKeep, sortedOn, l);
+      };
   auto testStrippedBySingleColumn =
-      [&](Variable var, const std::vector<ColumnIndex>& sortedOn) {
-        testStrippedColumns({var}, sortedOn);
+      [&](Variable var, const std::vector<ColumnIndex>& sortedOn,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        testFullScanStrippedColumns({var}, sortedOn, l);
       };
 
-  // Test zero column case
-  testStrippedColumns({}, {});
+  // Create a second scan with different variables (fixed subject, ?x ?y
+  // variables)
+  using I = TripleComponent::Iri;
+  IndexScan twoVarScan{
+      qec, Permutation::SPO,
+      SparqlTripleSimple{I::fromIriref("<s>"), Var{"?x"}, Var{"?y"}}};
+  IndexScan twoVarScanDifferentVars{
+      qec, Permutation::SPO,
+      SparqlTripleSimple{I::fromIriref("<s>"), Var{"?x"}, Var{"?b"}}};
+  IdTable twoVarRes =
+      twoVarScan.computeResultOnlyForTesting(false).idTable().clone();
 
-  // Test all single column cases
+  // Convenience wrapper for the twoVarScan
+  auto testTwoVarScanStrippedColumns =
+      [&](const std::vector<Variable>& varsToKeep,
+          const std::vector<ColumnIndex>& sortedOn,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        testStrippedColumns(twoVarScan, twoVarScanDifferentVars, twoVarRes,
+                            varsToKeep, sortedOn, l);
+      };
+
+  // Test zero column case on fullScan
+  testFullScanStrippedColumns({}, {});
+
+  // Test all single column cases on fullScan
   testStrippedBySingleColumn(Var{"?x"}, {0});
   testStrippedBySingleColumn(Var{"?y"}, {});
   testStrippedBySingleColumn(Var{"?z"}, {});
 
-  // Test all two column combinations
-  testStrippedColumns({Var{"?x"}, Var{"?y"}},
-                      {0, 1});  // ?x, ?y -> columns 0,1 -> sorted on 0
-  testStrippedColumns({Var{"?x"}, Var{"?z"}},
-                      {0});  // ?x, ?z -> columns 0,2 -> sorted on 0
-  testStrippedColumns({Var{"?y"}, Var{"?z"}},
-                      {});  // ?y, ?z -> columns 1,2 -> not sorted
+  // Test all two column combinations on fullScan
+  testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                              {0, 1});  // ?x, ?y -> columns 0,1 -> sorted on 0
+  testFullScanStrippedColumns({Var{"?x"}, Var{"?z"}},
+                              {0});  // ?x, ?z -> columns 0,2 -> sorted on 0
+  testFullScanStrippedColumns({Var{"?y"}, Var{"?z"}},
+                              {});  // ?y, ?z -> columns 1,2 -> not sorted
 
-  // Test three column case (should be equivalent to original)
-  testStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}}, {0, 1, 2});
+  // Test three column case on fullScan (should be equivalent to original)
+  testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}}, {0, 1, 2});
+
+  // Test all combinations on twoVarScan (different number of variables)
+  testTwoVarScanStrippedColumns({}, {});            // zero columns
+  testTwoVarScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+  testTwoVarScanStrippedColumns({Var{"?y"}}, {});  // single column (not sorted)
+  testTwoVarScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                {0, 1});  // both columns
 
   // TODO<joka921/RobinTF:
-  // 2. Also test cases where the underlying scan has a different number of
-  // variables.
   // 3. Test the case of additional variables (in particular with GRAPHs).
   // 4. Verify that all possible members are tested in the infrastructure.
 }
