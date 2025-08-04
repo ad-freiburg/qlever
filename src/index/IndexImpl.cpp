@@ -113,9 +113,12 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                       ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-      1, std::move(outputTable),
+      1,
+      std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),
-      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP, resultCallback};
+      true,
+      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
+      resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
                                               rowAdder, projection, projection,
@@ -1254,8 +1257,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 
 // ___________________________________________________________________________
 void IndexImpl::readIndexBuilderSettingsFromFile() {
-  json j;  // if we have no settings, we still have to initialize some default
-           // values
+  nlohmann::json j;  // if we have no settings, we still have to initialize some
+                     // default values
   if (!settingsFileName_.empty()) {
     auto f = ad_utility::makeIfstream(settingsFileName_);
     f >> j;

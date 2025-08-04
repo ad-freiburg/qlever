@@ -6,7 +6,6 @@
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -36,8 +35,17 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-constexpr std::string_view litInvalid =
+constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidBrackets =
+    "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidNumCoords =
+    "\"POINT(1)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litCoordOutOfRange =
+    "\"LINESTRING(2 -500, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -98,7 +106,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
   checkGeoInfo(g7, exp7);
 
-  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
   checkGeoInfo(g8, std::nullopt);
 }
 
@@ -204,7 +212,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   BoundingBox bbExp1{{4, 3}, {4, 3}};
   checkBoundingBox(bb1, bbExp1);
 
-  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
+  auto bb1Wkt =
+      boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
@@ -216,19 +225,27 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  ASSERT_FALSE(GeometryInfo::fromWktLiteral(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getWktType(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getCentroid(litInvalid).has_value());
-  ASSERT_FALSE(GeometryInfo::getBoundingBox(litInvalid).has_value());
+  checkInvalidLiteral(litInvalidType);
+  checkInvalidLiteral(litInvalidBrackets, true);
+  checkInvalidLiteral(litInvalidNumCoords, true);
+}
 
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<GeometryInfo>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<GeometryType>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<Centroid>(litInvalid).has_value());
-  ASSERT_FALSE(
-      GeometryInfo::getRequestedInfo<BoundingBox>(litInvalid).has_value());
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
+  checkInvalidLiteral(litCoordOutOfRange, true);
+  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
+                    {2});
+  checkGeometryType(
+      GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, WebMercProjection) {
+  util::geo::DBox b1{{1, 2}, {3, 4}};
+  auto b1WebMerc = boxToWebMerc(b1);
+  auto result1 =
+      ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+  checkUtilBoundingBox(result1, b1);
 }
 
 }  // namespace

@@ -1,10 +1,9 @@
 
-// Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
+// Generated from SparqlAutomatic.g4 by ANTLR 4.13.2
 
 #include "SparqlAutomaticParser.h"
 
 #include "SparqlAutomaticListener.h"
-#include "SparqlAutomaticVisitor.h"
 
 using namespace antlrcpp;
 
@@ -40,10 +39,20 @@ struct SparqlAutomaticParserStaticData final {
 };
 
 ::antlr4::internal::OnceFlag sparqlautomaticParserOnceFlag;
-SparqlAutomaticParserStaticData* sparqlautomaticParserStaticData = nullptr;
+#if ANTLR4_USE_THREAD_LOCAL_CACHE
+static thread_local
+#endif
+    std::unique_ptr<SparqlAutomaticParserStaticData>
+        sparqlautomaticParserStaticData = nullptr;
 
 void sparqlautomaticParserInitialize() {
+#if ANTLR4_USE_THREAD_LOCAL_CACHE
+  if (sparqlautomaticParserStaticData != nullptr) {
+    return;
+  }
+#else
   assert(sparqlautomaticParserStaticData == nullptr);
+#endif
   auto staticData = std::make_unique<SparqlAutomaticParserStaticData>(
       std::vector<std::string>{
           "query",
@@ -1616,7 +1625,7 @@ void sparqlautomaticParserInitialize() {
     staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i),
                                            i);
   }
-  sparqlautomaticParserStaticData = staticData.release();
+  sparqlautomaticParserStaticData = std::move(staticData);
 }
 
 }  // namespace
@@ -1711,14 +1720,6 @@ void SparqlAutomaticParser::QueryContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitQuery(this);
-}
-
-std::any SparqlAutomaticParser::QueryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitQuery(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::QueryContext* SparqlAutomaticParser::query() {
@@ -1824,14 +1825,6 @@ void SparqlAutomaticParser::PrologueContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPrologue(this);
 }
 
-std::any SparqlAutomaticParser::PrologueContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPrologue(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PrologueContext* SparqlAutomaticParser::prologue() {
   PrologueContext* _localctx =
       _tracker.createInstance<PrologueContext>(_ctx, getState());
@@ -1917,14 +1910,6 @@ void SparqlAutomaticParser::BaseDeclContext::exitRule(
   if (parserListener != nullptr) parserListener->exitBaseDecl(this);
 }
 
-std::any SparqlAutomaticParser::BaseDeclContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBaseDecl(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::BaseDeclContext* SparqlAutomaticParser::baseDecl() {
   BaseDeclContext* _localctx =
       _tracker.createInstance<BaseDeclContext>(_ctx, getState());
@@ -1987,14 +1972,6 @@ void SparqlAutomaticParser::PrefixDeclContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPrefixDecl(this);
-}
-
-std::any SparqlAutomaticParser::PrefixDeclContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPrefixDecl(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PrefixDeclContext* SparqlAutomaticParser::prefixDecl() {
@@ -2073,14 +2050,6 @@ void SparqlAutomaticParser::SelectQueryContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitSelectQuery(this);
-}
-
-std::any SparqlAutomaticParser::SelectQueryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSelectQuery(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::SelectQueryContext*
@@ -2168,14 +2137,6 @@ void SparqlAutomaticParser::SubSelectContext::exitRule(
   if (parserListener != nullptr) parserListener->exitSubSelect(this);
 }
 
-std::any SparqlAutomaticParser::SubSelectContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSubSelect(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::SubSelectContext* SparqlAutomaticParser::subSelect() {
   SubSelectContext* _localctx =
       _tracker.createInstance<SubSelectContext>(_ctx, getState());
@@ -2251,14 +2212,6 @@ void SparqlAutomaticParser::SelectClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitSelectClause(this);
-}
-
-std::any SparqlAutomaticParser::SelectClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSelectClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::SelectClauseContext*
@@ -2372,14 +2325,6 @@ void SparqlAutomaticParser::VarOrAliasContext::exitRule(
   if (parserListener != nullptr) parserListener->exitVarOrAlias(this);
 }
 
-std::any SparqlAutomaticParser::VarOrAliasContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVarOrAlias(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::VarOrAliasContext* SparqlAutomaticParser::varOrAlias() {
   VarOrAliasContext* _localctx =
       _tracker.createInstance<VarOrAliasContext>(_ctx, getState());
@@ -2452,14 +2397,6 @@ void SparqlAutomaticParser::AliasContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAlias(this);
 }
 
-std::any SparqlAutomaticParser::AliasContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAlias(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
   AliasContext* _localctx =
       _tracker.createInstance<AliasContext>(_ctx, getState());
@@ -2527,14 +2464,6 @@ void SparqlAutomaticParser::AliasWithoutBracketsContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitAliasWithoutBrackets(this);
-}
-
-std::any SparqlAutomaticParser::AliasWithoutBracketsContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAliasWithoutBrackets(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::AliasWithoutBracketsContext*
@@ -2629,14 +2558,6 @@ void SparqlAutomaticParser::ConstructQueryContext::exitRule(
   if (parserListener != nullptr) parserListener->exitConstructQuery(this);
 }
 
-std::any SparqlAutomaticParser::ConstructQueryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConstructQuery(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ConstructQueryContext*
 SparqlAutomaticParser::constructQuery() {
   ConstructQueryContext* _localctx =
@@ -2698,9 +2619,9 @@ SparqlAutomaticParser::constructQuery() {
         _errHandler->sync(this);
 
         _la = _input->LA(1);
-        if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-            (((_la - 142) & ~0x3fULL) == 0) &&
-                ((1ULL << (_la - 142)) & 29228991) != 0) {
+        if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+            ((((_la - 142) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 142)) & 29228991) != 0)) {
           setState(394);
           triplesTemplate();
         }
@@ -2781,14 +2702,6 @@ void SparqlAutomaticParser::DescribeQueryContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDescribeQuery(this);
 }
 
-std::any SparqlAutomaticParser::DescribeQueryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDescribeQuery(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DescribeQueryContext*
 SparqlAutomaticParser::describeQuery() {
   DescribeQueryContext* _localctx =
@@ -2825,8 +2738,8 @@ SparqlAutomaticParser::describeQuery() {
           setState(405);
           _errHandler->sync(this);
           _la = _input->LA(1);
-        } while ((((_la - 142) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 142)) & 183) != 0);
+        } while (((((_la - 142) & ~0x3fULL) == 0) &&
+                  ((1ULL << (_la - 142)) & 183) != 0));
         break;
       }
 
@@ -2918,14 +2831,6 @@ void SparqlAutomaticParser::AskQueryContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAskQuery(this);
 }
 
-std::any SparqlAutomaticParser::AskQueryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAskQuery(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::AskQueryContext* SparqlAutomaticParser::askQuery() {
   AskQueryContext* _localctx =
       _tracker.createInstance<AskQueryContext>(_ctx, getState());
@@ -3004,14 +2909,6 @@ void SparqlAutomaticParser::DatasetClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDatasetClause(this);
 }
 
-std::any SparqlAutomaticParser::DatasetClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDatasetClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DatasetClauseContext*
 SparqlAutomaticParser::datasetClause() {
   DatasetClauseContext* _localctx =
@@ -3088,14 +2985,6 @@ void SparqlAutomaticParser::DefaultGraphClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDefaultGraphClause(this);
 }
 
-std::any SparqlAutomaticParser::DefaultGraphClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDefaultGraphClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DefaultGraphClauseContext*
 SparqlAutomaticParser::defaultGraphClause() {
   DefaultGraphClauseContext* _localctx =
@@ -3155,14 +3044,6 @@ void SparqlAutomaticParser::NamedGraphClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitNamedGraphClause(this);
 }
 
-std::any SparqlAutomaticParser::NamedGraphClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNamedGraphClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NamedGraphClauseContext*
 SparqlAutomaticParser::namedGraphClause() {
   NamedGraphClauseContext* _localctx =
@@ -3218,14 +3099,6 @@ void SparqlAutomaticParser::SourceSelectorContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitSourceSelector(this);
-}
-
-std::any SparqlAutomaticParser::SourceSelectorContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSourceSelector(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::SourceSelectorContext*
@@ -3285,14 +3158,6 @@ void SparqlAutomaticParser::WhereClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitWhereClause(this);
-}
-
-std::any SparqlAutomaticParser::WhereClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitWhereClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::WhereClauseContext*
@@ -3374,14 +3239,6 @@ void SparqlAutomaticParser::SolutionModifierContext::exitRule(
   if (parserListener != nullptr) parserListener->exitSolutionModifier(this);
 }
 
-std::any SparqlAutomaticParser::SolutionModifierContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSolutionModifier(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::SolutionModifierContext*
 SparqlAutomaticParser::solutionModifier() {
   SolutionModifierContext* _localctx =
@@ -3428,7 +3285,7 @@ SparqlAutomaticParser::solutionModifier() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 3940649673949184) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 3940649673949184) != 0)) {
       setState(457);
       limitOffsetClauses();
     }
@@ -3479,14 +3336,6 @@ void SparqlAutomaticParser::GroupClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitGroupClause(this);
 }
 
-std::any SparqlAutomaticParser::GroupClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGroupClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::GroupClauseContext*
 SparqlAutomaticParser::groupClause() {
   GroupClauseContext* _localctx =
@@ -3517,10 +3366,10 @@ SparqlAutomaticParser::groupClause() {
     } while (_la == SparqlAutomaticParser::T__1
 
              || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             (((_la - 78) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 78)) & 9223372036853727229) != 0 ||
-             (((_la - 142) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 142)) & 183) != 0);
+             ((((_la - 78) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
+             ((((_la - 142) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 142)) & 183) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -3576,14 +3425,6 @@ void SparqlAutomaticParser::GroupConditionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGroupCondition(this);
-}
-
-std::any SparqlAutomaticParser::GroupConditionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGroupCondition(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GroupConditionContext*
@@ -3761,14 +3602,6 @@ void SparqlAutomaticParser::HavingClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitHavingClause(this);
 }
 
-std::any SparqlAutomaticParser::HavingClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitHavingClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::HavingClauseContext*
 SparqlAutomaticParser::havingClause() {
   HavingClauseContext* _localctx =
@@ -3799,10 +3632,10 @@ SparqlAutomaticParser::havingClause() {
     } while (_la == SparqlAutomaticParser::T__1
 
              || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             (((_la - 78) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 78)) & 9223372036853727229) != 0 ||
-             (((_la - 142) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 142)) & 135) != 0);
+             ((((_la - 78) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
+             ((((_la - 142) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 142)) & 135) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -3839,14 +3672,6 @@ void SparqlAutomaticParser::HavingConditionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitHavingCondition(this);
-}
-
-std::any SparqlAutomaticParser::HavingConditionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitHavingCondition(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::HavingConditionContext*
@@ -3918,14 +3743,6 @@ void SparqlAutomaticParser::OrderClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitOrderClause(this);
 }
 
-std::any SparqlAutomaticParser::OrderClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitOrderClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::OrderClauseContext*
 SparqlAutomaticParser::orderClause() {
   OrderClauseContext* _localctx =
@@ -3972,10 +3789,11 @@ SparqlAutomaticParser::orderClause() {
       _errHandler->sync(this);
       _la = _input->LA(1);
     } while (
-        ((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 431008558088196) != 0 ||
-        (((_la - 78) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 78)) & 9223372036853727229) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) && ((1ULL << (_la - 142)) & 183) != 0);
+        (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 431008558088196) != 0) ||
+        ((((_la - 78) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 78)) & 9223372036853727229) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 183) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -4030,14 +3848,6 @@ void SparqlAutomaticParser::OrderConditionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitOrderCondition(this);
-}
-
-std::any SparqlAutomaticParser::OrderConditionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitOrderCondition(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::OrderConditionContext*
@@ -4285,14 +4095,6 @@ void SparqlAutomaticParser::LimitOffsetClausesContext::exitRule(
   if (parserListener != nullptr) parserListener->exitLimitOffsetClauses(this);
 }
 
-std::any SparqlAutomaticParser::LimitOffsetClausesContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitLimitOffsetClauses(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::LimitOffsetClausesContext*
 SparqlAutomaticParser::limitOffsetClauses() {
   LimitOffsetClausesContext* _localctx =
@@ -4495,14 +4297,6 @@ void SparqlAutomaticParser::LimitClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitLimitClause(this);
 }
 
-std::any SparqlAutomaticParser::LimitClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitLimitClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::LimitClauseContext*
 SparqlAutomaticParser::limitClause() {
   LimitClauseContext* _localctx =
@@ -4562,14 +4356,6 @@ void SparqlAutomaticParser::OffsetClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitOffsetClause(this);
-}
-
-std::any SparqlAutomaticParser::OffsetClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitOffsetClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::OffsetClauseContext*
@@ -4633,14 +4419,6 @@ void SparqlAutomaticParser::TextLimitClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitTextLimitClause(this);
 }
 
-std::any SparqlAutomaticParser::TextLimitClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTextLimitClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::TextLimitClauseContext*
 SparqlAutomaticParser::textLimitClause() {
   TextLimitClauseContext* _localctx =
@@ -4700,14 +4478,6 @@ void SparqlAutomaticParser::ValuesClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitValuesClause(this);
-}
-
-std::any SparqlAutomaticParser::ValuesClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitValuesClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ValuesClauseContext*
@@ -4793,14 +4563,6 @@ void SparqlAutomaticParser::UpdateContext::exitRule(
   if (parserListener != nullptr) parserListener->exitUpdate(this);
 }
 
-std::any SparqlAutomaticParser::UpdateContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitUpdate(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::UpdateContext* SparqlAutomaticParser::update() {
   UpdateContext* _localctx =
       _tracker.createInstance<UpdateContext>(_ctx, getState());
@@ -4823,7 +4585,8 @@ SparqlAutomaticParser::UpdateContext* SparqlAutomaticParser::update() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if ((((_la - 53) & ~0x3fULL) == 0) && ((1ULL << (_la - 53)) & 15993) != 0) {
+    if (((((_la - 53) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 53)) & 15993) != 0)) {
       setState(562);
       update1();
       setState(569);
@@ -4943,14 +4706,6 @@ void SparqlAutomaticParser::Update1Context::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitUpdate1(this);
-}
-
-std::any SparqlAutomaticParser::Update1Context::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitUpdate1(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::Update1Context* SparqlAutomaticParser::update1() {
@@ -5104,14 +4859,6 @@ void SparqlAutomaticParser::LoadContext::exitRule(
   if (parserListener != nullptr) parserListener->exitLoad(this);
 }
 
-std::any SparqlAutomaticParser::LoadContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitLoad(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::LoadContext* SparqlAutomaticParser::load() {
   LoadContext* _localctx =
       _tracker.createInstance<LoadContext>(_ctx, getState());
@@ -5195,14 +4942,6 @@ void SparqlAutomaticParser::ClearContext::exitRule(
   if (parserListener != nullptr) parserListener->exitClear(this);
 }
 
-std::any SparqlAutomaticParser::ClearContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitClear(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ClearContext* SparqlAutomaticParser::clear() {
   ClearContext* _localctx =
       _tracker.createInstance<ClearContext>(_ctx, getState());
@@ -5276,14 +5015,6 @@ void SparqlAutomaticParser::DropContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDrop(this);
 }
 
-std::any SparqlAutomaticParser::DropContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDrop(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DropContext* SparqlAutomaticParser::drop() {
   DropContext* _localctx =
       _tracker.createInstance<DropContext>(_ctx, getState());
@@ -5355,14 +5086,6 @@ void SparqlAutomaticParser::CreateContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitCreate(this);
-}
-
-std::any SparqlAutomaticParser::CreateContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitCreate(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::CreateContext* SparqlAutomaticParser::create() {
@@ -5445,14 +5168,6 @@ void SparqlAutomaticParser::AddContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitAdd(this);
-}
-
-std::any SparqlAutomaticParser::AddContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAdd(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::AddContext* SparqlAutomaticParser::add() {
@@ -5538,14 +5253,6 @@ void SparqlAutomaticParser::MoveContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitMove(this);
-}
-
-std::any SparqlAutomaticParser::MoveContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMove(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::MoveContext* SparqlAutomaticParser::move() {
@@ -5634,14 +5341,6 @@ void SparqlAutomaticParser::CopyContext::exitRule(
   if (parserListener != nullptr) parserListener->exitCopy(this);
 }
 
-std::any SparqlAutomaticParser::CopyContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitCopy(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::CopyContext* SparqlAutomaticParser::copy() {
   CopyContext* _localctx =
       _tracker.createInstance<CopyContext>(_ctx, getState());
@@ -5719,14 +5418,6 @@ void SparqlAutomaticParser::InsertDataContext::exitRule(
   if (parserListener != nullptr) parserListener->exitInsertData(this);
 }
 
-std::any SparqlAutomaticParser::InsertDataContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInsertData(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::InsertDataContext* SparqlAutomaticParser::insertData() {
   InsertDataContext* _localctx =
       _tracker.createInstance<InsertDataContext>(_ctx, getState());
@@ -5793,14 +5484,6 @@ void SparqlAutomaticParser::DeleteDataContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDeleteData(this);
 }
 
-std::any SparqlAutomaticParser::DeleteDataContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDeleteData(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DeleteDataContext* SparqlAutomaticParser::deleteData() {
   DeleteDataContext* _localctx =
       _tracker.createInstance<DeleteDataContext>(_ctx, getState());
@@ -5865,14 +5548,6 @@ void SparqlAutomaticParser::DeleteWhereContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitDeleteWhere(this);
-}
-
-std::any SparqlAutomaticParser::DeleteWhereContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDeleteWhere(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::DeleteWhereContext*
@@ -5964,14 +5639,6 @@ void SparqlAutomaticParser::ModifyContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitModify(this);
-}
-
-std::any SparqlAutomaticParser::ModifyContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitModify(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ModifyContext* SparqlAutomaticParser::modify() {
@@ -6081,14 +5748,6 @@ void SparqlAutomaticParser::DeleteClauseContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDeleteClause(this);
 }
 
-std::any SparqlAutomaticParser::DeleteClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDeleteClause(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DeleteClauseContext*
 SparqlAutomaticParser::deleteClause() {
   DeleteClauseContext* _localctx =
@@ -6148,14 +5807,6 @@ void SparqlAutomaticParser::InsertClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitInsertClause(this);
-}
-
-std::any SparqlAutomaticParser::InsertClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInsertClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::InsertClauseContext*
@@ -6221,14 +5872,6 @@ void SparqlAutomaticParser::UsingClauseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitUsingClause(this);
-}
-
-std::any SparqlAutomaticParser::UsingClauseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitUsingClause(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::UsingClauseContext*
@@ -6315,14 +5958,6 @@ void SparqlAutomaticParser::GraphOrDefaultContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphOrDefault(this);
-}
-
-std::any SparqlAutomaticParser::GraphOrDefaultContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphOrDefault(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphOrDefaultContext*
@@ -6414,14 +6049,6 @@ void SparqlAutomaticParser::GraphRefContext::exitRule(
   if (parserListener != nullptr) parserListener->exitGraphRef(this);
 }
 
-std::any SparqlAutomaticParser::GraphRefContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphRef(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::GraphRefContext* SparqlAutomaticParser::graphRef() {
   GraphRefContext* _localctx =
       _tracker.createInstance<GraphRefContext>(_ctx, getState());
@@ -6488,14 +6115,6 @@ void SparqlAutomaticParser::GraphRefAllContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphRefAll(this);
-}
-
-std::any SparqlAutomaticParser::GraphRefAllContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphRefAll(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphRefAllContext*
@@ -6584,14 +6203,6 @@ void SparqlAutomaticParser::QuadPatternContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQuadPattern(this);
 }
 
-std::any SparqlAutomaticParser::QuadPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitQuadPattern(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::QuadPatternContext*
 SparqlAutomaticParser::quadPattern() {
   QuadPatternContext* _localctx =
@@ -6649,14 +6260,6 @@ void SparqlAutomaticParser::QuadDataContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitQuadData(this);
-}
-
-std::any SparqlAutomaticParser::QuadDataContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitQuadData(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::QuadDataContext* SparqlAutomaticParser::quadData() {
@@ -6732,14 +6335,6 @@ void SparqlAutomaticParser::QuadsContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQuads(this);
 }
 
-std::any SparqlAutomaticParser::QuadsContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitQuads(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
   QuadsContext* _localctx =
       _tracker.createInstance<QuadsContext>(_ctx, getState());
@@ -6759,9 +6354,9 @@ SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 29228991) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 29228991) != 0)) {
       setState(712);
       triplesTemplate();
     }
@@ -6783,9 +6378,9 @@ SparqlAutomaticParser::QuadsContext* SparqlAutomaticParser::quads() {
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-          (((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 29228991) != 0) {
+      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+          ((((_la - 142) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 142)) & 29228991) != 0)) {
         setState(719);
         triplesTemplate();
       }
@@ -6840,14 +6435,6 @@ void SparqlAutomaticParser::QuadsNotTriplesContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQuadsNotTriples(this);
 }
 
-std::any SparqlAutomaticParser::QuadsNotTriplesContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitQuadsNotTriples(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::QuadsNotTriplesContext*
 SparqlAutomaticParser::quadsNotTriples() {
   QuadsNotTriplesContext* _localctx =
@@ -6874,9 +6461,9 @@ SparqlAutomaticParser::quadsNotTriples() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 29228991) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 29228991) != 0)) {
       setState(730);
       triplesTemplate();
     }
@@ -6923,14 +6510,6 @@ void SparqlAutomaticParser::TriplesTemplateContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitTriplesTemplate(this);
-}
-
-std::any SparqlAutomaticParser::TriplesTemplateContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesTemplate(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TriplesTemplateContext*
@@ -7017,14 +6596,6 @@ void SparqlAutomaticParser::GroupGraphPatternContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGroupGraphPattern(this);
-}
-
-std::any SparqlAutomaticParser::GroupGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGroupGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GroupGraphPatternContext*
@@ -7153,14 +6724,6 @@ void SparqlAutomaticParser::GroupGraphPatternSubContext::exitRule(
   if (parserListener != nullptr) parserListener->exitGroupGraphPatternSub(this);
 }
 
-std::any SparqlAutomaticParser::GroupGraphPatternSubContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGroupGraphPatternSub(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::GroupGraphPatternSubContext*
 SparqlAutomaticParser::groupGraphPatternSub() {
   GroupGraphPatternSubContext* _localctx =
@@ -7181,20 +6744,20 @@ SparqlAutomaticParser::groupGraphPatternSub() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 29228991) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 29228991) != 0)) {
       setState(753);
       triplesBlock();
     }
     setState(759);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__3
+    while (
+        _la == SparqlAutomaticParser::T__3
 
-           || _la == SparqlAutomaticParser::VALUES ||
-           (((_la - 69) & ~0x3fULL) == 0) &&
-               ((1ULL << (_la - 69)) & 349) != 0) {
+        || _la == SparqlAutomaticParser::VALUES ||
+        ((((_la - 69) & ~0x3fULL) == 0) && ((1ULL << (_la - 69)) & 349) != 0)) {
       setState(756);
       graphPatternNotTriplesAndMaybeTriples();
       setState(761);
@@ -7249,15 +6812,6 @@ void SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::
     parserListener->exitGraphPatternNotTriplesAndMaybeTriples(this);
 }
 
-std::any
-SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphPatternNotTriplesAndMaybeTriples(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
 SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
   GraphPatternNotTriplesAndMaybeTriplesContext* _localctx =
@@ -7290,9 +6844,9 @@ SparqlAutomaticParser::graphPatternNotTriplesAndMaybeTriples() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 29228991) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 29228991) != 0)) {
       setState(766);
       triplesBlock();
     }
@@ -7340,14 +6894,6 @@ void SparqlAutomaticParser::TriplesBlockContext::exitRule(
   if (parserListener != nullptr) parserListener->exitTriplesBlock(this);
 }
 
-std::any SparqlAutomaticParser::TriplesBlockContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesBlock(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::TriplesBlockContext*
 SparqlAutomaticParser::triplesBlock() {
   TriplesBlockContext* _localctx =
@@ -7377,9 +6923,9 @@ SparqlAutomaticParser::triplesBlock() {
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-          (((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 29228991) != 0) {
+      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+          ((((_la - 142) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 142)) & 29228991) != 0)) {
         setState(771);
         triplesBlock();
       }
@@ -7460,14 +7006,6 @@ void SparqlAutomaticParser::GraphPatternNotTriplesContext::exitRule(
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr)
     parserListener->exitGraphPatternNotTriples(this);
-}
-
-std::any SparqlAutomaticParser::GraphPatternNotTriplesContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphPatternNotTriples(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphPatternNotTriplesContext*
@@ -7591,14 +7129,6 @@ void SparqlAutomaticParser::OptionalGraphPatternContext::exitRule(
   if (parserListener != nullptr) parserListener->exitOptionalGraphPattern(this);
 }
 
-std::any SparqlAutomaticParser::OptionalGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitOptionalGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::OptionalGraphPatternContext*
 SparqlAutomaticParser::optionalGraphPattern() {
   OptionalGraphPatternContext* _localctx =
@@ -7663,14 +7193,6 @@ void SparqlAutomaticParser::GraphGraphPatternContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphGraphPattern(this);
-}
-
-std::any SparqlAutomaticParser::GraphGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphGraphPatternContext*
@@ -7745,14 +7267,6 @@ void SparqlAutomaticParser::ServiceGraphPatternContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitServiceGraphPattern(this);
-}
-
-std::any SparqlAutomaticParser::ServiceGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitServiceGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ServiceGraphPatternContext*
@@ -7835,14 +7349,6 @@ void SparqlAutomaticParser::BindContext::exitRule(
   if (parserListener != nullptr) parserListener->exitBind(this);
 }
 
-std::any SparqlAutomaticParser::BindContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBind(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::BindContext* SparqlAutomaticParser::bind() {
   BindContext* _localctx =
       _tracker.createInstance<BindContext>(_ctx, getState());
@@ -7911,14 +7417,6 @@ void SparqlAutomaticParser::InlineDataContext::exitRule(
   if (parserListener != nullptr) parserListener->exitInlineData(this);
 }
 
-std::any SparqlAutomaticParser::InlineDataContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInlineData(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::InlineDataContext* SparqlAutomaticParser::inlineData() {
   InlineDataContext* _localctx =
       _tracker.createInstance<InlineDataContext>(_ctx, getState());
@@ -7978,14 +7476,6 @@ void SparqlAutomaticParser::DataBlockContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitDataBlock(this);
-}
-
-std::any SparqlAutomaticParser::DataBlockContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDataBlock(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::DataBlockContext* SparqlAutomaticParser::dataBlock() {
@@ -8071,14 +7561,6 @@ void SparqlAutomaticParser::InlineDataOneVarContext::exitRule(
   if (parserListener != nullptr) parserListener->exitInlineDataOneVar(this);
 }
 
-std::any SparqlAutomaticParser::InlineDataOneVarContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInlineDataOneVar(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::InlineDataOneVarContext*
 SparqlAutomaticParser::inlineDataOneVar() {
   InlineDataOneVarContext* _localctx =
@@ -8102,10 +7584,10 @@ SparqlAutomaticParser::inlineDataOneVar() {
     setState(819);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while ((((_la - 28) & ~0x3fULL) == 0) &&
-               ((1ULL << (_la - 28)) & 70368744177667) != 0 ||
-           (((_la - 142) & ~0x3fULL) == 0) &&
-               ((1ULL << (_la - 142)) & 4063111) != 0) {
+    while (((((_la - 28) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 28)) & 70368744177667) != 0) ||
+           ((((_la - 142) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 142)) & 4063111) != 0)) {
       setState(816);
       dataBlockValue();
       setState(821);
@@ -8169,14 +7651,6 @@ void SparqlAutomaticParser::InlineDataFullContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitInlineDataFull(this);
-}
-
-std::any SparqlAutomaticParser::InlineDataFullContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInlineDataFull(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::InlineDataFullContext*
@@ -8289,14 +7763,6 @@ void SparqlAutomaticParser::DataBlockSingleContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDataBlockSingle(this);
 }
 
-std::any SparqlAutomaticParser::DataBlockSingleContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDataBlockSingle(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DataBlockSingleContext*
 SparqlAutomaticParser::dataBlockSingle() {
   DataBlockSingleContext* _localctx =
@@ -8322,10 +7788,10 @@ SparqlAutomaticParser::dataBlockSingle() {
         setState(848);
         _errHandler->sync(this);
         _la = _input->LA(1);
-        while ((((_la - 28) & ~0x3fULL) == 0) &&
-                   ((1ULL << (_la - 28)) & 70368744177667) != 0 ||
-               (((_la - 142) & ~0x3fULL) == 0) &&
-                   ((1ULL << (_la - 142)) & 4063111) != 0) {
+        while (((((_la - 28) & ~0x3fULL) == 0) &&
+                ((1ULL << (_la - 28)) & 70368744177667) != 0) ||
+               ((((_la - 142) & ~0x3fULL) == 0) &&
+                ((1ULL << (_la - 142)) & 4063111) != 0)) {
           setState(845);
           dataBlockValue();
           setState(850);
@@ -8401,14 +7867,6 @@ void SparqlAutomaticParser::DataBlockValueContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitDataBlockValue(this);
-}
-
-std::any SparqlAutomaticParser::DataBlockValueContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDataBlockValue(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::DataBlockValueContext*
@@ -8523,14 +7981,6 @@ void SparqlAutomaticParser::MinusGraphPatternContext::exitRule(
   if (parserListener != nullptr) parserListener->exitMinusGraphPattern(this);
 }
 
-std::any SparqlAutomaticParser::MinusGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMinusGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::MinusGraphPatternContext*
 SparqlAutomaticParser::minusGraphPattern() {
   MinusGraphPatternContext* _localctx =
@@ -8608,14 +8058,6 @@ void SparqlAutomaticParser::GroupOrUnionGraphPatternContext::exitRule(
     parserListener->exitGroupOrUnionGraphPattern(this);
 }
 
-std::any SparqlAutomaticParser::GroupOrUnionGraphPatternContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGroupOrUnionGraphPattern(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::GroupOrUnionGraphPatternContext*
 SparqlAutomaticParser::groupOrUnionGraphPattern() {
   GroupOrUnionGraphPatternContext* _localctx =
@@ -8690,14 +8132,6 @@ void SparqlAutomaticParser::FilterRContext::exitRule(
   if (parserListener != nullptr) parserListener->exitFilterR(this);
 }
 
-std::any SparqlAutomaticParser::FilterRContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitFilterR(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::FilterRContext* SparqlAutomaticParser::filterR() {
   FilterRContext* _localctx =
       _tracker.createInstance<FilterRContext>(_ctx, getState());
@@ -8762,14 +8196,6 @@ void SparqlAutomaticParser::ConstraintContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitConstraint(this);
-}
-
-std::any SparqlAutomaticParser::ConstraintContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConstraint(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ConstraintContext* SparqlAutomaticParser::constraint() {
@@ -8919,14 +8345,6 @@ void SparqlAutomaticParser::FunctionCallContext::exitRule(
   if (parserListener != nullptr) parserListener->exitFunctionCall(this);
 }
 
-std::any SparqlAutomaticParser::FunctionCallContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitFunctionCall(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::FunctionCallContext*
 SparqlAutomaticParser::functionCall() {
   FunctionCallContext* _localctx =
@@ -8995,14 +8413,6 @@ void SparqlAutomaticParser::ArgListContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitArgList(this);
-}
-
-std::any SparqlAutomaticParser::ArgListContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitArgList(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ArgListContext* SparqlAutomaticParser::argList() {
@@ -9110,14 +8520,6 @@ void SparqlAutomaticParser::ExpressionListContext::exitRule(
   if (parserListener != nullptr) parserListener->exitExpressionList(this);
 }
 
-std::any SparqlAutomaticParser::ExpressionListContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitExpressionList(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ExpressionListContext*
 SparqlAutomaticParser::expressionList() {
   ExpressionListContext* _localctx =
@@ -9207,14 +8609,6 @@ void SparqlAutomaticParser::ConstructTemplateContext::exitRule(
   if (parserListener != nullptr) parserListener->exitConstructTemplate(this);
 }
 
-std::any SparqlAutomaticParser::ConstructTemplateContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConstructTemplate(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ConstructTemplateContext*
 SparqlAutomaticParser::constructTemplate() {
   ConstructTemplateContext* _localctx =
@@ -9237,9 +8631,9 @@ SparqlAutomaticParser::constructTemplate() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 142)) & 29228991) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 29228991) != 0)) {
       setState(916);
       constructTriples();
     }
@@ -9288,14 +8682,6 @@ void SparqlAutomaticParser::ConstructTriplesContext::exitRule(
   if (parserListener != nullptr) parserListener->exitConstructTriples(this);
 }
 
-std::any SparqlAutomaticParser::ConstructTriplesContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConstructTriples(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ConstructTriplesContext*
 SparqlAutomaticParser::constructTriples() {
   ConstructTriplesContext* _localctx =
@@ -9325,9 +8711,9 @@ SparqlAutomaticParser::constructTriples() {
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-          (((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 29228991) != 0) {
+      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+          ((((_la - 142) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 142)) & 29228991) != 0)) {
         setState(923);
         constructTriples();
       }
@@ -9383,14 +8769,6 @@ void SparqlAutomaticParser::TriplesSameSubjectContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitTriplesSameSubject(this);
-}
-
-std::any SparqlAutomaticParser::TriplesSameSubjectContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesSameSubject(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TriplesSameSubjectContext*
@@ -9493,14 +8871,6 @@ void SparqlAutomaticParser::PropertyListContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPropertyList(this);
 }
 
-std::any SparqlAutomaticParser::PropertyListContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPropertyList(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PropertyListContext*
 SparqlAutomaticParser::propertyList() {
   PropertyListContext* _localctx =
@@ -9522,7 +8892,8 @@ SparqlAutomaticParser::propertyList() {
 
     _la = _input->LA(1);
     if (_la == SparqlAutomaticParser::T__8 ||
-        (((_la - 142) & ~0x3fULL) == 0) && ((1ULL << (_la - 142)) & 183) != 0) {
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 183) != 0)) {
       setState(936);
       propertyListNotEmpty();
     }
@@ -9581,14 +8952,6 @@ void SparqlAutomaticParser::PropertyListNotEmptyContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPropertyListNotEmpty(this);
 }
 
-std::any SparqlAutomaticParser::PropertyListNotEmptyContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPropertyListNotEmpty(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PropertyListNotEmptyContext*
 SparqlAutomaticParser::propertyListNotEmpty() {
   PropertyListNotEmptyContext* _localctx =
@@ -9620,8 +8983,8 @@ SparqlAutomaticParser::propertyListNotEmpty() {
 
       _la = _input->LA(1);
       if (_la == SparqlAutomaticParser::T__8 ||
-          (((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 183) != 0) {
+          ((((_la - 142) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 142)) & 183) != 0)) {
         setState(942);
         verb();
         setState(943);
@@ -9667,14 +9030,6 @@ void SparqlAutomaticParser::VerbContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitVerb(this);
-}
-
-std::any SparqlAutomaticParser::VerbContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVerb(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
@@ -9758,14 +9113,6 @@ void SparqlAutomaticParser::ObjectListContext::exitRule(
   if (parserListener != nullptr) parserListener->exitObjectList(this);
 }
 
-std::any SparqlAutomaticParser::ObjectListContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitObjectList(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::objectList() {
   ObjectListContext* _localctx =
       _tracker.createInstance<ObjectListContext>(_ctx, getState());
@@ -9831,14 +9178,6 @@ void SparqlAutomaticParser::ObjectRContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitObjectR(this);
-}
-
-std::any SparqlAutomaticParser::ObjectRContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitObjectR(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ObjectRContext* SparqlAutomaticParser::objectR() {
@@ -9913,14 +9252,6 @@ void SparqlAutomaticParser::TriplesSameSubjectPathContext::exitRule(
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr)
     parserListener->exitTriplesSameSubjectPath(this);
-}
-
-std::any SparqlAutomaticParser::TriplesSameSubjectPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesSameSubjectPath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TriplesSameSubjectPathContext*
@@ -10024,14 +9355,6 @@ void SparqlAutomaticParser::PropertyListPathContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPropertyListPath(this);
 }
 
-std::any SparqlAutomaticParser::PropertyListPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPropertyListPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PropertyListPathContext*
 SparqlAutomaticParser::propertyListPath() {
   PropertyListPathContext* _localctx =
@@ -10052,8 +9375,9 @@ SparqlAutomaticParser::propertyListPath() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0 ||
-        (((_la - 142) & ~0x3fULL) == 0) && ((1ULL << (_la - 142)) & 183) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0) ||
+        ((((_la - 142) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 142)) & 183) != 0)) {
       setState(974);
       propertyListPathNotEmpty();
     }
@@ -10110,14 +9434,6 @@ void SparqlAutomaticParser::PropertyListPathNotEmptyContext::exitRule(
     parserListener->exitPropertyListPathNotEmpty(this);
 }
 
-std::any SparqlAutomaticParser::PropertyListPathNotEmptyContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPropertyListPathNotEmpty(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PropertyListPathNotEmptyContext*
 SparqlAutomaticParser::propertyListPathNotEmpty() {
   PropertyListPathNotEmptyContext* _localctx =
@@ -10148,9 +9464,9 @@ SparqlAutomaticParser::propertyListPathNotEmpty() {
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0 ||
-          (((_la - 142) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 142)) & 183) != 0) {
+      if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 37380) != 0) ||
+          ((((_la - 142) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 142)) & 183) != 0)) {
         setState(979);
         tupleWithoutPath();
       }
@@ -10194,14 +9510,6 @@ void SparqlAutomaticParser::VerbPathContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitVerbPath(this);
-}
-
-std::any SparqlAutomaticParser::VerbPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVerbPath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::VerbPathContext* SparqlAutomaticParser::verbPath() {
@@ -10256,14 +9564,6 @@ void SparqlAutomaticParser::VerbSimpleContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitVerbSimple(this);
-}
-
-std::any SparqlAutomaticParser::VerbSimpleContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVerbSimple(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::VerbSimpleContext* SparqlAutomaticParser::verbSimple() {
@@ -10323,14 +9623,6 @@ void SparqlAutomaticParser::TupleWithoutPathContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitTupleWithoutPath(this);
-}
-
-std::any SparqlAutomaticParser::TupleWithoutPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTupleWithoutPath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TupleWithoutPathContext*
@@ -10395,14 +9687,6 @@ void SparqlAutomaticParser::TupleWithPathContext::exitRule(
   if (parserListener != nullptr) parserListener->exitTupleWithPath(this);
 }
 
-std::any SparqlAutomaticParser::TupleWithPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTupleWithPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::TupleWithPathContext*
 SparqlAutomaticParser::tupleWithPath() {
   TupleWithPathContext* _localctx =
@@ -10463,14 +9747,6 @@ void SparqlAutomaticParser::VerbPathOrSimpleContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitVerbPathOrSimple(this);
-}
-
-std::any SparqlAutomaticParser::VerbPathOrSimpleContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVerbPathOrSimple(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::VerbPathOrSimpleContext*
@@ -10557,14 +9833,6 @@ void SparqlAutomaticParser::ObjectListPathContext::exitRule(
   if (parserListener != nullptr) parserListener->exitObjectListPath(this);
 }
 
-std::any SparqlAutomaticParser::ObjectListPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitObjectListPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ObjectListPathContext*
 SparqlAutomaticParser::objectListPath() {
   ObjectListPathContext* _localctx =
@@ -10633,14 +9901,6 @@ void SparqlAutomaticParser::ObjectPathContext::exitRule(
   if (parserListener != nullptr) parserListener->exitObjectPath(this);
 }
 
-std::any SparqlAutomaticParser::ObjectPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitObjectPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ObjectPathContext* SparqlAutomaticParser::objectPath() {
   ObjectPathContext* _localctx =
       _tracker.createInstance<ObjectPathContext>(_ctx, getState());
@@ -10693,14 +9953,6 @@ void SparqlAutomaticParser::PathContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPath(this);
-}
-
-std::any SparqlAutomaticParser::PathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PathContext* SparqlAutomaticParser::path() {
@@ -10760,14 +10012,6 @@ void SparqlAutomaticParser::PathAlternativeContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPathAlternative(this);
-}
-
-std::any SparqlAutomaticParser::PathAlternativeContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathAlternative(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PathAlternativeContext*
@@ -10843,14 +10087,6 @@ void SparqlAutomaticParser::PathSequenceContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPathSequence(this);
 }
 
-std::any SparqlAutomaticParser::PathSequenceContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathSequence(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PathSequenceContext*
 SparqlAutomaticParser::pathSequence() {
   PathSequenceContext* _localctx =
@@ -10924,14 +10160,6 @@ void SparqlAutomaticParser::PathEltContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPathElt(this);
 }
 
-std::any SparqlAutomaticParser::PathEltContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathElt(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
   PathEltContext* _localctx =
       _tracker.createInstance<PathEltContext>(_ctx, getState());
@@ -10953,7 +10181,7 @@ SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0) {
+    if ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0)) {
       setState(1030);
       pathMod();
     }
@@ -10993,14 +10221,6 @@ void SparqlAutomaticParser::PathEltOrInverseContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPathEltOrInverse(this);
-}
-
-std::any SparqlAutomaticParser::PathEltOrInverseContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathEltOrInverse(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PathEltOrInverseContext*
@@ -11079,14 +10299,6 @@ void SparqlAutomaticParser::PathModContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPathMod(this);
 }
 
-std::any SparqlAutomaticParser::PathModContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathMod(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::pathMod() {
   PathModContext* _localctx =
       _tracker.createInstance<PathModContext>(_ctx, getState());
@@ -11104,7 +10316,7 @@ SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::pathMod() {
     enterOuterAlt(_localctx, 1);
     setState(1038);
     _la = _input->LA(1);
-    if (!(((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0)) {
+    if (!((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 24578) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -11157,14 +10369,6 @@ void SparqlAutomaticParser::PathPrimaryContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPathPrimary(this);
-}
-
-std::any SparqlAutomaticParser::PathPrimaryContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathPrimary(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PathPrimaryContext*
@@ -11272,14 +10476,6 @@ void SparqlAutomaticParser::PathNegatedPropertySetContext::exitRule(
     parserListener->exitPathNegatedPropertySet(this);
 }
 
-std::any SparqlAutomaticParser::PathNegatedPropertySetContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathNegatedPropertySet(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PathNegatedPropertySetContext*
 SparqlAutomaticParser::pathNegatedPropertySet() {
   PathNegatedPropertySetContext* _localctx =
@@ -11321,8 +10517,8 @@ SparqlAutomaticParser::pathNegatedPropertySet() {
         if (_la == SparqlAutomaticParser::T__8
 
             || _la == SparqlAutomaticParser::T__11 ||
-            (((_la - 142) & ~0x3fULL) == 0) &&
-                ((1ULL << (_la - 142)) & 135) != 0) {
+            ((((_la - 142) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 142)) & 135) != 0)) {
           setState(1052);
           pathOneInPropertySet();
           setState(1057);
@@ -11384,14 +10580,6 @@ void SparqlAutomaticParser::PathOneInPropertySetContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPathOneInPropertySet(this);
-}
-
-std::any SparqlAutomaticParser::PathOneInPropertySetContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPathOneInPropertySet(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PathOneInPropertySetContext*
@@ -11496,14 +10684,6 @@ void SparqlAutomaticParser::IntegerContext::exitRule(
   if (parserListener != nullptr) parserListener->exitInteger(this);
 }
 
-std::any SparqlAutomaticParser::IntegerContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitInteger(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::IntegerContext* SparqlAutomaticParser::integer() {
   IntegerContext* _localctx =
       _tracker.createInstance<IntegerContext>(_ctx, getState());
@@ -11561,14 +10741,6 @@ void SparqlAutomaticParser::TriplesNodeContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitTriplesNode(this);
-}
-
-std::any SparqlAutomaticParser::TriplesNodeContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesNode(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TriplesNodeContext*
@@ -11647,14 +10819,6 @@ void SparqlAutomaticParser::BlankNodePropertyListContext::exitRule(
     parserListener->exitBlankNodePropertyList(this);
 }
 
-std::any SparqlAutomaticParser::BlankNodePropertyListContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBlankNodePropertyList(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::BlankNodePropertyListContext*
 SparqlAutomaticParser::blankNodePropertyList() {
   BlankNodePropertyListContext* _localctx =
@@ -11718,14 +10882,6 @@ void SparqlAutomaticParser::TriplesNodePathContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitTriplesNodePath(this);
-}
-
-std::any SparqlAutomaticParser::TriplesNodePathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitTriplesNodePath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::TriplesNodePathContext*
@@ -11805,14 +10961,6 @@ void SparqlAutomaticParser::BlankNodePropertyListPathContext::exitRule(
     parserListener->exitBlankNodePropertyListPath(this);
 }
 
-std::any SparqlAutomaticParser::BlankNodePropertyListPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBlankNodePropertyListPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::BlankNodePropertyListPathContext*
 SparqlAutomaticParser::blankNodePropertyListPath() {
   BlankNodePropertyListPathContext* _localctx =
@@ -11879,14 +11027,6 @@ void SparqlAutomaticParser::CollectionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitCollection(this);
 }
 
-std::any SparqlAutomaticParser::CollectionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitCollection(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::collection() {
   CollectionContext* _localctx =
       _tracker.createInstance<CollectionContext>(_ctx, getState());
@@ -11913,9 +11053,9 @@ SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::collection() {
       setState(1096);
       _errHandler->sync(this);
       _la = _input->LA(1);
-    } while (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-             (((_la - 142) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 142)) & 29228991) != 0);
+    } while ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+             ((((_la - 142) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 142)) & 29228991) != 0));
     setState(1098);
     match(SparqlAutomaticParser::T__2);
 
@@ -11961,14 +11101,6 @@ void SparqlAutomaticParser::CollectionPathContext::exitRule(
   if (parserListener != nullptr) parserListener->exitCollectionPath(this);
 }
 
-std::any SparqlAutomaticParser::CollectionPathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitCollectionPath(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::CollectionPathContext*
 SparqlAutomaticParser::collectionPath() {
   CollectionPathContext* _localctx =
@@ -11996,9 +11128,9 @@ SparqlAutomaticParser::collectionPath() {
       setState(1104);
       _errHandler->sync(this);
       _la = _input->LA(1);
-    } while (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0 ||
-             (((_la - 142) & ~0x3fULL) == 0) &&
-                 ((1ULL << (_la - 142)) & 29228991) != 0);
+    } while ((((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 805371908) != 0) ||
+             ((((_la - 142) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 142)) & 29228991) != 0));
     setState(1106);
     match(SparqlAutomaticParser::T__2);
 
@@ -12042,14 +11174,6 @@ void SparqlAutomaticParser::GraphNodeContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphNode(this);
-}
-
-std::any SparqlAutomaticParser::GraphNodeContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphNode(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
@@ -12150,14 +11274,6 @@ void SparqlAutomaticParser::GraphNodePathContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphNodePath(this);
-}
-
-std::any SparqlAutomaticParser::GraphNodePathContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphNodePath(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphNodePathContext*
@@ -12261,14 +11377,6 @@ void SparqlAutomaticParser::VarOrTermContext::exitRule(
   if (parserListener != nullptr) parserListener->exitVarOrTerm(this);
 }
 
-std::any SparqlAutomaticParser::VarOrTermContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVarOrTerm(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::varOrTerm() {
   VarOrTermContext* _localctx =
       _tracker.createInstance<VarOrTermContext>(_ctx, getState());
@@ -12367,14 +11475,6 @@ void SparqlAutomaticParser::VarOrIriContext::exitRule(
   if (parserListener != nullptr) parserListener->exitVarOrIri(this);
 }
 
-std::any SparqlAutomaticParser::VarOrIriContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVarOrIri(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::VarOrIriContext* SparqlAutomaticParser::varOrIri() {
   VarOrIriContext* _localctx =
       _tracker.createInstance<VarOrIriContext>(_ctx, getState());
@@ -12451,14 +11551,6 @@ void SparqlAutomaticParser::VarContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitVar(this);
-}
-
-std::any SparqlAutomaticParser::VarContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitVar(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::VarContext* SparqlAutomaticParser::var() {
@@ -12545,14 +11637,6 @@ void SparqlAutomaticParser::GraphTermContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitGraphTerm(this);
-}
-
-std::any SparqlAutomaticParser::GraphTermContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitGraphTerm(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
@@ -12671,14 +11755,6 @@ void SparqlAutomaticParser::ExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitExpression(this);
 }
 
-std::any SparqlAutomaticParser::ExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ExpressionContext* SparqlAutomaticParser::expression() {
   ExpressionContext* _localctx =
       _tracker.createInstance<ExpressionContext>(_ctx, getState());
@@ -12744,14 +11820,6 @@ void SparqlAutomaticParser::ConditionalOrExpressionContext::exitRule(
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr)
     parserListener->exitConditionalOrExpression(this);
-}
-
-std::any SparqlAutomaticParser::ConditionalOrExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConditionalOrExpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ConditionalOrExpressionContext*
@@ -12831,14 +11899,6 @@ void SparqlAutomaticParser::ConditionalAndExpressionContext::exitRule(
     parserListener->exitConditionalAndExpression(this);
 }
 
-std::any SparqlAutomaticParser::ConditionalAndExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitConditionalAndExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ConditionalAndExpressionContext*
 SparqlAutomaticParser::conditionalAndExpression() {
   ConditionalAndExpressionContext* _localctx =
@@ -12907,14 +11967,6 @@ void SparqlAutomaticParser::ValueLogicalContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitValueLogical(this);
-}
-
-std::any SparqlAutomaticParser::ValueLogicalContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitValueLogical(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::ValueLogicalContext*
@@ -12991,14 +12043,6 @@ void SparqlAutomaticParser::RelationalExpressionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitRelationalExpression(this);
-}
-
-std::any SparqlAutomaticParser::RelationalExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitRelationalExpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::RelationalExpressionContext*
@@ -13138,14 +12182,6 @@ void SparqlAutomaticParser::NumericExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitNumericExpression(this);
 }
 
-std::any SparqlAutomaticParser::NumericExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNumericExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NumericExpressionContext*
 SparqlAutomaticParser::numericExpression() {
   NumericExpressionContext* _localctx =
@@ -13216,14 +12252,6 @@ void SparqlAutomaticParser::AdditiveExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAdditiveExpression(this);
 }
 
-std::any SparqlAutomaticParser::AdditiveExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAdditiveExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::AdditiveExpressionContext*
 SparqlAutomaticParser::additiveExpression() {
   AdditiveExpressionContext* _localctx =
@@ -13248,8 +12276,8 @@ SparqlAutomaticParser::additiveExpression() {
     while (_la == SparqlAutomaticParser::T__12
 
            || _la == SparqlAutomaticParser::T__25 ||
-           (((_la - 153) & ~0x3fULL) == 0) &&
-               ((1ULL << (_la - 153)) & 63) != 0) {
+           ((((_la - 153) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 153)) & 63) != 0)) {
       setState(1177);
       multiplicativeExpressionWithSign();
       setState(1182);
@@ -13310,14 +12338,6 @@ void SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::exitRule(
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr)
     parserListener->exitMultiplicativeExpressionWithSign(this);
-}
-
-std::any SparqlAutomaticParser::MultiplicativeExpressionWithSignContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMultiplicativeExpressionWithSign(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*
@@ -13411,14 +12431,6 @@ void SparqlAutomaticParser::PlusSubexpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPlusSubexpression(this);
 }
 
-std::any SparqlAutomaticParser::PlusSubexpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPlusSubexpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PlusSubexpressionContext*
 SparqlAutomaticParser::plusSubexpression() {
   PlusSubexpressionContext* _localctx =
@@ -13473,14 +12485,6 @@ void SparqlAutomaticParser::MinusSubexpressionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitMinusSubexpression(this);
-}
-
-std::any SparqlAutomaticParser::MinusSubexpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMinusSubexpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::MinusSubexpressionContext*
@@ -13571,16 +12575,6 @@ void SparqlAutomaticParser::
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr)
     parserListener->exitMultiplicativeExpressionWithLeadingSignButNoSpace(this);
-}
-
-std::any SparqlAutomaticParser::
-    MultiplicativeExpressionWithLeadingSignButNoSpaceContext::accept(
-        tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor
-        ->visitMultiplicativeExpressionWithLeadingSignButNoSpace(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
@@ -13693,14 +12687,6 @@ void SparqlAutomaticParser::MultiplicativeExpressionContext::exitRule(
     parserListener->exitMultiplicativeExpression(this);
 }
 
-std::any SparqlAutomaticParser::MultiplicativeExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMultiplicativeExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::MultiplicativeExpressionContext*
 SparqlAutomaticParser::multiplicativeExpression() {
   MultiplicativeExpressionContext* _localctx =
@@ -13780,14 +12766,6 @@ void SparqlAutomaticParser::MultiplyOrDivideExpressionContext::exitRule(
     parserListener->exitMultiplyOrDivideExpression(this);
 }
 
-std::any SparqlAutomaticParser::MultiplyOrDivideExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMultiplyOrDivideExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::MultiplyOrDivideExpressionContext*
 SparqlAutomaticParser::multiplyOrDivideExpression() {
   MultiplyOrDivideExpressionContext* _localctx =
@@ -13862,14 +12840,6 @@ void SparqlAutomaticParser::MultiplyExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitMultiplyExpression(this);
 }
 
-std::any SparqlAutomaticParser::MultiplyExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitMultiplyExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::MultiplyExpressionContext*
 SparqlAutomaticParser::multiplyExpression() {
   MultiplyExpressionContext* _localctx =
@@ -13927,14 +12897,6 @@ void SparqlAutomaticParser::DivideExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitDivideExpression(this);
 }
 
-std::any SparqlAutomaticParser::DivideExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitDivideExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::DivideExpressionContext*
 SparqlAutomaticParser::divideExpression() {
   DivideExpressionContext* _localctx =
@@ -13990,14 +12952,6 @@ void SparqlAutomaticParser::UnaryExpressionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitUnaryExpression(this);
-}
-
-std::any SparqlAutomaticParser::UnaryExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitUnaryExpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::UnaryExpressionContext*
@@ -14205,14 +13159,6 @@ void SparqlAutomaticParser::PrimaryExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPrimaryExpression(this);
 }
 
-std::any SparqlAutomaticParser::PrimaryExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPrimaryExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PrimaryExpressionContext*
 SparqlAutomaticParser::primaryExpression() {
   PrimaryExpressionContext* _localctx =
@@ -14397,14 +13343,6 @@ void SparqlAutomaticParser::BrackettedExpressionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitBrackettedExpression(this);
-}
-
-std::any SparqlAutomaticParser::BrackettedExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBrackettedExpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::BrackettedExpressionContext*
@@ -14711,14 +13649,6 @@ void SparqlAutomaticParser::BuiltInCallContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitBuiltInCall(this);
-}
-
-std::any SparqlAutomaticParser::BuiltInCallContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBuiltInCall(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::BuiltInCallContext*
@@ -15504,14 +14434,6 @@ void SparqlAutomaticParser::RegexExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitRegexExpression(this);
 }
 
-std::any SparqlAutomaticParser::RegexExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitRegexExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::RegexExpressionContext*
 SparqlAutomaticParser::regexExpression() {
   RegexExpressionContext* _localctx =
@@ -15592,14 +14514,6 @@ void SparqlAutomaticParser::LangExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitLangExpression(this);
 }
 
-std::any SparqlAutomaticParser::LangExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitLangExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::LangExpressionContext*
 SparqlAutomaticParser::langExpression() {
   LangExpressionContext* _localctx =
@@ -15669,14 +14583,6 @@ void SparqlAutomaticParser::SubstringExpressionContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitSubstringExpression(this);
-}
-
-std::any SparqlAutomaticParser::SubstringExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitSubstringExpression(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::SubstringExpressionContext*
@@ -15767,14 +14673,6 @@ void SparqlAutomaticParser::StrReplaceExpressionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitStrReplaceExpression(this);
 }
 
-std::any SparqlAutomaticParser::StrReplaceExpressionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitStrReplaceExpression(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::StrReplaceExpressionContext*
 SparqlAutomaticParser::strReplaceExpression() {
   StrReplaceExpressionContext* _localctx =
@@ -15859,14 +14757,6 @@ void SparqlAutomaticParser::ExistsFuncContext::exitRule(
   if (parserListener != nullptr) parserListener->exitExistsFunc(this);
 }
 
-std::any SparqlAutomaticParser::ExistsFuncContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitExistsFunc(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::ExistsFuncContext* SparqlAutomaticParser::existsFunc() {
   ExistsFuncContext* _localctx =
       _tracker.createInstance<ExistsFuncContext>(_ctx, getState());
@@ -15929,14 +14819,6 @@ void SparqlAutomaticParser::NotExistsFuncContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitNotExistsFunc(this);
-}
-
-std::any SparqlAutomaticParser::NotExistsFuncContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNotExistsFunc(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::NotExistsFuncContext*
@@ -16041,14 +14923,6 @@ void SparqlAutomaticParser::AggregateContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitAggregate(this);
-}
-
-std::any SparqlAutomaticParser::AggregateContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAggregate(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
@@ -16398,14 +15272,6 @@ void SparqlAutomaticParser::IriOrFunctionContext::exitRule(
   if (parserListener != nullptr) parserListener->exitIriOrFunction(this);
 }
 
-std::any SparqlAutomaticParser::IriOrFunctionContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitIriOrFunction(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::IriOrFunctionContext*
 SparqlAutomaticParser::iriOrFunction() {
   IriOrFunctionContext* _localctx =
@@ -16478,14 +15344,6 @@ void SparqlAutomaticParser::RdfLiteralContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitRdfLiteral(this);
-}
-
-std::any SparqlAutomaticParser::RdfLiteralContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitRdfLiteral(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
@@ -16637,14 +15495,6 @@ void SparqlAutomaticParser::NumericLiteralContext::exitRule(
   if (parserListener != nullptr) parserListener->exitNumericLiteral(this);
 }
 
-std::any SparqlAutomaticParser::NumericLiteralContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNumericLiteral(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NumericLiteralContext*
 SparqlAutomaticParser::numericLiteral() {
   NumericLiteralContext* _localctx =
@@ -16744,14 +15594,6 @@ void SparqlAutomaticParser::NumericLiteralUnsignedContext::exitRule(
     parserListener->exitNumericLiteralUnsigned(this);
 }
 
-std::any SparqlAutomaticParser::NumericLiteralUnsignedContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNumericLiteralUnsigned(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NumericLiteralUnsignedContext*
 SparqlAutomaticParser::numericLiteralUnsigned() {
   NumericLiteralUnsignedContext* _localctx =
@@ -16770,8 +15612,8 @@ SparqlAutomaticParser::numericLiteralUnsigned() {
     enterOuterAlt(_localctx, 1);
     setState(1635);
     _la = _input->LA(1);
-    if (!((((_la - 150) & ~0x3fULL) == 0) &&
-          ((1ULL << (_la - 150)) & 7) != 0)) {
+    if (!(((((_la - 150) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 150)) & 7) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -16829,14 +15671,6 @@ void SparqlAutomaticParser::NumericLiteralPositiveContext::exitRule(
     parserListener->exitNumericLiteralPositive(this);
 }
 
-std::any SparqlAutomaticParser::NumericLiteralPositiveContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNumericLiteralPositive(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NumericLiteralPositiveContext*
 SparqlAutomaticParser::numericLiteralPositive() {
   NumericLiteralPositiveContext* _localctx =
@@ -16855,8 +15689,8 @@ SparqlAutomaticParser::numericLiteralPositive() {
     enterOuterAlt(_localctx, 1);
     setState(1637);
     _la = _input->LA(1);
-    if (!((((_la - 153) & ~0x3fULL) == 0) &&
-          ((1ULL << (_la - 153)) & 7) != 0)) {
+    if (!(((((_la - 153) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 153)) & 7) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -16914,14 +15748,6 @@ void SparqlAutomaticParser::NumericLiteralNegativeContext::exitRule(
     parserListener->exitNumericLiteralNegative(this);
 }
 
-std::any SparqlAutomaticParser::NumericLiteralNegativeContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitNumericLiteralNegative(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::NumericLiteralNegativeContext*
 SparqlAutomaticParser::numericLiteralNegative() {
   NumericLiteralNegativeContext* _localctx =
@@ -16940,8 +15766,8 @@ SparqlAutomaticParser::numericLiteralNegative() {
     enterOuterAlt(_localctx, 1);
     setState(1639);
     _la = _input->LA(1);
-    if (!((((_la - 156) & ~0x3fULL) == 0) &&
-          ((1ULL << (_la - 156)) & 7) != 0)) {
+    if (!(((((_la - 156) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 156)) & 7) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -16978,14 +15804,6 @@ void SparqlAutomaticParser::BooleanLiteralContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitBooleanLiteral(this);
-}
-
-std::any SparqlAutomaticParser::BooleanLiteralContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBooleanLiteral(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::BooleanLiteralContext*
@@ -17065,14 +15883,6 @@ void SparqlAutomaticParser::StringContext::exitRule(
   if (parserListener != nullptr) parserListener->exitString(this);
 }
 
-std::any SparqlAutomaticParser::StringContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitString(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
   StringContext* _localctx =
       _tracker.createInstance<StringContext>(_ctx, getState());
@@ -17090,8 +15900,8 @@ SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
     enterOuterAlt(_localctx, 1);
     setState(1643);
     _la = _input->LA(1);
-    if (!((((_la - 160) & ~0x3fULL) == 0) &&
-          ((1ULL << (_la - 160)) & 15) != 0)) {
+    if (!(((((_la - 160) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 160)) & 15) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -17142,14 +15952,6 @@ void SparqlAutomaticParser::IriContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitIri(this);
-}
-
-std::any SparqlAutomaticParser::IriContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitIri(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::IriContext* SparqlAutomaticParser::iri() {
@@ -17236,14 +16038,6 @@ void SparqlAutomaticParser::PrefixedNameContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPrefixedName(this);
 }
 
-std::any SparqlAutomaticParser::PrefixedNameContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPrefixedName(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PrefixedNameContext*
 SparqlAutomaticParser::prefixedName() {
   PrefixedNameContext* _localctx =
@@ -17320,14 +16114,6 @@ void SparqlAutomaticParser::BlankNodeContext::exitRule(
   if (parserListener != nullptr) parserListener->exitBlankNode(this);
 }
 
-std::any SparqlAutomaticParser::BlankNodeContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitBlankNode(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::BlankNodeContext* SparqlAutomaticParser::blankNode() {
   BlankNodeContext* _localctx =
       _tracker.createInstance<BlankNodeContext>(_ctx, getState());
@@ -17390,14 +16176,6 @@ void SparqlAutomaticParser::IrirefContext::exitRule(
   if (parserListener != nullptr) parserListener->exitIriref(this);
 }
 
-std::any SparqlAutomaticParser::IrirefContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitIriref(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::IrirefContext* SparqlAutomaticParser::iriref() {
   IrirefContext* _localctx =
       _tracker.createInstance<IrirefContext>(_ctx, getState());
@@ -17449,14 +16227,6 @@ void SparqlAutomaticParser::PnameLnContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
   if (parserListener != nullptr) parserListener->exitPnameLn(this);
-}
-
-std::any SparqlAutomaticParser::PnameLnContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPnameLn(this);
-  else
-    return visitor->visitChildren(this);
 }
 
 SparqlAutomaticParser::PnameLnContext* SparqlAutomaticParser::pnameLn() {
@@ -17512,14 +16282,6 @@ void SparqlAutomaticParser::PnameNsContext::exitRule(
   if (parserListener != nullptr) parserListener->exitPnameNs(this);
 }
 
-std::any SparqlAutomaticParser::PnameNsContext::accept(
-    tree::ParseTreeVisitor* visitor) {
-  if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitPnameNs(this);
-  else
-    return visitor->visitChildren(this);
-}
-
 SparqlAutomaticParser::PnameNsContext* SparqlAutomaticParser::pnameNs() {
   PnameNsContext* _localctx =
       _tracker.createInstance<PnameNsContext>(_ctx, getState());
@@ -17547,6 +16309,10 @@ SparqlAutomaticParser::PnameNsContext* SparqlAutomaticParser::pnameNs() {
 }
 
 void SparqlAutomaticParser::initialize() {
+#if ANTLR4_USE_THREAD_LOCAL_CACHE
+  sparqlautomaticParserInitialize();
+#else
   ::antlr4::internal::call_once(sparqlautomaticParserOnceFlag,
                                 sparqlautomaticParserInitialize);
+#endif
 }

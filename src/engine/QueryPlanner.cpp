@@ -2383,7 +2383,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
-    if (!unionOperation || !hasUnboundTransitivePathInTree(*unionOperation)) {
+
+    // TODO<joka921> This changes the behavior to consider applying the
+    // distribution to ALL unions. Evaluate the impact and make sure that the
+    // documentation is correct.
+    if (!unionOperation) {
       return;
     }
 
@@ -2759,7 +2763,11 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     ql::ranges::for_each(
         candidates, [this, &newPlans](const SubtreePlan& plan) {
           auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          // Note: It is important that we do NOT copy the filter and
+          // textLimit IDs, as they originate from the inner scope of the
+          // OPTIONAL clause and have been already completely dealt with.
+          // This was the cause of
+          // https://github.com/ad-freiburg/qlever/issues/2194.
           newPlans.push_back(std::move(joinedPlan));
         });
     return true;
@@ -3153,8 +3161,15 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // Make sure that variables that are not selected by the subquery are not
   // visible.
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
-    plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        select.getSelectedVariables());
+    const auto& selected = select.getSelectedVariables();
+    std::set<Variable> selectedVariables{selected.begin(), selected.end()};
+    if (RuntimeParameters().get<"strip-columns">()) {
+      plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
+          std::move(plan._qet), selectedVariables);
+    } else {
+      plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
+          select.getSelectedVariables());
+    }
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
