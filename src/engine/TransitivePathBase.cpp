@@ -30,7 +30,8 @@
 TransitivePathBase::TransitivePathBase(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, Graphs activeGraphs)
+    size_t maxDist, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable)
     : Operation(qec),
       subtree_(std::move(child)),
       lhs_(std::move(leftSide)),
@@ -40,6 +41,9 @@ TransitivePathBase::TransitivePathBase(
       activeGraphs_{std::move(activeGraphs)} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
+  // For now we don't support the `graphVariable` yet, but only have it for a
+  // faster review cycle.
+  AD_CORRECTNESS_CHECK(!graphVariable.has_value());
   if (lhs_.isVariable()) {
     variableColumns_[lhs_.value_.getVariable()] = makeAlwaysDefinedColumn(0);
   }
@@ -368,27 +372,29 @@ size_t TransitivePathBase::getCostEstimate() {
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, Graphs activeGraphs) {
+    size_t maxDist, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable) {
   bool useBinSearch =
       RuntimeParameters().get<"use-binsearch-transitive-path">();
-  return makeTransitivePath(qec, std::move(child), std::move(leftSide),
-                            std::move(rightSide), minDist, maxDist,
-                            useBinSearch, std::move(activeGraphs));
+  return makeTransitivePath(
+      qec, std::move(child), std::move(leftSide), std::move(rightSide), minDist,
+      maxDist, useBinSearch, std::move(activeGraphs), graphVariable);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, bool useBinSearch, Graphs activeGraphs) {
+    size_t maxDist, bool useBinSearch, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable) {
   if (useBinSearch) {
     return std::make_shared<TransitivePathBinSearch>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist, std::move(activeGraphs));
+        minDist, maxDist, std::move(activeGraphs), graphVariable);
   } else {
     return std::make_shared<TransitivePathHashMap>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist, std::move(activeGraphs));
+        minDist, maxDist, std::move(activeGraphs), graphVariable);
   }
 }
 

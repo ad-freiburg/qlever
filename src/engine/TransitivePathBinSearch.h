@@ -1,11 +1,14 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
-#include <iterator>
+#include <absl/container/inlined_vector.h>
+
 #include <memory>
 
 #include "engine/Operation.h"
@@ -34,37 +37,52 @@
  *       5 |        6
  *
  */
-struct BinSearchMap {
+class BinSearchMap {
+  // All of these have the same size, for convenience the code represents "no
+  // graph" as an empty span for `graphIds_`, regardless of the amount of
+  // elements of the other ranges.
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
+  ql::span<const Id> graphIds_;
+  // Set the bounds of the currently active graph.
+  size_t offsetOfActiveGraph_ = 0;
+  size_t sizeOfActiveGraph_;
+
+ public:
+  BinSearchMap(
+      ql::span<const Id> startIds, ql::span<const Id> targetIds,
+      const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   /**
    * @brief Return the successors for the given id.
    * The successors are all target ids, where the corresponding start id is
-   * equal to the given id `node`.
+   * equal to the given id `node`. Only values matching the active graph (set
+   * via `setGraphId`) will be returned.
    *
    * @param node The input id, which will be looked up in startIds_
    * @return A ql::span<Id>, which consists of all targetIds_ where
    * startIds_ == node.
    */
-  auto successors(const Id node) const {
-    auto range = ql::ranges::equal_range(startIds_, node);
+  ql::span<const Id> successors(Id node) const;
 
-    auto startIndex = std::distance(startIds_.begin(), range.begin());
+  // Return a pair of matching ids + graph ids. If `node` originates from a
+  // `LocalVocab` an equivalent entry from the graph is used instead,
+  // eliminating the need to keep the `LocalVocab` around any longer. If no
+  // entry matches an empty vector is returned. The first id of the pair is
+  // always the same element. It is flattened out because all callers of this
+  // function need it in this format for convenience. The most common case is
+  // that there's a single matching entry, (especially when using this without
+  // an active graph,) which is why `absl::InlinedVector` is used with size 1.
+  //  If `node` is undefined, it
+  // will return all elements in the currently active graph, or all elements if
+  // no graph is set. Active graphs set via `setGraphId` are ignored. Entries
+  // are deduplicated.
+  IdWithGraphs getEquivalentIdAndMatchingGraphs(Id node) const;
 
-    return targetIds_.subspan(startIndex, range.size());
-  }
-
-  // Retrieve pointer to equal id from `startIds_`, or nullptr if not present.
-  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
-  // but instead are backed by the index.
-  const Id* getEquivalentId(Id node) const {
-    auto range = ql::ranges::equal_range(startIds_, node);
-    if (range.empty()) {
-      return nullptr;
-    }
-    return &range.front();
-  }
+  // Prefilter the map for values of a certain graph. If graphs are active, i.e.
+  // the constructor of this class was called with a graph column, this has to
+  // be set before calling `successors`.
+  void setGraphId(Id graphId);
 };
 
 /**
@@ -79,7 +97,8 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           std::shared_ptr<QueryExecutionTree> child,
                           TransitivePathSide leftSide,
                           TransitivePathSide rightSide, size_t minDist,
-                          size_t maxDist, Graphs activeGraphs);
+                          size_t maxDist, Graphs activeGraphs,
+                          const std::optional<Variable>& graphVariable);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

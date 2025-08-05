@@ -130,12 +130,14 @@ class TransitivePathBase : public Operation {
   // Store the active graphs for the transitive path operation. This is used to
   // correctly match against the proper graph when the minimum distance is 0.
   Graphs activeGraphs_;
+  std::optional<Variable> graphVariable_;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist, Graphs activeGraphs);
+                     size_t minDist, size_t maxDist, Graphs activeGraphs,
+                     const std::optional<Variable>& graphVariable);
 
   ~TransitivePathBase() override = 0;
 
@@ -296,7 +298,8 @@ class TransitivePathBase : public Operation {
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {});
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
@@ -313,11 +316,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, Graphs activeGraphs = {});
+      size_t maxDist, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   std::vector<QueryExecutionTree*> getChildren() override;
 
