@@ -89,8 +89,9 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   }
 
   // Initialize the parser.
-  sjTemp::WKTParser parser(&sweeper, numThreads, usePrefiltering,
-                           prefilterLatLngBox, qec_->getIndex());
+  ad_utility::detail::parallel_wkt_parser::WKTParser parser(
+      &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
+      qec_->getIndex());
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {

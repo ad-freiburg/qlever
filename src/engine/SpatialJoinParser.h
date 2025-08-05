@@ -16,22 +16,25 @@
 #include "global/ValueId.h"
 #include "index/Index.h"
 
-namespace sjTemp {
+namespace ad_utility::detail::parallel_wkt_parser {
 
-struct ParseJob {
+// Special parse job using `ValueId` instead of string.
+struct SpatialJoinParseJob {
   ValueId valueId;
   size_t line;
   bool side;
   std::string wkt;
 };
 
-inline bool operator==(const ParseJob& a, const ParseJob& b) {
+inline bool operator==(const SpatialJoinParseJob& a,
+                       const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
 }
 
-typedef std::vector<ParseJob> ParseBatch;
-
-class WKTParser : public sj::WKTParserBase<ParseJob> {
+// Custom parallel WKT parser, which recieves only `ValueId`s instead of
+// literals and fetches the corresponding bounding boxes and literals from the
+// vocabulary on the fly (and in parallel).
+class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
             const std::optional<util::geo::DBox>& prefilterLatLngBox,
@@ -52,6 +55,6 @@ class WKTParser : public sj::WKTParserBase<ParseJob> {
   const Index& _index;
 };
 
-}  // namespace sjTemp
+}  // namespace ad_utility::detail::parallel_wkt_parser
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_

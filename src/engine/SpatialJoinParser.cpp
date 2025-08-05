@@ -7,23 +7,14 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
-namespace sjTemp {
-
-using util::geo::collectionFromWKT;
-using util::geo::getWKTType;
-using util::geo::lineFromWKT;
-using util::geo::multiLineFromWKT;
-using util::geo::multiPointFromWKT;
-using util::geo::multiPolygonFromWKT;
-using util::geo::pointFromWKT;
-using util::geo::polygonFromWKT;
+namespace ad_utility::detail::parallel_wkt_parser {
 
 // _____________________________________________________________________________
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      bool usePrefiltering,
                      const std::optional<util::geo::DBox>& prefilterLatLngBox,
                      const Index& index)
-    : sj::WKTParserBase<ParseJob>(sweeper, numThreads),
+    : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
@@ -44,7 +35,7 @@ size_t WKTParser::getPrefilterCounter() {
 
 // _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
-  ParseBatch batch;
+  std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
@@ -115,8 +106,9 @@ void WKTParser::addValueIdToQueue(ValueId valueId, size_t id, bool side) {
   }
 }
 
-}  // namespace sjTemp
+}  // namespace ad_utility::detail::parallel_wkt_parser
 
 namespace sj {
-template class WKTParserBase<sjTemp::ParseJob>;
+template class WKTParserBase<
+    ad_utility::detail::parallel_wkt_parser::SpatialJoinParseJob>;
 }
