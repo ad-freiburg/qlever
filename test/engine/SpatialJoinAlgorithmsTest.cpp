@@ -14,6 +14,7 @@
 #include <thread>
 #include <variant>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
@@ -23,7 +24,6 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "rdfTypes/Variable.h"
-#include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
 
