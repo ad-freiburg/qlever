@@ -1330,3 +1330,144 @@ TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
       "\n"
       "<http://vocab.getty.edu/aat/300312355> rdfs:label \"test\".");
 }
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, EncodedIriManagerUsage) {
+  // Create an EncodedIriManager with test prefixes
+  EncodedIriManager encodedIriManager{
+      {"http://example.org/", "http://test.com/id/"}};
+
+  // Create parsers with the EncodedIriManager
+  auto re2ParserWithEncoding = [&]() { return Re2Parser{&encodedIriManager}; };
+  auto ctreParserWithEncoding = [&]() {
+    return CtreParser{&encodedIriManager};
+  };
+
+  // Test lambda that reduces boilerplate
+  auto testIriAtPosition = [&](auto parserFactory, const std::string& tripleStr,
+                               TripleComponent TurtleTriple::*position,
+                               bool shouldEncode,
+                               const std::string& expectedValue) {
+    auto parser = parserFactory();
+    parser.setInputStream(tripleStr);
+    parser.turtleDoc();
+    ASSERT_EQ(parser.getTriples().size(), 1);
+    const auto& triple = parser.getTriples()[0];
+    const auto& component = triple.*position;
+
+    if (shouldEncode) {
+      EXPECT_TRUE(component.isId());
+      EXPECT_EQ(component.getId().getDatatype(), Datatype::EncodedVal);
+      auto decoded = encodedIriManager.toString(component.getId());
+      EXPECT_EQ(decoded, expectedValue);
+    } else {
+      EXPECT_TRUE(component.isIri());
+      EXPECT_EQ(component.getIri().toStringRepresentation(), expectedValue);
+    }
+  };
+
+  // Test IRI encoding in RDF parsing
+  auto testIriEncoding = [&](auto parserFactory) {
+    // Test encoding in subject position
+    testIriAtPosition(parserFactory, "<http://example.org/123> <p> <o> .",
+                      &TurtleTriple::subject_, true,
+                      "<http://example.org/123>");
+    testIriAtPosition(parserFactory, "<http://test.com/id/456> <p> <o> .",
+                      &TurtleTriple::subject_, true,
+                      "<http://test.com/id/456>");
+
+    // Test encoding in predicate position
+    testIriAtPosition(parserFactory, "<s> <http://example.org/789> <o> .",
+                      &TurtleTriple::predicate_, true,
+                      "<http://example.org/789>");
+
+    // Test encoding in object position
+    testIriAtPosition(parserFactory, "<s> <p> <http://test.com/id/999> .",
+                      &TurtleTriple::object_, true, "<http://test.com/id/999>");
+    testIriAtPosition(parserFactory, "<s> <p> <http://example.org/555> .",
+                      &TurtleTriple::object_, true, "<http://example.org/555>");
+
+    // Test non-encoding cases
+    testIriAtPosition(parserFactory, "<http://other.org/123> <p> <o> .",
+                      &TurtleTriple::subject_, false, "<http://other.org/123>");
+    testIriAtPosition(parserFactory, "<http://example.org/abc> <p> <o> .",
+                      &TurtleTriple::subject_, false,
+                      "<http://example.org/abc>");
+    testIriAtPosition(
+        parserFactory, "<http://example.org/123456789012345> <p> <o> .",
+        &TurtleTriple::subject_, false, "<http://example.org/123456789012345>");
+  };
+
+  testIriEncoding(re2ParserWithEncoding);
+  testIriEncoding(ctreParserWithEncoding);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
+  // Test that prefixed names also get encoded when they resolve to encodable
+  // IRIs
+  EncodedIriManager encodedIriManager{
+      {"http://example.org/", "http://test.com/id/"}};
+
+  // Meta-matcher that creates matchers for encoded IRIs at any position in a
+  // triple
+  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::*memberPtr) {
+    return [&, memberPtr](const std::string& expectedDecodedIri) {
+      return ::testing::Field(
+          memberPtr,
+          ::testing::AllOf(
+              ::testing::ResultOf(std::mem_fn(&TripleComponent::isId), true),
+              ::testing::ResultOf(
+                  [](const TripleComponent& tc) {
+                    return tc.getId().getDatatype();
+                  },
+                  Datatype::EncodedVal),
+              ::testing::ResultOf(
+                  [&](const TripleComponent& tc) {
+                    return encodedIriManager.toString(tc.getId());
+                  },
+                  expectedDecodedIri)));
+    };
+  };
+
+  // Create specific matchers using the meta-matcher
+  auto TripleWithEncodedSubject = makeTripleMatcher(&TurtleTriple::subject_);
+  auto TripleWithEncodedPredicate =
+      makeTripleMatcher(&TurtleTriple::predicate_);
+  auto TripleWithEncodedObject = makeTripleMatcher(&TurtleTriple::object_);
+
+  auto testPrefixedNameEncoding = [&](auto parserFactory) {
+    auto parser = parserFactory();
+    parser.setInputStream(
+        "@prefix ex: <http://example.org/> . "
+        "@prefix test: <http://test.com/id/> . "
+        "ex:123 <p> test:456 .");
+    parser.turtleDoc();
+
+    // Using GMock matchers for cleaner, more readable assertions
+    EXPECT_THAT(parser.getTriples(),
+                ::testing::ElementsAre(::testing::AllOf(
+                    TripleWithEncodedSubject("<http://example.org/123>"),
+                    TripleWithEncodedObject("<http://test.com/id/456>"))));
+    parser = parserFactory();
+
+    // Test more prefixed name cases
+    parser.setInputStream(
+        "@prefix ex: <http://example.org/> . "
+        "ex:999 ex:777 \"literal\" .");
+    parser.turtleDoc();
+
+    EXPECT_THAT(parser.getTriples(),
+                ::testing::ElementsAre(::testing::AllOf(
+                    TripleWithEncodedSubject("<http://example.org/999>"),
+                    TripleWithEncodedPredicate("<http://example.org/777>"))));
+  };
+
+  auto re2ParserWithEncoding = [&]() { return Re2Parser{&encodedIriManager}; };
+  auto ctreParserWithEncoding = [&]() {
+    return CtreParser{&encodedIriManager};
+  };
+
+  testPrefixedNameEncoding(re2ParserWithEncoding);
+  testPrefixedNameEncoding(ctreParserWithEncoding);
+}

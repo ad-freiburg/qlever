@@ -113,6 +113,7 @@ class GraphStoreProtocol {
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
+  FRIEND_TEST(GraphStoreProtocolTest, EncodedIriManagerUsage);
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.

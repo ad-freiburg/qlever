@@ -168,6 +168,15 @@ class EncodedIriManagerImpl {
         static_cast<std::vector<std::string>>(j[jsonKey_]);
   }
 
+  // Hash support for use in TestIndexConfig
+  template <typename H>
+  friend H AbslHashValue(H h, const EncodedIriManagerImpl& manager) {
+    return H::combine(std::move(h), manager.prefixes_);
+  }
+
+  // Equality operator for use in TestIndexConfig
+  bool operator==(const EncodedIriManagerImpl&) const = default;
+
  private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.

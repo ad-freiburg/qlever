@@ -213,7 +213,7 @@ class TurtleParser : public RdfParserBase {
   // so we have to save the last seen ones.
   std::string activePrefix_;
   TripleComponent activeSubject_;
-  TripleComponent::Iri activePredicate_;
+  TripleComponent activePredicate_;
   TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
@@ -372,6 +372,8 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, collection);
   FRIEND_TEST(RdfParserTest, iriref);
   FRIEND_TEST(RdfParserTest, specialPredicateA);
+  FRIEND_TEST(RdfParserTest, EncodedIriManagerUsage);
+  FRIEND_TEST(RdfParserTest, EncodedIriManagerPrefixedNames);
 };
 
 template <class Tokenizer_T>

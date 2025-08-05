@@ -229,7 +229,7 @@ bool TurtleParser<T>::subject() {
 template <class T>
 bool TurtleParser<T>::predicate() {
   if (iri()) {
-    activePredicate_ = lastParseResult_.getIri();
+    activePredicate_ = lastParseResult_;
     return true;
   } else {
     return false;
@@ -463,7 +463,7 @@ bool NQuadParser<T>::nQuadSubject() {
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
   if (Base::iriref()) {
-    this->activePredicate_ = std::move(this->lastParseResult_.getIri());
+    this->activePredicate_ = std::move(this->lastParseResult_);
     return true;
   }
   return false;
