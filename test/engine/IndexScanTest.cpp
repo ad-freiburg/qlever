@@ -1215,53 +1215,106 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
                ad_utility::Exception);
 }
 
-// _____________________________________________________________________________
+namespace {
+// For each of the `varsToKeep` return a pair of `[variable, columnIndex]` where
+// the column indices are obtained from the `underlyingScan`. The result is
+// sorted by the column indices.
+constexpr auto getVarsAndColumnIndices = [](const auto& varsToKeep,
+                                            const IndexScan& underlyingScan) {
+  std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
+  for (const auto& var : varsToKeep) {
+    auto colIdxInBaseScan = underlyingScan.getExternallyVisibleVariableColumns()
+                                .at(var)
+                                .columnIndex_;
+    varColPairs.emplace_back(var, colIdxInBaseScan);
+  }
+  ql::ranges::sort(varColPairs, {}, ad_utility::second);
+  return varColPairs;
+};
+}  // namespace
+
+// Tests for the stripping of columns directly inside the `IndexScan` class.
 TEST(IndexScanTest, StripColumns) {
+  // Generic setup
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
+  // Each triple will be in a separate block.
   config.blocksizePermutations = 8_B;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
-  IndexScan fullScan{qec, Permutation::SPO,
-                     SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
-  IndexScan fullScanDifferentVars{
-      qec, Permutation::SPO,
-      SparqlTripleSimple{Var{"?x"}, Var{"?a"}, Var{"?b"}}};
-
-  auto fullRes = fullScan.computeResultOnlyForTesting(false).idTable().clone();
 
   auto def = makeAlwaysDefinedColumn;
 
+  // We create various scans that all should have unique cache keys, this hash
+  // set helps us test that invariant.
   ad_utility::HashSet<std::string> cacheKeys;
-  auto testStrippedBySingleColumn = [&](Variable var,
-                                        const std::vector<ColumnIndex>&
-                                            sortedOn) {
+
+  // Generic lambda to test stripping with any number of columns for any
+  // IndexScan. Parameters:
+  // `baseScan` : an arbitrary `IndexScan`.
+  // `baseScanDifferentVars` : the same index scan, but the first variable must
+  // be the same, and all other variables must be different. This tests the
+  // block prefiltering for joins, which currently only works on a single
+  // variable.
+  auto testStrippedColumns = [&](IndexScan& baseScan,
+                                 IndexScan& baseScanDifferentVars,
+                                 const std::vector<Variable>& varsToKeep,
+                                 const std::vector<ColumnIndex>& sortedOn,
+                                 ad_utility::source_location l =
+                                     ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    IdTable baseResult =
+        baseScan.computeResultOnlyForTesting(false).idTable().clone();
+    qec->clearCacheUnpinnedOnly();
+    // Create set with variables to keep, plus non-existent variables to test
+    // filtering
+    std::set<Variable> varsWithNonExistent(varsToKeep.begin(),
+                                           varsToKeep.end());
+    varsWithNonExistent.insert(Var{"?notFound"});
+
     auto subsetScan =
-        fullScan.makeTreeWithStrippedColumns({var, var, Var{"?notFound"}})
-            .value();
-    EXPECT_EQ(subsetScan->getResultWidth(), 1);
+        baseScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
+    EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
+
     auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
     EXPECT_TRUE(wasNew);
+
     using namespace ::testing;
-    VariableToColumnMap expected{{var, def(0)}};
+
+    // Create pairs of (variable, original_column_index) and sort by original
+    // index
+    std::vector<std::pair<Variable, ColumnIndex>> columnOrigins =
+        getVarsAndColumnIndices(varsToKeep, baseScan);
+    // Build expected variable to column mapping with dense, ordered column
+    // indices
+    VariableToColumnMap expected;
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (size_t i = 0; i < columnOrigins.size(); ++i) {
+      expected[columnOrigins[i].first] = def(i);
+      originalColumnIndices.push_back(columnOrigins[i].second);
+    }
+
     EXPECT_THAT(subsetScan->getVariableColumns(),
                 UnorderedElementsAreArray(expected));
 
+    // Test multiplicity preservation
     for (const auto& [v, colIdxAndInfo] : subsetScan->getVariableColumns()) {
-      auto colIdxInFullScan =
-          fullScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
+      auto colIdxInBaseScan =
+          baseScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
       EXPECT_FLOAT_EQ(subsetScan->getMultiplicity(colIdxAndInfo.columnIndex_),
-                      fullScan.getMultiplicity(colIdxInFullScan));
+                      baseScan.getMultiplicity(colIdxInBaseScan));
     }
-    auto colIndexInOrig =
-        fullScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
-    auto expectedResult =
-        fullRes.asColumnSubsetView(std::array{colIndexInOrig}).clone();
 
+    // Create expected result by selecting the right columns
+    auto expectedResult =
+        baseResult.asColumnSubsetView(originalColumnIndices).clone();
+
+    // Test fully materialized evaluation.
     EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
     EXPECT_THAT(subsetScan->getResult(false)->idTable(),
                 matchesIdTable(expectedResult.clone()));
 
+    // Test lazy evaluation.
     qec->clearCacheUnpinnedOnly();
     auto res = subsetScan->getResult(true);
     auto lazyResToTable = [&subsetScan, &qec](auto&& gen) {
@@ -1276,11 +1329,19 @@ TEST(IndexScanTest, StripColumns) {
                     ql::views::transform(&Result::IdTableVocabPair::idTable_)),
                 matchesIdTable(expectedResult.clone()));
 
-    if (!sortedOn.empty()) {
+    // Test lazy scan functionality only for single-column results that are
+    // sorted.
+    // Note: We currently test the join between an index scan and itself. This
+    // makes the testing easier, because then the block prefiltering actually
+    // doesn't filter out any blocks. We are not interested in the block
+    // prefiltering here (which is tested further above), but only in the
+    // stripping of the columns.
+    if (varsToKeep.size() == 1 && !sortedOn.empty()) {
       const auto& scanOp1 =
           dynamic_cast<const IndexScan&>(*subsetScan->getRootOperation());
       auto subsetScan2 =
-          fullScanDifferentVars.makeTreeWithStrippedColumns({var}).value();
+          baseScanDifferentVars.makeTreeWithStrippedColumns({varsToKeep[0]})
+              .value();
       const auto& scanOp2 =
           dynamic_cast<const IndexScan&>(*subsetScan2->getRootOperation());
       auto [s1, s2] = IndexScan::lazyScanForJoinOfTwoScans(scanOp1, scanOp2);
@@ -1291,16 +1352,320 @@ TEST(IndexScanTest, StripColumns) {
           scanOp1.lazyScanForJoinOfColumnWithScan(expectedResult.getColumn(0));
       EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
     }
+
+    // Test functions whose results don't depend on column stripping
+    // These should return the same values for both base and stripped scan
+    auto& strippedScanOp =
+        dynamic_cast<IndexScan&>(*subsetScan->getRootOperation());
+
+    // Test accessor functions
+    EXPECT_EQ(strippedScanOp.getDescriptor(), baseScan.getDescriptor());
+    EXPECT_EQ(strippedScanOp.subject().toString(),
+              baseScan.subject().toString());
+    EXPECT_EQ(strippedScanOp.predicate().toString(),
+              baseScan.predicate().toString());
+    EXPECT_EQ(strippedScanOp.object().toString(), baseScan.object().toString());
+    EXPECT_EQ(strippedScanOp.graphsToFilter(), baseScan.graphsToFilter());
+    EXPECT_THAT(strippedScanOp.additionalVariables(),
+                ElementsAreArray(baseScan.additionalVariables()));
+    EXPECT_THAT(strippedScanOp.additionalColumns(),
+                ElementsAreArray(baseScan.additionalColumns()));
+    EXPECT_EQ(strippedScanOp.numVariables(), baseScan.numVariables());
+    EXPECT_EQ(strippedScanOp.permutation(), baseScan.permutation());
+
+    // Test size and cost functions
+    EXPECT_EQ(strippedScanOp.getExactSize(), baseScan.getExactSize());
+    EXPECT_EQ(strippedScanOp.getCostEstimate(), baseScan.getCostEstimate());
+    EXPECT_EQ(strippedScanOp.getSizeEstimate(), baseScan.getSizeEstimate());
+    EXPECT_EQ(strippedScanOp.knownEmptyResult(), baseScan.knownEmptyResult());
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(0),
+              baseScan.isIndexScanWithNumVariables(0));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(1),
+              baseScan.isIndexScanWithNumVariables(1));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(2),
+              baseScan.isIndexScanWithNumVariables(2));
+    EXPECT_EQ(strippedScanOp.isIndexScanWithNumVariables(3),
+              baseScan.isIndexScanWithNumVariables(3));
+
+    // Test optimization functions
+    EXPECT_EQ(strippedScanOp.supportsLimitOffset(),
+              baseScan.supportsLimitOffset());
+
+    // Test specification functions
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col0Id(),
+              baseScan.getScanSpecification().col0Id());
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col1Id(),
+              baseScan.getScanSpecification().col1Id());
+    EXPECT_EQ(strippedScanOp.getScanSpecification().col2Id(),
+              baseScan.getScanSpecification().col2Id());
+    auto strippedTriple = strippedScanOp.getPermutedTriple();
+    auto baseTriple = baseScan.getPermutedTriple();
+    for (size_t i = 0; i < 3; ++i) {
+      EXPECT_EQ(*strippedTriple[i], *baseTriple[i]);
+    }
+
+    // Test column origin function for variables that exist in both scans
+    for (const auto& var : varsToKeep) {
+      EXPECT_EQ(strippedScanOp.columnOriginatesFromGraphOrUndef(var),
+                baseScan.columnOriginatesFromGraphOrUndef(var));
+    }
   };
 
-  testStrippedBySingleColumn(Var{"?x"}, {0});
-  testStrippedBySingleColumn(Var{"?y"}, {});
-  testStrippedBySingleColumn(Var{"?z"}, {});
+  // Same as above, but bind the first two arguments by reference.
+  auto testStrippedBindFront = [&](IndexScan& baseScan,
+                                   IndexScan& baseScanDifferentVars) {
+    return [&](const std::vector<Variable>& varsToKeep,
+               const std::vector<ColumnIndex>& sortedOn,
+               ad_utility::source_location l =
+                   ad_utility::source_location::current()) {
+      return testStrippedColumns(baseScan, baseScanDifferentVars, varsToKeep,
+                                 sortedOn, l);
+    };
+  };
 
-  // TODO<joka921/RobinTF:
-  // 1. Also test cases with multiple variables that are being kept.
-  // 2. Also test cases where the underlying scan has a different number of
-  // variables.
-  // 3. Test the case of additional variables (in particular with GRAPHs).
-  // 4. Verify that all possible members are tested in the infrastructure.
+  // Test group 1: Full scan with three variables (?x ?y ?z)
+  {
+    IndexScan fullScan{qec, Permutation::SPO,
+                       SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+    IndexScan fullScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?a"}, Var{"?b"}}};
+    auto testFullScanStrippedColumns =
+        testStrippedBindFront(fullScan, fullScanDifferentVars);
+
+    // Test all combinations for full scan
+    testFullScanStrippedColumns({}, {});            // zero columns
+    testFullScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+    testFullScanStrippedColumns({Var{"?y"}}, {});  // single column (not sorted)
+    testFullScanStrippedColumns({Var{"?z"}}, {});  // single column (not sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                {0, 1});  // two columns (sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?z"}},
+                                {0});  // two columns (sorted)
+    testFullScanStrippedColumns({Var{"?y"}, Var{"?z"}},
+                                {});  // two columns (not sorted)
+    testFullScanStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}},
+                                {0, 1, 2});  // all columns
+  }
+
+  // Test group 2: Two-variable scan with fixed predicate using PSO permutation
+  {
+    using I = TripleComponent::Iri;
+    IndexScan twoVarScan{
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?y"}}};
+    IndexScan twoVarScanDifferentVars{
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?b"}}};
+
+    auto testTwoVarScanStrippedColumns =
+        testStrippedBindFront(twoVarScan, twoVarScanDifferentVars);
+
+    // Test all combinations for two-variable scan
+    testTwoVarScanStrippedColumns({}, {});            // zero columns
+    testTwoVarScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+    testTwoVarScanStrippedColumns({Var{"?y"}},
+                                  {});  // single column (not sorted)
+    testTwoVarScanStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                  {0, 1});  // both columns
+  }
+
+  // Test group 3: One-variable scan with two fixed entries
+  {
+    using I = TripleComponent::Iri;
+    IndexScan oneVarScan{qec, Permutation::SPO,
+                         SparqlTripleSimple{I::fromIriref("<s>"),
+                                            I::fromIriref("<p>"), Var{"?x"}}};
+    IndexScan oneVarScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           Var{"?x"}}};
+    auto testOneVarScanStrippedColumns =
+        testStrippedBindFront(oneVarScan, oneVarScanDifferentVars);
+
+    // Test all combinations for one-variable scan
+    testOneVarScanStrippedColumns({}, {});            // zero columns
+    testOneVarScanStrippedColumns({Var{"?x"}}, {0});  // single column (sorted)
+  }
+
+  // Test group 4: Zero-variable scan with three fixed entries
+  {
+    using I = TripleComponent::Iri;
+    IndexScan zeroVarScan{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           I::fromIriref("<o>")}};
+    IndexScan zeroVarScanDifferentVars{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{I::fromIriref("<s>"), I::fromIriref("<p>"),
+                           I::fromIriref("<o>")}};
+    auto testZeroVarScanStrippedColumns =
+        testStrippedBindFront(zeroVarScan, zeroVarScanDifferentVars);
+
+    // Test the only combination for zero-variable scan
+    testZeroVarScanStrippedColumns({},
+                                   {});  // zero columns (only possible case)
+  }
+
+  // Test group 5: Scan with additional variables
+  {
+    SparqlTripleSimple tripleWithAdditionalVar{Var{"?x"}, Var{"?y"}, Var{"?z"}};
+    tripleWithAdditionalVar.additionalScanColumns_.emplace_back(
+        3, Var{"?additional"});
+    IndexScan scanWithAdditional{qec, Permutation::SPO,
+                                 tripleWithAdditionalVar};
+
+    SparqlTripleSimple tripleWithAdditionalVarDifferent{Var{"?x"}, Var{"?b"},
+                                                        Var{"?c"}};
+    tripleWithAdditionalVarDifferent.additionalScanColumns_.emplace_back(
+        3, Var{"?additional2"});
+    IndexScan scanWithAdditionalDifferentVars{qec, Permutation::SPO,
+                                              tripleWithAdditionalVarDifferent};
+
+    auto testScanWithAdditionalStrippedColumns = testStrippedBindFront(
+        scanWithAdditional, scanWithAdditionalDifferentVars);
+
+    // Test all combinations for scan with additional variables
+    testScanWithAdditionalStrippedColumns({}, {});  // zero columns
+    testScanWithAdditionalStrippedColumns({Var{"?x"}},
+                                          {0});  // single regular (sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?y"}},
+                                          {});  // single regular (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?z"}},
+                                          {});  // single regular (not sorted)
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?additional"}}, {});  // single additional (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?y"}},
+                                          {0, 1});  // two regular
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?additional"}},
+                                          {0});  // regular + additional
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?y"}, Var{"?additional"}},
+        {});  // regular + additional (not sorted)
+    testScanWithAdditionalStrippedColumns({Var{"?x"}, Var{"?y"}, Var{"?z"}},
+                                          {0, 1, 2});  // all regular
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?x"}, Var{"?y"}, Var{"?additional"}},
+        {0, 1});  // regular + additional
+    testScanWithAdditionalStrippedColumns(
+        {Var{"?x"}, Var{"?y"}, Var{"?z"}, Var{"?additional"}},
+        {0, 1, 2, 3});  // all columns
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScanTest, StripColumnsWithPrefiltering) {
+  TestIndexConfig config;
+  using namespace ad_utility::memory_literals;
+  config.blocksizePermutations = 8_B;
+  config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
+  auto qec = ad_utility::testing::getQec(config);
+
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+
+  // Create base scan with three free variables (?x ?y ?z) using SPO
+  // permutation where subject is bound to ?x (first column)
+
+  auto makeBaseScan = [&qec]() {
+    return ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+  };
+  auto baseScanTree = makeBaseScan();
+  IndexScan& baseScanForPrefilter =
+      dynamic_cast<IndexScan&>(*baseScanTree->getRootOperation());
+
+  // Create prefilter condition: ?x < <s2>
+  auto prefilterPairs = []() {
+    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  };
+
+  // Test with different variable combinations
+  std::vector<std::vector<Variable>> testCases = {
+      {Var{"?x"}},                       // single column (sorted)
+      {Var{"?y"}},                       // single column (not sorted)
+      {Var{"?x"}, Var{"?y"}},            // two columns
+      {Var{"?x"}, Var{"?y"}, Var{"?z"}}  // all columns
+  };
+
+  for (const auto& varsToKeep : testCases) {
+    // Approach 1: First apply prefilter, then strip columns
+    auto prefilteredThenStripped = [&]() {
+      auto prefilteredQet =
+          makeBaseScan()
+              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+              .value_or(makeBaseScan());
+      std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+      return QueryExecutionTree::makeTreeWithStrippedColumns(
+          std::move(prefilteredQet), varsSet);
+    }();
+
+    auto strippedThenPrefiltered = [&]() {
+      // Approach 2: First strip columns, then apply prefilter
+      std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+      auto strippedFirst = QueryExecutionTree::makeTreeWithStrippedColumns(
+          makeBaseScan(), varsSet);
+      return strippedFirst
+          ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+          .value_or(strippedFirst);
+    }();
+
+    // Both approaches should yield the same cache key (indicating equivalent
+    // operations)
+    EXPECT_EQ(prefilteredThenStripped->getCacheKey(),
+              strippedThenPrefiltered->getCacheKey())
+        << "Cache keys should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same result width
+    EXPECT_EQ(prefilteredThenStripped->getResultWidth(),
+              strippedThenPrefiltered->getResultWidth())
+        << "Result widths should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same variable columns
+    EXPECT_EQ(prefilteredThenStripped->getVariableColumns(),
+              strippedThenPrefiltered->getVariableColumns())
+        << "Variable columns should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same actual results
+    // First get the full prefiltered result (without column stripping)
+    auto fullPrefilteredQet =
+        makeBaseScan()
+            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            .value_or(makeBaseScan());
+
+    qec->clearCacheUnpinnedOnly();
+    IdTable fullResult =
+        fullPrefilteredQet->getResult(false)->idTable().clone();
+
+    // Create expected result by applying column subset (same logic as
+    // infrastructure lambda)
+    std::vector<std::pair<Variable, ColumnIndex>> columnOrigins =
+        getVarsAndColumnIndices(varsToKeep, baseScanForPrefilter);
+
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (const auto& [var, colIdx] : columnOrigins) {
+      originalColumnIndices.push_back(colIdx);
+    }
+
+    IdTable expectedResult =
+        fullResult.asColumnSubsetView(originalColumnIndices).clone();
+
+    // Now compare both approaches against the expected result
+    qec->clearCacheUnpinnedOnly();
+    IdTable result1 =
+        prefilteredThenStripped->getResult(false)->idTable().clone();
+    qec->clearCacheUnpinnedOnly();
+    IdTable result2 =
+        strippedThenPrefiltered->getResult(false)->idTable().clone();
+    EXPECT_THAT(result1, matchesIdTable(expectedResult.clone()))
+        << "Approach 1 (prefilter-then-strip) should match expected result for "
+        << varsToKeep.size() << " variables";
+    EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
+        << "Approach 2 (strip-then-prefilter) should match expected result for "
+        << varsToKeep.size() << " variables";
+  }
 }
