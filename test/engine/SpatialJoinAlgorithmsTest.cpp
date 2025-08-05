@@ -11,9 +11,11 @@
 #include <cstdlib>
 #include <fstream>
 #include <regex>
+#include <thread>
 #include <variant>
 
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -21,7 +23,9 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "rdfTypes/Variable.h"
+#include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/SourceLocation.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -1678,5 +1682,66 @@ TEST(SpatialJoin, mixedDataSet) {
 }
 
 }  // namespace boundingBox
+
+namespace runtimeParameters {
+
+using Loc = ad_utility::source_location;
+
+// Helper to compute a `SpatialJoin` using `libspatialjoin` and check if the
+// used number of threads is the expected.
+void testNumberOfThreads(size_t expectedNumberOfThreads,
+                         Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  auto qec = buildMixedAreaPointQEC();
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{
+              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
+              Variable{"?geo1"}, Variable{"?geo2"}},
+          leftChild, rightChild);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto res = spatialJoin->computeResult(false);
+  ASSERT_TRUE(
+      spatialJoin->runtimeInfo().details_.contains("spatialjoin num threads"));
+  EXPECT_EQ(static_cast<size_t>(
+                spatialJoin->runtimeInfo().details_["spatialjoin num threads"]),
+            expectedNumberOfThreads);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, NumberOfThreads) {
+  size_t hardwareThreads = std::thread::hardware_concurrency();
+  testNumberOfThreads(hardwareThreads);
+  {
+    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(1);
+    testNumberOfThreads(1);
+  }
+  if (hardwareThreads > 2) {
+    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(1);
+    testNumberOfThreads(2);
+  }
+  {
+    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(0);
+    testNumberOfThreads(hardwareThreads);
+  }
+  {
+    auto context =
+        setRuntimeParameterForTest<"spatial-join-max-threads">(hardwareThreads);
+    testNumberOfThreads(hardwareThreads);
+  }
+  {
+    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(
+        hardwareThreads + 5);
+    testNumberOfThreads(hardwareThreads);
+  }
+}
+
+}  // namespace runtimeParameters
 
 }  // namespace
