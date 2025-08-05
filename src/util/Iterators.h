@@ -448,6 +448,39 @@ template <typename Range>
 InputRangeTypeErased(std::unique_ptr<Range>)
     -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
 
+// A general type-erased input range with details. This combines an
+// InputRangeTypeErased with additional metadata/details of arbitrary type.
+template <typename ValueType, typename DetailsType>
+class InputRangeTypeErasedWithDetails {
+ private:
+  InputRangeTypeErased<ValueType> range_;
+  DetailsType details_;
+
+ public:
+  // Constructor that takes the range and details
+  template <typename Range>
+  explicit InputRangeTypeErasedWithDetails(Range range, DetailsType details)
+      : range_(std::move(range)), details_(std::move(details)) {}
+
+  // Delegate iterator methods to the underlying range
+  auto begin() { return range_.begin(); }
+  auto end() { return range_.end(); }
+
+  // Provide access to the details
+  const DetailsType& details() const { return details_; }
+  DetailsType& details() { return details_; }
+
+  // Additional type aliases for compatibility
+  using value_type = ValueType;
+  using iterator = typename InputRangeTypeErased<ValueType>::iterator;
+};
+
+// Deduction guide
+template <typename Range, typename DetailsType>
+InputRangeTypeErasedWithDetails(Range, DetailsType)
+    -> InputRangeTypeErasedWithDetails<ql::ranges::range_value_t<Range>,
+                                       DetailsType>;
+
 // A view that takes an iterator and a sentinel (similar to
 // `ql::ranges::subrange`, but yields the iterators instead of the values when
 // being iterated over. Currently, the iterators must be random-access and the
