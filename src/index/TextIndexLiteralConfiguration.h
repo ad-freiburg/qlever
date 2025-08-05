@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXLITERALCONFIGURATION_H
 #define QLEVER_SRC_INDEX_TEXTINDEXLITERALCONFIGURATION_H
 
+#include "index/TextIndexLiteralFilter.h"
+
 struct TextIndexLiteralConfiguration {
   std::string regex_;
-  bool whitelist_;
+  TextIndexLiteralFilter::FilterType whitelist_;
   bool addAllLiterals_;
 };
 

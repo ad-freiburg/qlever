@@ -20,6 +20,6 @@ std::tuple<bool, bool, bool> TextIndexLiteralFilter::computeInTextIndexMap(
     return {false, false, false};
   }
   return {false, false,
-          isWhitelist_ ==
+          (filterType_ == FilterType::AcceptMatching) ==
               RE2::PartialMatch(p.getIri().toStringRepresentation(), *regex_)};
 }

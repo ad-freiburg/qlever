@@ -11,8 +11,11 @@
 
 class TextIndexLiteralFilter {
  public:
+  enum struct FilterType { AcceptMatching, DeclineMatching };
+
   TextIndexLiteralFilter()
-      : regex_{std::make_unique<RE2>("(?s).*")}, isWhitelist_{true} {};
+      : regex_{std::make_unique<RE2>("(?s).*")},
+        filterType_{FilterType::AcceptMatching} {};
 
   /**
    * @brief Class to determine whether the literal of a triple should be part of
@@ -20,16 +23,17 @@ class TextIndexLiteralFilter {
    * @param regex The regex that is used to determine whether a literal should
    *              be part of the text index or not. This is used on the
    *              predicate.
-   * @param whitelist If set to true the matching regex cases will be added to
-   *                  the text index. If set to falls the matching regex cases
-   *                  will not be added but everything else.
+   * @param filterType If set to AcceptMatching, the matching regex cases will
+   *                   be added to the text index. If set to DeclineMatching,
+   *                   the matching regex cases will not be added but everything
+   *                   else.
    * @param addAllLiterals If set to true this can later be used to not only
    *        add objects of triples but all literals.
    */
-  explicit TextIndexLiteralFilter(std::string regex, bool whitelist,
+  explicit TextIndexLiteralFilter(std::string regex, FilterType filterType,
                                   bool addAllLiterals)
       : regex_{std::make_unique<RE2>(regex, RE2::Quiet)},
-        isWhitelist_{whitelist},
+        filterType_{filterType},
         addAllLiterals_(addAllLiterals) {
     if (!regex_->ok()) {
       throw std::runtime_error{
@@ -51,11 +55,13 @@ class TextIndexLiteralFilter {
 
   bool addAllLiterals() const { return addAllLiterals_; }
 
+  bool isWhiteList() const { return filterType_ == FilterType::AcceptMatching; }
+
  private:
   // The regex string used to do the comparison
   std::unique_ptr<RE2> regex_ = nullptr;
   // Determine whether the regex should act as whitelist or blacklist
-  bool isWhitelist_ = true;
+  FilterType filterType_ = FilterType::AcceptMatching;
   // True when all literals not only objects should be added
   bool addAllLiterals_ = false;
 };

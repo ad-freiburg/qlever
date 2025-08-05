@@ -11,6 +11,9 @@
 
 namespace {
 
+using TextIndexLiteralFilter::FilterType::AcceptMatching;
+using TextIndexLiteralFilter::FilterType::DeclineMatching;
+
 using EqualityVector = std::vector<std::tuple<bool, bool, bool>>;
 
 auto testMultipleTriples = [](TextIndexLiteralFilter& filter,
@@ -47,21 +50,21 @@ std::vector<TurtleTriple> testVector = {
 
 TEST(TripleInTextIndex, FaultyRegex) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      TextIndexLiteralFilter("(abc", false, false),
+      TextIndexLiteralFilter("(abc", AcceptMatching, false),
       ::testing::HasSubstr(
           R"(The regex supposed to filter predicates for which the objects are stored in the text index was "(abc". This is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
       std::runtime_error);
 }
 
 TEST(TripleInTextIndex, NoLiteralObject) {
-  TextIndexLiteralFilter filter{"(?s).*", true, false};
+  TextIndexLiteralFilter filter{"(?s).*", AcceptMatching, false};
   TurtleTriple triple{iri("<Scientist>"), iri("<has-description>"),
                       TripleComponent{4}};
   testMultipleTriples(filter, {triple}, {std::make_tuple(false, false, false)});
 }
 
 TEST(TripleInTextIndex, PartialMatch) {
-  TextIndexLiteralFilter filter{"descri", true, false};
+  TextIndexLiteralFilter filter{"descri", AcceptMatching, false};
   EqualityVector equality{{false, false, true},
                           {false, false, true},
                           {false, false, false},
@@ -70,7 +73,7 @@ TEST(TripleInTextIndex, PartialMatch) {
 }
 
 TEST(TripleInTextIndex, Blacklist) {
-  TextIndexLiteralFilter filter{"descri", false, false};
+  TextIndexLiteralFilter filter{"descri", DeclineMatching, false};
   EqualityVector equality{{false, false, false},
                           {false, false, false},
                           {false, false, true},
@@ -79,7 +82,7 @@ TEST(TripleInTextIndex, Blacklist) {
 }
 
 TEST(TripleInTextIndex, NoCaseSensitivity) {
-  TextIndexLiteralFilter filter{"(?i)descri", true, false};
+  TextIndexLiteralFilter filter{"(?i)descri", AcceptMatching, false};
   EqualityVector equality{{false, false, true},
                           {false, false, true},
                           {false, false, false},

@@ -184,7 +184,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.setTextIndexLiteralFilter(
-        {c.literalRegex.value_or(""), c.literalRegexIsWhitelist,
+        {c.literalRegex.value_or(""),
+         c.literalRegexIsWhitelist
+             ? TextIndexLiteralFilter::FilterType::AcceptMatching
+             : TextIndexLiteralFilter::FilterType::DeclineMatching,
          !c.literalRegex.has_value() && c.addWordsFromLiterals});
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
