@@ -1506,152 +1506,150 @@ TEST(IndexScanTest, StripColumns) {
   testScanWithAdditionalStrippedColumns(
       {Var{"?x"}, Var{"?y"}, Var{"?z"}, Var{"?additional"}},
       {0, 1, 2, 3});  // all columns
+}
 
-  // Test setPrefilterGetUpdatedQueryExecutionTree with column stripping
-  // Test that: prefilter-then-strip == strip-then-prefilter
-  {
-    using namespace makeFilterExpression;
-    using namespace filterHelper;
+// _____________________________________________________________________________
+TEST(IndexScanTest, StripColumnsWithPrefiltering) {
+  TestIndexConfig config;
+  using namespace ad_utility::memory_literals;
+  config.blocksizePermutations = 8_B;
+  config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
+  auto qec = ad_utility::testing::getQec(config);
 
-    // Create base scan with three free variables (?x ?y ?z) using SPO
-    // permutation where subject is bound to ?x (first column)
-    IndexScan baseScanForPrefilter{
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+
+  // Create base scan with three free variables (?x ?y ?z) using SPO
+  // permutation where subject is bound to ?x (first column)
+  IndexScan baseScanForPrefilter{
+      qec, Permutation::SPO,
+      SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+
+  // Create prefilter condition: ?x < <s2>
+  auto prefilterPairs = []() {
+    return makePrefilterVec(pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
+  };
+
+  // Test with different variable combinations
+  std::vector<std::vector<Variable>> testCases = {
+      {Var{"?x"}},                       // single column (sorted)
+      {Var{"?y"}},                       // single column (not sorted)
+      {Var{"?x"}, Var{"?y"}},            // two columns
+      {Var{"?x"}, Var{"?y"}, Var{"?z"}}  // all columns
+  };
+
+  for (const auto& varsToKeep : testCases) {
+    // Approach 1: First apply prefilter, then strip columns
+    auto qet1 = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::SPO,
-        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+    auto prefilteredQet =
+        qet1->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs());
 
-    // Create prefilter condition: ?x < <s2>
-    auto prefilterPairs = []() {
-      return makePrefilterVec(
-          pr(lt(LocalVocabEntry::iriref("<s2>")), Var{"?x"}));
-    };
-
-    // Test with different variable combinations
-    std::vector<std::vector<Variable>> testCases = {
-        //{Var{"?x"}},                    // single column (sorted)
-        {Var{"?y"}},  // single column (not sorted)
-                      //{Var{"?x"}, Var{"?y"}},         // two columns
-                      //{Var{"?x"}, Var{"?y"}, Var{"?z"}} // all columns
-    };
-
-    for (const auto& varsToKeep : testCases) {
-      // Approach 1: First apply prefilter, then strip columns
-      auto qet1 = ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::SPO,
-          SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
-      auto prefilteredQet =
-          qet1->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs());
-
-      std::shared_ptr<QueryExecutionTree> approach1Result;
-      if (prefilteredQet.has_value()) {
-        // Strip columns after prefiltering
-        std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
-        auto strippedAfterPrefilter =
-            prefilteredQet.value()
-                ->getRootOperation()
-                ->makeTreeWithStrippedColumns(varsSet);
-        approach1Result =
-            strippedAfterPrefilter.value_or(prefilteredQet.value());
-      } else {
-        // Prefilter not applicable, just strip columns
-        std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
-        approach1Result = qet1->getRootOperation()
-                              ->makeTreeWithStrippedColumns(varsSet)
-                              .value();
-      }
-
-      // Approach 2: First strip columns, then apply prefilter
-      auto qet2 = ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::SPO,
-          SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+    std::shared_ptr<QueryExecutionTree> approach1Result;
+    if (prefilteredQet.has_value()) {
+      // Strip columns after prefiltering
       std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
-      auto strippedFirst = qet2->getRootOperation()
-                               ->makeTreeWithStrippedColumns(varsSet)
-                               .value();
-      auto approach2Result =
-          strippedFirst
-              ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
-              .value_or(strippedFirst);
-
-      // Both approaches should yield the same cache key (indicating equivalent
-      // operations)
-      EXPECT_EQ(approach1Result->getCacheKey(), approach2Result->getCacheKey())
-          << "Cache keys should be equal for varsToKeep with "
-          << varsToKeep.size() << " variables";
-
-      // Both approaches should yield the same result width
-      EXPECT_EQ(approach1Result->getResultWidth(),
-                approach2Result->getResultWidth())
-          << "Result widths should be equal for varsToKeep with "
-          << varsToKeep.size() << " variables";
-
-      // Both approaches should yield the same variable columns
-      EXPECT_EQ(approach1Result->getVariableColumns(),
-                approach2Result->getVariableColumns())
-          << "Variable columns should be equal for varsToKeep with "
-          << varsToKeep.size() << " variables";
-
-      // Both approaches should yield the same actual results
-      // First get the full prefiltered result (without column stripping)
-      auto qetFullPrefiltered = ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::SPO,
-          SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
-      auto fullPrefilteredQet =
-          qetFullPrefiltered->setPrefilterGetUpdatedQueryExecutionTree(
-              prefilterPairs());
-
-      qec->clearCacheUnpinnedOnly();
-      IdTable fullResult = [&]() {
-        if (fullPrefilteredQet.has_value()) {
-          return fullPrefilteredQet.value()->getResult()->idTable().clone();
-        } else {
-          return qetFullPrefiltered->getResult()->idTable().clone();
-        }
-      }();
-
-      // Create expected result by applying column subset (same logic as
-      // infrastructure lambda)
-      std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
-      for (const auto& var : varsToKeep) {
-        auto colIdxInBaseScan =
-            baseScanForPrefilter.getExternallyVisibleVariableColumns()
-                .at(var)
-                .columnIndex_;
-        varColPairs.emplace_back(var, colIdxInBaseScan);
-      }
-      ql::ranges::sort(varColPairs, [](const auto& a, const auto& b) {
-        return a.second < b.second;
-      });
-
-      std::vector<ColumnIndex> originalColumnIndices;
-      for (const auto& [var, colIdx] : varColPairs) {
-        originalColumnIndices.push_back(colIdx);
-      }
-
-      IdTable expectedResult = [&]() -> IdTable {
-        if (!originalColumnIndices.empty()) {
-          return fullResult.asColumnSubsetView(originalColumnIndices).clone();
-        } else {
-          // Handle zero-column case
-          auto res = IdTable(0, qec->getAllocator());
-          res.resize(fullResult.numRows());
-          return res;
-        }
-      }();
-
-      // Now compare both approaches against the expected result
-      qec->clearCacheUnpinnedOnly();
-      IdTable result1 = approach1Result->getResult()->idTable().clone();
-      qec->clearCacheUnpinnedOnly();
-      IdTable result2 = approach2Result->getResult()->idTable().clone();
-      EXPECT_THAT(result1, matchesIdTable(expectedResult.clone()))
-          << "Approach 1 (prefilter-then-strip) should match expected result "
-             "for "
-          << varsToKeep.size() << " variables";
-      EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
-          << "Approach 2 (strip-then-prefilter) should match expected result "
-             "for "
-          << varsToKeep.size() << " variables, test case index is "
-          << (&varsToKeep - testCases.data());
+      auto strippedAfterPrefilter = prefilteredQet.value()
+                                        ->getRootOperation()
+                                        ->makeTreeWithStrippedColumns(varsSet);
+      approach1Result = strippedAfterPrefilter.value_or(prefilteredQet.value());
+    } else {
+      // Prefilter not applicable, just strip columns
+      std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+      approach1Result = qet1->getRootOperation()
+                            ->makeTreeWithStrippedColumns(varsSet)
+                            .value();
     }
+
+    // Approach 2: First strip columns, then apply prefilter
+    auto qet2 = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+    std::set<Variable> varsSet(varsToKeep.begin(), varsToKeep.end());
+    auto strippedFirst =
+        qet2->getRootOperation()->makeTreeWithStrippedColumns(varsSet).value();
+    auto approach2Result =
+        strippedFirst
+            ->setPrefilterGetUpdatedQueryExecutionTree(prefilterPairs())
+            .value_or(strippedFirst);
+
+    // Both approaches should yield the same cache key (indicating equivalent
+    // operations)
+    EXPECT_EQ(approach1Result->getCacheKey(), approach2Result->getCacheKey())
+        << "Cache keys should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same result width
+    EXPECT_EQ(approach1Result->getResultWidth(),
+              approach2Result->getResultWidth())
+        << "Result widths should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same variable columns
+    EXPECT_EQ(approach1Result->getVariableColumns(),
+              approach2Result->getVariableColumns())
+        << "Variable columns should be equal for varsToKeep with "
+        << varsToKeep.size() << " variables";
+
+    // Both approaches should yield the same actual results
+    // First get the full prefiltered result (without column stripping)
+    auto qetFullPrefiltered = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+    auto fullPrefilteredQet =
+        qetFullPrefiltered->setPrefilterGetUpdatedQueryExecutionTree(
+            prefilterPairs());
+
+    qec->clearCacheUnpinnedOnly();
+    IdTable fullResult = [&]() {
+      if (fullPrefilteredQet.has_value()) {
+        return fullPrefilteredQet.value()->getResult()->idTable().clone();
+      } else {
+        return qetFullPrefiltered->getResult()->idTable().clone();
+      }
+    }();
+
+    // Create expected result by applying column subset (same logic as
+    // infrastructure lambda)
+    std::vector<std::pair<Variable, ColumnIndex>> varColPairs;
+    for (const auto& var : varsToKeep) {
+      auto colIdxInBaseScan =
+          baseScanForPrefilter.getExternallyVisibleVariableColumns()
+              .at(var)
+              .columnIndex_;
+      varColPairs.emplace_back(var, colIdxInBaseScan);
+    }
+    ql::ranges::sort(varColPairs, [](const auto& a, const auto& b) {
+      return a.second < b.second;
+    });
+
+    std::vector<ColumnIndex> originalColumnIndices;
+    for (const auto& [var, colIdx] : varColPairs) {
+      originalColumnIndices.push_back(colIdx);
+    }
+
+    IdTable expectedResult = [&]() -> IdTable {
+      if (!originalColumnIndices.empty()) {
+        return fullResult.asColumnSubsetView(originalColumnIndices).clone();
+      } else {
+        // Handle zero-column case
+        auto res = IdTable(0, qec->getAllocator());
+        res.resize(fullResult.numRows());
+        return res;
+      }
+    }();
+
+    // Now compare both approaches against the expected result
+    qec->clearCacheUnpinnedOnly();
+    IdTable result1 = approach1Result->getResult()->idTable().clone();
+    qec->clearCacheUnpinnedOnly();
+    IdTable result2 = approach2Result->getResult()->idTable().clone();
+    EXPECT_THAT(result1, matchesIdTable(expectedResult.clone()))
+        << "Approach 1 (prefilter-then-strip) should match expected result for "
+        << varsToKeep.size() << " variables";
+    EXPECT_THAT(result2, matchesIdTable(expectedResult.clone()))
+        << "Approach 2 (strip-then-prefilter) should match expected result for "
+        << varsToKeep.size() << " variables";
   }
 }

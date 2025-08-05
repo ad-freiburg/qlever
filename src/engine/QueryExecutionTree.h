@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/HashSet.h"
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
@@ -213,6 +214,13 @@ class QueryExecutionTree {
     return getRootOperation()->getPrimarySortKeyVariable();
   }
 
+  // Get the set of variables that were stripped from this tree when created
+  // via `makeTreeWithStrippedColumns`. These are variables that were present
+  // before stripping but are gone afterwards.
+  const ad_utility::HashSet<Variable>& getStrippedVariables() const {
+    return strippedVariables_;
+  }
+
   // _____________________________________________________________
   friend void PrintTo(const QueryExecutionTree& tree, std::ostream* os) {
     auto& s = *os;
@@ -244,6 +252,7 @@ class QueryExecutionTree {
                          // operations/subtrees when pinning only the result.
 
   std::shared_ptr<const Result> cachedResult_ = nullptr;
+  ad_utility::HashSet<Variable> strippedVariables_;
 
  public:
   // Helper class to avoid bug in g++ that leads to memory corruption when
