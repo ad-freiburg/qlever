@@ -164,11 +164,28 @@ class VocabularyMerger {
 
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
+  /**
+   * @brief Struct to manage duplicate occurrences of words during merging of
+   *        partial vocabularies.
+   * @detail This struct is needed for the correct semantics of isExternal and
+   *         inTextIndex. If multiple occurrences of the same iriOrLiteral
+   *         appear, they are flattened to one vocab entry. If those occurrences
+   *         have different values for isExternal and inTextIndex the logic is
+   *         as follows:
+   *         For isExternal: If one of the occurrences has this set to true,
+   *         this should be set to true later on after merging.
+   *         For inTextIndex: The same as isExternal
+   *
+   *         This struct is used to collect all multiple occurrences of
+   *         iriOrLiterals and once all are collected, the writing happens. The
+   *         reason the collection works is the QueueWords being sorted.
+   */
   struct EqualWords {
     std::string iriOrLiteral_;
     bool isExternal_;
     bool inTextIndex_;
-    uint64_t index_;
+    // The targetId_ the Id the words are mapped to by vocabulary. This is the
+    // same for equal words since they are later written as one.
     Id targetId_;
     // partialVocabAndPartialFileIds
     struct PartialIds {
@@ -183,7 +200,6 @@ class VocabularyMerger {
           isExternal_(isExternal),
           inTextIndex_(inTextIndex),
           partialIds_({{fileId, localIndex}}) {
-      index_ = 0;
       targetId_ = Id::makeUndefined();
     }
 
@@ -253,8 +269,10 @@ class VocabularyMerger {
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
-  // Gets the index and target index for EqualWords. This has to be set only
-  // once for EqualWords and does some form of writing since the metaData is
+  // This function has to be called for a word once all of its occurrences in
+  // the different partial vocabularies have been processed by the queue. It
+  // gets the index and target index for EqualWords. This target index has to be
+  // set only once for EqualWords. The function isn't const since metaData is
   // modified.
   CPP_template(typename C)(
       requires WordCallback<C>) void writeAndGetEqualWordIds(EqualWords&

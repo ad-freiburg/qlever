@@ -171,6 +171,14 @@ CPP_template_def(typename C, typename L)(
                            ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
+  // Used to retrieve the next word once the old `EqualWords` have been written
+  // or there have not been `EqualWords` before.
+  auto getNewCurrentWord = [](const auto& queueWord) {
+    return EqualWords(queueWord.iriOrLiteral(), queueWord.isExternal(),
+                      queueWord.inTextIndex(), queueWord.partialFileId_,
+                      queueWord.id());
+  };
+
   // Smaller grained buffer for the actual inner write.
   auto bufSize = bufferSize_ / 5;
   std::future<void> writeFut;
@@ -180,9 +188,7 @@ CPP_template_def(typename C, typename L)(
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
     if (!currentWord_.has_value()) {
-      currentWord_ =
-          EqualWords(top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
-                     top.partialFileId_, top.id());
+      currentWord_ = getNewCurrentWord(top);
       continue;
     }
     auto& word = currentWord_.value();
@@ -229,9 +235,7 @@ CPP_template_def(typename C, typename L)(
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
       // Set new currentWord_ since old have been written
-      currentWord_ =
-          EqualWords(top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
-                     top.partialFileId_, top.id());
+      currentWord_ = getNewCurrentWord(top);
     }
   }
 
@@ -247,18 +251,18 @@ CPP_template_def(typename C, typename L)(
 // _____________________________________________________________________________
 CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
     writeAndGetEqualWordIds(EqualWords& equalWords, C& wordCallback) {
+  uint64_t index;
   if (equalWords.isBlankNode()) {
-    equalWords.index_ = metaData_.getNextBlankNodeIndex();
+    index = metaData_.getNextBlankNodeIndex();
   } else {
-    equalWords.index_ =
-        wordCallback(equalWords.iriOrLiteral_, equalWords.isExternal_,
-                     equalWords.inTextIndex_);
-    metaData_.addWord(equalWords.iriOrLiteral_, equalWords.index_);
+    index = wordCallback(equalWords.iriOrLiteral_, equalWords.isExternal_,
+                         equalWords.inTextIndex_);
+    metaData_.addWord(equalWords.iriOrLiteral_, index);
   }
   equalWords.targetId_ =
       equalWords.isBlankNode()
-          ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(equalWords.index_))
-          : Id::makeFromVocabIndex(VocabIndex::make(equalWords.index_));
+          ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index))
+          : Id::makeFromVocabIndex(VocabIndex::make(index));
 }
 
 // _____________________________________________________________________________
