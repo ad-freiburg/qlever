@@ -259,3 +259,69 @@ TEST(Iterator, IteratorRange) {
   EXPECT_EQ(beg[3], v.begin() + 3);
   EXPECT_EQ(*beg[3], 7);
 }
+
+//_____________________________________________________________________________
+TEST(Iterator, InputRangeTypeErasedWithDetails) {
+  using namespace ad_utility;
+
+  // Define a simple details type for testing
+  struct TestDetails {
+    std::string name;
+    int count = 0;
+  };
+
+  // Create a simple input range
+  std::vector<int> values{1, 2, 3, 4, 5};
+  TestDetails details{"test_range", 42};
+
+  // Test construction and basic functionality
+  InputRangeTypeErasedWithDetails<int, TestDetails> rangeWithDetails{values,
+                                                                     details};
+
+  // Test details access
+  EXPECT_EQ(rangeWithDetails.details().name, "test_range");
+  EXPECT_EQ(rangeWithDetails.details().count, 42);
+
+  // Test that the range functionality works
+  std::vector<int> result;
+  for (auto& value : rangeWithDetails) {
+    result.push_back(value);
+  }
+  EXPECT_EQ(result, values);
+
+  // Test modifying details
+  rangeWithDetails.details().count = 100;
+  EXPECT_EQ(rangeWithDetails.details().count, 100);
+
+  // Test with a custom InputRangeFromGet implementation
+  struct CountingRange : InputRangeFromGet<int> {
+    int current_ = 0;
+    int max_;
+    explicit CountingRange(int max) : max_(max) {}
+    std::optional<int> get() override {
+      if (current_ >= max_) return std::nullopt;
+      return current_++;
+    }
+  };
+
+  TestDetails countingDetails{"counting", 999};
+  InputRangeTypeErasedWithDetails<int, TestDetails> countingRangeWithDetails{
+      CountingRange{3}, countingDetails};
+
+  std::vector<int> countingResult;
+  for (auto& value : countingRangeWithDetails) {
+    countingResult.push_back(value);
+  }
+  EXPECT_EQ(countingResult, (std::vector<int>{0, 1, 2}));
+  EXPECT_EQ(countingRangeWithDetails.details().name, "counting");
+  EXPECT_EQ(countingRangeWithDetails.details().count, 999);
+
+  // Test deduction guide
+  auto deducedRange =
+      InputRangeTypeErasedWithDetails{values, TestDetails{"deduced", 123}};
+  static_assert(
+      std::is_same_v<decltype(deducedRange),
+                     InputRangeTypeErasedWithDetails<int, TestDetails>>);
+  EXPECT_EQ(deducedRange.details().name, "deduced");
+  EXPECT_EQ(deducedRange.details().count, 123);
+}
