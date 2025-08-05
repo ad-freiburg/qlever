@@ -70,18 +70,7 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
-  if (graphVariable_.has_value()) {
-    decltype(auto) graphCol =
-        sub.getColumn(subtree_->getVariableColumn(graphVariable_.value()));
-    HashMapWrapper::MapOfMaps edgesWithGraph{allocator()};
-    for (size_t i = 0; i < sub.size(); i++) {
-      checkCancellation();
-      auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator()).first;
-      auto it2 = it1->second.try_emplace(startCol[i], allocator()).first;
-      it2->second.insert(targetCol[i]);
-    }
-    return HashMapWrapper{std::move(edgesWithGraph), allocator()};
-  }
+  AD_CORRECTNESS_CHECK(!graphVariable_.has_value());
   HashMapWrapper::Map edges{allocator()};
 
   for (size_t i = 0; i < sub.size(); i++) {

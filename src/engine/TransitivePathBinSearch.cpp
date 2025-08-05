@@ -97,12 +97,10 @@ TransitivePathBinSearch::TransitivePathBinSearch(
           qec, std::move(child), std::move(leftSide), std::move(rightSide),
           minDist, maxDist, std::move(activeGraphs), graphVariable) {
   auto [startSide, targetSide] = decideDirection();
-  auto makeSortColumns = [this, &graphVariable](ColumnIndex first,
-                                                ColumnIndex second) {
+  auto makeSortColumns = [&graphVariable](ColumnIndex first,
+                                          ColumnIndex second) {
     std::vector<ColumnIndex> sortColumns;
-    if (graphVariable.has_value()) {
-      sortColumns.push_back(subtree_->getVariableColumn(graphVariable.value()));
-    }
+    AD_CORRECTNESS_CHECK(!graphVariable.has_value());
     sortColumns.push_back(first);
     sortColumns.push_back(second);
     return sortColumns;
@@ -117,12 +115,9 @@ TransitivePathBinSearch::TransitivePathBinSearch(
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return BinSearchMap{
-      dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),
-      graphVariable_.has_value()
-          ? std::optional{dynSub.getColumn(
-                subtree_->getVariableColumn(graphVariable_.value()))}
-          : std::nullopt};
+  AD_CORRECTNESS_CHECK(!graphVariable_.has_value());
+  return BinSearchMap{dynSub.getColumn(startSide.subCol_),
+                      dynSub.getColumn(targetSide.subCol_), std::nullopt};
 }
 
 // _____________________________________________________________________________
