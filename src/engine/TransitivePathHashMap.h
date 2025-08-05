@@ -34,7 +34,7 @@ class HashMapWrapper {
 
  private:
   // Maps graph id -> (id -> set(id)), where the value type `Map` represents an
-  // adjancency list mapping.
+  // adjacency list mapping.
   MapOfMaps graphMap_;
   // Pointer to the map selected by the currently active graph.
   Map* map_;
