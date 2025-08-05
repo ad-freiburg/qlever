@@ -7,6 +7,7 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
 
 #include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
@@ -30,48 +31,20 @@ inline bool operator==(const ParseJob& a, const ParseJob& b) {
 
 typedef std::vector<ParseJob> ParseBatch;
 
-class WKTParser {
+class WKTParser : public sj::WKTParserBase<ParseJob> {
  public:
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
             const std::optional<util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
-  ~WKTParser();
 
   void addValueIdToQueue(ValueId valueId, size_t id, bool side);
 
-  util::geo::I32Box getBoundingBox() const { return _bbox; }
-
-  void done();
-
-  static util::geo::I32Point projFunc(const util::geo::DPoint& p) {
-    auto projPoint = latLngToWebMerc(p);
-    return {static_cast<int>(projPoint.getX() * PREC),
-            static_cast<int>(projPoint.getY() * PREC)};
-  }
-
   size_t getPrefilterCounter();
 
+ protected:
+  void processQueue(size_t t) override;
+
  private:
-  void parseLine(char* c, size_t len, size_t gid, size_t t,
-                 sj::WriteBatch& batch, bool side);
-  void processQueue(size_t t);
-
-  size_t _gid = 1;
-  std::string _dangling;
-
-  sj::Sweeper* _sweeper;
-
-  ParseBatch _curBatch;
-
-  util::geo::I32Box _bbox;
-
-  util::JobQueue<ParseBatch> _jobs;
-  std::vector<std::thread> _thrds;
-
-  std::vector<util::geo::I32Box> _bboxes;
-
-  std::atomic<bool> _cancelled;
-
   std::vector<size_t> _numSkipped;
 
   bool _usePrefiltering;
