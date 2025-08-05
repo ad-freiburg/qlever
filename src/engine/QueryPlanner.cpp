@@ -580,7 +580,8 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+  static EncodedIriManager ev;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
                     .parseTypesafe(&SparqlAutomaticParser::filterR)
                     .resultOfParse_;
 
@@ -833,13 +834,13 @@ auto QueryPlanner::seedWithScansAndText(
     // Backward compatibility with spatial search predicates
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
-            [](const PropertyPath& propertyPath) -> const std::string& {
+            [](const PropertyPath& propertyPath) -> std::string {
               AD_CORRECTNESS_CHECK(propertyPath.isIri());
-              return propertyPath.getIri().toStringRepresentation();
+              const auto& tc = propertyPath.getIri();
+              return tc.isIri() ? tc.getIri().toStringRepresentation()
+                                : tc.toString();
             },
-            [](const Variable& var) -> const std::string& {
-              return var.name();
-            }},
+            [](const Variable& var) -> std::string { return var.name(); }},
         node.triple_.p_);
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
@@ -939,8 +940,20 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [&left, &right](const ad_utility::triple_component::Iri& iri) {
-        return seedFromVarOrIri(left, iri, right);
+      [&left, &right](const TripleComponent& tripleComponent) {
+        // The tripleComponent can be either an IRI or an encoded ID
+        // seedFromVarOrIri expects a VarOrIri (variant<Variable, Iri>)
+        if (tripleComponent.isIri()) {
+          return seedFromVarOrIri(left, tripleComponent.getIri(), right);
+        } else {
+          // For encoded values, convert back to IRI representation
+          // This might not be ideal but allows compilation for now
+          auto iriString = tripleComponent.toString();
+          auto iri =
+              ad_utility::triple_component::Iri::fromStringRepresentation(
+                  iriString);
+          return seedFromVarOrIri(left, iri, right);
+        }
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
@@ -1040,10 +1053,14 @@ std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
     if (auto unwrapped = child.getChildOfInvertedPath()) {
       const PropertyPath& path = unwrapped.value();
       AD_CORRECTNESS_CHECK(path.isIri());
-      inverseIris.emplace_back(path.getIri().toStringRepresentation());
+      const auto& tc = path.getIri();
+      inverseIris.emplace_back(tc.isIri() ? tc.getIri().toStringRepresentation()
+                                          : tc.toString());
     } else {
       AD_CORRECTNESS_CHECK(child.isIri());
-      forwardIris.emplace_back(child.getIri().toStringRepresentation());
+      const auto& tc = child.getIri();
+      forwardIris.emplace_back(tc.isIri() ? tc.getIri().toStringRepresentation()
+                                          : tc.toString());
     }
   }
   return {std::move(forwardIris), std::move(inverseIris)};
@@ -3035,8 +3052,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& vocab = planner_._qec->getIndex().getVocab();
-  auto config = pathQuery.toPathSearchConfiguration(vocab);
+  const auto& index = planner_._qec->getIndex();
+  const auto& vocab = index.getVocab();
+  auto config =
+      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());

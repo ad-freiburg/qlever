@@ -27,6 +27,12 @@ using ::testing::Eq;
 using ::testing::HasSubstr;
 
 namespace {
+auto parseQuery(std::string query,
+                const std::vector<DatasetClause>& datasets = {}) {
+  static EncodedIriManager evM;
+  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
+}
+
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
 std::string runQueryStreamableResult(
@@ -42,7 +48,7 @@ std::string runQueryStreamableResult(
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
@@ -70,7 +76,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -1427,8 +1433,8 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   auto* qec = ad_utility::testing::getQec(
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(
-      GetParam() == turtle ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
+  auto pq = parseQuery(GetParam() == turtle
+                           ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
                            : "SELECT * WHERE { ?x ?y ?z }");
   auto qet = qp.createExecutionTree(pq);
 
@@ -1659,7 +1665,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       "<s> <p1> 40,41,42,43,44,45,46,47,48,49"
       " ; <p2> 50,51,52,53,54,55,56,57,58,59");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(std::string{query});
+  auto pq = parseQuery(std::string{query});
   auto qet = qp.createExecutionTree(pq);
 
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -1963,4 +1969,70 @@ TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
 
   ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet2);
   EXPECT_EQ(limit._offset, 0);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
+  // Test that encoded IRIs are properly handled during export
+
+  // Create a knowledge graph with IRIs that should be encodable
+  std::string kg =
+      "<http://example.org/123> <http://example.org/predicate456> "
+      "<http://example.org/789> ."
+      "<http://test.com/id/111> <http://example.org/predicate456> \"literal "
+      "value\" .";
+
+  // Test XML export with encoded IRIs
+  std::string query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o";
+
+  // Create test configuration with EncodedIriManager
+  auto encodedIriManager = std::make_shared<EncodedIriManager>(
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
+
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.encodedIriManager = EncodedIriManager{
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"}};
+  auto qec = ad_utility::testing::getQec(std::move(config));
+
+  // Parse query with the same EncodedIriManager
+  auto parsedQuery =
+      SparqlParser::parseQuery(encodedIriManager.get(), query, {});
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, cancellationHandle};
+  auto qet = qp.createExecutionTree(parsedQuery);
+
+  // Export as XML and verify encoded IRIs are properly converted back
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto cancellationHandle2 =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::string result;
+  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
+           std::move(cancellationHandle2))) {
+    result += chunk;
+  }
+
+  // Verify that the original IRI strings appear in the output
+  EXPECT_THAT(result, HasSubstr("http://example.org/123"));
+  EXPECT_THAT(result, HasSubstr("http://example.org/predicate456"));
+  EXPECT_THAT(result, HasSubstr("http://example.org/789"));
+  EXPECT_THAT(result, HasSubstr("http://test.com/id/111"));
+  EXPECT_THAT(result, HasSubstr("literal value"));
+
+  // Test TSV export as well
+  ad_utility::Timer tsvTimer{ad_utility::Timer::Started};
+  auto cancellationHandle3 =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::string tsvResult;
+  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
+           std::move(cancellationHandle3))) {
+    tsvResult += chunk;
+  }
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/123"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/predicate456"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/789"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://test.com/id/111"));
 }
