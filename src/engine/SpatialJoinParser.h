@@ -31,7 +31,7 @@ inline bool operator==(const SpatialJoinParseJob& a,
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
 }
 
-// Custom parallel WKT parser, which recieves only `ValueId`s instead of
+// Custom parallel WKT parser, which receives only `ValueId`s instead of
 // literals and fetches the corresponding bounding boxes and literals from the
 // vocabulary on the fly (and in parallel).
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
