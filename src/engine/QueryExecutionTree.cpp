@@ -204,6 +204,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   }
 
   auto& resultTree = optTree.value();
+  AD_CORRECTNESS_CHECK(resultTree != nullptr);
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
