@@ -2,7 +2,6 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <absl/functional/bind_front.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -1217,7 +1216,6 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
 }
 
 namespace {
-
 // For each of the `varsToKeep` return a pair of `[variable, columnIndex]` where
 // the column indices are obtained from the `underlyingScan`. The result is
 // sorted by the column indices.

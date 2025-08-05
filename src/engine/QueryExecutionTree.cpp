@@ -112,16 +112,15 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
+
+  // Note: Variables that have been stripped are still semantically part of the
+  // query, and thus can be prefiltered.
   std::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
     return !varToColMap.contains(pair.second) &&
            !strippedVariables_.contains(pair.second);
   });
 
   if (prefilterPairs.empty()) {
-    AD_LOG_INFO << "Stripped variables:\n";
-    for (const auto& var : strippedVariables_) {
-      AD_LOG_INFO << "Stripped variable: " << var.name() << '\n';
-    }
     return std::nullopt;
   } else {
     return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
@@ -205,10 +204,10 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   }
 
   auto& resultTree = optTree.value();
-  // Only store stripped variables if hideStrippedColumns is False
+  // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
-    // Calculate the variables that will be stripped (present in original but
-    // not in variables)
+    // Calculate the variables that will be stripped (present in the input, but
+    // not in the stripped result of this function).
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
@@ -216,7 +215,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
         strippedVariables.insert(var);
       }
     }
-    // Set the stripped variables in the result tree
+
+    // Store the stripped variables in the result tree
     resultTree->strippedVariables_ = std::move(strippedVariables);
   }
 
