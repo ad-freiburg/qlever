@@ -1697,13 +1697,13 @@ void testNumberOfThreads(size_t expectedNumberOfThreads,
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?geo1"},
+      Variable{"?geo2"}};
+  config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
-          qec,
-          SpatialJoinConfiguration{
-              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
-              Variable{"?geo1"}, Variable{"?geo2"}},
-          leftChild, rightChild);
+      ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
+                                                 rightChild);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
   auto res = spatialJoin->computeResult(false);
@@ -1723,7 +1723,7 @@ TEST(SpatialJoin, NumberOfThreads) {
     testNumberOfThreads(1);
   }
   if (hardwareThreads > 2) {
-    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(1);
+    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(2);
     testNumberOfThreads(2);
   }
   {
