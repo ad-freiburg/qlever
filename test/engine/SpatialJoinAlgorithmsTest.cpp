@@ -1707,13 +1707,12 @@ void testNumberOfThreads(size_t runtimeParamNumThreads,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
                                                  rightChild);
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
   auto res = spatialJoin->computeResult(false);
-  ASSERT_TRUE(
-      spatialJoin->runtimeInfo().details_.contains("spatialjoin num threads"));
-  EXPECT_EQ(static_cast<size_t>(
-                spatialJoin->runtimeInfo().details_["spatialjoin num threads"]),
+  auto details = spatialJoin->runtimeInfo().details_;
+  ASSERT_TRUE(details.contains("spatialjoin num threads"));
+  EXPECT_EQ(static_cast<size_t>(details["spatialjoin num threads"]),
             expectedNumberOfThreads);
 }
 
