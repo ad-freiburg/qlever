@@ -40,6 +40,54 @@ auto ev = []() -> const EncodedIriManager* {
 
 auto re2Parser = []() { return Re2Parser{ev()}; };
 auto ctreParser = []() { return CtreParser{ev()}; };
+
+// Meta-matcher that creates matchers for encoded IRIs at any position in a
+// triple
+auto makeEncodedTripleMatcher = [](const EncodedIriManager& encodedIriManager,
+                                   TripleComponent TurtleTriple::*memberPtr) {
+  return
+      [&encodedIriManager, memberPtr](const std::string& expectedDecodedIri) {
+        return ::testing::Field(
+            memberPtr,
+            ::testing::AllOf(
+                ::testing::ResultOf(std::mem_fn(&TripleComponent::isId), true),
+                ::testing::ResultOf(
+                    [](const TripleComponent& tc) {
+                      return tc.getId().getDatatype();
+                    },
+                    Datatype::EncodedVal),
+                ::testing::ResultOf(
+                    [&encodedIriManager](const TripleComponent& tc) {
+                      return encodedIriManager.toString(tc.getId());
+                    },
+                    expectedDecodedIri)));
+      };
+};
+
+// Meta-matcher that creates matchers for non-encoded IRIs at any position in a
+// triple
+auto makeIriTripleMatcher = [](TripleComponent TurtleTriple::*memberPtr) {
+  return [memberPtr](const std::string& expectedIri) {
+    return ::testing::Field(
+        memberPtr,
+        ::testing::AllOf(
+            ::testing::ResultOf(std::mem_fn(&TripleComponent::isIri), true),
+            ::testing::ResultOf(
+                [](const TripleComponent& tc) {
+                  return tc.getIri().toStringRepresentation();
+                },
+                expectedIri)));
+  };
+};
+
+// Helper function for testing triple parsing with matchers
+auto testTripleWithMatcher =
+    [](auto parserFactory, const std::string& tripleStr, auto tripleMatcher) {
+      auto parser = parserFactory();
+      parser.setInputStream(tripleStr);
+      parser.turtleDoc();
+      EXPECT_THAT(parser.getTriples(), ::testing::ElementsAre(tripleMatcher));
+    };
 }  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
