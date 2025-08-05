@@ -14,7 +14,7 @@
 // _____________________________________________________________________________
 BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
                            ql::span<const Id> targetIds,
-                           std::optional<ql::span<const Id>> graphIds)
+                           const std::optional<ql::span<const Id>>& graphIds)
     : startIds_{startIds},
       targetIds_{targetIds},
       graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},

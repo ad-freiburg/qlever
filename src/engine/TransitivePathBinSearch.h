@@ -50,7 +50,7 @@ class BinSearchMap {
 
  public:
   BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
-               std::optional<ql::span<const Id>> graphIds = std::nullopt);
+               const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   /**
    * @brief Return the successors for the given id.
