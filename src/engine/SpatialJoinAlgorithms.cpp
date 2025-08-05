@@ -94,48 +94,12 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       qec_->getIndex());
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
+  // TODO: can we avoid this loop and add the IdTable en-block?
   for (size_t row = 0; row < idTable->size(); row++) {
     throwIfCancelled();
 
     const auto id = idTable->at(row, column);
     parser.addValueIdToQueue(id, row, leftOrRightSide);
-    /* if (id.getDatatype() == Datatype::VocabIndex) {
-       // If we have a prefilter box, check if we also have a precomputed
-       // bounding box for the geometry this `VocabIndex` is referring to.
-       if (usePrefiltering &&
-           prefilterGeoByBoundingBox(prefilterLatLngBox, qec_->getIndex(),
-                                     id.getVocabIndex())) {
-         prefilterCounter++;
-         continue;
-       }
-
-       // If we have not filtered out this geometry, read and parse the full
-       // string.
-       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
-       parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
-     } else if (id.getDatatype() == Datatype::GeoPoint) {
-       const auto& p = id.getGeoPoint();
-       const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
-
-       // If point is not contained in the prefilter box, we can skip it
-       // immediately instead of feeding it to the parser.
-       if (prefilterLatLngBox.has_value() &&
-           !util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
-         prefilterCounter++;
-         continue;
-       }
-
-       parser.parsePoint(utilPoint, row, leftOrRightSide);
-     } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-       // `LocalVocabEntry` has to be parsed in any case: we have no information
-       // except the string.
-       const auto& literalOrIri = *id.getLocalVocabIndex();
-       if (literalOrIri.isLiteral()) {
-         const auto& wkt =
-             asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-         parser.parseWKT(wkt, row, leftOrRightSide);
-       }
-     }*/
   }
 
   // Wait for all parser threads to finish, then return the bounding box of all
