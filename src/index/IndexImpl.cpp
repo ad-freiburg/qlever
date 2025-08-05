@@ -565,6 +565,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
+  // Initializing textIndexIndices_
+  textIndexIndices_.open(onDiskBase_ + TEXT_INDEX_LITERAL_IDS,
+                         ad_utility::CreateTag{});
+
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
@@ -579,7 +583,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                 bool inTextIndex) {
       const auto idx = wordCallback(word, external);
       if (inTextIndex) {
-        textIndexIndices_.push_back(idx);
+        textIndexIndices_.push_back(VocabIndex::make(idx));
       }
       return idx;
     };
@@ -592,14 +596,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
 
-  ad_utility::File textLiteralsIndexFile(onDiskBase_ + TEXT_INDEX_LITERAL_IDS,
-                                         "w");
-  ad_utility::serialization::FileWriteSerializer serializer{
-      std::move(textLiteralsIndexFile)};
-  serializer << textIndexIndices_;
-  textLiteralsIndexFile = std::move(serializer).file();
-  textLiteralsIndexFile.close();
-  textIndexIndices_.clear();
+  // Save textIndexIndices_
+  textIndexIndices_.close();
 
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;

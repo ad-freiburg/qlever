@@ -123,7 +123,7 @@ class IndexImpl {
   Index::Vocab vocab_;
   // A list of all Ids of all Literals that have been added to the text index.
   // (In the textIndexBuilder this is used to add them)
-  std::vector<TextLiteralsIndex> textIndexIndices_;
+  ad_utility::MmapVector<VocabIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
   TextIndexLiteralFilter textIndexLiteralFilter_;
@@ -427,7 +427,7 @@ class IndexImpl {
       if (index >= textIndexIndices_.size()) {
         return "";
       }
-      return vocab_[VocabIndex::make(textIndexIndices_[index])];
+      return vocab_[textIndexIndices_[index]];
     }
     return docsDB_.getTextExcerpt(cid);
   }

@@ -11,7 +11,6 @@
 
 using Id = ValueId;
 using Score = float;
-using TextLiteralsIndex = uint64_t;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;

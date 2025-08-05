@@ -156,7 +156,7 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // a text record.
   if (addWordsFromLiterals) {
     for (const auto& index : textIndexIndices_) {
-      auto text = vocab_[VocabIndex::make(index)];
+      auto text = vocab_[index];
       // We need the explicit cast to `std::string` because the return type of
       // `indexToString` might be `string_view` if the vocabulary is stored
       // uncompressed in memory.

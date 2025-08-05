@@ -15,9 +15,8 @@ class TextIndexBuilder : public IndexImpl {
                             const std::string& onDiskBase)
       : IndexImpl(allocator) {
     setOnDiskBase(onDiskBase);
-    ad_utility::serialization::FileReadSerializer reader{
-        onDiskBase_ + TEXT_INDEX_LITERAL_IDS};
-    reader >> textIndexIndices_;
+    textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+        onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
   }
 
   // Adds a text index to a complete KB index. Reads words from the given
