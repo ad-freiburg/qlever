@@ -170,6 +170,10 @@ class SpatialJoinAlgorithms {
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
       const Index& index, VocabIndex vocabIndex);
 
+  // Retrieve the number of threads to be used for `libspatialjoinParse` and
+  // `LibspatialjoinAlgorithm`.
+  static size_t getNumThreads();
+
  private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
