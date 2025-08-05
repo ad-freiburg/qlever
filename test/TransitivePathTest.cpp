@@ -1157,6 +1157,12 @@ TEST(TransitivePathBinSearch, successorsWithGraph) {
   EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre());
   EXPECT_THAT(binSearchMap.successors(V(2)), ElementsAre(V(12)));
   EXPECT_THAT(binSearchMap.successors(V(3)), ElementsAre(V(13)));
+
+  binSearchMap.setGraphId(V(102));
+  EXPECT_THAT(binSearchMap.successors(V(0)), ElementsAre());
+  EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre());
+  EXPECT_THAT(binSearchMap.successors(V(2)), ElementsAre());
+  EXPECT_THAT(binSearchMap.successors(V(3)), ElementsAre());
 }
 
 namespace {
@@ -1220,6 +1226,12 @@ TEST(TransitivePathHashMap, successorsWithGraph) {
   EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre());
   EXPECT_THAT(hashMapWrapper.successors(V(2)), UnorderedElementsAre(V(12)));
   EXPECT_THAT(hashMapWrapper.successors(V(3)), UnorderedElementsAre(V(13)));
+
+  hashMapWrapper.setGraphId(V(102));
+  EXPECT_THAT(hashMapWrapper.successors(V(0)), UnorderedElementsAre());
+  EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre());
+  EXPECT_THAT(hashMapWrapper.successors(V(2)), UnorderedElementsAre());
+  EXPECT_THAT(hashMapWrapper.successors(V(3)), UnorderedElementsAre());
 }
 
 // _____________________________________________________________________________

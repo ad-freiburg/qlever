@@ -41,7 +41,8 @@ TransitivePathBase::TransitivePathBase(
       activeGraphs_{std::move(activeGraphs)} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
-  // Temporary
+  // For now we don't support the `graphVariable` yet, but only have it for a
+  // faster review cycle.
   AD_CORRECTNESS_CHECK(!graphVariable.has_value());
   if (lhs_.isVariable()) {
     variableColumns_[lhs_.value_.getVariable()] = makeAlwaysDefinedColumn(0);

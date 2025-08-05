@@ -1,6 +1,8 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #include "engine/TransitivePathBinSearch.h"
 
@@ -16,10 +18,18 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
     : startIds_{startIds},
       targetIds_{targetIds},
       graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},
-      sizeOfActiveGraph_{startIds_.size()} {
+      // Set size to zero if graphs are active to avoid undefined behaviour in
+      // case we forget to call `setActiveGraph`.
+      sizeOfActiveGraph_{graphIds.has_value() ? 0 : startIds_.size()} {
   AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
   AD_CORRECTNESS_CHECK(startIds.size() == graphIds_.size() ||
                        !graphIds.has_value());
+  if (graphIds.has_value()) {
+    AD_EXPENSIVE_CHECK(
+        ql::ranges::is_sorted(::ranges::views::zip(graphIds_, startIds)));
+  } else {
+    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(startIds));
+  }
 }
 
 // _____________________________________________________________________________
@@ -33,10 +43,11 @@ ql::span<const Id> BinSearchMap::successors(Id node) const {
 }
 
 // _____________________________________________________________________________
-absl::InlinedVector<std::pair<Id, Id>, 1>
-BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
-  absl::InlinedVector<std::pair<Id, Id>, 1> result;
+IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
+  IdWithGraphs result;
   if (graphIds_.empty()) {
+    // We fill the graph id with undefined here, because it's supposed to be
+    // unused, and `setGraphId` is no-op in this case using this value.
     if (node.isUndefined()) {
       for (Id id : startIds_) {
         if (result.empty() || result.back().first != id) {

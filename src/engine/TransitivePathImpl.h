@@ -33,6 +33,8 @@ struct TableColumnWithVocab {
 };
 };  // namespace detail
 
+using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
+
 /**
  * @class TransitivePathImpl
  * @brief This class implements common functions for the concrete TransitivePath
@@ -291,6 +293,9 @@ class TransitivePathImpl : public TransitivePathBase {
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways.
     const auto& idsWithGraph = edges.getEquivalentIdAndMatchingGraphs(startId);
+    // For now we don't support GRAPH yet, but only have it for a faster review
+    // cycle.
+    AD_CORRECTNESS_CHECK(idsWithGraph.size() <= 1);
     for (const auto& [id, graphId] : idsWithGraph) {
       result.insert(id);
     }
