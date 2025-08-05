@@ -1220,8 +1220,9 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // Here changes can be made whether literals should be in the text index.
   // This has to be done this early on since "triple" values will be moved later
   // on.
-  textIndexLiteralFilter_.computeInTextIndexMap(
-      triple.subject_, triple.predicate_, triple.object_);
+  auto [sInTextIndex, pInTextIndex, oInTextIndex] =
+      textIndexLiteralFilter_.computeInTextIndexMap(
+          triple.subject_, triple.predicate_, triple.object_);
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
@@ -1273,7 +1274,20 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
 
     // Retrieve the inTextIndex value for subject, predicate and object.
-    component.inTextIndex_ = textIndexLiteralFilter_(index);
+    switch (index) {
+      case 0:
+        component.inTextIndex_ = sInTextIndex;
+        break;
+      case 1:
+        component.inTextIndex_ = pInTextIndex;
+        break;
+      case 2:
+        component.inTextIndex_ = oInTextIndex;
+        break;
+      default:
+        component.inTextIndex_ = false;
+        break;
+    }
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }

@@ -18,12 +18,13 @@ auto testMultipleTriples = [](TextIndexLiteralFilter& filter,
                               const EqualityVector& equality) {
   ASSERT_EQ(triplesToTest.size(), equality.size());
   for (size_t i = 0; i < triplesToTest.size(); ++i) {
-    filter.computeInTextIndexMap(triplesToTest[i].subject_,
-                                 triplesToTest[i].predicate_,
-                                 triplesToTest[i].object_);
-    ASSERT_EQ(filter(0), std::get<0>(equality[i]));
-    ASSERT_EQ(filter(1), std::get<1>(equality[i]));
-    ASSERT_EQ(filter(2), std::get<2>(equality[i]));
+    auto [sInTextIndex, pInTextIndex, oInTextIndex] =
+        filter.computeInTextIndexMap(triplesToTest[i].subject_,
+                                     triplesToTest[i].predicate_,
+                                     triplesToTest[i].object_);
+    ASSERT_EQ(sInTextIndex, std::get<0>(equality[i]));
+    ASSERT_EQ(pInTextIndex, std::get<1>(equality[i]));
+    ASSERT_EQ(oInTextIndex, std::get<2>(equality[i]));
   }
 };
 

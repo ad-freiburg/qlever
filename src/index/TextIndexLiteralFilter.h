@@ -43,11 +43,11 @@ class TextIndexLiteralFilter {
     }
   }
 
-  bool operator()(size_t index) const;
   // Computes inTextIndexMap_ depending on the values for regex, whitelist and
   // addAllLiterals. Later the values can be retrieved using the operator().
-  void computeInTextIndexMap(const TripleComponent& s, const TripleComponent& p,
-                             const TripleComponent& o);
+  std::tuple<bool, bool, bool> computeInTextIndexMap(const TripleComponent& s,
+                                                     const TripleComponent& p,
+                                                     const TripleComponent& o);
 
   bool addAllLiterals() const { return addAllLiterals_; }
 
@@ -58,8 +58,6 @@ class TextIndexLiteralFilter {
   bool isWhitelist_ = true;
   // True when all literals not only objects should be added
   bool addAllLiterals_ = false;
-  // This maps subject, predicate and object to their inTextIndex values
-  std::tuple<bool, bool, bool> inTextIndexMap_ = {false, false, false};
 };
 
 #endif  // QLEVER_SRC_INDEX_TRIPLEINTEXTINDEX_H

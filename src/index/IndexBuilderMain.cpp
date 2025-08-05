@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
   // Add words from literals if either a regex filter for predicates with
   // literals as objects is given or the option to add all literals is chosen
   addWordsFromLiterals =
-      addWordsFromAllLiterals || optionsMap.count("text-index-regex");
+      addWordsFromAllLiterals || optionsMap.contains("text-index-regex");
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
