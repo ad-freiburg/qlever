@@ -728,6 +728,13 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::makeTreeWithStrippedColumns(
+    [[maybe_unused]] const std::set<Variable>& variables) const {
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 bool Operation::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));

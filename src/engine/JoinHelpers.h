@@ -14,6 +14,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/CompressedRelation.h"
 #include "index/Permutation.h"
+#include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
@@ -152,6 +153,38 @@ inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
   bool rightUndef = hasUndef(right);
   return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
          (rightInGraph && !rightUndef);
+}
+
+// Helper function to check if any of the join columns could potentially contain
+// undef values.
+inline bool joinColumnsAreAlwaysDefined(
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right) {
+  auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
+    return tree->getVariableAndInfoByColumnIndex(index)
+               .second.mightContainUndef_ ==
+           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  };
+  return ql::ranges::all_of(
+      joinColumns, [alwaysDefHelper = std::move(alwaysDefHelper), &left,
+                    &right](const auto& indices) {
+        return alwaysDefHelper(left, indices[0]) &&
+               alwaysDefHelper(right, indices[1]);
+      });
+}
+
+// Helper function that is commonly used to skip sort operations and use an
+// alternative algorithm that doesn't require sorting instead.
+inline std::shared_ptr<const Result> computeResultSkipChild(
+    const std::shared_ptr<Operation>& operation) {
+  auto children = operation->getChildren();
+  AD_CONTRACT_CHECK(children.size() == 1);
+  auto child = children.at(0);
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  operation->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
+
+  return child->getResult(true);
 }
 }  // namespace qlever::joinHelpers
 

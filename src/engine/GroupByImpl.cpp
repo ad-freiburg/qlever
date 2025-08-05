@@ -15,6 +15,7 @@
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -47,14 +48,27 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                 [&map = subtree->getVariableColumns()](const auto& var) {
                   return !map.contains(var);
                 });
+
+  // The subtrees of a GROUP BY only need to compute columns that are grouped or
+  // used in any of the aggregate aliases.
+  if (RuntimeParameters().get<"strip-columns">()) {
+    std::set<Variable> usedVariables{_groupByVariables.begin(),
+                                     _groupByVariables.end()};
+    for (const auto& alias : _aliases) {
+      for (const auto* var : alias._expression.containedVariables()) {
+        usedVariables.insert(*var);
+      }
+    }
+    subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::move(subtree), usedVariables);
+  }
+
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
   //
   // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
   ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
-
-  auto sortColumns = computeSortColumns(subtree.get());
 
   // Aliases are like `BIND`s, which may contain `EXISTS` expressions.
   for (const auto& alias : _aliases) {
@@ -63,6 +77,9 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
         cancellationHandle_);
   }
 
+  // The input of a GROUP BY has to be sorted. If possible, we get optimize out
+  // the sort during the evaluation.
+  auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
@@ -622,7 +639,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  if (indexScan->getResultWidth() <= 1 ||
+  if (indexScan->numVariables() <= 1 ||
       indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
     return std::nullopt;
   }
@@ -635,7 +652,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   // Distinct counts are only supported for triples with three variables.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
-  if (countIsDistinct && indexScan->getResultWidth() != 3) {
+  if (countIsDistinct && indexScan->numVariables() != 3) {
     return std::nullopt;
   }
 
@@ -645,7 +662,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
-  } else if (indexScan->getResultWidth() == 3) {
+  } else if (indexScan->numVariables() == 3) {
     if (countIsDistinct) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
@@ -786,7 +803,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || indexScan->graphsToFilter().has_value() ||
-      indexScan->getResultWidth() != 3) {
+      indexScan->numVariables() != 3) {
     return std::nullopt;
   }
   {
@@ -935,6 +952,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     return result;
   }
   if (auto result = computeGroupByObjectWithCount()) {
+    return result;
+  }
+  if (auto result = computeCountStar()) {
     return result;
   }
   return std::nullopt;
@@ -1641,4 +1661,43 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeCountStar() const {
+  bool isSingleGlobalAggregateFunction =
+      _groupByVariables.empty() && _aliases.size() == 1;
+  if (!isSingleGlobalAggregateFunction) {
+    return std::nullopt;
+  }
+  // We can't optimize `COUNT(DISTINCT *)`.
+  const bool singleAggregateIsNonDistinctCountStar = [&]() {
+    auto* countStar =
+        dynamic_cast<const sparqlExpression::CountStarExpression*>(
+            _aliases[0]._expression.getPimpl());
+    return countStar && !countStar->isDistinct();
+  }();
+  if (!singleAggregateIsNonDistinctCountStar) {
+    return std::nullopt;
+  }
+
+  auto childRes = _subtree->getResult(true);
+  // Compute the result as a single `size_t`.
+  auto res = [&input = *childRes]() -> size_t {
+    if (input.isFullyMaterialized()) {
+      return input.idTable().size();
+    } else {
+      auto gen = input.idTables();
+      auto sz = gen | ql::views::transform([](const auto& pair) {
+                  return pair.idTable_.numRows();
+                }) |
+                ql::views::common;
+      return std::accumulate(sz.begin(), sz.end(), size_t{0});
+    }
+  }();
+
+  // Wrap the result in an IdTable with a single row and column.
+  IdTable result{1, getExecutionContext()->getAllocator()};
+  result.push_back(std::array{Id::makeFromInt(res)});
+  return result;
 }
