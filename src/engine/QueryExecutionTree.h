@@ -17,6 +17,9 @@
 #include "parser/data/Types.h"
 #include "util/HashSet.h"
 
+// Strongly typed enum for controlling whether stripped variables are stored
+enum class HideStrippedColumns { False, True };
+
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
 class QueryExecutionTree {
@@ -194,10 +197,12 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qetB);
 
   // Return a clone/ deep copy of `qet` that only returns the specified
-  // `variables` in its result.
+  // `variables` in its result. If `hideStrippedColumns` is True, the stripped
+  // variables are not stored in the result tree.
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::set<Variable>& variables);
+      const std::set<Variable>& variables,
+      HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
