@@ -1689,8 +1689,11 @@ using Loc = ad_utility::source_location;
 
 // Helper to compute a `SpatialJoin` using `libspatialjoin` and check if the
 // used number of threads is the expected.
-void testNumberOfThreads(size_t expectedNumberOfThreads,
+void testNumberOfThreads(size_t runtimeParamNumThreads,
+                         size_t expectedNumberOfThreads,
                          Loc sourceLocation = Loc::current()) {
+  auto cleanUp = setRuntimeParameterForTest<"spatial-join-max-threads">(
+      runtimeParamNumThreads);
   auto l = generateLocationTrace(sourceLocation);
   auto qec = buildMixedAreaPointQEC();
   auto leftChild =
@@ -1717,29 +1720,13 @@ void testNumberOfThreads(size_t expectedNumberOfThreads,
 // _____________________________________________________________________________
 TEST(SpatialJoin, NumberOfThreads) {
   size_t hardwareThreads = std::thread::hardware_concurrency();
-  testNumberOfThreads(hardwareThreads);
-  {
-    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(1);
-    testNumberOfThreads(1);
-  }
+  testNumberOfThreads(1, 1);
   if (hardwareThreads > 2) {
-    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(2);
-    testNumberOfThreads(2);
+    testNumberOfThreads(2, 2);
   }
-  {
-    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(0);
-    testNumberOfThreads(hardwareThreads);
-  }
-  {
-    auto context =
-        setRuntimeParameterForTest<"spatial-join-max-threads">(hardwareThreads);
-    testNumberOfThreads(hardwareThreads);
-  }
-  {
-    auto context = setRuntimeParameterForTest<"spatial-join-max-threads">(
-        hardwareThreads + 5);
-    testNumberOfThreads(hardwareThreads);
-  }
+  testNumberOfThreads(0, hardwareThreads);
+  testNumberOfThreads(hardwareThreads, hardwareThreads);
+  testNumberOfThreads(hardwareThreads + 5, hardwareThreads);
 }
 
 }  // namespace runtimeParameters
