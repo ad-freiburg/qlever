@@ -307,9 +307,11 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
     AD_CORRECTNESS_CHECK(predicate.isIri());
+    const auto& tripleComponent = predicate.getIri();
+    AD_CORRECTNESS_CHECK(tripleComponent.isIri());
     predicate =
         PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-            predicate.getIri(), langTag));
+            tripleComponent.getIri(), langTag));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
