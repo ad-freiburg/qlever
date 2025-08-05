@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#include "TransitivePathBinSearch.h"
+#include "engine/TransitivePathBinSearch.h"
 
 #include <memory>
 #include <utility>

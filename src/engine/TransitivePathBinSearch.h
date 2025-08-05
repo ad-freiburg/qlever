@@ -62,10 +62,10 @@ class BinSearchMap {
   // function need it in this format for convenience. The most common case is
   // that there's a single matching entry, (especially when using this without
   // an active graph,) which is why `absl::InlinedVector` is used with size 1.
-  // If no entry matches an empty vector is returned. If an active graph is set,
-  // entries will be limited to just that graph. If `node` is undefined, it will
-  // return all elements in the currently active graph, or all elements if no
-  // graph is set.
+  // If no entry matches an empty vector is returned. If `node` is undefined, it
+  // will return all elements in the currently active graph, or all elements if
+  // no graph is set. Active graphs set via `setGraphId` are ignored. Entries
+  // are deduplicated.
   absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIdAndMatchingGraphs(
       Id node) const;
 

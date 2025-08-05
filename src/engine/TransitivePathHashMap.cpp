@@ -3,7 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#include "TransitivePathHashMap.h"
+#include "engine/TransitivePathHashMap.h"
 
 #include <memory>
 
