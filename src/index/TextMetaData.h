@@ -8,9 +8,9 @@
 #include <cstdio>
 #include <vector>
 
-#include "global/Id.h"
+#include "global/IndexTypes.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
 class ContextListMetaData {
@@ -57,7 +57,7 @@ class TextBlockMetaData {
  public:
   TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() {}
 
-  TextBlockMetaData(WordIndex firstWordId, WordIndex lastWordId,
+  TextBlockMetaData(WordVocabIndex firstWordId, WordVocabIndex lastWordId,
                     const ContextListMetaData& cl,
                     const ContextListMetaData& entityCl)
       : _firstWordId(firstWordId),
@@ -65,14 +65,10 @@ class TextBlockMetaData {
         _cl(cl),
         _entityCl(entityCl) {}
 
-  uint64_t _firstWordId;
-  uint64_t _lastWordId;
+  WordVocabIndex _firstWordId;
+  WordVocabIndex _lastWordId;
   ContextListMetaData _cl;
   ContextListMetaData _entityCl;
-
-  static constexpr size_t sizeOnDisk() {
-    return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
-  }
 
   template <typename T>
   friend std::true_type allowTrivialSerialization(TextBlockMetaData, T);
@@ -86,7 +82,8 @@ class TextMetaData {
   // Can be multiple blocks. Note: the range is [lower, upper], NOT [lower,
   // upper)
   std::vector<std::reference_wrapper<const TextBlockMetaData>>
-  getBlockInfoByWordRange(const uint64_t lower, const uint64_t upper) const;
+  getBlockInfoByWordRange(const WordVocabIndex lower,
+                          const WordVocabIndex upper) const;
 
   size_t getBlockCount() const;
 
@@ -94,7 +91,7 @@ class TextMetaData {
 
   void addBlock(const TextBlockMetaData& md);
 
-  off_t getOffsetAfter();
+  off_t getOffsetAfter() const;
 
   const TextBlockMetaData& getBlockById(size_t id) const { return _blocks[id]; }
 
@@ -117,7 +114,9 @@ class TextMetaData {
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
-  std::vector<uint64_t> _blockUpperBoundWordIds;
+  // Dummy for a member that is not needed anymore. Removing it would
+  // by an index-breaking change.
+  std::vector<uint64_t> _blockUpperBoundWordIdDummy = {};
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
@@ -126,7 +125,7 @@ class TextMetaData {
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
-    serializer | arg._blockUpperBoundWordIds;
+    serializer | arg._blockUpperBoundWordIdDummy;
     serializer | arg._nofTextRecords;
     serializer | arg._nofWordPostings;
     serializer | arg._nofEntityPostings;
