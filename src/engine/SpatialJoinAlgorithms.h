@@ -8,7 +8,6 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
 #include <spatialjoin/Sweeper.h>
-#include <spatialjoin/WKTParse.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
