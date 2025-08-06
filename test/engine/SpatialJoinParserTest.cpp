@@ -4,11 +4,12 @@
 
 #include <gtest/gtest.h>
 
-#include "engine/SpatialJoinParser.h"
+#include "./SpatialJoinParserTestHelpers.h"
 
+// _____________________________________________________________________________
 namespace {
-using namespace ad_utility::detail::parallel_wkt_parser;
-// TODO SpatialJoinPrefilterTestHelpers
+
+using namespace SpatialJoinParserTestHelpers;
 
 // TODO
 TEST(SpatialJoinParser, Todo) { ASSERT_TRUE(true); }
