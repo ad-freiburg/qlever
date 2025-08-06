@@ -93,16 +93,19 @@ using GeneratorWithDetails =
 // efficient access in the join columns below.
 inline GeneratorWithDetails convertGenerator(
     Permutation::IdTableGenerator gen) {
-  // Capture the details before moving the generator
-  auto details = gen.details();
-  auto transformer = [](auto& table) {
-    // IndexScans don't have a local vocabulary, so we can just use an empty one
-    return IdTableAndFirstCol{std::move(table), LocalVocab{}};
-  };
-  // Use the captured details from the original generator
-  return GeneratorWithDetails{
-      CachingTransformInputRange(std::move(gen), std::move(transformer)),
-      std::move(details)};
+  // Store the generator in a wrapper so we can access its details after moving
+  auto generatorStorage =
+      std::make_shared<Permutation::IdTableGenerator>(std::move(gen));
+
+  // Create the range with a pointer to the generator's details
+  auto range = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(
+      CachingTransformInputRange(*generatorStorage, [](auto& table) {
+        // IndexScans don't have a local vocabulary, so we can just use an
+        // empty one
+        return IdTableAndFirstCol{std::move(table), LocalVocab{}};
+      }));
+
+  return GeneratorWithDetails{std::move(range), &generatorStorage->details()};
 }
 
 // Part of the implementation of `createResult`. This function is called when
