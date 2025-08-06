@@ -173,7 +173,7 @@ CPP_template_def(typename C, typename L)(
 
   // Used to retrieve the next word once the old `EqualWords` have been written
   // or there have not been `EqualWords` before.
-  auto getNewCurrentWord = [](const auto& queueWord) {
+  auto getNewCurrentWord = [](const QueueWord& queueWord) {
     return EqualWords(queueWord.iriOrLiteral(), queueWord.isExternal(),
                       queueWord.inTextIndex(), queueWord.partialFileId_,
                       queueWord.id());

@@ -185,9 +185,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.loadAllPermutations() = c.loadAllPermutations;
     index.setTextIndexLiteralFilter(
         {c.literalRegex.value_or(""),
-         c.literalRegexIsWhitelist
-             ? TextIndexLiteralFilter::FilterType::AcceptMatching
-             : TextIndexLiteralFilter::FilterType::DeclineMatching,
+         c.literalRegexIsWhitelist ? LiteralFilterType::AcceptMatching
+                                   : LiteralFilterType::DeclineMatching,
          !c.literalRegex.has_value() && c.addWordsFromLiterals});
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};

@@ -1038,8 +1038,7 @@ void IndexImpl::setKbName(const std::string& name) {
 // _____________________________________________________________________________
 void IndexImpl::setTextIndexLiteralFilter(
     const TextIndexLiteralConfiguration& config) {
-  textIndexLiteralFilter_ = TextIndexLiteralFilter{
-      config.regex_, config.whitelist_, config.addAllLiterals_};
+  textIndexLiteralFilter_ = TextIndexLiteralFilter{config};
 }
 
 // ____________________________________________________________________________
@@ -1214,7 +1213,7 @@ void IndexImpl::readConfiguration() {
 
 // ___________________________________________________________________________
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
-    TurtleTriple&& triple) {
+    TurtleTriple&& triple) const {
   // Here changes can be made whether literals should be in the text index.
   // This has to be done this early on since "triple" values will be moved later
   // on.

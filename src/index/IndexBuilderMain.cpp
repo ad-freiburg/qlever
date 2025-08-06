@@ -200,9 +200,10 @@ int main(int argc, char** argv) {
       po::bool_switch(&tripleInTextIndexRegexIsWhitelist),
       "If set to true (default) the object literals of predicates matching "
       "`text-index-regex` will be added to the text index. If set to false the "
-      "object literals for every non-matching predicate will be added. If "
-      "duplicate object literals have different values for if they should be "
-      "added to the text index one true suffices to add the literal.");
+      "object literals for every non-matching predicate will be added. If a "
+      "literal appears together with multiple predicates, then it is added if "
+      "at least one of the predicates indicates that it should be added to the "
+      "text index");
   add("text-index-name,T", po::value(&textIndexName),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
@@ -329,12 +330,11 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    index.setTextIndexLiteralFilter(
-        {tripleInTextIndexRegex,
-         tripleInTextIndexRegexIsWhitelist
-             ? TextIndexLiteralFilter::FilterType::AcceptMatching
-             : TextIndexLiteralFilter::FilterType::DeclineMatching,
-         addWordsFromAllLiterals});
+    index.setTextIndexLiteralFilter({tripleInTextIndexRegex,
+                                     tripleInTextIndexRegexIsWhitelist
+                                         ? LiteralFilterType::AcceptMatching
+                                         : LiteralFilterType::DeclineMatching,
+                                     addWordsFromAllLiterals});
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

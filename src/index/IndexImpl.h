@@ -671,7 +671,7 @@ class IndexImpl {
   bool isLiteral(std::string_view object) const;
 
  public:
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple);
+  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 
  protected:
   /**

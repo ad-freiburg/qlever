@@ -272,7 +272,7 @@ class VocabularyMerger {
   // This function has to be called for a word once all of its occurrences in
   // the different partial vocabularies have been processed by the queue. It
   // gets the index and target index for EqualWords. This target index has to be
-  // set only once for EqualWords. The function isn't const since metaData is
+  // set only once for EqualWords. The function isn't const since `metaData_` is
   // modified.
   CPP_template(typename C)(
       requires WordCallback<C>) void writeAndGetEqualWordIds(EqualWords&
