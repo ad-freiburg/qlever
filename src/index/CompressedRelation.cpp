@@ -388,21 +388,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       });
 }
 
-// Helper function that enables a comparison of a triple with an `Id` in
-// the function `getBlocksForJoin` below.
-//
-// If the given triple matches `col0Id` of the given `ScanSpecification`, then
-// `col1Id` is returned.
-// respective other `Id` of the triple is returned.
-//
-// If the given triple matches neither, a sentinel value is returned (`Id::min`
-// if the triple is lower than all triples matching the `ScanSpecification`, or
-// `Id::max` if it is higher).
-namespace {
-auto getRelevantIdFromTriple(
+// _____________________________________________________________________________
+Id CompressedRelationReader::getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
-    const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
-        metadataAndBlocks) {
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // The `ScanSpecifcation`, which must ask for at least one column.
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
   AD_CORRECTNESS_CHECK(!scanSpec.col2Id());
@@ -458,7 +447,6 @@ auto getRelevantIdFromTriple(
                                maxId)
       .value_or(triple.col2Id_);
 }
-}  // namespace
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getBlocksForJoin(

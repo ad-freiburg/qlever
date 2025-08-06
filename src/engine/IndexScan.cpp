@@ -562,10 +562,20 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
-      if (newBlocks.empty()) {
-        // The current input table matches no blocks, so we don't have to yield
-        // it.
-        continue;
+      if (newBlocks.empty() &&
+          (pendingBlocks_.empty() ||
+           joinColumn[0] >
+               CompressedRelationReader::getRelevantIdFromTriple(
+                   pendingBlocks_.back().lastTriple_, metaBlocks_))) {
+        if (!metaBlocks_.blockMetadata_.empty()) {
+          // The current input table matches no blocks, so we don't have to
+          // yield it.
+          continue;
+        }
+        // In this case there's no more data to fetch, so we no longer need to
+        // process the rest of the join side.
+        doneFetching_ = true;
+        return;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       // Find first value that differs from the last one that was used to find

@@ -620,6 +620,15 @@ class CompressedRelationReader {
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
 
+  // Helper function that enables a comparison of a triple with an `Id` in the
+  // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
+  // the given `ScanSpecification`, then `col1Id` is returned. If the given
+  // triple matches neither, a sentinel value is returned `ScanSpecification`,
+  // or `Id::max` if it is higher).
+  static Id getRelevantIdFromTriple(
+      CompressedBlockMetadata::PermutedTriple triple,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
+
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
   // elements in the `joinColumn` (The col0Id is fixed and specified by the
