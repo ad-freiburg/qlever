@@ -10,6 +10,7 @@
 #include <string>
 
 #include "backports/algorithm.h"
+#include "util/Exception.h"
 #include "util/Iterators.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
@@ -324,4 +325,33 @@ TEST(Iterator, InputRangeTypeErasedWithDetails) {
                      InputRangeTypeErasedWithDetails<int, TestDetails>>);
   EXPECT_EQ(deducedRange.details().name, "deduced");
   EXPECT_EQ(deducedRange.details().count, 123);
+
+  // Test external details (pointer-based) scenario
+  TestDetails externalDetails{"external", 456};
+  InputRangeTypeErasedWithDetails<int, TestDetails> rangeWithExternalDetails{
+      values, &externalDetails};
+
+  // Test that external details are accessible (const access)
+  const auto& constRangeRef = rangeWithExternalDetails;
+  EXPECT_EQ(constRangeRef.details().name, "external");
+  EXPECT_EQ(constRangeRef.details().count, 456);
+
+  // Test that modifying the external details affects the range
+  externalDetails.count = 789;
+  EXPECT_EQ(constRangeRef.details().count, 789);
+
+  // Test that mutable access throws for external details
+  EXPECT_THROW(
+      {
+        auto& mutableDetails = rangeWithExternalDetails.details();
+        mutableDetails.count = 999;  // This should throw
+      },
+      ad_utility::Exception);
+
+  // Test range functionality with external details
+  std::vector<int> externalResult;
+  for (auto& value : rangeWithExternalDetails) {
+    externalResult.push_back(value);
+  }
+  EXPECT_EQ(externalResult, values);
 }
