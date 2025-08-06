@@ -24,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
@@ -347,19 +348,11 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
     ad_utility::gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{},
                               addRow, {}, cancellationCallback);
   } else {
-    auto findSmallerUndefRangeLeft =
-        [undefRangeA](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
-      for (auto it = undefRangeA.first; it != undefRangeA.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeLeft = [undefRangeA](auto&&...) {
+      return ad_utility::IteratorRange{undefRangeA.first, undefRangeA.second};
     };
-    auto findSmallerUndefRangeRight =
-        [undefRangeB](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeB.first)> {
-      for (auto it = undefRangeB.first; it != undefRangeB.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeRight = [undefRangeB](auto&&...) {
+      return ad_utility::IteratorRange{undefRangeB.first, undefRangeB.second};
     };
 
     auto numOutOfOrder = [&]() {
