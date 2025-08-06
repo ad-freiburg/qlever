@@ -550,6 +550,7 @@ class CompressedRelationReader {
           // Completely remove the subspan (via the `erase` at the end).
           numBlocksToRemove -= sz;
         }
+        ++it;
       }
       // Remove all the blocks that are to be erased completely.
       blockMetadata_.erase(blockMetadata_.begin(), it);
