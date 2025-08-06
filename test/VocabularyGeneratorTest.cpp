@@ -96,6 +96,7 @@ class MergeVocabularyTest : public ::testing::Test {
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, false, 0},
         {"\"monkey\"", true, false, 4},
+        {"\"zebra\"", false, true, 5},
         {"_:blank", false, false, 0},
         {"_:blunk", false, false, 1}};
     std::vector<TripleComponentWithIndex> words1{
@@ -104,16 +105,19 @@ class MergeVocabularyTest : public ::testing::Test {
         {"\"POLYGON((1 2, 3 4))\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, false, 1},
-        {"\"zebra\"", false, true, 5},
+        {"\"zebra\"", true, false, 5},
         {"_:blunk", false, false, 1},
     };
 
     // Note that the word "monkey" appears in both vocabularies, buth with
     // different settings for `isExternal`. In this case it is externalized.
+    // The same goes for `inTextIndex`. The word "zebra" has the exact inverted
+    // settings for `isExternal` and `inTextIndex` in the partial vocabularies
+    // to test that no lucky order of vocabularies is enough to pass this test.
     expectedMergedVocabulary_ = ExpectedVocabulary{
         {"\"ape\"", false, true},   {"\"bear\"", false, true},
         {"\"bla\"", true, true},    {"\"gorilla\"", false, true},
-        {"\"monkey\"", true, true}, {"\"zebra\"", false, true}};
+        {"\"monkey\"", true, true}, {"\"zebra\"", true, true}};
     expectedMergedGeoVocabulary_ = ExpectedVocabulary{
         {"\"LINESTRING(1 2, 3 4)\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
