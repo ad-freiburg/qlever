@@ -1214,3 +1214,93 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
   EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
+TEST(IndexScanTest, StripColumns) {
+  TestIndexConfig config;
+  using namespace ad_utility::memory_literals;
+  config.blocksizePermutations = 8_B;
+  config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
+  auto qec = ad_utility::testing::getQec(config);
+  IndexScan fullScan{qec, Permutation::SPO,
+                     SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+  IndexScan fullScanDifferentVars{
+      qec, Permutation::SPO,
+      SparqlTripleSimple{Var{"?x"}, Var{"?a"}, Var{"?b"}}};
+
+  auto fullRes = fullScan.computeResultOnlyForTesting(false).idTable().clone();
+
+  auto def = makeAlwaysDefinedColumn;
+
+  ad_utility::HashSet<std::string> cacheKeys;
+  auto testStrippedBySingleColumn = [&](Variable var,
+                                        const std::vector<ColumnIndex>&
+                                            sortedOn) {
+    auto subsetScan =
+        fullScan.makeTreeWithStrippedColumns({var, var, Var{"?notFound"}})
+            .value();
+    EXPECT_EQ(subsetScan->getResultWidth(), 1);
+    auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
+    EXPECT_TRUE(wasNew);
+    using namespace ::testing;
+    VariableToColumnMap expected{{var, def(0)}};
+    EXPECT_THAT(subsetScan->getVariableColumns(),
+                UnorderedElementsAreArray(expected));
+
+    for (const auto& [v, colIdxAndInfo] : subsetScan->getVariableColumns()) {
+      auto colIdxInFullScan =
+          fullScan.getExternallyVisibleVariableColumns().at(v).columnIndex_;
+      EXPECT_FLOAT_EQ(subsetScan->getMultiplicity(colIdxAndInfo.columnIndex_),
+                      fullScan.getMultiplicity(colIdxInFullScan));
+    }
+    auto colIndexInOrig =
+        fullScan.getExternallyVisibleVariableColumns().at(var).columnIndex_;
+    auto expectedResult =
+        fullRes.asColumnSubsetView(std::array{colIndexInOrig}).clone();
+
+    EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
+    EXPECT_THAT(subsetScan->getResult(false)->idTable(),
+                matchesIdTable(expectedResult.clone()));
+
+    qec->clearCacheUnpinnedOnly();
+    auto res = subsetScan->getResult(true);
+    auto lazyResToTable = [&subsetScan, &qec](auto&& gen) {
+      IdTable resultTable(subsetScan->getResultWidth(), qec->getAllocator());
+      for (auto&& table : gen) {
+        resultTable.insertAtEnd(table);
+      }
+      return resultTable;
+    };
+    EXPECT_THAT(lazyResToTable(
+                    ad_utility::OwningView{res->idTables()} |
+                    ql::views::transform(&Result::IdTableVocabPair::idTable_)),
+                matchesIdTable(expectedResult.clone()));
+
+    if (!sortedOn.empty()) {
+      const auto& scanOp1 =
+          dynamic_cast<const IndexScan&>(*subsetScan->getRootOperation());
+      auto subsetScan2 =
+          fullScanDifferentVars.makeTreeWithStrippedColumns({var}).value();
+      const auto& scanOp2 =
+          dynamic_cast<const IndexScan&>(*subsetScan2->getRootOperation());
+      auto [s1, s2] = IndexScan::lazyScanForJoinOfTwoScans(scanOp1, scanOp2);
+      EXPECT_THAT(lazyResToTable(s1), matchesIdTable(expectedResult.clone()));
+      EXPECT_THAT(lazyResToTable(s2), matchesIdTable(expectedResult.clone()));
+
+      auto s3 =
+          scanOp1.lazyScanForJoinOfColumnWithScan(expectedResult.getColumn(0));
+      EXPECT_THAT(lazyResToTable(s3), matchesIdTable(expectedResult.clone()));
+    }
+  };
+
+  testStrippedBySingleColumn(Var{"?x"}, {0});
+  testStrippedBySingleColumn(Var{"?y"}, {});
+  testStrippedBySingleColumn(Var{"?z"}, {});
+
+  // TODO<joka921/RobinTF:
+  // 1. Also test cases with multiple variables that are being kept.
+  // 2. Also test cases where the underlying scan has a different number of
+  // variables.
+  // 3. Test the case of additional variables (in particular with GRAPHs).
+  // 4. Verify that all possible members are tested in the infrastructure.
+}
