@@ -101,11 +101,11 @@ constexpr std::string_view VAR_LEFT{"?geom1"};
 constexpr std::string_view VAR_RIGHT{"?geom2"};
 
 // Helper to generate different test datasets
-std::string buildLibSJTestDataset(bool addApproxGermany = false,
-                                  bool germanyDifferentPredicate = true,
-                                  bool addSeparateUni = false,
-                                  bool addInvalid = false,
-                                  bool addCapeTown = false) {
+inline std::string buildLibSJTestDataset(bool addApproxGermany = false,
+                                         bool germanyDifferentPredicate = true,
+                                         bool addSeparateUni = false,
+                                         bool addInvalid = false,
+                                         bool addCapeTown = false) {
   std::string kg;
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
     if (addApproxGermany && name == "approx-de") {
@@ -145,7 +145,7 @@ struct ValIdTable {
 };
 
 // Retrieve the `ValueId` for a given `name` from a `GeomNameToValId`.
-ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
+inline ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
   auto valId = nMap.at(name);
   EXPECT_EQ(valId.getDatatype(), Datatype::VocabIndex);
   return valId;
@@ -153,8 +153,9 @@ ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
 
 // Helper to create a `ValIdTable` struct which maps `ValueId`s to names and
 // names to `ValueId`s for the geometries in `testGeometries`.
-ValIdTable resolveValIdTable(QueryExecutionContext* qec, size_t expectedSize,
-                             Loc loc = Loc::current()) {
+inline ValIdTable resolveValIdTable(QueryExecutionContext* qec,
+                                    size_t expectedSize,
+                                    Loc loc = Loc::current()) {
   auto l = generateLocationTrace(loc);
   ValIdToGeomName vMap;
   GeomNameToValId nMap;
@@ -178,10 +179,10 @@ ValIdTable resolveValIdTable(QueryExecutionContext* qec, size_t expectedSize,
 
 // Helper to construct the `SweeperCfg` configuration struct for
 // `runParsingAndSweeper`
-sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
-                              SweeperResult& results,
-                              SweeperDistResult& resultDists,
-                              double withinDist) {
+inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
+                                     SweeperResult& results,
+                                     SweeperDistResult& resultDists,
+                                     double withinDist) {
   using enum SpatialJoinType;
   sj::SweeperCfg cfg;
   cfg.numThreads = 1;
@@ -225,18 +226,18 @@ sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
 }
 
 // Helpers to build index scans for `runParsingAndSweeper`
-QET makeLeftChild(QEC qec, std::string_view pred) {
+inline QET makeLeftChild(QEC qec, std::string_view pred) {
   return buildIndexScan(
       qec, {"?a", absl::StrCat("<wkt-", pred, ">"), std::string{VAR_LEFT}});
 }
-QET makeRightChild(QEC qec, std::string_view pred) {
+inline QET makeRightChild(QEC qec, std::string_view pred) {
   return buildIndexScan(
       qec, {"?b", absl::StrCat("<wkt-", pred, ">"), std::string{VAR_RIGHT}});
 }
 
 // Run a complete spatial join and record information into a `SweeperTestResult`
 // struct, which can be compared against an expected result in the next step.
-void runParsingAndSweeper(
+inline void runParsingAndSweeper(
     QEC qec, std::string_view leftPred, std::string_view rightPred,
     const LibSpatialJoinConfig& sjTask, SweeperTestResult& testResult,
     bool usePrefilter = true, bool checkPrefilterDeactivate = false,
@@ -374,9 +375,9 @@ void runParsingAndSweeper(
 
 // Helper to approximately compare two prefilter boxes from
 // `runParsingAndSweeper`
-void checkPrefilterBox(const util::geo::DBox& actualLatLng,
-                       const util::geo::DBox& expectedLatLng,
-                       Loc loc = Loc::current()) {
+inline void checkPrefilterBox(const util::geo::DBox& actualLatLng,
+                              const util::geo::DBox& expectedLatLng,
+                              Loc loc = Loc::current()) {
   auto l = generateLocationTrace(loc);
 
   auto lowerLeftActual = actualLatLng.getLowerLeft();
@@ -392,7 +393,7 @@ void checkPrefilterBox(const util::geo::DBox& actualLatLng,
 
 // Helper to approximately compare the results of `runParsingAndSweeper` with an
 // expected result, both as `SweeperTestResult`
-void checkSweeperTestResult(
+inline void checkSweeperTestResult(
     const ValIdToGeomName& vMap, const SweeperTestResult& actual,
     const SweeperTestResult& expected,
     std::optional<SpatialJoinType> checkOnlySjType = std::nullopt,
@@ -460,7 +461,7 @@ void checkSweeperTestResult(
 // Construct a bounding box for a list of geometries simply by computing the
 // bounding box of a geometry collection with all geometries. Use to compute the
 // expected bounding box after adding the geometries to `Sweeper`.
-util::geo::DBox makeAggregatedBoundingBox(
+inline util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
   std::vector<std::string> wktWithoutDatatype;
   for (const auto& geom : wktGeometries) {
