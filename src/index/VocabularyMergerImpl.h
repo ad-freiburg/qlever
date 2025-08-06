@@ -251,18 +251,18 @@ CPP_template_def(typename C, typename L)(
 // _____________________________________________________________________________
 CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
     writeAndGetEqualWordIds(EqualWords& equalWords, C& wordCallback) {
-  uint64_t index;
-  if (equalWords.isBlankNode()) {
-    index = metaData_.getNextBlankNodeIndex();
-  } else {
-    index = wordCallback(equalWords.iriOrLiteral_, equalWords.isExternal_,
-                         equalWords.inTextIndex_);
-    metaData_.addWord(equalWords.iriOrLiteral_, index);
-  }
-  equalWords.targetId_ =
-      equalWords.isBlankNode()
-          ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index))
-          : Id::makeFromVocabIndex(VocabIndex::make(index));
+  equalWords.targetId_ = [this, &equalWords, &wordCallback]() {
+    if (equalWords.isBlankNode()) {
+      return Id::makeFromBlankNodeIndex(
+          BlankNodeIndex::make(metaData_.getNextBlankNodeIndex()));
+    } else {
+      auto index =
+          wordCallback(equalWords.iriOrLiteral_, equalWords.isExternal_,
+                       equalWords.inTextIndex_);
+      metaData_.addWord(equalWords.iriOrLiteral_, index);
+      return Id::makeFromVocabIndex(VocabIndex::make(index));
+    }
+  }();
 }
 
 // _____________________________________________________________________________
