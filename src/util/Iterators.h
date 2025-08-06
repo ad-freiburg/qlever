@@ -466,7 +466,8 @@ class InputRangeTypeErasedWithDetails {
 
   // Constructor that takes the range and a pointer to external details
   template <typename Range>
-  explicit InputRangeTypeErasedWithDetails(Range range, const DetailsType* detailsPtr)
+  explicit InputRangeTypeErasedWithDetails(Range range,
+                                           const DetailsType* detailsPtr)
       : range_(std::move(range)), details_(detailsPtr) {}
 
   // Delegate iterator methods to the underlying range
@@ -474,18 +475,21 @@ class InputRangeTypeErasedWithDetails {
   auto end() { return range_.end(); }
 
   // Provide access to the details
-  const DetailsType& details() const { 
-    return std::visit([](const auto& d) -> const DetailsType& {
-      if constexpr (std::is_same_v<std::decay_t<decltype(d)>, DetailsType>) {
-        return d;
-      } else {
-        return *d;
-      }
-    }, details_);
+  const DetailsType& details() const {
+    return std::visit(
+        [](const auto& d) -> const DetailsType& {
+          if constexpr (std::is_same_v<std::decay_t<decltype(d)>,
+                                       DetailsType>) {
+            return d;
+          } else {
+            return *d;
+          }
+        },
+        details_);
   }
 
   // Note: Mutable access only available for owned details
-  DetailsType& details() { 
+  DetailsType& details() {
     AD_CONTRACT_CHECK(std::holds_alternative<DetailsType>(details_),
                       "Cannot get mutable reference to external details");
     return std::get<DetailsType>(details_);
