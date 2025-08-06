@@ -99,12 +99,10 @@ inline GeneratorWithDetails convertGenerator(
     // IndexScans don't have a local vocabulary, so we can just use an empty one
     return IdTableAndFirstCol{std::move(table), LocalVocab{}};
   };
-  auto cachingRange =
-      CachingTransformInputRange(std::move(gen), std::move(transformer));
-  auto typeErasedRange = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(
-      std::move(cachingRange));
   // Use the captured details from the original generator
-  return GeneratorWithDetails{std::move(typeErasedRange), std::move(details)};
+  return GeneratorWithDetails{
+      CachingTransformInputRange(std::move(gen), std::move(transformer)),
+      std::move(details)};
 }
 
 // Part of the implementation of `createResult`. This function is called when
