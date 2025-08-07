@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupByImpl.h"
+#include "engine/GroupByStrategyChooser.h"
 
 #include <absl/strings/str_join.h>
 
@@ -16,13 +17,13 @@
 #include <type_traits>
 #include <unordered_set>
 
-#include "absl/container/flat_hash_map.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -336,11 +337,6 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 //    join full scan, object count).
 // 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
 // grouping.
-// 4) (PLANNED) If the hash-map grows too large mid-aggregation, buffer
-// remaining data and
-//    switch to sort-based aggregation via mergeSortedTailIntoPartial.
-// 5) (PLANNED) If all optimizations fail or threshold crossed, fallback to
-// standard doGroupBy (sort+group-by).
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -373,7 +369,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
     if (subresult->isFullyMaterialized() &&
-        shouldSkipHashMapGrouping(subresult->idTable())) {
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(*this, subresult->idTable())) {
       // You will see this if you use qlever with --verbose-runtime-info
       runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
@@ -1676,69 +1672,3 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
                                        _aliases, _subtree->clone());
 }
 
-// _____________________________________________________________________________
-// Sampling guard: skip hash-map grouping if estimated distinct groups exceed
-// threshold
-bool GroupByImpl::shouldSkipHashMapGrouping(const IdTable& table) const {
-  // Fetch runtime parameters
-  // sample size = k * sqrt(n)
-  if (!RuntimeParameters().get<"group-by-sample-enabled">()) {
-    return false;
-  }
-  size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
-  size_t groupThreshold =
-      RuntimeParameters().get<"group-by-sample-group-threshold">();
-  double distinctRatio =
-      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
-  size_t totalSize = table.size();
-  size_t k = RuntimeParameters().get<"group-by-sample-constant">();
-
-  size_t sampleSize = k * static_cast<size_t>(std::sqrt(double(totalSize)));
-  if (sampleSize == 0) {
-    return false;
-  }
-  if (maxSampleRows != 0) {
-    sampleSize = std::min(sampleSize, maxSampleRows);
-  }
-  // Reservoir-sample indices only
-  std::vector<size_t> indices(sampleSize);
-  for (size_t i = 0; i < sampleSize; ++i) indices[i] = i;
-  std::mt19937_64 gen{42};
-  for (size_t i = sampleSize; i < totalSize; ++i) {
-    std::uniform_int_distribution<size_t> dist(0, i);
-    size_t randIdx = dist(gen);
-    if (randIdx < sampleSize) {
-      indices[randIdx] = i;
-    }
-  }
-  // Use absl::flat_hash_map to count frequencies for Chao1 estimator
-  absl::flat_hash_map<RowKey, size_t> groupCounts;
-  const auto& varCols = _subtree->getVariableColumns();
-  std::vector<ColumnIndex> groupByCols;
-  groupByCols.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(varCols.at(var).columnIndex_);
-  }
-  for (size_t idx : indices) {
-    RowKey key{&table, idx, &groupByCols};
-    ++groupCounts[key];
-  }
-  // Chao1 estimator: D = d_obs + (f1 * f1) / (2 * f2)
-  size_t dObs = groupCounts.size();
-  size_t f1 = 0, f2 = 0;
-  for (auto& [key, cnt] : groupCounts) {
-    if (cnt == 1)
-      ++f1;
-    else if (cnt == 2)
-      ++f2;
-  }
-  double chaoCorrection = double(f1 * f1) / (f2 > 0 ? 2.0 * f2 : 1.0);
-  size_t estGroups = dObs + static_cast<size_t>(chaoCorrection);
-  runtimeInfo().addDetail(
-      "chao1Estimate",
-      absl::StrFormat(
-          "size=%zu, total=%zu, est=%zu, dObs=%zu, f1=%zu, f2=%zu, thr=%zu",
-          sampleSize, totalSize, estGroups, dObs, f1, f2, groupThreshold));
-  return (groupThreshold > 0 && estGroups > groupThreshold) ||
-         (distinctRatio > 0 && estGroups > totalSize * distinctRatio);
-}

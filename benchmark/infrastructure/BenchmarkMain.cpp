@@ -121,11 +121,10 @@ int main(int argc, char** argv) {
 
   // sampling guard parameters
   bool sampleEnabled = RuntimeParameters().get<"group-by-sample-enabled">();
-  size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
   double sampleDistinctRatio =
       RuntimeParameters().get<"group-by-sample-distinct-ratio">();
   size_t groupThreshold =
-      RuntimeParameters().get<"group-by-sample-group-threshold">();
+      RuntimeParameters().get<"group-by-sample-min-table-size">();
 
   // Declaring the supported options.
   po::options_description options("Options for the benchmark");
@@ -157,15 +156,12 @@ int main(int argc, char** argv) {
       ("group-by-sample-enabled,e", po::bool_switch(&sampleEnabled),
        "Enable sampling-based hybrid GROUP BY optimization.")
       //
-      ("group-by-sample-max-rows,m", po::value<size_t>(&maxSampleRows),
-       "Max sample rows for GROUP BY sampling guard.")
-      //
       ("group-by-sample-distinct-ratio,r",
        po::value<double>(&sampleDistinctRatio),
        "Switch to sort if sampled distinct groups/sample size exceed this "
        "ratio.")
       //
-      ("group-by-sample-group-threshold,t", po::value<size_t>(&groupThreshold),
+      ("group-by-sample-min-table-size,t", po::value<size_t>(&groupThreshold),
        "Switch to sort if estimated number of distinct groups "
        "exceeds this number.");
 
@@ -189,10 +185,9 @@ int main(int argc, char** argv) {
 
   // Apply GROUP BY sampling params to runtime parameters
   RuntimeParameters().set<"group-by-sample-enabled">(sampleEnabled);
-  RuntimeParameters().set<"group-by-sample-max-rows">(maxSampleRows);
   RuntimeParameters().set<"group-by-sample-distinct-ratio">(
       sampleDistinctRatio);
-  RuntimeParameters().set<"group-by-sample-group-threshold">(groupThreshold);
+  RuntimeParameters().set<"group-by-sample-min-table-size">(groupThreshold);
 
   // If write was chosen, then the given file must be a json file.
   if (vm.count("write") && !writeFileName.ends_with(".json")) {

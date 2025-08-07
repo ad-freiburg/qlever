@@ -51,18 +51,13 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-disable-index-scan-optimizations">{false},
         // === Sampling-based hybrid GROUP BY thresholds ===
         Bool<"group-by-sample-enabled">{true},
-        // Cap on sample size. If set to 0, then the sample size is
-        // k * sqrt(n), where n is the number of rows in the table.
-        SizeT<"group-by-sample-max-rows">{50000},
         // Constant multiplier for sample size (k * sqrt(n)) in Chao1
         SizeT<"group-by-sample-constant">{1},
         // Avoid HashMap path if the fraction (sampled distinct groups / sample
-        // size) exceeds the distinct ratio OR the estimated number of
+        // size) exceeds the distinct ratio AND the estimated number of
         // distinct groups exceeds the group threshold.
-        // If set to 0, then respective limit is ignored (so the threshold is
-        // ignored per default).
         Double<"group-by-sample-distinct-ratio">{0.9},
-        SizeT<"group-by-sample-group-threshold">{0},
+        SizeT<"group-by-sample-min-table-size">{1000},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},

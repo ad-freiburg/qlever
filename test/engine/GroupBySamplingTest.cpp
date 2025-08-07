@@ -9,17 +9,18 @@
 #include <string>
 #include <vector>
 
-#include "../../src/engine/GroupByImpl.h"
-#include "../../src/engine/QueryExecutionContext.h"
-#include "../../src/engine/QueryExecutionTree.h"
-#include "../../src/engine/Result.h"
-#include "../../src/engine/Values.h"
-#include "../../src/engine/idTable/IdTable.h"
-#include "../../src/global/RuntimeParameters.h"
-#include "../../src/parser/GraphPatternOperation.h"
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "engine/GroupByImpl.h"
+#include "engine/GroupByStrategyChooser.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
+#include "engine/Values.h"
+#include "engine/idTable/IdTable.h"
+#include "global/RuntimeParameters.h"
+#include "parser/GraphPatternOperation.h"
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -102,26 +103,40 @@ class GroupBySamplingTest : public ::testing::Test {
   }
 };
 
+// void printRuntimeInfo(const GroupByImpl& groupBy) {
+//   auto& info = groupBy.getRootOperation()->getRuntimeInfoWholeQuery();
+//   std::cout << info.toString() << std::endl;
+//   // or: info.toJson() for machine-readable output
+// }
+
 // Test that an empty input table correctly results in `false`.
 TEST_F(GroupBySamplingTest, edgeCaseEmptyInput) {
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   IdTable table(1, allocator);
   table.resize(0);
   auto groupBy = setupGroupBy(table, qec_);
-  EXPECT_FALSE(groupBy->shouldSkipHashMapGrouping(table));
+  EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+      *groupBy, table, /*log=*/true));
 }
 
 // Test the case where all rows belong to the same group across various sizes
 TEST_F(GroupBySamplingTest, edgeCaseAllSame) {
   std::vector<size_t> sizes = {1, 10, 300, 1000, 10'000, 100'000, 1'000'000};
+  RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
-    // threshold set to table size to ensure one group never exceeds threshold
-    RuntimeParameters().set<"group-by-sample-group-threshold">(s == 1 ? 2 : 1);
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     IdTable table = createIdTable(
         s, [](size_t) { return 42; }, allocator);
     auto groupBy = setupGroupBy(table, qec_);
-    EXPECT_FALSE(groupBy->shouldSkipHashMapGrouping(table)) << "size=" << s;
+    if (s == 1) {
+      // For size 1, we expect the hash-map grouping to be skipped
+      // because the estimated number of groups is 2 and the threshold is 0.9
+      EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+          *groupBy, table, /*log=*/true));
+    } else {
+      EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+          *groupBy, table, /*log=*/true));
+    }
   }
 }
 
@@ -129,15 +144,22 @@ TEST_F(GroupBySamplingTest, edgeCaseAllSame) {
 TEST_F(GroupBySamplingTest, edgeCaseAllUnique) {
   std::vector<size_t> sizes = {1, 10, 300, 1000, 10'000, 100'000, 1'000'000};
   for (auto s : sizes) {
-    // threshold set to (table size × 0.99) so allUnique always exceeds
-    // threshold
-    RuntimeParameters().set<"group-by-sample-group-threshold">(
-        static_cast<size_t>(s * 0.99));
+    RuntimeParameters().set<"group-by-sample-min-table-size">(0);
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     IdTable table = createIdTable(
         s, [](size_t i) { return static_cast<int64_t>(i); }, allocator);
     auto groupBy = setupGroupBy(table, qec_);
-    EXPECT_TRUE(groupBy->shouldSkipHashMapGrouping(table)) << "size=" << s;
+    EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+        *groupBy, table, /*log=*/true));
+
+    RuntimeParameters().set<"group-by-sample-min-table-size">(1000);
+    if (s < 1000) {
+      EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+          *groupBy, table, /*log=*/true));
+    } else {
+      EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+          *groupBy, table, /*log=*/true));
+    }
   }
 }
 
@@ -145,14 +167,15 @@ TEST_F(GroupBySamplingTest, edgeCaseAllUnique) {
 // below the configured threshold.
 TEST_F(GroupBySamplingTest, belowThreshold) {
   std::vector<size_t> sizes = {500, 1000, 10'000, 100'000, 1'000'000};
+  RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
-    RuntimeParameters().set<"group-by-sample-group-threshold">(150);
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     // 1000 rows, 100 distinct groups.
     IdTable table = createIdTable(
         s, [](size_t i) { return i % 100; }, allocator);
     auto groupBy = setupGroupBy(table, qec_);
-    EXPECT_FALSE(groupBy->shouldSkipHashMapGrouping(table));
+    EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+        *groupBy, table, /*log=*/true));
   }
 }
 
@@ -160,13 +183,20 @@ TEST_F(GroupBySamplingTest, belowThreshold) {
 // above the configured threshold.
 TEST_F(GroupBySamplingTest, aboveThreshold) {
   std::vector<size_t> sizes = {1000, 10'000, 100'000, 1'000'000};
+  RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
-    RuntimeParameters().set<"group-by-sample-group-threshold">(750);
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     // 1000 rows, 800 distinct groups.
+    // Use 80% of s as the number of distinct groups
+    size_t distinctGroups = static_cast<size_t>(s * 0.8);
     IdTable table = createIdTable(
-        s, [](size_t i) { return i % 800; }, allocator);
+        s,
+        [distinctGroups](size_t i) {
+          return static_cast<int64_t>(i % distinctGroups);
+        },
+        allocator);
     auto groupBy = setupGroupBy(table, qec_);
-    EXPECT_TRUE(groupBy->shouldSkipHashMapGrouping(table));
+    EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
+        *groupBy, table, /*log=*/true));
   }
 }
