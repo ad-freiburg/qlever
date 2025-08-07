@@ -1011,6 +1011,26 @@ TEST_P(IndexScanWithLazyJoin,
 }
 
 // _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  // This is a regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2252
+  using P = Result::IdTableVocabPair;
+  std::array pairs{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<b>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] =
+      consumeGenerators(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
+
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
+}
+
+// _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
   IndexScan scan = makeScan();
 
