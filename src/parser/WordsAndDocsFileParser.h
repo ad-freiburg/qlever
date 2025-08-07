@@ -154,7 +154,9 @@ class WordsAndDocsFileParser {
   explicit WordsAndDocsFileParser(const WordsAndDocsFileParser& other) = delete;
   WordsAndDocsFileParser& operator=(const WordsAndDocsFileParser& other) =
       delete;
-
+  WordsAndDocsFileParser(WordsAndDocsFileParser&& other) noexcept = default;
+  WordsAndDocsFileParser& operator=(WordsAndDocsFileParser&& other) noexcept = default;
+  
  protected:
   std::ifstream& getInputStream() { return in_; }
   const LocaleManager& getLocaleManager() const { return localeManager_; }
