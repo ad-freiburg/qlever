@@ -6,7 +6,6 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupByImpl.h"
-#include "engine/GroupByStrategyChooser.h"
 
 #include <absl/strings/str_join.h>
 
@@ -19,6 +18,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -385,7 +385,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
     if (subresult->isFullyMaterialized() &&
-        GroupByStrategyChooser::shouldSkipHashMapGrouping(*this, subresult->idTable())) {
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(
+            *this, subresult->idTable())) {
       // You will see this if you use qlever with --verbose-runtime-info
       runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
