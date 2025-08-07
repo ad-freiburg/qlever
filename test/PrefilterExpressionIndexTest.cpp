@@ -447,7 +447,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   auto makeTestIsDatatype(std::unique_ptr<PrefilterExpression> expr,
                           std::vector<CompressedBlockMetadata>&& expected,
                           bool testIsIriOrIsLit = false,
-                          std::vector<CompressedBlockMetadata>&& input = {}) {
+                          std::vector<CompressedBlockMetadata>&& input = {},
+                          ad_utility::source_location loc =
+                              ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(loc);
     // The evaluation implementation of `isLiteral()` and `isIri()` uses two
     // conjuncted relational `PrefilterExpression`s. Thus we have to add all
     // CompressedBlockMetadata values containing mixed datatypes.
