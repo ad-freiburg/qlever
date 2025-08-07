@@ -172,12 +172,6 @@ int main(int argc, char** argv) {
       "algorithm to decide whether to use a hash map or a sort-based algorithm "
       "for grouping. If not set, the GROUP BY operation will always use a "
       "sort-based algorithm.");
-  add("group-by-sample-max-rows",
-      optionFactory.getProgramOption<"group-by-sample-max-rows">(),
-      "Maximum number of rows to sample for the GROUP BY sampling guard. "
-      "If the number of distinct groups exceeds the ratio of "
-      "`group-by-sample-distinct-ratio`, then the GROUP BY will be executed "
-      "using a sort-based algorithm.");
   add("group-by-sample-distinct-ratio",
       optionFactory.getProgramOption<"group-by-sample-distinct-ratio">(),
       "Switch to sort if the fraction (sampled distinct groups / sample size) "
