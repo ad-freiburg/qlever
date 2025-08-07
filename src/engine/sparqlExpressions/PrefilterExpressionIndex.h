@@ -379,6 +379,36 @@ using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
+
+class IsBoolExpression : public PrefilterExpression {
+  bool isNegated_;
+
+ public:
+  explicit IsBoolExpression(bool isNegated) : isNegated_{isNegated} {}
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
+
+class IsDateExpression : public PrefilterExpression {
+  bool isNegated_;
+
+ public:
+  explicit IsDateExpression(bool isNegated) : isNegated_{isNegated} {}
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
 //______________________________________________________________________________
 namespace logicalOps {
 

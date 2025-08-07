@@ -377,7 +377,7 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
     }
   }
   return result;
-};
+}
 
 }  // namespace detail
 

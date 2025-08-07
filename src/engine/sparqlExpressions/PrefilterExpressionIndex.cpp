@@ -644,6 +644,14 @@ BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const Vocab& vocab,
   static_assert(Datatype == IRI || Datatype == LITERAL);
   using LVE = LocalVocabEntry;
 
+  auto combineSubExpressions = [&]<typename T>() {
+    return make<T>(make<T>(make<T>(make<IsNumericExpression>(isNegated),
+                                   make<LessThanExpression>(
+                                       LVE::fromStringRepresentation("<"))),
+                           make<detail::IsBoolExpression>(isNegated)),
+                   make<detail::IsDateExpression>(isNegated));
+  };
+
   return Datatype == IRI
              // Remark: Ids containing LITERAL values precede IRI related Ids
              // in order. The smallest possible IRI is represented by "<>", we
@@ -652,7 +660,9 @@ BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const Vocab& vocab,
                    ->evaluateImpl(vocab, idRange, blockRange, isNegated)
              // For pre-filtering LITERAL related ValueIds we use the ValueId
              // representing the beginning of IRI values as an upper bound.
-             : make<LessThanExpression>(LVE::fromStringRepresentation("<"))
+             : (isNegated
+                    ? combineSubExpressions.template operator()<AndExpression>()
+                    : combineSubExpressions.template operator()<OrExpression>())
                    ->evaluateImpl(vocab, idRange, blockRange, isNegated);
 }
 
@@ -910,6 +920,86 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
+
+//______________________________________________________________________________
+bool IsBoolExpression::operator==(const PrefilterExpression& other) const {
+  if (auto* isBoolOther = dynamic_cast<const IsBoolExpression*>(&other)) {
+    return isBoolOther->isNegated_ == isNegated_;
+  }
+  return false;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsBoolExpression::clone() const {
+  return make<IsBoolExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string IsBoolExpression::asString([[maybe_unused]] size_t depth) const {
+  return absl::StrCat("IsBoolExpression(isNegated: ", isNegated_, ")");
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsBoolExpression::logicalComplement()
+    const {
+  return make<IsBoolExpression>(!isNegated_);
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges IsBoolExpression::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  std::vector<ValueIdItPair> relevantRanges;
+  relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
+      idRange.begin(), idRange.end(), Datatype::Bool));
+  // Sort and remove overlapping ranges.
+  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  return isNegated_ ? mapping::mapValueIdItRangesToBlockItRangesComplemented(
+                          relevantRanges, idRange, blockRange)
+                    : mapping::mapValueIdItRangesToBlockItRanges(
+                          relevantRanges, idRange, blockRange);
+}
+
+//______________________________________________________________________________
+bool IsDateExpression::operator==(const PrefilterExpression& other) const {
+  if (auto* isDateOther = dynamic_cast<const IsDateExpression*>(&other)) {
+    return isDateOther->isNegated_ == isNegated_;
+  }
+  return false;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsDateExpression::clone() const {
+  return make<IsDateExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string IsDateExpression::asString([[maybe_unused]] size_t depth) const {
+  return absl::StrCat("IsDateExpression(isNegated: ", isNegated_, ")");
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsDateExpression::logicalComplement()
+    const {
+  return make<IsDateExpression>(!isNegated_);
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges IsDateExpression::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  std::vector<ValueIdItPair> relevantRanges;
+  relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
+      idRange.begin(), idRange.end(), Datatype::Date));
+  // Sort and remove overlapping ranges.
+  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  return isNegated_ ? mapping::mapValueIdItRangesToBlockItRangesComplemented(
+                          relevantRanges, idRange, blockRange)
+                    : mapping::mapValueIdItRangesToBlockItRanges(
+                          relevantRanges, idRange, blockRange);
+}
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
