@@ -1012,8 +1012,12 @@ TEST_P(IndexScanWithLazyJoin,
 
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
-  std::string kg = "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  qec_ = getQec(std::move(kg));
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
   // This is a regression test for an issue introduced in
@@ -1033,8 +1037,12 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin,
        prefilterTablesSkipsRemainingTablesIfIndexIsExhausted) {
-  std::string kg = "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  qec_ = getQec(std::move(kg));
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
   auto indexE =

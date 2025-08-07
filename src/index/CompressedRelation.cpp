@@ -1850,7 +1850,7 @@ void CompressedRelationReader::ScanSpecAndBlocks::removePrefix(
     size_t numBlocksToRemove) {
   auto it = blockMetadata_.begin();
   auto end = blockMetadata_.end();
-  while (it != end) {
+  for (; it != end; ++it) {
     auto& subspan = *it;
     auto sz = ql::ranges::size(subspan);
     if (numBlocksToRemove < sz) {
@@ -1862,7 +1862,6 @@ void CompressedRelationReader::ScanSpecAndBlocks::removePrefix(
       // Completely remove the subspan (via the `erase` at the end).
       numBlocksToRemove -= sz;
     }
-    ++it;
   }
   // Remove all the blocks that are to be erased completely.
   blockMetadata_.erase(blockMetadata_.begin(), it);

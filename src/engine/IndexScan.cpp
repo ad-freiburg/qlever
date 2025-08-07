@@ -567,12 +567,13 @@ struct IndexScan::SharedGeneratorState {
             newBlocks.back().lastTriple_, metaBlocks_);
       } else if (joinColumn[0] > lastId_.value_or(Id::makeUndefined())) {
         if (!metaBlocks_.blockMetadata_.empty()) {
-          // The current input table matches no blocks, so we don't have to
-          // yield it.
+          // The current `joinColumn` has no matching block in the index, we can
+          // safely skip appending it to `prefetchedValues_`, but future values
+          // might require later blocks from the index.
           continue;
         }
-        // In this case there's no more data to fetch, so we no longer need to
-        // process the rest of the join side.
+        // The current `joinColumn` has no matching block in the index, and
+        // there is nothing more left to search for subsequent values.
         doneFetching_ = true;
         return;
       }
