@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupByImpl.h"
+#include "engine/GroupByStrategyChooser.h"
 
 #include <absl/strings/str_join.h>
 
@@ -16,7 +17,6 @@
 #include <type_traits>
 #include <unordered_set>
 
-#include "absl/container/flat_hash_map.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
@@ -353,11 +353,6 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 //    join full scan, object count).
 // 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
 // grouping.
-// 4) (PLANNED) If the hash-map grows too large mid-aggregation, buffer
-// remaining data and
-//    switch to sort-based aggregation via mergeSortedTailIntoPartial.
-// 5) (PLANNED) If all optimizations fail or threshold crossed, fallback to
-// standard doGroupBy (sort+group-by).
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -390,7 +385,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
     if (subresult->isFullyMaterialized() &&
-        shouldSkipHashMapGrouping(subresult->idTable())) {
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(*this, subresult->idTable())) {
       // You will see this if you use qlever with --verbose-runtime-info
       runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
