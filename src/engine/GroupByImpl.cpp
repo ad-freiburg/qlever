@@ -6,7 +6,6 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupByImpl.h"
-#include "engine/GroupByStrategyChooser.h"
 
 #include <absl/strings/str_join.h>
 
@@ -19,11 +18,11 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
-#include "engine/GroupByStrategyChooser.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -369,7 +368,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Sampling-based guard: decide whether to skip hash-map grouping based on
     // estimated number of groups
     if (subresult->isFullyMaterialized() &&
-        GroupByStrategyChooser::shouldSkipHashMapGrouping(*this, subresult->idTable())) {
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(
+            *this, subresult->idTable())) {
       // You will see this if you use qlever with --verbose-runtime-info
       runtimeInfo().addDetail("hashMapOptimization",
                               "Skipped due to high estimated group count, "
@@ -1671,4 +1671,3 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
 }
-
