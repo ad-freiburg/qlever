@@ -1089,3 +1089,49 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }
 }
+
+// _____________________________________________________________________________
+TEST(ScanSpecAndBlocks, removePrefix) {
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
+  std::vector<RelationInput> inputs;
+  inputs.push_back(RelationInput{42,
+                                 {{0, 0, 0},
+                                  {1, 0, 0},
+                                  {2, 0, 0},
+                                  {3, 0, 0},
+                                  {4, 0, 0},
+                                  {5, 0, 0},
+                                  {6, 0, 0},
+                                  {7, 0, 0},
+                                  {8, 0, 0},
+                                  {9, 0, 0}}});
+  auto [blocks, metadata, reader] =
+      writeAndOpenRelations(inputs, "removePrefix", 16_B);
+  ScanSpecification spec{
+      std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
+  ScanSpecAndBlocks specAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)};
+
+  auto getSize = [](auto range) {
+    size_t counter = 0;
+    for ([[maybe_unused]] const auto& _ : range) {
+      counter++;
+    }
+    return counter;
+  };
+
+  EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 4);
+
+  specAndBlocks.removePrefix(1);
+  EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 3);
+
+  specAndBlocks.removePrefix(2);
+  EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 1);
+
+  // Should not overrun.
+  specAndBlocks.removePrefix(3);
+  EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 0);
+
+  // Should be no-op.
+  specAndBlocks.removePrefix(12);
+  EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 0);
+}

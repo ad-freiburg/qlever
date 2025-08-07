@@ -535,25 +535,7 @@ class CompressedRelationReader {
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
     // be used if it is known that those are not needed anymore, e.g. because
     // they have already been dealt with by a lazy `IndexScan` or `Join`.
-    void removePrefix(size_t numBlocksToRemove) {
-      auto it = blockMetadata_.begin();
-      auto end = blockMetadata_.end();
-      while (it != end) {
-        auto& subspan = *it;
-        auto sz = ql::ranges::size(subspan);
-        if (numBlocksToRemove < sz) {
-          // Partially remove a subspan if it contains less blocks than we have
-          // to remove.
-          subspan.advance(numBlocksToRemove);
-          break;
-        } else {
-          // Completely remove the subspan (via the `erase` at the end).
-          numBlocksToRemove -= sz;
-        }
-      }
-      // Remove all the blocks that are to be erased completely.
-      blockMetadata_.erase(blockMetadata_.begin(), it);
-    }
+    void removePrefix(size_t numBlocksToRemove);
   };
 
   // This struct additionally contains the first and last triple of the scan
@@ -619,6 +601,15 @@ class CompressedRelationReader {
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+
+  // Helper function that enables a comparison of a triple with an `Id` in the
+  // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
+  // the given `ScanSpecification`, then `col1Id` is returned. If the given
+  // triple matches neither, a sentinel value is returned `ScanSpecification`,
+  // or `Id::max` if it is higher).
+  static Id getRelevantIdFromTriple(
+      CompressedBlockMetadata::PermutedTriple triple,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the

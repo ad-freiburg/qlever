@@ -505,8 +505,8 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // The index of the last matching block that was found using the join column.
-  std::optional<size_t> lastBlockIndex_ = std::nullopt;
+  // Last fetched id from index scan.
+  std::optional<Id> lastId_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
@@ -562,22 +562,23 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
-      if (newBlocks.empty()) {
-        // The current input table matches no blocks, so we don't have to yield
-        // it.
-        continue;
+      if (!newBlocks.empty()) {
+        lastId_ = CompressedRelationReader::getRelevantIdFromTriple(
+            newBlocks.back().lastTriple_, metaBlocks_);
+      } else if (joinColumn[0] > lastId_.value_or(Id::makeUndefined())) {
+        if (!metaBlocks_.blockMetadata_.empty()) {
+          // The current `joinColumn` has no matching block in the index, we can
+          // safely skip appending it to `prefetchedValues_`, but future values
+          // might require later blocks from the index.
+          continue;
+        }
+        // The current `joinColumn` has no matching block in the index, and
+        // there is nothing more left to search for subsequent values.
+        doneFetching_ = true;
+        return;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
-      // Find first value that differs from the last one that was used to find
-      // matching blocks.
-      auto startIterator =
-          lastBlockIndex_.has_value()
-              ? ql::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
-                                        &CompressedBlockMetadata::blockIndex_)
-              : newBlocks.begin();
-      lastBlockIndex_ = newBlocks.back().blockIndex_;
-      ql::ranges::move(startIterator, newBlocks.end(),
-                       std::back_inserter(pendingBlocks_));
+      ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
     }
   }
 
