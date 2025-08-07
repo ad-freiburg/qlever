@@ -1,7 +1,8 @@
 // Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
-
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #include "index/TextIndexBuilder.h"
 
 #include "index/Postings.h"
@@ -135,47 +136,76 @@ void TextIndexBuilder::processWordsForInvertedLists(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
+ad_utility::InputRangeTypeErased<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
     std::string contextFile, bool addWordsFromLiterals) const {
-  auto localeManager = textVocab_.getLocaleManager();
+
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
-  TextRecordIndex contextId = TextRecordIndex::make(0);
-  if (!contextFile.empty()) {
-    WordsFileParser p(contextFile, localeManager);
-    ad_utility::HashSet<std::string> items;
-    for (auto& line : p) {
-      contextId = line.contextId_;
-      co_yield line;
+  std::shared_ptr<LocaleManager> localeManager = std::make_shared<LocaleManager>(textVocab_.getLocaleManager());
+  std::shared_ptr<TextRecordIndex> contextId = std::make_shared<TextRecordIndex>(TextRecordIndex::make(0));
+
+  auto round_one = [localeManager, contextId, this, contextFile]() {
+    using L = ad_utility::LoopControl<WordsFileLine>;
+    if(contextFile.empty()) {
+      return ad_utility::InputRangeTypeErased<WordsFileLine>(ql::ranges::empty_view<WordsFileLine>{});
     }
-    if (contextId > TextRecordIndex::make(0)) {
-      contextId = contextId.incremented();
-    }
-  }
+
+    return ad_utility::InputRangeTypeErased<WordsFileLine>(ad_utility::CachingContinuableTransformInputRange(
+      WordsFileParser(contextFile, *localeManager),
+      [contextId](WordsFileLine& line) {
+        *contextId = line.contextId_;
+
+        if(*contextId > TextRecordIndex::make(0)) {
+          *contextId = contextId->incremented();
+        }
+        
+        return L::yieldValue(line);
+      }
+    ));
+  };
+
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
-  if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
-      if (!isLiteral(text)) {
-        continue;
-      }
+  auto round_two = [localeManager, contextId, this]() {
+    using L = ad_utility::LoopControl<WordsFileLine>;
+    return ad_utility::InputRangeTypeErased<WordsFileLine>(
+      ad_utility::CachingContinuableTransformInputRange(
+        ad_utility::integerRange(vocab_.size()),
+        [localeManager, contextId, this](size_t i) {
+          VocabIndex index = VocabIndex::make(i);
+          auto text = vocab_[index];
+          if(!isLiteral(text)) {
+            return L::makeContinue();
+          }
 
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
-      WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
-      co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
-        WordsFileLine wordLine{std::move(word), false, contextId, 1};
-        co_yield wordLine;
-      }
-      contextId = contextId.incremented();
-    }
+          // We need the explicit cast to `std::string` because the return type of
+          // `indexToString` might be `string_view` if the vocabulary is stored
+          // uncompressed in memory.
+          WordsFileLine entityLine{std::string{text}, true, *contextId, 1, true};
+
+          std::string_view textView = text;
+          textView = textView.substr(0, textView.rfind('"'));
+          textView.remove_prefix(1);
+          std::vector<WordsFileLine> result;
+          result.emplace_back(std::move(entityLine));
+          for(auto word : tokenizeAndNormalizeText(textView, *localeManager)) {
+            result.emplace_back(std::move(word), false, *contextId, 1);
+          }
+          *contextId = contextId->incremented();
+          return L::yieldAll(std::move(result));
+        }
+      )
+    );
+  };
+
+  if(addWordsFromLiterals) {
+    return ad_utility::InputRangeTypeErased<WordsFileLine>{::ranges::concat_view(
+      round_one(),
+      round_two())
+    };
+  }
+  else {
+    return ad_utility::InputRangeTypeErased<WordsFileLine>(round_one());
   }
 }
 
