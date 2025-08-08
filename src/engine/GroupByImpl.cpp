@@ -9,13 +9,6 @@
 
 #include <absl/strings/str_join.h>
 
-#include <algorithm>  // for std::min
-#include <cmath>
-#include <random>   // for std::mt19937_64, std::uniform_int_distribution
-#include <sstream>  // for std::ostringstream
-#include <type_traits>
-#include <unordered_set>
-
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/GroupByStrategyChooser.h"
