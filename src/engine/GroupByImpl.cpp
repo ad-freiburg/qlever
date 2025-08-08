@@ -393,7 +393,6 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                               "falling back to sort-based grouping.");
       useHashMapOptimization = false;
     } else {
-      subresult = child->getResult(true);
       // Update runtime information
       auto runTimeInfoChildren =
           child->getRootOperation()->getRuntimeInfoPointer();
