@@ -306,7 +306,8 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
+            *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            SortPerformanceEstimator{});
   };
 
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
