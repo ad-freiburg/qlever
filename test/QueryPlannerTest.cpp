@@ -4330,8 +4330,9 @@ TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
   auto qp = makeQueryPlanner();
   {
     auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o ."
-        "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }}");
+        "SELECT * { "
+        "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } "
+        "?x <P31> ?o }");
     auto plans = qp.createExecutionTrees(query);
     ASSERT_EQ(plans.size(), 2);
     EXPECT_TRUE(
@@ -4339,10 +4340,11 @@ TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
   }
   {
     auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o . "
+        "SELECT * WHERE { "
         "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
         "UNION "
-        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } }");
+        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
+        "?x <P31> ?o }");
     auto plans = qp.createExecutionTrees(query);
     ASSERT_EQ(plans.size(), 1);
     EXPECT_TRUE(
