@@ -170,9 +170,11 @@ TEST_F(GroupBySamplingTest, belowThreshold) {
   RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-    // 1000 rows, 100 distinct groups.
+    // Use 15% of s as the number of distinct groups
+    size_t distinctGroups = static_cast<size_t>(s * 0.15);
     IdTable table = createIdTable(
-        s, [](size_t i) { return i % 100; }, allocator);
+        s, [distinctGroups](size_t i) { return i % distinctGroups; },
+        allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
         *groupBy, table, /*log=*/true));
@@ -186,14 +188,10 @@ TEST_F(GroupBySamplingTest, aboveThreshold) {
   RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-    // 1000 rows, 800 distinct groups.
-    // Use 80% of s as the number of distinct groups
-    size_t distinctGroups = static_cast<size_t>(s * 0.8);
+    // Use 95% of s as the number of distinct groups
+    size_t distinctGroups = static_cast<size_t>(s * 0.95);
     IdTable table = createIdTable(
-        s,
-        [distinctGroups](size_t i) {
-          return static_cast<int64_t>(i % distinctGroups);
-        },
+        s, [distinctGroups](size_t i) { return i % distinctGroups; },
         allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
