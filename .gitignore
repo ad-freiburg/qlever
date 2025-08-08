@@ -49,6 +49,3 @@ sourcelist
 
 /cmake-build*
 /localIndices
-
-# local history
-.history
