@@ -13,6 +13,7 @@
 #include "engine/GroupByImpl.h"
 #include "global/RuntimeParameters.h"
 #include "util/HashMap.h"
+#include "util/Random.h"  // for ad_utility::randomShuffle and RandomSeed
 
 // _____________________________________________________________________________
 bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
@@ -38,16 +39,14 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
   size_t k = RuntimeParameters().get<"group-by-sample-constant">();
 
   size_t sampleSize = k * static_cast<size_t>(std::sqrt(double(totalSize)));
-  if (sampleSize == 0) {
-    return false;
-  }
   // Reservoir-sample indices only
-  std::vector<size_t> indices(sampleSize);
-  for (size_t i = 0; i < sampleSize; ++i) indices[i] = i;
-  size_t keep = static_cast<size_t>(std::sqrt(double(sampleSize)));
+  std::vector<size_t> indices(totalSize);
+  for (size_t i = 0; i < totalSize; ++i) indices[i] = i;
   // Shuffle and keep only the first `keep` indices.
-  ad_utility::randomShuffle(indices.begin(), indices.end());
-  indices.resize(keep);
+  // Use fixed seed for deterministic shuffle
+  ad_utility::randomShuffle(indices.begin(), indices.end(),
+                            ad_utility::RandomSeed::make(42));
+  indices.resize(sampleSize);
   // Extract grouping columns from the GroupByImpl instance
   const auto& varCols = gb._subtree->getVariableColumns();
   std::vector<ColumnIndex> groupByCols;
