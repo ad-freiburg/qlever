@@ -273,6 +273,12 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
 // the graph info is set to `nullopt`, which means that there is no info.
 static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
                                 const LocatedTriples& locatedTriples) {
+  // HACK: For Wikidata, all updates are in the default graph, so we can
+  // skip this. This is relevant because an analysis using `perf` and flame
+  // graphs showed that this function becomes VERY expensive when the number
+  // of located triples per block becomes larger.
+  return;
+
   // We do not know anything about the triples contained in the block, so we
   // also cannot know if the `locatedTriples` introduces duplicates. We thus
   // have to be conservative and assume that there are duplicates.
