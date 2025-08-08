@@ -9,10 +9,10 @@
 #include <random>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "engine/GroupByImpl.h"
 #include "global/RuntimeParameters.h"
+#include "util/HashMap.h"
 
 // _____________________________________________________________________________
 bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
@@ -43,19 +43,11 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
   }
   // Reservoir-sample indices only
   std::vector<size_t> indices(sampleSize);
-  for (size_t i = 0; i < sampleSize; ++i) {
-    indices[i] = i;
-  }
-  std::mt19937_64 gen{42};
-  for (size_t i = sampleSize; i < totalSize; ++i) {
-    std::uniform_int_distribution<size_t> dist(0, i);
-    size_t randIdx = dist(gen);
-    if (randIdx < sampleSize) {
-      indices[randIdx] = i;
-    }
-  }
-  // Use absl::flat_hash_map to count frequencies for Chao1 estimator
-  absl::flat_hash_map<RowKey, size_t> groupCounts;
+  for (size_t i = 0; i < sampleSize; ++i) indices[i] = i;
+  size_t keep = static_cast<size_t>(std::sqrt(double(sampleSize)));
+  // Shuffle and keep only the first `keep` indices.
+  ad_utility::randomShuffle(indices.begin(), indices.end());
+  indices.resize(keep);
   // Extract grouping columns from the GroupByImpl instance
   const auto& varCols = gb._subtree->getVariableColumns();
   std::vector<ColumnIndex> groupByCols;
@@ -63,11 +55,16 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
   for (const auto& var : gb._groupByVariables) {
     groupByCols.push_back(varCols.at(var).columnIndex_);
   }
+  // Use a HashMap to count frequencies for Chao1 estimator
+  ad_utility::HashMap<RowKey, size_t> groupCounts;
   for (size_t idx : indices) {
     RowKey key{&table, idx, &groupByCols};
     ++groupCounts[key];
   }
   // Chao1 estimator: D = d_obs + (f1 * f1) / (2 * f2)
+  // d_obs: number of distinct groups observed
+  // f1: number of groups with exactly one occurrence
+  // f2: number of groups with exactly two occurrences
   size_t dObs = groupCounts.size();
   size_t f1 = 0, f2 = 0;
   for (auto& [key, cnt] : groupCounts) {

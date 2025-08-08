@@ -16,10 +16,8 @@
 #include "engine/idTable/IdTable.h"  // for IdTable
 #include "global/Id.h"               // for ColumnIndex
 #include "global/RuntimeParameters.h"
-// #include "engine/GroupByImpl.h"  // for friend access
 
 // Abseil
-#include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 
 class GroupByImpl;
