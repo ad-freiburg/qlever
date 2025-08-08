@@ -11,6 +11,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -337,6 +338,14 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
+// Hybrid GROUP BY fallback strategy (SORT vs. HASH MAP):
+// 1) Sample a fraction of rows and estimate distinct group count via hash
+// sketch;
+//    if estimated groups exceed threshold, skip hash-map path entirely.
+// 2) Attempt index-scan-based shortcuts (single index count, full index scan,
+//    join full scan, object count).
+// 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
+// grouping.
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -365,14 +374,26 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subresult;
   if (useHashMapOptimization) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
-    // Skip sorting
     subresult = child->getResult(true);
-    // Update runtime information
-    auto runTimeInfoChildren =
-        child->getRootOperation()->getRuntimeInfoPointer();
-    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
-  } else {
+    // Sampling-based guard: decide whether to skip hash-map grouping based on
+    // estimated number of groups
+    if (subresult->isFullyMaterialized() &&
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(
+            *this, subresult->idTable())) {
+      // You will see this if you use qlever with --verbose-runtime-info
+      runtimeInfo().addDetail("hashMapOptimization",
+                              "Skipped due to high estimated group count, "
+                              "falling back to sort-based grouping.");
+      useHashMapOptimization = false;
+    } else {
+      // Update runtime information
+      auto runTimeInfoChildren =
+          child->getRootOperation()->getRuntimeInfoPointer();
+      _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+          {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
+    }
+  }
+  if (!useHashMapOptimization) {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
     metadataForUnsequentialData =
@@ -389,7 +410,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      AD_THROW("Groupby variable " + var.name() + " is not groupable");
+      AD_THROW("GroupBy variable " + var.name() + " is not groupable");
     }
 
     groupByColumns.push_back(it->second.columnIndex_);

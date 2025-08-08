@@ -17,6 +17,7 @@
 
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -595,9 +596,13 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-};
 
-// _____________________________________________________________________________
+  friend bool GroupByStrategyChooser::shouldSkipHashMapGrouping(
+      const GroupByImpl&, const IdTable&, const bool);
+
+};  // class GroupByImpl
+
+// Concept to identify aggregation data vectors
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =
