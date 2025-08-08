@@ -13,8 +13,8 @@
 #include <variant>
 #include <vector>
 
-#include "../HashMap.h"
-#include "../HashSet.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
 
 namespace ad_utility {
 
@@ -29,7 +29,8 @@ enum class MediaType {
   csv,
   turtle,
   ntriples,
-  octetStream
+  octetStream,
+  binaryQleverExport
 };
 
 struct MediaTypeWithQuality {
