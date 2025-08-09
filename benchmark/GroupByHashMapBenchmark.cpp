@@ -131,6 +131,34 @@ auto determineAggregateString = [](auto ti) {
 };
 
 class GroupByHashMapBenchmark : public BenchmarkInterface {
+ public:
+  // Constructor: add sampling-time-log and hybrid GROUP BY sampling options
+  GroupByHashMapBenchmark() {
+    auto& config = getConfigManager();
+    // Hybrid GROUP BY sampling parameters
+    config.addOption("group-by-sample-enabled",
+                     "Enable sampling to determine whether to use a HashMap or "
+                     "to do a Sort-based GROUP BY.",
+                     &sampleEnabled_,
+                     RuntimeParameters().get<"group-by-sample-enabled">());
+    config.addOption(
+        "group-by-sample-distinct-ratio",
+        "Switch to sort if (sampled distinct groups/sample size) exceeds this "
+        "ratio.",
+        &sampleDistinctRatio_,
+        static_cast<float>(
+            RuntimeParameters().get<"group-by-sample-distinct-ratio">()));
+    config.addOption(
+        "group-by-sample-min-table-size",
+        "Minimum table size to use sampling-based hybrid GROUP BY optimization",
+        &groupThreshold_,
+        RuntimeParameters().get<"group-by-sample-min-table-size">());
+    // Sample size constant multiplier k
+    config.addOption("group-by-sample-constant", "Multiplier for sample size",
+                     &sampleConstant_,
+                     RuntimeParameters().get<"group-by-sample-constant">());
+  }
+
   [[nodiscard]] std::string name() const final {
     return "Benchmarks for Group By using Hash Maps";
   }
@@ -222,6 +250,13 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
+    // Apply benchmark config to runtime parameters
+    RuntimeParameters().set<"group-by-sample-enabled">(sampleEnabled_);
+    RuntimeParameters().set<"group-by-sample-distinct-ratio">(
+        sampleDistinctRatio_);
+    RuntimeParameters().set<"group-by-sample-min-table-size">(groupThreshold_);
+    RuntimeParameters().set<"group-by-sample-constant">(sampleConstant_);
+    // run tests
     // runTwoAggregateBenchmarks(results);
     // runStringBenchmarks(results);
     runNumericBenchmarks(results);
@@ -232,6 +267,11 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
  private:
   std::random_device rd;
   std::mt19937_64 randomEngine{rd()};
+  // Sampling-based hybrid GROUP BY config
+  bool sampleEnabled_;
+  float sampleDistinctRatio_;
+  size_t groupThreshold_;
+  size_t sampleConstant_;
   static constexpr size_t numInputRows = 10'000'000;
   static constexpr size_t numMeasurements = 4;
   static constexpr size_t multiplicities[] = {
