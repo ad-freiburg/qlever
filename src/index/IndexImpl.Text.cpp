@@ -15,6 +15,7 @@
 
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
+#include "index/SortedIdTableMerger.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
@@ -85,6 +86,12 @@ IdTable IndexImpl::mergeTextBlockResults(
     return std::move(partialResults.at(0));
   }
   // Combine the partial results to one IdTable
+  if (textScanMode == TextScanMode::WordScan) {
+    auto result = SortedIdTableMerger::mergeIdTables(std::move(partialResults),
+                                                     allocator);
+    // If not entitySearch don't filter duplicates
+    return std::move(result).toDynamic<>();
+  }
   IdTable result{3, allocator};
   result.reserve(std::accumulate(partialResults.begin(), partialResults.end(),
                                  size_t{0},
@@ -103,10 +110,6 @@ IdTable IndexImpl::mergeTextBlockResults(
           return x.compareWithoutLocalVocab(y) < 0;
         });
   });
-  // If not entitySearch don't filter duplicates
-  if (textScanMode == TextScanMode::WordScan) {
-    return std::move(toSort).toDynamic<>();
-  }
   // Filter duplicates
   auto [newEnd, _] = std::ranges::unique(toSort);
   toSort.erase(newEnd, toSort.end());

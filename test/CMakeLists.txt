@@ -143,6 +143,8 @@ addLinkAndDiscoverTest(Simple8bTest)
 
 addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
 
+addLinkAndDiscoverTest(SortedIdTableMergerTest index)
+
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 # We currently always use static file names for all indices, which
