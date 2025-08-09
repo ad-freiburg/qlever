@@ -9,13 +9,13 @@
 #include <cmath>
 #include <numeric>
 #include <random>
-#include <unordered_set>
 #include <vector>
 
 #include "absl/strings/str_format.h"
 #include "engine/GroupByImpl.h"
 #include "global/RuntimeParameters.h"
 #include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/Log.h"     // for AD_LOG_DEBUG, AD_LOG_TIMING
 #include "util/Random.h"  // for ad_utility::randomShuffle and RandomSeed
 
@@ -52,10 +52,7 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
   for (const auto& var : gb._groupByVariables) {
     groupByCols.push_back(varCols.at(var).columnIndex_);
   }
-  // Direct sampling without full-pass shuffle: pick unique random indices
-
-  // Direct uniform sampling via SlowRandomIntGenerator (unique draws)
-  std::unordered_set<size_t> seen;
+  ad_utility::HashSet<size_t> seen;
   ad_utility::SlowRandomIntGenerator<size_t> sampler(
       0, totalSize - 1, ad_utility::RandomSeed::make(42));
   auto t1 = std::chrono::steady_clock::now();
@@ -97,10 +94,10 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
     auto to_us = [](auto d) {
       return std::chrono::duration_cast<std::chrono::microseconds>(d).count();
     };
-    AD_LOG_DEBUG << "Timing (us): sampling=" << to_us(t1 - t0)
-                 << ", counting=" << to_us(t2 - t1)
-                 << ", estimating=" << to_us(t3 - t2)
-                 << ", total=" << to_us(t3 - t0) << std::endl;
+    AD_LOG_INFO << "Timing (us): sampling=" << to_us(t1 - t0)
+                << ", counting=" << to_us(t2 - t1)
+                << ", estimating=" << to_us(t3 - t2)
+                << ", total=" << to_us(t3 - t0) << std::endl;
   }
   return estGroups > totalSize * distinctRatio;
 }

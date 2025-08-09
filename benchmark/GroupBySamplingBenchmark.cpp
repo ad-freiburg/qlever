@@ -81,7 +81,7 @@ class GroupBySamplingBenchmark : public BenchmarkInterface {
               if (doTiming) {
                 auto idtableTime = to_ms(t1 - t0);
                 auto setupTime = to_ms(t2 - t1);
-                AD_LOG_DEBUG
+                AD_LOG_INFO
                     << "Timing (ms): setup idtable=" << idtableTime.count()
                     << ", setup groupby=" << setupTime.count() << std::endl;
               }
