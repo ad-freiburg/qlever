@@ -16,6 +16,7 @@
 #include "engine/idTable/IdTable.h"  // for IdTable
 #include "global/Id.h"               // for ColumnIndex
 #include "global/RuntimeParameters.h"
+#include "util/Log.h"
 
 // Abseil
 #include "absl/strings/str_format.h"
@@ -28,7 +29,7 @@ class GroupByStrategyChooser {
   // groups. Friend of GroupByImpl so it can inspect private members.
   static bool shouldSkipHashMapGrouping(const GroupByImpl& gb,
                                         const IdTable& table,
-                                        const bool log = false);
+                                        LogLevel logLevel = LogLevel::INFO);
 
   // Data structure to be able to use IdTable rows as keys in a hash map.
   struct RowKey {
