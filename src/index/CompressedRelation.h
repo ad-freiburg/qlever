@@ -489,8 +489,8 @@ class CompressedRelationReader {
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
-    static bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata);
+    bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a

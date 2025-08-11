@@ -272,18 +272,20 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    filterDuplicatesIfNecessary(IdTable& block,
-                                const CompressedBlockMetadata& blockMetadata) {
+    filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
   auto deleteLastIfDuplicate = [&]() {
-    if (blockMetadata.lastTripleIsDuplicateOfFirstTripleInNextBlock_) {
+    if (blockMetadata.lastTripleIsDuplicateOfFirstTripleInNextBlock_ &&
+        !desiredGraphs_.has_value()) {
       AD_CORRECTNESS_CHECK(!block.empty());
       block.erase(block.end() - 1);
+      return true;
     }
+    return false;
   };
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
-    deleteLastIfDuplicate();
-    return false;
+    return deleteLastIfDuplicate();
   }
   auto endUnique = std::unique(block.begin(), block.end());
   block.erase(endUnique, block.end());

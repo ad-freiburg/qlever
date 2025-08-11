@@ -894,6 +894,11 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
 
+    // The first and second block share the same triple, albeit in different
+    // graphs.
+    expectedAugmentedMetadata[0]
+        .lastTripleIsDuplicateOfFirstTripleInNextBlock_ = true;
+
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
     auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
