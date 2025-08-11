@@ -59,14 +59,17 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
                                        "31",    "0",     "al"};
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
-  auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
-  auto& writer = *writerPtr;
-  for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-    ASSERT_EQ(writer(word), static_cast<uint64_t>(i));
+  {
+    auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
+    auto& writer = *writerPtr;
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      ASSERT_EQ(writer(word, false), static_cast<uint64_t>(i));
+    }
+    writer.readableName() = "blabb";
+    EXPECT_EQ(writer.readableName(), "blabb");
+    // Test the case that the destructor implicitly calls `finish`.
+    // The other unit tests have
   }
-  writer.finish();
-  writer.readableName() = "blabb";
-  EXPECT_EQ(writer.readableName(), "blabb");
 
   VocabularyInMemory simple;
   simple.open("vocabtmp.txt.words");
@@ -102,7 +105,7 @@ struct CompressedVocabularyF : public testing::Test {
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
       auto& writer = *writerPtr;
       for (const auto& word : words) {
-        writer(word);
+        writer(word, false);
       }
       writer.finish();
       vocab.open(filename);

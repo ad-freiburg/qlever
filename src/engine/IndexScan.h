@@ -15,10 +15,7 @@ class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  // Optional pair containing a `PrefilterExpression` with `ColumnIndex` (eval.
-  // index)
-  using PrefilterIndexPair = std::optional<std::pair<
-      std::unique_ptr<prefilterExpressions::PrefilterExpression>, ColumnIndex>>;
+  using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   Permutation::Enum permutation_;
@@ -26,17 +23,12 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  // TODO @realHannes:
-  // Remove `PrefilterIndexPair` as a member and set instead a member of type
-  // `ScanSpecAndBlocks` (see CompressedRelation.h) with optionally prefiltered
-  // `BlockMetadataRanges`. This `ScanSpecAndBlocks` member can be passed
-  // to the scan and size-estimate functions in the future making those
-  // evaluations simpler.
-  PrefilterIndexPair prefilter_;
+  ScanSpecAndBlocks scanSpecAndBlocks_;
+  bool scanSpecAndBlocksIsPrefiltered_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
-  vector<float> multiplicity_;
+  std::vector<float> multiplicity_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
   // the "ordinary" subjects, predicates, or objects, as well as the variables
@@ -44,18 +36,26 @@ class IndexScan final : public Operation {
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
+  // If set, then only the specified variables will be part of the result.
+  // Can be used to strip some columns that are not needed by the remainder
+  // of the query.
+  using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
+  VarsToKeep varsToKeep_;
+
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
+
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
-            PrefilterIndexPair prefilter);
+            ScanSpecAndBlocks scanSpecAndBlocks,
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
 
   ~IndexScan() override = default;
 
@@ -75,7 +75,7 @@ class IndexScan final : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
@@ -180,12 +180,15 @@ class IndexScan final : public Operation {
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
   // `IndexScan`.
@@ -199,14 +202,19 @@ class IndexScan final : public Operation {
 
   std::string getCacheKeyImpl() const override;
 
+  // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
+  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
+  // `false` if prefilterd `BlockMetadataRanges` are contained.
+  bool canResultBeCachedImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return an updated QueryExecutionTree containing the new IndexScan which is
   // a copy of this (`IndexScan`), but with added corresponding
   // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
   // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
-  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
-      PrefilterIndexPair prefilter) const;
+  std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
+      ScanSpecAndBlocks scanSpecAndBlocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
@@ -220,26 +228,48 @@ class IndexScan final : public Operation {
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
-  // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
-  // applying any additional pre-filter procedure.
-  std::optional<ql::span<const CompressedBlockMetadata>> getBlockMetadata()
-      const;
-
-  // This method retrieves all relevant `CompressedBlockMetadata` and performs
-  // the pre-filtering procedure given a `PrefilterIndexPair` is available.
-  std::optional<std::vector<CompressedBlockMetadata>>
-  getBlockMetadataOptionallyPrefiltered() const;
-
-  // Apply the `prefilter_` to the `blocks`. May only be called if the limit is
-  // unconstrained, and a `prefilter_` exists.
-  std::vector<CompressedBlockMetadata> applyPrefilter(
-      ql::span<const CompressedBlockMetadata> blocks) const;
+  // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
+  // `Permutation` class.
+  ScanSpecAndBlocks getScanSpecAndBlocks() const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata> blocks) const;
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
+  // returns a subset of this actual columns, return the subset of columns that
+  // has to be applied to the "full" result (without any columns stripped) to
+  // get the final result. Throws if `varsToKee_` is `nullopt`.
+  std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+
+  // Return a lambda that takes an `idTable` that has the result without any
+  // columns stripped, and applies the column subset that leads to the correct
+  // stripping of the columns. This function can also be used if no columns are
+  // stripped and hence `varsToKeep_` is `nullopt`.
+  // Note: In theory, we could inform the underlying `CompressedRelationReader`
+  // of the required columns to not read the stripped columns at all. But in
+  // practice the effect would be limited, because the reader has to read all
+  // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
+  // filtering etc.)
+  auto makeApplyColumnSubset() const {
+    bool hasSubset = varsToKeep_.has_value();
+    auto cols =
+        hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
+    return [cols = std::move(cols)](auto&& table) {
+      if (cols.has_value()) {
+        table.setColumnSubset(cols.value());
+      }
+      return std::move(table);
+    };
+  }
+
+ public:
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

@@ -23,7 +23,7 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   AD_CONTRACT_CHECK(idx < size());
   auto offsetAndSize = getOffsetAndSize(idx);
-  string result(offsetAndSize.size_, '\0');
+  std::string result(offsetAndSize.size_, '\0');
   file_.read(result.data(), offsetAndSize.size_, offsetAndSize.offset_);
   return result;
 }
@@ -31,7 +31,7 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 // _____________________________________________________________________________
 template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
-                                         const string& fileName) {
+                                         const std::string& fileName) {
   {
     file_.open(fileName.c_str(), "w");
     ad_utility::MmapVector<Offset> offsets(fileName + offsetSuffix_,
@@ -69,10 +69,7 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::WordWriter::finish() {
-  if (std::exchange(isFinished_, true)) {
-    return;
-  }
+void VocabularyOnDisk::WordWriter::finishImpl() {
   // End offset of last vocabulary entry, also consistent with the empty
   // vocabulary.
   offsets_.push_back(currentOffset_);
@@ -82,8 +79,11 @@ void VocabularyOnDisk::WordWriter::finish() {
 
 // _____________________________________________________________________________
 VocabularyOnDisk::WordWriter::~WordWriter() {
-  throwInDestructorIfSafe_([this]() { finish(); },
-                           "`~VocabularyOnDisk::WordWriter`");
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`VocabularyOnDisk::WordWriter`");
+  }
 }
 
 // _____________________________________________________________________________

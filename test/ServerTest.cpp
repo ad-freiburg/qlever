@@ -2,19 +2,21 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#include <engine/QueryPlanner.h>
-#include <engine/Server.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
 
+#include "engine/QueryPlanner.h"
+#include "engine/Server.h"
+#include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
+
+using nlohmann::json;
 
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -30,6 +32,7 @@ TEST(ServerTest, determineResultPinning) {
               testing::Pair(false, false));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, determineMediaType) {
   auto MakeRequest = [](const std::optional<std::string>& accept,
                         const http::verb method = http::verb::get,
@@ -45,39 +48,83 @@ TEST(ServerTest, determineMediaType) {
   };
   auto checkActionMediatype = [&](const std::string& actionName,
                                   ad_utility::MediaType expectedMediaType) {
-    EXPECT_THAT(Server::determineMediaType({{"action", {actionName}}},
-                                           MakeRequest(std::nullopt)),
-                testing::Eq(expectedMediaType));
+    EXPECT_THAT(Server::determineMediaTypes({{"action", {actionName}}},
+                                            MakeRequest(std::nullopt)),
+                testing::ElementsAre(expectedMediaType));
   };
   // The media type associated with the action overrides the `Accept` header.
-  EXPECT_THAT(Server::determineMediaType(
+  EXPECT_THAT(Server::determineMediaTypes(
                   {{"action", {"csv_export"}}},
                   MakeRequest("application/sparql-results+json")),
-              testing::Eq(ad_utility::MediaType::csv));
+              testing::ElementsAre(ad_utility::MediaType::csv));
   checkActionMediatype("csv_export", ad_utility::MediaType::csv);
   checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
   checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
   checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
   checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
   checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
-  EXPECT_THAT(Server::determineMediaType(
+  EXPECT_THAT(Server::determineMediaTypes(
                   {}, MakeRequest("application/sparql-results+json")),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
   // No supported media type in the `Accept` header. (Contrary to it's docstring
   // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
   // exception if no supported media type is found.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::determineMediaType({}, MakeRequest("text/css")),
+      Server::determineMediaTypes({}, MakeRequest("text/css")),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"text/css\"."));
   // No `Accept` header means that any content type is allowed.
-  EXPECT_THAT(Server::determineMediaType({}, MakeRequest(std::nullopt)),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest(std::nullopt)),
+              testing::ElementsAre());
   // No `Accept` header and an empty `Accept` header are not distinguished.
-  EXPECT_THAT(Server::determineMediaType({}, MakeRequest("")),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest("")),
+              testing::ElementsAre());
 }
 
+// _____________________________________________________________________________
+TEST(ServerTest, chooseBestFittingMediaType) {
+  auto askQuery = SparqlParser::parseQuery("ASK {}");
+  auto selectQuery = SparqlParser::parseQuery("SELECT * {}");
+  auto constructQuery = SparqlParser::parseQuery("CONSTRUCT WHERE {}");
+  using enum ad_utility::MediaType;
+
+  auto choose = &Server::chooseBestFittingMediaType;
+
+  // Empty case
+  EXPECT_EQ(choose({}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({}, constructQuery), turtle);
+
+  // Single matching element
+  EXPECT_EQ(choose({sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, constructQuery), turtle);
+  EXPECT_EQ(choose({qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, constructQuery), qleverJson);
+
+  // Single non-matching element
+  EXPECT_EQ(choose({tsv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream}, constructQuery), turtle);
+
+  // Multiple matching elements
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, constructQuery), turtle);
+
+  // One matching, one non-matching element
+  EXPECT_EQ(choose({tsv, qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({octetStream, qleverJson}, constructQuery), qleverJson);
+
+  // Multiple non-matching elements
+  EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
@@ -167,7 +214,8 @@ TEST(ServerTest, createResponseMetadata) {
   const Index& index = qec->getIndex();
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
-  auto pqs = SparqlParser::parseUpdate(update);
+  ad_utility::BlankNodeManager bnm;
+  auto pqs = SparqlParser::parseUpdate(&bnm, update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);

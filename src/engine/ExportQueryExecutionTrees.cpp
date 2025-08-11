@@ -7,11 +7,12 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
 #include <ranges>
 
-#include "parser/RdfEscaping.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
@@ -336,8 +337,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
-                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+      return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
@@ -1029,7 +1029,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     std::optional<std::string> exceptionMessage;
     try {
       for (; it != innerGenerator.end(); ++it) {
-        co_yield std::move(*it);
+        co_yield std::string{*it};
       }
     } catch (const std::exception& e) {
       exceptionMessage = e.what();
@@ -1196,3 +1196,43 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   co_yield absl::StrCat("],", jsonSuffix.dump().substr(1));
 }
+
+// This function evaluates a `Variable` in the context of the `CONSTRUCT`
+// export.
+[[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
+    const Variable& var, const ConstructQueryExportContext& context,
+    [[maybe_unused]] PositionInTriple positionInTriple) {
+  size_t row = context._row;
+  const auto& variableColumns = context._variableColumns;
+  const Index& qecIndex = context._qecIndex;
+  const auto& idTable = context.idTable_;
+  if (variableColumns.contains(var)) {
+    size_t index = variableColumns.at(var).columnIndex_;
+    auto id = idTable(row, index);
+    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
+        qecIndex, id, context.localVocab_);
+    if (!optionalStringAndType.has_value()) {
+      return std::nullopt;
+    }
+    auto& [literal, type] = optionalStringAndType.value();
+    const char* i = XSD_INT_TYPE;
+    const char* d = XSD_DECIMAL_TYPE;
+    const char* b = XSD_BOOLEAN_TYPE;
+    if (type == nullptr || type == i || type == d ||
+        (type == b && literal.length() > 1)) {
+      return std::move(literal);
+    } else {
+      return absl::StrCat("\"", literal, "\"^^<", type, ">");
+    }
+  }
+  return std::nullopt;
+}
+
+// The following trick has the effect that `Variable::evaluate()` calls the
+// above function, without `Variable` having to link against the (heavy) export
+// module. This is a bit of a hack and will be removed in the future when we
+// improve the CONSTRUCT module for better performance.
+[[maybe_unused]] static const int initializeVariableEvaluationDummy = []() {
+  Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
+  return 42;
+}();

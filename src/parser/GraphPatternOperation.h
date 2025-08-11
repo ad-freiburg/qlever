@@ -7,14 +7,11 @@
 #ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 #define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
-#include <util/TransparentFunctors.h>
-
 #include <limits>
 #include <memory>
 #include <vector>
 
 #include "engine/PathSearch.h"
-#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
@@ -22,8 +19,8 @@
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
-#include "util/Algorithm.h"
+#include "rdfTypes/Variable.h"
+#include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 #include "util/http/HttpUtils.h"
 
@@ -72,7 +69,7 @@ struct Service {
 /// An internal pattern used in the `LOAD` update operation.
 struct Load {
  public:
-  ad_utility::httpUtils::Url url_;
+  TripleComponent::Iri iri_;
   bool silent_;
 };
 
@@ -191,7 +188,7 @@ struct Bind {
            ql::views::transform(ad_utility::dereference);
   }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
@@ -199,7 +196,7 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe>;
+                 Minus, GroupGraphPattern, Describe, Load>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

@@ -9,7 +9,12 @@
 #include <optional>
 #include <vector>
 
+#include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "index/CompressedRelation.h"
+#include "index/Permutation.h"
+#include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
@@ -69,7 +74,7 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
   if (result.isFullyMaterialized()) {
     return asSingleTableView(result, permutation);
   }
-  return convertGenerator(std::move(result.idTables()), permutation);
+  return convertGenerator(result.idTables(), permutation);
 }
 
 using GeneratorWithDetails =
@@ -127,6 +132,59 @@ CPP_template_2(typename ActionT)(
             });
         yieldValue(std::move(lastBlock));
       });
+}
+
+// Helper function to check if the join of two columns propagate the value
+// returned by `Operation::columnOriginatesFromGraphOrUndef`.
+inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right,
+    const Variable& variable) {
+  auto graphOrUndef = [&variable](const auto& tree) {
+    return tree->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+  };
+  auto hasUndef = [&variable](const auto& tree) {
+    return tree->getVariableColumns().at(variable).mightContainUndef_ !=
+           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  };
+  bool leftInGraph = graphOrUndef(left);
+  bool rightInGraph = graphOrUndef(right);
+  bool leftUndef = hasUndef(left);
+  bool rightUndef = hasUndef(right);
+  return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
+         (rightInGraph && !rightUndef);
+}
+
+// Helper function to check if any of the join columns could potentially contain
+// undef values.
+inline bool joinColumnsAreAlwaysDefined(
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right) {
+  auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
+    return tree->getVariableAndInfoByColumnIndex(index)
+               .second.mightContainUndef_ ==
+           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  };
+  return ql::ranges::all_of(
+      joinColumns, [alwaysDefHelper = std::move(alwaysDefHelper), &left,
+                    &right](const auto& indices) {
+        return alwaysDefHelper(left, indices[0]) &&
+               alwaysDefHelper(right, indices[1]);
+      });
+}
+
+// Helper function that is commonly used to skip sort operations and use an
+// alternative algorithm that doesn't require sorting instead.
+inline std::shared_ptr<const Result> computeResultSkipChild(
+    const std::shared_ptr<Operation>& operation) {
+  auto children = operation->getChildren();
+  AD_CONTRACT_CHECK(children.size() == 1);
+  auto child = children.at(0);
+  auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
+  operation->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
+
+  return child->getResult(true);
 }
 }  // namespace qlever::joinHelpers
 

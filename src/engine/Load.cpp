@@ -19,17 +19,17 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
           RuntimeParameters().get<"cache-load-results">()) {}
 
 // _____________________________________________________________________________
-string Load::getCacheKeyImpl() const {
+std::string Load::getCacheKeyImpl() const {
   if (RuntimeParameters().get<"cache-load-results">()) {
-    return absl::StrCat("LOAD ", loadClause_.url_.asString(),
+    return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
                         loadClause_.silent_ ? " SILENT" : "");
   }
   return absl::StrCat("LOAD ", cacheBreaker_);
 }
 
 // _____________________________________________________________________________
-string Load::getDescriptor() const {
-  return absl::StrCat("LOAD ", loadClause_.url_.asString());
+std::string Load::getDescriptor() const {
+  return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation());
 }
 
 // _____________________________________________________________________________
@@ -65,10 +65,21 @@ std::unique_ptr<Operation> Load::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {
+  auto makeSilentResult = [this]() -> Result {
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab{}};
+  };
+
+  // In the syntax test mode we don't even try to compute the result, as this
+  // could run into timeouts which would be a waste of time and is hard to
+  // properly recover from.
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    return makeSilentResult();
+  }
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -77,25 +88,25 @@ Result Load::computeResult(bool requestLaziness) {
     throw;
   } catch (const std::exception&) {
     // If the `SILENT` keyword is set, catch the error and return the neutral
-    // element for this operation (an empty `IdTable`). The `IdTable` is used to
-    // fill in the variables in the template triple `?s ?p ?o`. The empty
+    // element for this operation (an empty `IdTable`). The `IdTable` is used
+    // to fill in the variables in the template triple `?s ?p ?o`. The empty
     // `IdTable` results in no triples being updated.
     if (loadClause_.silent_) {
-      return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-              resultSortedOn(), LocalVocab{}};
+      return makeSilentResult();
+    } else {
+      throw;
     }
-    throw;
   }
 }
 
 // _____________________________________________________________________________
 Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
-  LOG(INFO) << "Loading RDF dataset from " << loadClause_.url_.asString()
-            << std::endl;
-  HttpOrHttpsResponse response =
-      getResultFunction_(loadClause_.url_, cancellationHandle_,
-                         boost::beast::http::verb::get, "", "", "");
+  ad_utility::httpUtils::Url url{
+      asStringViewUnsafe(loadClause_.iri_.getContent())};
+  LOG(INFO) << "Loading RDF dataset from " << url.asString() << std::endl;
+  HttpOrHttpsResponse response = getResultFunction_(
+      url, cancellationHandle_, boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -163,11 +174,17 @@ void Load::throwErrorWithContext(std::string_view msg,
                                  std::string_view first100,
                                  std::string_view last100) const {
   throw std::runtime_error(absl::StrCat(
-      "Error while executing a Load request to <", loadClause_.url_.asString(),
-      ">: ", msg, ". First 100 bytes of the response: '", first100,
+      "Error while executing a Load request to <",
+      loadClause_.iri_.toStringRepresentation(), ">: ", msg,
+      ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }
 
 // _____________________________________________________________________________
 bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+
+// _____________________________________________________________________________
+void Load::resetGetResultFunctionForTesting(SendRequestType func) {
+  getResultFunction_ = std::move(func);
+}

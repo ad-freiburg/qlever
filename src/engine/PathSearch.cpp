@@ -165,7 +165,7 @@ std::string PathSearch::getCacheKeyImpl() const {
 };
 
 // _____________________________________________________________________________
-string PathSearch::getDescriptor() const {
+std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();
@@ -203,7 +203,7 @@ bool PathSearch::knownEmptyResult() {
 };
 
 // _____________________________________________________________________________
-vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,

@@ -3,12 +3,14 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
+#include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
@@ -44,6 +46,30 @@ auto D = DoubleId;
 // value and that value is equal to `makeIdTableFromVector(table)`.
 auto optionalHasTable = [](const VectorTable& table) {
   return Optional(matchesIdTableFromVector(table));
+};
+
+// _____________________________________________________________________________
+auto lit(std::string_view s) {
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
+}
+
+// Helper function to get the local vocab ID for a given word.
+Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
+                            const std::string& word) {
+  auto lit =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
+  auto value = localVocab.getIndexOrNullopt(lit);
+  if (value.has_value()) {
+    return ValueId::makeFromLocalVocabIndex(value.value());
+  }
+  auto values = localVocab.getAllWordsForTesting();
+  AD_THROW(absl::StrCat(
+      "Local vocab does not contain: ", word, "\n existing words: ",
+      absl::StrJoin(
+          values | ql::views::transform([](const LocalVocabEntry& entry) {
+            return entry.toStringRepresentation();
+          }),
+          ", ")));
 };
 }  // namespace
 
@@ -650,6 +676,95 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
 }
 
 // _____________________________________________________________________________
+TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
+  using namespace sparqlExpression;
+  auto* qec = getQec();
+
+  std::shared_ptr expr1{makeCountStarExpression(false)};
+  std::shared_ptr expr2{makeCountStarExpression(true)};
+
+  auto makeIdTables = []() {
+    std::vector<IdTable> idTables;
+    idTables.push_back(makeIdTableFromVector({{Id::makeUndefined()}, {1}}));
+    idTables.push_back(makeIdTableFromVector({{2}, {2}, {4}, {8}}));
+    return idTables;
+  };
+
+  // Regular case that should get optimized, with and without lazy input
+  {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTables(),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, true,
+        std::vector<ColumnIndex>{});
+    GroupByImpl groupBy{
+        qec,
+        {},
+        {Alias{SparqlExpressionPimpl{std::shared_ptr{expr1}, "COUNT(*) AS ?x"},
+               Variable{"?x"}}},
+        std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+  }
+  {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec,
+        makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+    GroupByImpl groupBy{
+        qec,
+        {},
+        {Alias{SparqlExpressionPimpl{std::shared_ptr{expr1}, "COUNT(*) AS ?x"},
+               Variable{"?x"}}},
+        std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+  }
+  // Distinct should not be optimized
+  {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTables(),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, true,
+        std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{qec,
+                        {},
+                        {Alias{SparqlExpressionPimpl{std::shared_ptr{expr2},
+                                                     "COUNT(DISTINCT *) AS ?x"},
+                               Variable{"?x"}}},
+                        std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+  }
+  // With variable name should also not be optimized
+  {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTables(),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, true,
+        std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        {},
+        {Alias{makeCountPimpl(Variable{"?a"}, false), Variable{"?x"}}},
+        std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+  }
+  {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTables(),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, true,
+        std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        {},
+        {Alias{makeCountPimpl(Variable{"?a"}, true), Variable{"?x"}}},
+        std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(4)}}));
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join, auto& aggregates) {
@@ -701,7 +816,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupByImpl::Aggregate> sampleAggregate = {{sampleXPimpl, 1}};
 
   // Enable optimization
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   // Top operation must be SORT
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
@@ -736,9 +851,6 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   ASSERT_EQ(aggregateInfo.aggregateDataIndex_, 0);
   ASSERT_FALSE(aggregateInfo.parentAndIndex_.has_value());
   ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -762,7 +874,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
@@ -779,6 +891,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg) WHERE {
     # explicitly defined subresult.
@@ -806,7 +919,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
 
     // Calculate result with optimization
     qec->getQueryTreeCache().clearAll();
-    RuntimeParameters().set<"group-by-hash-map-enabled">(true);
     GroupBy groupBy{qec, variablesOnlyX, aliasesAvgY, std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting();
     ASSERT_TRUE(result.isFullyMaterialized());
@@ -816,9 +928,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
   };
   runTest(true);
   runTest(false);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -843,7 +952,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
   std::vector<Alias> aliasesCountStar{Alias{countStarPimpl, Variable{"?c"}}};
 
   // Calculate result with optimization
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
@@ -862,7 +971,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesInExpression) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -915,15 +1024,12 @@ TEST_F(GroupByOptimizations,
   auto expected = makeIdTableFromVector(
       {{d(1), d(2), d(5.5), d(1)}, {d(2), d(2), d(7.0), d(2.0)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariables) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -972,15 +1078,12 @@ TEST_F(GroupByOptimizations,
   auto expected = makeIdTableFromVector(
       {{d(1), d(2), d(3.5)}, {d(2), d(2), d(5.0)}, {d(4), d(1), d(42.0)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesOutOfOrder) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -1029,14 +1132,11 @@ TEST_F(GroupByOptimizations,
   auto expected = makeIdTableFromVector(
       {{d(1), d(2), d(3.5)}, {d(2), d(2), d(5.0)}, {d(4), d(1), d(42.0)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -1100,16 +1200,13 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
                              {d(2), d(2), d(2), d(2), d(2), d(5), d(5)},
                              {d(4), d(1), d(2), d(2), d(2), d(5), d(2)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Make sure we are calculating the correct result when a grouped variable
   // occurs in an expression.
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -1170,15 +1267,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   auto expected = makeIdTableFromVector(
       {{d(1), d(1), d(3), d(6)}, {d(5), d(5), d(6), d(9)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   // Test for support of min, max and sum when using the HashMap optimization.
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -1247,15 +1341,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
                                          {d(3), d(1), d(13.37), d(18.37)},
                                          {d(4), undef, undef, undef}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   // Test for support of min, max and sum when using the HashMap optimization.
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) (SUM(?b) as ?w) WHERE {
   //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
@@ -1330,14 +1421,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   auto expected = makeIdTableFromVector(
       {{i(1), i(3), i(42), i(54)}, {i(3), i(1), i(13), i(18)}});
   EXPECT_EQ(table, expected);
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   std::string turtleInput =
       "<x> <label> \"C\" . <x> <label> \"B\" . <x> <label> \"A\" . "
@@ -1368,38 +1456,30 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
 
   auto getId = makeGetId(qec->getIndex());
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto lit =
-        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
-    auto value = result->localVocab().getIndexOrNullopt(lit);
-    if (value.has_value())
-      return ValueId::makeFromLocalVocabIndex(value.value());
-    else
-      AD_THROW("");
+    return getLocalVocabIdFromVocab(result->localVocab(), word);
   };
 
   auto expected = makeIdTableFromVector(
       {{getId("<x>"), getLocalVocabId("A B C"), getLocalVocabId("A,B,C")},
        {getId("<y>"), getLocalVocabId("f g h"), getLocalVocabId("f,g,h")}});
   EXPECT_EQ(table, expected);
-
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   // Test for support of min, max and sum when using the HashMap optimization.
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
 
   input._variables = std::vector{varX, varY};
-  input._values.push_back(std::vector{TC(1.0), TC{iri("<B>")}});
-  input._values.push_back(std::vector{TC(1.0), TC{iri("<A>")}});
-  input._values.push_back(std::vector{TC(1.0), TC{iri("<C>")}});
-  input._values.push_back(std::vector{TC(3.0), TC{iri("<g>")}});
-  input._values.push_back(std::vector{TC(3.0), TC{iri("<h>")}});
-  input._values.push_back(std::vector{TC(3.0), TC{iri("<f>")}});
+  input._values.push_back(std::vector{TC(1.0), TC{lit("B")}});
+  input._values.push_back(std::vector{TC(1.0), TC{lit("A")}});
+  input._values.push_back(std::vector{TC(1.0), TC{lit("C")}});
+  input._values.push_back(std::vector{TC(3.0), TC{lit("g")}});
+  input._values.push_back(std::vector{TC(3.0), TC{lit("h")}});
+  input._values.push_back(std::vector{TC(3.0), TC{lit("f")}});
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -1417,26 +1497,18 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto lit =
-        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
-    auto value = result->localVocab().getIndexOrNullopt(lit);
-    if (value.has_value())
-      return ValueId::makeFromLocalVocabIndex(value.value());
-    else
-      AD_THROW("");
+    return getLocalVocabIdFromVocab(result->localVocab(), word);
   };
 
   auto expected = makeIdTableFromVector(
       {{d(1), getLocalVocabId("B A C"), getLocalVocabId("B,A,C")},
        {d(3), getLocalVocabId("g h f"), getLocalVocabId("g,h,f")}});
   EXPECT_EQ(table, expected);
-
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(true);
 
   std::string turtleInput =
       "<x> <label> \"C\" . <x> <label> \"B\" . <x> <label> \"A\" . "
@@ -1470,8 +1542,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
       makeIdTableFromVector({{getId("<x>"), getId("\"A\""), getId("\"C\"")},
                              {getId("<y>"), getId("\"f\""), getId("\"h\"")}});
   EXPECT_EQ(table, expected);
-
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -1559,7 +1629,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       Alias{constPlusEtcPimpl, Variable{"?sth"}}};
 
   // Clear cache, calculate result without optimization
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
+  auto cleanup = setRuntimeParameterForTest<"group-by-hash-map-enabled">(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -1574,9 +1644,6 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
   // Compare results, using debugString as the result only contains 2 rows
   ASSERT_EQ(resultWithOptimization->asDebugString(),
             resultWithoutOptimization->asDebugString());
-
-  // Disable optimization for following tests
-  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -2092,11 +2159,126 @@ TEST(GroupBy, knownEmptyResult) {
   }
 }
 
+// Helper expressions to test specific behaviour of the `GroupBy` class.
+namespace {
+class SetOfIntervalsExpression : public SparqlExpression {
+ public:
+  ExpressionResult evaluate(EvaluationContext*) const override {
+    using SOI = ad_utility::SetOfIntervals;
+    return SOI{SOI::Vec{}};
+  }
+
+  std::string getCacheKey(const VariableToColumnMap&) const override {
+    return "SetOfIntervalsExpression";
+  }
+
+ private:
+  ql::span<Ptr> childrenImpl() override { return {}; }
+};
+
+// _____________________________________________________________________________
+class AggregationFunctionWithVector : public SparqlExpression {
+  VectorWithMemoryLimit<ValueId> vector_;
+
+ public:
+  explicit AggregationFunctionWithVector(VectorWithMemoryLimit<ValueId> vector)
+      : vector_{std::move(vector)} {}
+  ExpressionResult evaluate(EvaluationContext*) const override {
+    return vector_.clone();
+  }
+
+  std::string getCacheKey(const VariableToColumnMap&) const override {
+    return "AggregationFunctionWithVector";
+  }
+
+ private:
+  ql::span<Ptr> childrenImpl() override { return {}; }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(GroupBy, nonConstantAggregationFunctions) {
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?a"}});
+
+  {
+    auto expr0 = std::make_unique<VariableExpression>(Variable{"?a"});
+    GroupBy groupBy{qec,
+                    {},
+                    {{SparqlExpressionPimpl{std::move(expr0), "expr0"},
+                      Variable{"?result"}}},
+                    subtree};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        groupBy.computeResultOnlyForTesting(false),
+        ::testing::HasSubstr("An expression returned an invalid type"),
+        ad_utility::Exception);
+  }
+  {
+    auto expr1 = std::make_unique<SetOfIntervalsExpression>();
+    GroupBy groupBy{qec,
+                    {},
+                    {{SparqlExpressionPimpl{std::move(expr1), "expr1"},
+                      Variable{"?result"}}},
+                    subtree};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        groupBy.computeResultOnlyForTesting(false),
+        ::testing::HasSubstr("An expression returned an invalid type"),
+        ad_utility::Exception);
+  }
+  {
+    // Return empty vector
+    auto expr2 = std::make_unique<AggregationFunctionWithVector>(
+        VectorWithMemoryLimit<ValueId>{qec->getAllocator()});
+    GroupBy groupBy{qec,
+                    {},
+                    {{SparqlExpressionPimpl{std::move(expr2), "expr2"},
+                      Variable{"?result"}}},
+                    subtree};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        groupBy.computeResultOnlyForTesting(false),
+        ::testing::HasSubstr(
+            "An expression returned a vector expression result "
+            "that contained an unexpected amount of entries."),
+        ad_utility::Exception);
+  }
+  {
+    // Return vector with 2 elements
+    auto expr3 = std::make_unique<AggregationFunctionWithVector>(
+        VectorWithMemoryLimit{{Id::makeFromBool(true), Id::makeFromBool(false)},
+                              qec->getAllocator()});
+    GroupBy groupBy{qec,
+                    {},
+                    {{SparqlExpressionPimpl{std::move(expr3), "expr3"},
+                      Variable{"?result"}}},
+                    subtree};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        groupBy.computeResultOnlyForTesting(false),
+        ::testing::HasSubstr(
+            "An expression returned a vector expression result "
+            "that contained an unexpected amount of entries."),
+        ad_utility::Exception);
+  }
+  {
+    auto expr4 = std::make_unique<AggregationFunctionWithVector>(
+        VectorWithMemoryLimit{{Id::makeFromBool(true)}, qec->getAllocator()});
+    GroupBy groupBy{qec,
+                    {},
+                    {{SparqlExpressionPimpl{std::move(expr4), "expr4"},
+                      Variable{"?result"}}},
+                    subtree};
+    EXPECT_NO_THROW(groupBy.computeResultOnlyForTesting(false));
+  }
+}
+
 namespace {
 class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
  protected:
   using V = Variable;
   QueryExecutionContext* qec_ = getQec();
+
+  void SetUp() override { qec_->getQueryTreeCache().clearAll(); }
 
   // ___________________________________________________________________________
   static std::vector<std::optional<Variable>> vars(
@@ -2316,7 +2498,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto i = IntId;
 
   if (GetParam()) {
-    auto& generator = result.idTables();
+    auto generator = result.idTables();
 
     auto iterator = generator.begin();
     ASSERT_NE(iterator, generator.end());
@@ -2379,7 +2561,12 @@ TEST_P(GroupByLazyFixture, countStarWorks) {
   Alias alias{
       SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*) as ?y"},
       V{"?y"}};
-  GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
+  // Second entry to avoid the COUNT(*) optimization
+  Alias aliasDummy{
+      SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*) as ?z"},
+      V{"?z"}};
+  GroupBy groupBy{
+      qec_, {}, {std::move(alias), std::move(aliasDummy)}, std::move(subtree)};
 
-  expectReturningIdTables<1>(groupBy, {makeIntTable({{4}})});
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{4, 4}})});
 }

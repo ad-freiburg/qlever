@@ -73,6 +73,8 @@ class Url {
   std::string asString() const {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
+
+  bool operator==(const Url&) const = default;
 };
 
 // A concept for `http::request`
@@ -158,14 +160,17 @@ CPP_template(typename RequestType)(
 
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
+
   auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
+  auto coroAsyncGenerator = cppcoro::fromInputRange(std::move(asyncGenerator));
+
   if (method != CompressionMethod::NONE) {
     response.body() =
-        streams::compressStream(std::move(asyncGenerator), method);
+        streams::compressStream(std::move(coroAsyncGenerator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
         method, response);
   } else {
-    response.body() = std::move(asyncGenerator);
+    response.body() = std::move(coroAsyncGenerator);
   }
 }
 

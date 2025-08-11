@@ -69,8 +69,6 @@ void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
 IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::function<std::vector<ValueId>()>& rowGenerator) {
-  AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
-
   // Creating the table and setting it to the wanted size.
   IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
   table.resize(numberRows);
@@ -102,8 +100,6 @@ IdTable createRandomlyFilledIdTable(
     const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
     const ad_utility::RandomSeed randomSeed) {
-  AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
-
   // Views for clearer access.
   auto joinColumnNumberView = ql::views::keys(joinColumnWithGenerator);
   auto joinColumnGeneratorView = ql::views::values(joinColumnWithGenerator);

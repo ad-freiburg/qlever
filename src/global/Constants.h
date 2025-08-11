@@ -155,6 +155,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+static constexpr std::string_view GEO_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
 
 enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
@@ -164,6 +166,8 @@ constexpr inline std::string_view UNIT_KILOMETER_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
 constexpr inline std::string_view UNIT_MILE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
+
+constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
@@ -275,5 +279,8 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // Operation string is echoed. This operation string is truncated to ensure
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
+    "http-graph-store";
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

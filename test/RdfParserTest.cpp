@@ -722,8 +722,14 @@ TEST(RdfParserTest, booleanLiteralLongForm) {
   auto runCommonTests = [](const auto& ruleChecker) {
     ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
     ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
-    ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-                lit("\"maybe\""));
+    ruleChecker("\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                Id::makeBoolFromZeroOrOne(true));
+    ruleChecker("\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                Id::makeBoolFromZeroOrOne(false));
+    EXPECT_THROW(
+        ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                    Id::makeUndefined()),
+        ParseException);
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::rdfLiteral>);
@@ -1284,4 +1290,33 @@ TEST(RdfParserTest, specialPredicateA) {
   auto checkCTRE = checkParseResult<CtreParser, parseTwoStatements>;
   runCommonTests(checkRe2);
   runCommonTests(checkCTRE);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
+  // Regression test for small payloads with long prefixes, where the initial
+  // chunk size of `ParallelBufferWithEndRegex::findRegexNearEnd` of 1000 is
+  // greater than the total size of the payload.
+  std::string filename{"payloadSmallerThanInitialChunkSize.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
+    EXPECT_THAT(result, ::testing::ElementsAre(TurtleTriple{
+                            iri("<http://vocab.getty.edu/aat/300312355>"),
+                            iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
+                            lit("\"test\"")}));
+    ad_utility::deleteFile(filename);
+  };
+
+  forAllParallelParsers(
+      testWithParser,
+      "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>. \n"
+      "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.\n"
+      "\n"
+      "<http://vocab.getty.edu/aat/300312355> rdfs:label \"test\".");
 }

@@ -357,6 +357,8 @@ TEST(Date, parseDateTime) {
                Date::NoTimeZone{});
   testDatetime("-2034-12-24T02:12:42Z", -2034, 12, 24, 2, 12, 42.0,
                Date::TimeZoneZ{});
+  testDatetime("-0100-12-31T02:12:42Z", -100, 12, 31, 2, 12, 42.0,
+               Date::TimeZoneZ{});
 }
 
 TEST(Date, parseDate) {
@@ -365,6 +367,7 @@ TEST(Date, parseDate) {
   testDate("2034-12-24Z", 2034, 12, 24, Date::TimeZoneZ{});
   testDate("2034-12-24", 2034, 12, 24, Date::NoTimeZone{});
   testDate("-2034-12-24", -2034, 12, 24, Date::NoTimeZone{});
+  testDate("-0100-12-31", -100, 12, 31, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYearMonth) {
@@ -373,6 +376,7 @@ TEST(Date, parseYearMonth) {
   testYearMonth("2034-12Z", 2034, 12, Date::TimeZoneZ{});
   testYearMonth("2034-12", 2034, 12, Date::NoTimeZone{});
   testYearMonth("-2034-12", -2034, 12, Date::NoTimeZone{});
+  testYearMonth("-0100-12", -100, 12, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYear) {
@@ -381,6 +385,7 @@ TEST(Date, parseYear) {
   testYear("2034Z", 2034, Date::TimeZoneZ{});
   testYear("2034", 2034, Date::NoTimeZone{});
   testYear("-2034", -2034, Date::NoTimeZone{});
+  testYear("-0100", -100, Date::NoTimeZone{});
 }
 
 TEST(Date, timeZoneWithMinutes) {

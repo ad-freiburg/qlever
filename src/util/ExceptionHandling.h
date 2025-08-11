@@ -5,13 +5,13 @@
 #ifndef QLEVER_SRC_UTIL_EXCEPTIONHANDLING_H
 #define QLEVER_SRC_UTIL_EXCEPTIONHANDLING_H
 
+#include <absl/strings/str_cat.h>
+
 #include <concepts>
 #include <exception>
 #include <iostream>
-#include <stdexcept>
 #include <type_traits>
 
-#include "absl/strings/str_cat.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -21,7 +21,7 @@ namespace detail {
 [[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
   std::terminate();
 };
-}
+}  // namespace detail
 // Call `f()`. If this call throws, catch the exception and log it, but do not
 // propagate it. Can be used to make destructors `noexcept` when the destructor
 // has to perform actions that might throw, but when handling these exceptions

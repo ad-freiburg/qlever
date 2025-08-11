@@ -9,8 +9,9 @@
 #include "engine/Server.h"
 
 #include <absl/functional/bind_front.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
-#include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -19,15 +20,15 @@
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
-#include "engine/SPARQLProtocol.h"
+#include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
+#include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
-#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -70,7 +71,7 @@ Server::Server(unsigned short port, size_t numThreads,
 }
 
 // __________________________________________________________________________
-void Server::initialize(const string& indexBaseName, bool useText,
+void Server::initialize(const std::string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations,
                         bool persistUpdates) {
   LOG(INFO) << "Initializing server ..." << std::endl;
@@ -93,8 +94,9 @@ void Server::initialize(const string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
-                 bool loadAllPermutations, bool persistUpdates) {
+void Server::run(const std::string& indexBaseName, bool useText,
+                 bool usePatterns, bool loadAllPermutations,
+                 bool persistUpdates) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -131,16 +133,22 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
+    std::optional<boost::beast::http::status> httpResponseStatus;
     try {
       co_await process(request, sendWithAccessControlHeaders);
+    } catch (const HttpError& e) {
+      httpResponseStatus = e.status();
+      exceptionErrorMsg = e.what();
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
-    if (exceptionErrorMsg) {
+    if (exceptionErrorMsg.has_value()) {
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-      auto badRequestResponse = createBadRequestResponse(
-          absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
-      co_await sendWithAccessControlHeaders(std::move(badRequestResponse));
+      auto status =
+          httpResponseStatus.value_or(boost::beast::http::status::bad_request);
+      auto response = createHttpResponseFromString(
+          exceptionErrorMsg.value(), status, request, MediaType::textPlain);
+      co_return co_await sendWithAccessControlHeaders(std::move(response));
     }
   };
 
@@ -280,7 +288,7 @@ auto Server::prepareOperation(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(const RequestT& request, ResponseT&& send) {
+    Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -300,7 +308,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  auto parsedHttpRequest = SPARQLProtocol::parseHttpRequest(request);
+  auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
   // We always want to call `Server::checkParameter` with the same first
@@ -484,39 +492,41 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
-  auto visitUpdate = [&visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
-    auto parsedUpdates =
-        SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
+    auto parsedUpdates = SparqlParser::parseUpdate(
+        index().getBlankNodeManager(), update.update_, update.datasetClauses_);
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
-  auto visitGraphStore = [&request, &visitOperation, &requireValidAccessToken](
-                             GraphStoreOperation operation) -> Awaitable<void> {
-    ParsedQuery parsedOperation =
+  auto visitGraphStore =
+      [&request, &visitOperation, &requireValidAccessToken,
+       this](GraphStoreOperation operation) -> Awaitable<void> {
+    std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request);
+                                                        request, index_);
 
-    if (parsedOperation.hasUpdateClause()) {
+    if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
       requireValidAccessToken("Update from Graph Store Protocol");
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
     auto trueFunc = [](const ParsedQuery&) { return true; };
-    std::string_view operationType =
-        parsedOperation.hasUpdateClause() ? "Update" : "Query";
-    std::string operationString = parsedOperation._originalString;
-    return visitOperation({std::move(parsedOperation)},
-                          absl::StrCat("Graph Store (", operationType, ")"),
-                          std::move(operationString), trueFunc,
-                          "Unused dummy message");
+    std::string operationString = parsedOperations[0]._originalString;
+    return visitOperation(
+        std::move(parsedOperations),
+        absl::StrCat("Graph Store (", std::string_view{request.method_string()},
+                     ")"),
+        std::move(operationString), trueFunc, "Unused dummy message");
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
@@ -583,8 +593,8 @@ Server::PlannedQuery Server::planQuery(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(
-    const string& query, const std::string& errorMsg,
+nlohmann::json Server::composeErrorResponseJson(
+    const std::string& query, const std::string& errorMsg,
     const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
@@ -610,7 +620,7 @@ json Server::composeErrorResponseJson(
 }
 
 // _____________________________________________________________________________
-json Server::composeStatsJson() const {
+nlohmann::json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
   result["git-hash-index"] = index_.getGitShortHash();
@@ -714,7 +724,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    MediaType Server::determineMediaType(
+    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
         const ad_utility::url_parser::ParamValueMap& params,
         const RequestT& request) {
   using namespace ad_utility::url_parser;
@@ -742,12 +752,15 @@ CPP_template_def(typename RequestT)(
 
   std::string_view acceptHeader = request.base()[http::field::accept];
 
-  if (!mediaType.has_value()) {
-    mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  if (mediaType.has_value()) {
+    return {mediaType.value()};
   }
-  AD_CORRECTNESS_CHECK(mediaType.has_value());
 
-  return mediaType.value();
+  try {
+    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
+  } catch (const std::exception& e) {
+    throw HttpError(http::status::not_acceptable, e.what());
+  }
 }
 
 // ____________________________________________________________________________
@@ -763,6 +776,38 @@ CPP_template_def(typename RequestT)(
   return messageSender;
 }
 
+// _____________________________________________________________________________
+ad_utility::MediaType Server::chooseBestFittingMediaType(
+    const std::vector<ad_utility::MediaType>& candidates,
+    const ParsedQuery& parsedQuery) {
+  if (!candidates.empty()) {
+    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
+                                                  MediaType mediaType) {
+      if (parsedQuery.hasAskClause()) {
+        std::array supportedMediaTypes{
+            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      if (parsedQuery.hasSelectClause()) {
+        std::array supportedMediaTypes{
+            MediaType::octetStream, MediaType::csv,
+            MediaType::tsv,         MediaType::qleverJson,
+            MediaType::sparqlXml,   MediaType::sparqlJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
+                                     MediaType::qleverJson, MediaType::turtle};
+      return ad_utility::contains(supportedMediaTypes, mediaType);
+    });
+    if (it != candidates.end()) {
+      return *it;
+    }
+  }
+
+  return parsedQuery.hasConstructClause() ? MediaType::turtle
+                                          : MediaType::sparqlJson;
+}
+
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -774,9 +819,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
-  MediaType mediaType = determineMediaType(params, request);
-  LOG(INFO) << "Requested media type of result is \""
-            << ad_utility::toString(mediaType) << "\"" << std::endl;
+  auto mediaTypes = determineMediaTypes(params, request);
+  AD_LOG_INFO << "Requested media types of the result are: "
+              << absl::StrJoin(
+                     mediaTypes | ql::views::transform([](MediaType mediaType) {
+                       return absl::StrCat(
+                           "\"", ad_utility::toString(mediaType), "\"");
+                     }),
+                     ", ")
+              << std::endl;
 
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -795,6 +846,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree_;
+
+  MediaType mediaType =
+      chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
@@ -826,7 +880,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-json Server::createResponseMetadataForUpdate(
+nlohmann::json Server::createResponseMetadataForUpdate(
     const ad_utility::Timer& requestTimer, const Index& index,
     const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
@@ -887,7 +941,7 @@ json Server::createResponseMetadataForUpdate(
   return response;
 }
 // ____________________________________________________________________________
-json Server::processUpdateImpl(
+nlohmann::json Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
@@ -937,15 +991,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate]() {
         json results = json::array();
+        // TODO<qup42> We currently create a new snapshot after each update in
+        // the chain, which is expensive. Instead, the updates could operate
+        // directly on the `DeltaTriples` (we have an exclusive lock on them
+        // anyway).
         for (ParsedQuery& update : updates) {
+          // Make the snapshot before the query planning. Otherwise, it could
+          // happen that the query planner "knows" that a result is empty, when
+          // actually it is not due to a preceding update in the chain. Also,
+          // this improves the size estimates and hence the query plan.
+          qec.updateLocatedTriplesSnapshot();
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
-          // TODO<qup42>: optimize the case of chained updates
-          // As we have an exclusive lock on the DeltaTriples we the
-          // execution could happen directly against the DeltaTriples
-          // instead of the snapshot that has to be refreshed after each
-          // step.
-          qec.updateLocatedTriplesSnapshot();
           // Update the delta triples.
           results.push_back(index_.deltaTriplesManager().modify<nlohmann::json>(
               [this, &requestTimer, &cancellationHandle,
@@ -1007,15 +1064,15 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   std::optional<ExceptionMetadata> metadata;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
+  } catch (const HttpError& e) {
+    responseStatus = e.status();
+    exceptionErrorMsg = e.what();
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
-    exceptionErrorMsg = e.what();
-  } catch (const UnknownMediatypeError& e) {
-    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached

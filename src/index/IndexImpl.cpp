@@ -3,25 +3,22 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
+
+#include <absl/strings/str_join.h>
 
 #include <cstdio>
 #include <future>
 #include <numeric>
 #include <optional>
-#include <unordered_map>
 
 #include "CompilationInfo.h"
-#include "Index.h"
-#include "absl/strings/str_join.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
+#include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -115,9 +112,12 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                       ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-      1, std::move(outputTable),
+      1,
+      std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),
-      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP, resultCallback};
+      true,
+      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
+      resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
                                               rowAdder, projection, projection,
@@ -337,6 +337,8 @@ void IndexImpl::createFromFiles(
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
+
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
 
@@ -607,7 +609,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
-    TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+    TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
@@ -784,8 +786,10 @@ auto IndexImpl::convertPartialToGlobalIds(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                                     const string& fileName2, T&& sortedTriples,
+IndexImpl::createPermutationPairImpl(size_t numColumns,
+                                     const std::string& fileName1,
+                                     const std::string& fileName2,
+                                     T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
@@ -882,7 +886,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
+void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
                                       bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
@@ -1007,7 +1011,7 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setKbName(const string& name) {
+void IndexImpl::setKbName(const std::string& name) {
   pos_.setKbName(name);
   pso_.setKbName(name);
   sop_.setKbName(name);
@@ -1166,6 +1170,11 @@ void IndexImpl::readConfiguration() {
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
+
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
   loadDataMember("num-blank-nodes-total", numBlankNodesTotal);
@@ -1242,8 +1251,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 
 // ___________________________________________________________________________
 void IndexImpl::readIndexBuilderSettingsFromFile() {
-  json j;  // if we have no settings, we still have to initialize some default
-           // values
+  nlohmann::json j;  // if we have no settings, we still have to initialize some
+                     // default values
   if (!settingsFileName_.empty()) {
     auto f = ad_utility::makeIfstream(settingsFileName_);
     f >> j;
@@ -1389,9 +1398,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
-  string partialFilename =
+  std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  string partialCompressionFilename = absl::StrCat(
+  std::string partialCompressionFilename = absl::StrCat(
       onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
@@ -1574,7 +1583,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
@@ -1589,7 +1598,7 @@ vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
+std::vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
@@ -1619,9 +1628,11 @@ IdTable IndexImpl::scan(
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
-  return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, locatedTriplesSnapshot,
-                                limitOffset);
+  const auto& perm = getPermutation(p);
+  return perm.scan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      additionalColumns, cancellationHandle, locatedTriplesSnapshot,
+      limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -1629,12 +1640,14 @@ size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
+  const auto& perm = getPermutation(permutation);
+  return perm.getResultSizeOfScan(
+      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesSnapshot),
+      locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________
-void IndexImpl::deleteTemporaryFile(const string& path) {
+void IndexImpl::deleteTemporaryFile(const std::string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }

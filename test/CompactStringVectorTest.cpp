@@ -267,28 +267,3 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
   testSerializationWithPush(CompactVectorChar{}, strings);
   testSerializationWithPush(CompactVectorInt{}, ints);
 }
-
-TEST(CompactVectorOfStrings, DiskIterator) {
-  auto testDiskIterator = [](const auto& v, auto& inputVector) {
-    using V = std::decay_t<decltype(v)>;
-
-    const std::string filename = "_writerTest4.dat";
-    {
-      typename V::Writer writer{filename};
-      for (const auto& s : inputVector) {
-        writer.push(s.data(), s.size());
-      }
-    }  // The constructor finishes writing the file.
-
-    auto iterator = V::diskIterator(filename);
-
-    size_t i = 0;
-    for (const auto& el : iterator) {
-      ASSERT_EQ(el, inputVector[i++]);
-    }
-    ASSERT_EQ(i, inputVector.size());
-    ad_utility::deleteFile(filename);
-  };
-  testDiskIterator(CompactVectorChar{}, strings);
-  testDiskIterator(CompactVectorInt{}, ints);
-};

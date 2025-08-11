@@ -62,6 +62,29 @@ void testTransformView(const TransformViewTestHelpers<T>& inAndOutputs,
   }
 }
 
+// Tests for ad_utility::lazySingleValueRange
+TEST(lazySingleValueRange, ReturnLazySingleValueRange) {
+  int variable = 0;
+  auto transformation = [&variable]() {
+    variable++;
+    return variable + 1;
+  };
+
+  auto range = ad_utility::lazySingleValueRange(std::move(transformation));
+  // initial variable should be unchanged
+  EXPECT_EQ(variable, 0);
+  std::optional<int> element = range.get();
+
+  // The first call to `get()` should return a value.
+  EXPECT_TRUE(element.has_value());
+  EXPECT_EQ(element.value(), 2);
+  EXPECT_EQ(variable, 1);
+
+  // No more values after the first.
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_EQ(variable, 1);
+}
+
 // Tests for ad_utility::CachingTransformInputRange
 TEST(CachingTransformInputRange, BasicTests) {
   // This function will move the `vec` if possible (i.e. if it is not const)
@@ -146,6 +169,34 @@ TEST(CachingContinuableTransformInputRange, BreakWithValue) {
   TransformViewTestHelpers<std::vector<int>> helpers;
   helpers.input_ = {{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
   helpers.expected_ = {{3, 2}, {5, 4}, {5, 8}};
+  helpers.elementwiseMoved_ = {{}, {1, 3}, {}, {}, {1, 2}};
+  testTransformView<ad_utility::CachingContinuableTransformInputRange>(
+      helpers, firstPlusTwo);
+}
+
+// _____________________________________________________________________________
+TEST(CachingContinuableTransformInputRange, yieldAll) {
+  // This function will move the vector if possible (i.e. if it is not const)
+  // and then increment the first element by `2`. All but the last input
+  // will be yielded twice to test the `yieldAll` facility.
+  using namespace ad_utility;
+  using L = LoopControl<std::vector<int>>;
+  auto firstPlusTwo = [](auto& vec) -> L {
+    if (vec.at(1) % 2 == 1) {
+      return L::makeContinue();
+    }
+    auto copy = std::move(vec);
+    copy.at(0) += 2;
+    if (copy.at(1) > 5) {
+      return L::breakWithValue(std::move(copy));
+    }
+    std::array arr{copy, copy};
+    return L::yieldAll(std::move(arr));
+  };
+
+  TransformViewTestHelpers<std::vector<int>> helpers;
+  helpers.input_ = {{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
+  helpers.expected_ = {{3, 2}, {3, 2}, {5, 4}, {5, 4}, {5, 8}};
   helpers.elementwiseMoved_ = {{}, {1, 3}, {}, {}, {1, 2}};
   testTransformView<ad_utility::CachingContinuableTransformInputRange>(
       helpers, firstPlusTwo);
@@ -248,11 +299,20 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
     if (val == 38) {
       return L::yieldValue(123);
     }
+    if (val == 42) {
+      return L::yieldAll(std::array{13, 18});
+    }
+
+    if (val == 45) {
+      return L::yieldValue(9);
+    }
+
     if (val < 47) {
       return L::makeContinue();
     }
     return L::makeBreak();
   };
-  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)), ElementsAre(0, 42, 123));
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)),
+              ElementsAre(0, 42, 123, 13, 18, 9));
 }
 }  // namespace

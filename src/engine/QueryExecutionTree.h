@@ -15,7 +15,6 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
-#include "util/stream_generator.h"
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
@@ -192,6 +191,12 @@ class QueryExecutionTree {
   static SortedTreesAndJoinColumns getSortedSubtreesAndJoinColumns(
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB);
+
+  // Return a clone/ deep copy of `qet` that only returns the specified
+  // `variables` in its result.
+  static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::set<Variable>& variables);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is

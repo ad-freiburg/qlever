@@ -9,8 +9,6 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <util/http/websocket/MessageSender.h>
-
 #include <string>
 #include <vector>
 
@@ -20,19 +18,15 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/Index.h"
-#include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
+#include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
-
-using nlohmann::json;
-using std::string;
-using std::vector;
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -42,6 +36,7 @@ CPP_concept QueryOrUpdate =
 
 //! The HTTP Server used.
 class Server {
+  using json = nlohmann::json;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
@@ -55,15 +50,16 @@ class Server {
 
  private:
   //! Initialize the server.
-  void initialize(const string& indexBaseName, bool useText,
+  void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
                   bool persistUpdates = false);
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool loadAllPermutations = true, bool persistUpdates = false);
+  void run(const std::string& indexBaseName, bool useText,
+           bool usePatterns = true, bool loadAllPermutations = true,
+           bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -139,7 +135,7 @@ class Server {
   ///             `HttpServer.h` for documentation).
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(const RequestT& request, ResponseT&& send);
+      Awaitable<void> process(RequestT& request, ResponseT&& send);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
@@ -150,6 +146,15 @@ class Server {
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
           const std::optional<PlannedQuery>& plannedQuery);
+
+  // Out of a list of allowed media types, choose the one that best fits the
+  // given query type. Currently it just chooses the first from the list. If the
+  // list is empty, just choose one that works for the given query type.
+  static ad_utility::MediaType chooseBestFittingMediaType(
+      const std::vector<ad_utility::MediaType>& candidates,
+      const ParsedQuery& parsedQuery);
+  FRIEND_TEST(ServerTest, chooseBestFittingMediaType);
+
   // Do the actual execution of a query.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -178,13 +183,15 @@ class Server {
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
 
-  // Determine the media type to be used for the result. The media type is
+  // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
-  // "action=csv_export") and by the "Accept" header of the request.
-  CPP_template(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
-                                  RequestT>) static ad_utility::MediaType
-      determineMediaType(const ad_utility::url_parser::ParamValueMap& params,
-                         const RequestT& request);
+  // "action=csv_export") and by the "Accept" header of the request. The latter
+  // option can produce multiple candidates.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      vector<ad_utility::MediaType> determineMediaTypes(
+          const ad_utility::url_parser::ParamValueMap& params,
+          const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
   // Determine whether the subtrees and the result should be pinned.
   static std::pair<bool, bool> determineResultPinning(
@@ -220,7 +227,7 @@ class Server {
       DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
-      const string& query, const std::string& errorMsg,
+      const std::string& query, const std::string& errorMsg,
       const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 

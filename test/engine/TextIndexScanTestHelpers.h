@@ -49,8 +49,11 @@ inline const TextRecordIndex getTextRecordIdFromResultTable(
 inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
                                             const Result& result,
                                             const size_t& rowIndex) {
-  return qec->getIndex().indexToString(
-      result.idTable().getColumn(1)[rowIndex].getVocabIndex());
+  // We need the explicit cast to `std::string` because the return type of
+  // `indexToString` might be `string_view` if the vocabulary is stored
+  // uncompressed in memory.
+  return std::string{qec->getIndex().indexToString(
+      result.idTable().getColumn(1)[rowIndex].getVocabIndex())};
 }
 
 // Only use on prefix search results
