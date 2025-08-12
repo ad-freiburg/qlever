@@ -2272,6 +2272,28 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, countDistinctGraph) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2284
+  using V = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}});
+
+  auto expr0 = std::make_unique<VariableExpression>(Variable{"?g"});
+  auto expr1 = std::make_unique<CountExpression>(true, std::move(expr0));
+  GroupBy groupBy{qec,
+                  {},
+                  {{SparqlExpressionPimpl{std::move(expr1),
+                                          "COUNT(DISTINCT ?g) AS ?gCount"},
+                    Variable{"?gCount"}}},
+                  std::move(subtree)};
+
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
+}
+
 namespace {
 class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
  protected:
