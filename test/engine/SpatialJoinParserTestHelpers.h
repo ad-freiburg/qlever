@@ -20,6 +20,8 @@ namespace SpatialJoinParserTestHelpers {
 using namespace SpatialJoinPrefilterTestHelpers;
 using namespace ad_utility::detail::parallel_wkt_parser;
 
+// TODO: getWKTParserForTesting (build test qec/index, sweeper)
+
 }  // namespace SpatialJoinParserTestHelpers
 
 #endif  // QLEVER_TEST_ENGINE_SPATIALJOINPARSERTESTHELPERS_H
