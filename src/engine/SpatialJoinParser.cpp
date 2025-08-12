@@ -16,6 +16,7 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
+      _numParsed(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _index(index) {
@@ -34,9 +35,19 @@ size_t WKTParser::getPrefilterCounter() {
 };
 
 // _____________________________________________________________________________
+size_t WKTParser::getParseCounter() {
+  size_t res = 0;
+  for (auto c : _numParsed) {
+    res += c;
+  }
+  return res;
+};
+
+// _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
+  size_t parseCounter = 0;
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -58,6 +69,7 @@ void WKTParser::processQueue(size_t t) {
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
         parseLine(const_cast<char*>(job.wkt.c_str()), job.wkt.size(), job.line,
                   t, w, job.side);
+        parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
         const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
@@ -77,6 +89,7 @@ void WKTParser::processQueue(size_t t) {
         _bboxes[t] = util::geo::extendBox(
             _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
             _bboxes[t]);
+        parseCounter++;
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
         // information except the string.
@@ -85,6 +98,7 @@ void WKTParser::processQueue(size_t t) {
           job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
           parseLine(const_cast<char*>(job.wkt.c_str()), job.wkt.size(),
                     job.line, t, w, job.side);
+          parseCounter++;
         }
       }
     }
@@ -93,6 +107,7 @@ void WKTParser::processQueue(size_t t) {
   }
 
   _numSkipped[t] = prefilterCounter;
+  _numParsed[t] = parseCounter;
 }
 
 // _____________________________________________________________________________

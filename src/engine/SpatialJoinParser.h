@@ -43,15 +43,17 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   void addValueIdToQueue(ValueId valueId, size_t id, bool side);
 
   size_t getPrefilterCounter();
+  size_t getParseCounter();
 
  protected:
   void processQueue(size_t t) override;
 
  private:
   std::vector<size_t> _numSkipped;
+  std::vector<size_t> _numParsed;
 
   bool _usePrefiltering;
-  const std::optional<util::geo::DBox>& _prefilterLatLngBox;
+  std::optional<util::geo::DBox> _prefilterLatLngBox;
   const Index& _index;
 };
 
