@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/Log.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -598,7 +599,7 @@ class GroupByImpl : public Operation {
   // that the optimization can be done.
 
   friend bool GroupByStrategyChooser::shouldSkipHashMapGrouping(
-      const GroupByImpl&, const IdTable&, const bool);
+      const GroupByImpl&, const IdTable&, LogLevel);
 
 };  // class GroupByImpl
 
