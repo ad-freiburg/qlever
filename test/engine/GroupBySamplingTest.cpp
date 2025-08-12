@@ -21,6 +21,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/Log.h"
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -116,7 +117,7 @@ TEST_F(GroupBySamplingTest, edgeCaseEmptyInput) {
   table.resize(0);
   auto groupBy = setupGroupBy(table, qec_);
   EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-      *groupBy, table, /*log=*/true));
+      *groupBy, table, LogLevel::DEBUG));
 }
 
 // Test the case where all rows belong to the same group across various sizes
@@ -132,10 +133,10 @@ TEST_F(GroupBySamplingTest, edgeCaseAllSame) {
       // For size 1, we expect the hash-map grouping to be skipped
       // because the estimated number of groups is 2 and the threshold is 0.9
       EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-          *groupBy, table, /*log=*/true));
+          *groupBy, table, LogLevel::DEBUG));
     } else {
       EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-          *groupBy, table, /*log=*/true));
+          *groupBy, table, LogLevel::DEBUG));
     }
   }
 }
@@ -150,15 +151,15 @@ TEST_F(GroupBySamplingTest, edgeCaseAllUnique) {
         s, [](size_t i) { return static_cast<int64_t>(i); }, allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-        *groupBy, table, /*log=*/true));
+        *groupBy, table, LogLevel::DEBUG));
 
     RuntimeParameters().set<"group-by-sample-min-table-size">(1000);
     if (s < 1000) {
       EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-          *groupBy, table, /*log=*/true));
+          *groupBy, table, LogLevel::DEBUG));
     } else {
       EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-          *groupBy, table, /*log=*/true));
+          *groupBy, table, LogLevel::DEBUG));
     }
   }
 }
@@ -177,7 +178,7 @@ TEST_F(GroupBySamplingTest, belowThreshold) {
         allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-        *groupBy, table, /*log=*/true));
+        *groupBy, table, LogLevel::DEBUG));
   }
 }
 
@@ -195,6 +196,6 @@ TEST_F(GroupBySamplingTest, aboveThreshold) {
         allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
-        *groupBy, table, /*log=*/true));
+        *groupBy, table, LogLevel::DEBUG));
   }
 }
