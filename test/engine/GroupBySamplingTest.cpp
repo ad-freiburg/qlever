@@ -12,7 +12,6 @@
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "util/Log.h"
 #include "engine/GroupByImpl.h"
 #include "engine/GroupByStrategyChooser.h"
 #include "engine/QueryExecutionContext.h"
@@ -22,6 +21,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/Log.h"
 
 #include "GroupBySamplingHelpers.h"
 

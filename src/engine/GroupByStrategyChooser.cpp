@@ -16,8 +16,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/Log.h"     // for AD_LOG_DEBUG, AD_LOG_TIMING
-#include "util/Random.h"  // for ad_utility::randomShuffle and RandomSeed
+#include "util/Log.h"
+#include "util/Random.h"
 
 // _____________________________________________________________________________
 bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
@@ -64,28 +64,14 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
     }
   }
   auto t2 = std::chrono::steady_clock::now();
-  // Chao1 estimator: D = d_obs + (f1 * f1) / (2 * f2)
-  // d_obs: number of distinct groups observed
-  // f1: number of groups with exactly one occurrence
-  // f2: number of groups with exactly two occurrences
-  size_t dObs = groupCounts.size();
-  size_t f1 = 0, f2 = 0;
-  for (auto& [key, cnt] : groupCounts) {
-    if (cnt == 1)
-      ++f1;
-    else if (cnt == 2)
-      ++f2;
-  }
-  double chaoCorrection = double(f1 * f1) / (f2 > 0 ? 2.0 * f2 : 1.0);
-  size_t estGroups = dObs + static_cast<size_t>(chaoCorrection);
+  size_t estGroups = estimateNumberOfTotalGroups(groupCounts);
   auto t3 = std::chrono::steady_clock::now();
   // Detailed statistics if requested
   if (logLevel == LogLevel::DEBUG || logLevel == LogLevel::TRACE) {
     AD_LOG_DEBUG << absl::StrFormat(
-                        "size=%zu, total=%zu, est=%zu, dObs=%zu, f1=%zu, "
-                        "f2=%zu, thr=%.1f",
-                        sampleSize, totalSize, estGroups, dObs, f1, f2,
-                        totalSize * distinctRatio)
+                        "size=%zu, total=%zu, est=%zu, thr=%.1f, min=%zu",
+                        sampleSize, totalSize, estGroups,
+                        totalSize * distinctRatio, minimumTableSize)
                  << std::endl;
   }
   // Detailed timing breakdown if requested
