@@ -16,19 +16,43 @@
 #include "engine/idTable/IdTable.h"  // for IdTable
 #include "global/Id.h"               // for ColumnIndex
 #include "global/RuntimeParameters.h"
-
-// Abseil
-#include "absl/strings/str_format.h"
+#include "util/Log.h"
 
 class GroupByImpl;
 
 class GroupByStrategyChooser {
  public:
+  // Forward declaration for use in static methods
+  struct RowKey;
   // Check via sampling if the hash-map path should be skipped due to too many
   // groups. Friend of GroupByImpl so it can inspect private members.
   static bool shouldSkipHashMapGrouping(const GroupByImpl& gb,
                                         const IdTable& table,
-                                        const bool log = false);
+                                        LogLevel logLevel = LogLevel::INFO);
+
+  // Estimate total distinct groups via Chao1 estimator for any map-like
+  // container
+  template <typename Map>
+  static size_t estimateNumberOfTotalGroups(
+      const Map& groupCounts, LogLevel logLevel = LogLevel::INFO) {
+    // Chao1 estimator = d_obs + (f1 * f1) / (2 * f2)
+    // d_obs: number of distinct groups observed
+    // f1: number of groups with exactly one occurrence
+    // f2: number of groups with exactly two occurrences
+    size_t dObs = groupCounts.size(), f1 = 0, f2 = 0;
+    for (auto& [key, cnt] : groupCounts) {
+      if (cnt == 1)
+        ++f1;
+      else if (cnt == 2)
+        ++f2;
+    }
+    double chaoCorrection = double(f1 * f1) / (f2 > 0 ? 2.0 * f2 : 1.0);
+    if (logLevel == LogLevel::DEBUG || logLevel == LogLevel::TRACE) {
+      AD_LOG_DEBUG << "dObs=" << dObs << ", f1=" << f1 << ", f2=" << f2
+                   << std::endl;
+    }
+    return dObs + static_cast<size_t>(chaoCorrection);
+  }
 
   // Data structure to be able to use IdTable rows as keys in a hash map.
   struct RowKey {
