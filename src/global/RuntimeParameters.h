@@ -52,7 +52,7 @@ inline auto& RuntimeParameters() {
         // === Sampling-based hybrid GROUP BY thresholds ===
         Bool<"group-by-sample-enabled">{true},
         // Constant multiplier for sample size (k * sqrt(n)) in Chao1
-        SizeT<"group-by-sample-constant">{1},
+        Double<"group-by-sample-constant">{1},
         // Avoid HashMap path if the fraction (sampled distinct groups / sample
         // size) exceeds the distinct ratio AND the estimated number of
         // distinct groups exceeds the group threshold.
