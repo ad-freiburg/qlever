@@ -119,9 +119,9 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
       BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
       resultCallback};
 
-  ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
-                                              rowAdder, projection, projection,
-                                              ad_utility::ConstantJoinType<ad_utility::JoinType::OPTIONAL>{});
+  ad_utility::zipperJoinForBlocksWithoutUndef(
+      leftInput, rightInput, comparator, rowAdder, projection, projection,
+      ad_utility::ConstantJoinType<ad_utility::JoinType::OPTIONAL>{});
   rowAdder.flush();
 }
 
