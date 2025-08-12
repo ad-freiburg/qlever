@@ -40,9 +40,9 @@ bool GroupByStrategyChooser::shouldSkipHashMapGrouping(const GroupByImpl& gb,
   }
   double distinctRatio =
       RuntimeParameters().get<"group-by-sample-distinct-ratio">();
-  size_t k = RuntimeParameters().get<"group-by-sample-constant">();
+  double k = RuntimeParameters().get<"group-by-sample-constant">();
 
-  size_t sampleSize = k * static_cast<size_t>(std::sqrt(double(totalSize)));
+  size_t sampleSize = static_cast<size_t>(k * std::sqrt(double(totalSize)));
   // Timing instrumentation
   auto t0 = std::chrono::steady_clock::now();
   // Extract grouping columns from the GroupByImpl instance
