@@ -40,6 +40,13 @@ CPP_concept BinaryIteratorFunction =
     std::invocable<F, ql::ranges::iterator_t<Range>,
                    ql::ranges::iterator_t<Range>>;
 
+// Helper type to indicate the different join modes.
+enum class JoinType { JOIN, OPTIONAL, MINUS };
+
+// Helper type to indicate the mode at compile-time.
+template <JoinType Mode>
+using ConstantJoinType = std::integral_constant<JoinType, Mode>;
+
 // Note: In the following functions, two rows of IDs are called `compatible` if
 // for each position they are equal, or at least one of them is UNDEF. This is
 // exactly the semantics of the SPARQL standard for rows that match in a JOIN
@@ -1443,12 +1450,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   }
 
   // The actual join routine that combines all the previous functions.
-  template <bool DoOptionalJoin, bool DoMinus>
+  template <JoinType joinType>
   void runJoin() {
-    if constexpr (DoMinus) {
+    if constexpr (joinType == JoinType::MINUS) {
       handleUndefForMinus();
     } else {
-      fetchAndProcessUndefinedBlocks(DoOptionalJoin);
+      fetchAndProcessUndefinedBlocks(joinType == JoinType::OPTIONAL);
     }
     if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
       // Run the join without UNDEF values if there are none. No need to move
@@ -1456,9 +1463,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
                           AlwaysFalse>{leftSide_, rightSide_, lessThan_,
                                        compatibleRowAction_, AlwaysFalse{}}
-          // We can safely pass false here, because at this point all UNDEF
-          // values have already been processed.
-          .template runJoin<DoOptionalJoin, false>();
+          .template runJoin<joinType>();
       return;
     }
     while (true) {
@@ -1466,14 +1471,14 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
         addRemainingUndefPairs();
-        if constexpr (DoOptionalJoin) {
+        if constexpr (joinType != JoinType::JOIN) {
           if (!hasUndef(rightSide_)) {
             fillWithAllFromLeft();
           }
         }
         return;
       }
-      joinBuffers<DoOptionalJoin, ProjectedEl>(blockStatus);
+      joinBuffers<joinType != JoinType::JOIN, ProjectedEl>(blockStatus);
     }
   }
   // Don't clutter other compilation units with these aliases.
@@ -1524,49 +1529,40 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
-          typename DoOptionalJoinTag = std::false_type>
+          JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
                                      CompatibleRowAction& compatibleRowAction,
                                      LeftProjection leftProjection = {},
                                      RightProjection rightProjection = {},
-                                     DoOptionalJoinTag = {}) {
-  static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
-
+                                     ConstantJoinType<joinType> = {}) {
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
   detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
                                    compatibleRowAction};
-  impl.template runJoin<DoOptionalJoin, false>();
+  impl.template runJoin<joinType>();
 }
 
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
-// a single column join scenario. For `MINUS` both `DoOptionalJoinTag` and
-// `DoMinusTag` need to be set to true.
-// TODO<RobinTF> use single parameter to indicate the type of join.
+// a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
-          typename DoOptionalJoinTag = std::false_type,
-          typename DoMinusTag = std::false_type>
+          JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
     const LessThan& lessThan, CompatibleRowAction& compatibleRowAction,
     LeftProjection leftProjection = {}, RightProjection rightProjection = {},
-    DoOptionalJoinTag = {}, DoMinusTag = {}) {
-  static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
-  static constexpr bool DoMinus = DoMinusTag::value;
-  static_assert(!DoMinus || DoOptionalJoin);
-
+    ConstantJoinType<joinType> = {}) {
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
   detail::BlockZipperJoinImpl impl{
       leftSide, rightSide, lessThan, compatibleRowAction,
       [](const Id& id) { return id.isUndefined(); }};
-  impl.template runJoin<DoOptionalJoin, DoMinus>();
+  impl.template runJoin<joinType>();
 }
 
 }  // namespace ad_utility
