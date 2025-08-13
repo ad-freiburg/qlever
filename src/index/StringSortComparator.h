@@ -98,7 +98,7 @@ class LocaleManager {
   LocaleManager()
       : LocaleManager(std::string{LOCALE_DEFAULT_LANG},
                       std::string{LOCALE_DEFAULT_COUNTRY},
-                      LOCALE_DEFAULT_IGNORE_PUNCTUATION){};
+                      LOCALE_DEFAULT_IGNORE_PUNCTUATION) {}
 
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
@@ -625,6 +625,13 @@ class TripleComponentComparator {
     return compare(spA, spB, level) < 0;
   }
 
+  // Same operator, but with switched argument types.
+  bool operator()(const SplitVal& spA, std::string_view b,
+                  const Level level) const {
+    auto spB = extractAndTransformComparable(b, level, false);
+    return compare(spA, spB, level) < 0;
+  }
+
   template <typename A, typename B, typename C>
   bool operator()(const SplitValBase<A, B, C>& a,
                   const SplitValBase<A, B, C>& b, const Level level) const {
@@ -778,7 +785,7 @@ class TripleComponentComparator {
       // In the case of prefix filters we might also have
       // Literals that do not have the closing quotation mark
       auto endPos = ad_utility::findLiteralEnd(res, "\"");
-      if (endPos != string::npos) {
+      if (endPos != std::string::npos) {
         // this should also be fine if there is no langtag (endPos == size()
         // according to cppreference.com
         langtag = res.substr(endPos + 1);

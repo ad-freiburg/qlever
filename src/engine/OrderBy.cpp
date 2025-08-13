@@ -20,7 +20,7 @@ size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 vector<std::pair<ColumnIndex, bool>> sortIndices)
+                 std::vector<std::pair<ColumnIndex, bool>> sortIndices)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
@@ -119,7 +119,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
+  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
     Engine::sort<I>(&idTable, comparison);
   });
   // We can't check during sort, so reset status here

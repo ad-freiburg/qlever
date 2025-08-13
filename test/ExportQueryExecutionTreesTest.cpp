@@ -9,7 +9,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
+#include "parser/LiteralOrIri.h"
+#include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -309,7 +312,8 @@ std::vector<IdTable> convertToVector(
 }
 
 // match the contents of a `vector<IdTable>` to the given `tables`.
-auto matchesIdTables(const auto&... tables) {
+template <typename... Tables>
+auto matchesIdTables(const Tables&... tables) {
   return ElementsAre(matchesIdTable(tables)...);
 }
 
@@ -399,7 +403,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
-  std::string kg = "<s> <p> true . <s> <p> false.";
+  std::string kg =
+      "<s> <p> true . <s> <p> false ."
+      " <s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> ."
+      " <s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -408,44 +415,72 @@ TEST(ExportQueryExecutionTrees, Bool) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
   </result>
   <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">0</literal></binding>
+  </result>
+  <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">1</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
-      kg, query, 2,
+      kg, query, 4,
       // TSV
       "?o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       // CSV
       "o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       makeExpectedQLeverJSON(
           {"\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
-           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
+           "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
                            "literal", "false"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
-                           "literal", "true")}),
+                           "literal", "0"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "true"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "1")}),
       expectedXml};
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 2,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 4, 4,
       // TSV
       "<s>\t<p>\tfalse\n"
-      "<s>\t<p>\ttrue\n",
+      "<s2>\t<p2>\t\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n"
+      "<s>\t<p>\ttrue\n"
+      "<s2>\t<p2>\t\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n",
       // CSV
       "<s>,<p>,false\n"
-      "<s>,<p>,true\n",
+      "<s2>,<p2>,\"\"\"0\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n"
+      "<s>,<p>,true\n"
+      "<s2>,<p2>,\"\"\"1\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n",
       // Turtle
       "<s> <p> false .\n"
-      "<s> <p> true .\n",
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> true .\n"
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "true"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
@@ -1636,7 +1671,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       pq, qet, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
-  for (std::string& chunk : jsonStream) {
+  for (std::string_view chunk : jsonStream) {
     aggregateString += chunk;
   }
   nlohmann::json json = nlohmann::json::parse(aggregateString);
@@ -1717,7 +1752,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -1729,7 +1764,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test
   // logic is below with the test cases.
-  auto checkIdToLiteralOrIri =
+  auto checkIdToLiteral =
       [&](Id id,
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
               cases) {
@@ -1752,9 +1787,10 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   // Test cases: Each tuple describes one test case.
   // The first element is the ID of the element to test.
   // The second element is a list of 2 configurations:
-  // 1. for literals all datatypes except for xsd:string are removed, IRIs
+  // 1. for literals all datatypes are removed, IRIs
   // are converted to literals
-  // 2. only literals with `xsd:string` or no datatype are returned
+  // 2. only literals with no datatype or`xsd:string` are returned.
+  // In the last case the datatype is removed.
   std::vector<
       std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
       testCases = {
@@ -1764,8 +1800,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 
           // Case: Literal with datatype `xsd:string`
           {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-           {{false, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
-            {true, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"}}},
+           {{false, "\"some\""}, {true, "\"some\""}}},
 
           // Case: Literal with unknown datatype
           {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
@@ -1783,8 +1818,73 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
            {{false, std::nullopt}, {true, std::nullopt}}}};
 
   for (const auto& [id, cases] : testCases) {
-    checkIdToLiteralOrIri(id, cases);
+    checkIdToLiteral(id, cases);
   }
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+  std::string kg =
+      "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
+      "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
+      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> . <s> <p> "
+      "<http://example.com/> .";
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
+
+  std::vector<std::pair<ValueId, std::optional<LiteralOrIri>>> expected{
+      {getId("\"something\""),
+       LiteralOrIri{Literal::fromStringRepresentation("\"something\"")}},
+      {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>")}},
+      {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")}},
+      {getId("<http://example.com/>"),
+       LiteralOrIri{Iri::fromIriref("<http://example.com/>")}},
+      {ValueId::makeFromBool(true),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")}},
+      {ValueId::makeUndefined(), std::nullopt}};
+  for (const auto& [valueId, expRes] : expected) {
+    ASSERT_EQ(ExportQueryExecutionTrees::idToLiteralOrIri(
+                  qec->getIndex(), valueId, LocalVocab{}),
+              expRes);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
+
+  auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
+                                   std::optional<std::string> expectedRes) {
+    auto res = ExportQueryExecutionTrees::getLiteralOrNullopt(input);
+    ASSERT_EQ(res.has_value(), expectedRes.has_value());
+    if (res.has_value()) {
+      ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
+    }
+  };
+
+  auto lit = LiteralOrIri{Literal::fromStringRepresentation("\"test\"")};
+  litOrNulloptTestHelper(lit, "\"test\"");
+
+  auto litWithType = LiteralOrIri{Literal::fromStringRepresentation(
+      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")};
+  litOrNulloptTestHelper(
+      litWithType, "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>");
+
+  litOrNulloptTestHelper(std::nullopt, std::nullopt);
+
+  auto iri = LiteralOrIri{Iri::fromIriref("<https://example.com/>")};
+  litOrNulloptTestHelper(iri, std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -1844,4 +1944,23 @@ TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
   EXPECT_EQ(ExportQueryExecutionTrees::blankNodeIriToString(
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
+  auto* qec = ad_utility::testing::getQec();
+
+  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, false);
+  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, true);
+
+  LimitOffsetClause limit{10, 5};
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet1);
+  EXPECT_EQ(limit._offset, 5);
+
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet2);
+  EXPECT_EQ(limit._offset, 0);
 }

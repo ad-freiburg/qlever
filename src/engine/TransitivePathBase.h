@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
+#include <absl/hash/hash.h>
+
 #include <functional>
 #include <memory>
 
@@ -20,12 +22,12 @@ struct TransitivePathSide {
   std::optional<TreeAndCol> treeAndCol_;
   // Column of the sub table where the Ids of this side are located
   size_t subCol_;
-  std::variant<Id, Variable> value_;
+  TripleComponent value_;
   // The column in the output table where this side Ids are written to.
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value_); }
+  bool isVariable() const { return value_.isVariable(); }
 
   bool isBoundVariable() const { return treeAndCol_.has_value(); }
 
@@ -34,7 +36,7 @@ struct TransitivePathSide {
   std::string getCacheKey() const {
     std::ostringstream os;
     if (!isVariable()) {
-      os << "Id: " << std::get<Id>(value_);
+      os << "Value " << value_;
     }
 
     os << ", subColumn: " << subCol_ << "to " << outputCol_;
@@ -68,17 +70,13 @@ struct TransitivePathSide {
   }
 };
 
-// We deliberately use the `std::` variants of a hash set and hash map because
-// `absl`s types are not exception safe.
-struct HashId {
-  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
-};
-
-using Set = std::unordered_set<Id, HashId, std::equal_to<Id>,
+// We deliberately use the `std::` variants of a hash set because `absl`s types
+// are not exception safe.
+using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-using Map = std::unordered_map<
-    Id, Set, HashId, std::equal_to<Id>,
-    ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+
+// Alias for common type
+using PayloadTable = std::optional<IdTableView<0>>;
 
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
@@ -89,17 +87,17 @@ struct NodeWithTargets {
   Id node_;
   Set targets_;
   LocalVocab localVocab_;
-  const IdTable* idTable_;
+  PayloadTable idTable_;
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  const IdTable* idTable, size_t row)
+                  PayloadTable idTable, size_t row)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
-        idTable_{idTable},
+        idTable_{std::move(idTable)},
         row_{row} {}
 };
 
@@ -123,7 +121,15 @@ class TransitivePathBase : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
-  bool emptyPathBound_ = false;
+  // Indicate that the variable is only bound because the path is empty, not
+  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // full scan of all subjects and objects in the knowledge graph, but can be
+  // re-bound to something cheaper later if the query permits it.
+  bool boundVariableIsForEmptyPath_ = false;
+
+  // Store the active graphs for the transitive path operation. This is used to
+  // correctly match against the proper graph when the minimum distance is 0.
+  Graphs activeGraphs_;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
@@ -192,15 +198,13 @@ class TransitivePathBase : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param skipCol This column contains the Ids of the start side in the
-   * startSideTable and will be skipped.
    * @param yieldOnce If true, the generator will yield only a single time.
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, size_t skipCol,
-                                      bool yieldOnce, size_t inputWidth) const;
+                                      size_t targetSideCol, bool yieldOnce,
+                                      size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -221,19 +225,14 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow, size_t skipCol);
-
-  // A small helper function: Insert the `value` to the set at `map[key]`.
-  // As the sets all have an allocator with memory limit, this construction is a
-  // little bit more involved, so this can be a separate helper function.
-  void insertIntoMap(Map& map, Id key, Id value) const;
+                          size_t inputRow, size_t outputRow);
 
  public:
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 
@@ -245,13 +244,33 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
-                                          size_t targetSideCol, bool yieldOnce,
-                                          size_t skipCol = 0) const;
+                                          size_t targetSideCol,
+                                          bool yieldOnce) const;
+
+  // Return an execution tree, that "joins" the given `tripleComponent` with all
+  // of the subjects or objects in the knowledge graph, so if the graph does not
+  // contain this value it is filtered out.
+  static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
-  // used as a starting point for evaluating the empty path.
+  // used as a starting point for evaluating the empty path and returns a single
+  // column containung all distinct entities the appear either as a subject or
+  // object in the knowledge graph. The optional parameter `variable` can be set
+  // to explicitly define the name of the column this produces (useful for
+  // subsequent joins), by default it is `?internal_property_path_variable_x`.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
-      QueryExecutionContext* qec, Graphs activeGraphs);
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      std::optional<Variable> variable = std::nullopt);
+
+  // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
+  // found in the knowledge graph. In many cases we can statically guarantee
+  // this and just return the `leftOrRightOp` unchanged, in all other cases the
+  // result will be a join with the result of `makeEmptyPathSide` above.
+  std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
+      size_t& inputCol,
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
  public:
   size_t getCostEstimate() override;
@@ -300,9 +319,12 @@ class TransitivePathBase : public Operation {
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
       size_t maxDist, Graphs activeGraphs = {});
 
-  vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*> getChildren() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
@@ -314,7 +336,7 @@ class TransitivePathBase : public Operation {
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
   // which has to store both ways to sort the subtree until it knows which side
   // becomes bound.
-  virtual std::span<const std::shared_ptr<QueryExecutionTree>>
+  virtual ql::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};
   }

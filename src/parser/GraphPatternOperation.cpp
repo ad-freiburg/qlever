@@ -6,13 +6,12 @@
 
 #include "parser/GraphPatternOperation.h"
 
-#include <optional>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
+
 #include <string_view>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
@@ -47,7 +46,8 @@ std::string SparqlValues::valuesToString() const {
 // Small anonymous helper function that is used in the definition of the member
 // functions of the `Subquery` class.
 namespace {
-auto m(auto&&... args) {
+template <typename... Args>
+auto m(Args&&... args) {
   return std::make_unique<ParsedQuery>(AD_FWD(args)...);
 }
 }  // namespace
@@ -77,7 +77,7 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-[[nodiscard]] string Bind::getDescriptor() const {
+[[nodiscard]] std::string Bind::getDescriptor() const {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }

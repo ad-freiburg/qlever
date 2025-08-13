@@ -5,6 +5,7 @@
 #include "engine/Operation.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/container/inlined_vector.h>
 
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
@@ -66,8 +67,8 @@ void Operation::forAllDescendants(F f) const {
 }
 
 // _____________________________________________________________________________
-vector<string> Operation::collectWarnings() const {
-  vector<string> res{*getWarnings().rlock()};
+std::vector<std::string> Operation::collectWarnings() const {
+  std::vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -168,13 +169,26 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
+    AD_CORRECTNESS_CHECK(
+        result.idTable().empty() || !knownEmptyResult(), [&]() {
+          return absl::StrCat("Operation ", getDescriptor(),
+                              "returned non-empty result, but "
+                              "knownEmptyResult() returned true");
+        });
   } else {
-    runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+    auto& rti = runtimeInfo();
+    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.totalTime_ = timer.msecs();
+    rti.originalTotalTime_ = rti.totalTime_;
+    rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
-            const Result::IdTableVocabPair& pair,
-            std::chrono::microseconds duration) mutable {
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{},
+         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
+                                   std::chrono::microseconds duration) mutable {
           const IdTable& idTable = pair.idTable_;
+          AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
+                               "Operation returned non-empty result, but "
+                               "knownEmptyResult() returned true");
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
@@ -210,17 +224,18 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   // that a lot of the time the limit is only artificially applied during
   // export, allowing the cache to reuse the same operation for different
   // limits and offsets.
-  if (!supportsLimit()) {
-    runtimeInfo().addLimitOffsetRow(_limit, true);
+  if (!supportsLimitOffset()) {
+    runtimeInfo().addLimitOffsetRow(limitOffset_, true);
     AD_CONTRACT_CHECK(!externalLimitApplied_);
-    externalLimitApplied_ = !_limit.isUnconstrained();
-    result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
-                                           const IdTable& idTable) {
-      updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
-                         limitTime);
-    });
+    externalLimitApplied_ = !limitOffset_.isUnconstrained();
+    result.applyLimitOffset(
+        limitOffset_,
+        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
+          updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                             limitTime);
+        });
   } else {
-    result.assertThatLimitWasRespected(_limit);
+    result.assertThatLimitWasRespected(limitOffset_);
   }
   return result;
 }
@@ -295,6 +310,11 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
+  // If pinned there's no point in computing the result lazily.
+  if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
@@ -492,6 +512,14 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 }
 
 // __________________________________________________________________
+void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
+  limitOffset_.mergeLimitAndOffset(limitOffsetClause);
+  // We can safely ignore members that are not `_offset` and `_limit` since
+  // they are unused by subclasses of `Operation`.
+  onLimitOffsetChanged(limitOffsetClause);
+}
+
+// __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
   _rootRuntimeInfo = root;
@@ -510,7 +538,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
   // We are interested only in the first two elements of the limit tuple.
-  const auto& [limit, offset, _1, _2] = getLimit();
+  const auto& [limit, offset, _1, _2] = getLimitOffset();
   if (limit.has_value()) {
     _runtimeInfo->addDetail("limit", limit.value());
   }
@@ -598,7 +626,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};
@@ -619,19 +647,19 @@ void Operation::signalQueryUpdate() const {
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
   auto result = getCacheKeyImpl();
-  if (_limit._limit.has_value()) {
-    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  if (limitOffset_._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
   }
-  if (_limit._offset != 0) {
-    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  if (limitOffset_._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", limitOffset_._offset);
   }
   return result;
 }
 
 // _____________________________________________________________________________
 uint64_t Operation::getSizeEstimate() {
-  if (_limit._limit.has_value()) {
-    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  if (limitOffset_._limit.has_value()) {
+    return std::min(limitOffset_._limit.value(), getSizeEstimateBeforeLimit());
   } else {
     return getSizeEstimateBeforeLimit();
   }
@@ -648,6 +676,7 @@ std::unique_ptr<Operation> Operation::clone() const {
                      std::back_inserter(visibleVariables));
     result->setSelectedVariablesForSubquery(visibleVariables);
   }
+  result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
@@ -670,6 +699,55 @@ std::unique_ptr<Operation> Operation::clone() const {
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  // If the result can be cached, then the cache key must be the same for
+  // the cloned operation.
+  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+                     getCacheKey() == result->getCacheKey());
   return result;
+}
+
+// _____________________________________________________________________________
+bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
+  auto inputSortedOn = resultSortedOn();
+  if (sortColumns.size() > inputSortedOn.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < sortColumns.size(); ++i) {
+    if (sortColumns[i] != inputSortedOn[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+    const std::vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::makeTreeWithStrippedColumns(
+    [[maybe_unused]] const std::set<Variable>& variables) const {
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // Returning false does never lead to a wrong result, but it might be
+  // inefficient.
+  if (ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
+        return child->getVariableColumnOrNullopt(variable).has_value();
+      })) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [&variable](const auto* child) {
+    return !child->getVariableColumnOrNullopt(variable).has_value() ||
+           child->getRootOperation()->columnOriginatesFromGraphOrUndef(
+               variable);
+  });
 }

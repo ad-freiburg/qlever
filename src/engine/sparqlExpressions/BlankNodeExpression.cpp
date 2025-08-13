@@ -128,7 +128,8 @@ class BlankNodeExpression : public SparqlExpression {
     }
     auto childResult = label_.value()->evaluate(context);
     return std::visit(
-        [this, context]<typename T>(T&& element) -> ExpressionResult {
+        [this, context](auto&& element) -> ExpressionResult {
+          using T = std::decay_t<decltype(element)>;
           if constexpr (isConstantResult<T>) {
             const auto& value = StringValueGetter{}(AD_FWD(element), context);
             if (!value.has_value()) {
@@ -175,7 +176,7 @@ class BlankNodeExpression : public SparqlExpression {
   }
 
  private:
-  std::span<Ptr> childrenImpl() override {
+  ql::span<Ptr> childrenImpl() override {
     if (label_.has_value()) {
       return {&label_.value(), 1};
     }

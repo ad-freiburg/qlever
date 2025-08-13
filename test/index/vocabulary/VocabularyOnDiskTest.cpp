@@ -5,7 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
-#include "index/VocabularyOnDisk.h"
+#include "backports/algorithm.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Forward.h"
 
 namespace {
@@ -38,9 +39,11 @@ class VocabularyCreator {
     if (!ids.has_value()) {
       {
         auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
-        for (auto& word : words) {
-          writer(word);
+        for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+          EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
         }
+        writer.readableName() = "blubb";
+        EXPECT_EQ(writer.readableName(), "blubb");
         static std::atomic<unsigned> doFinish = 0;
         // In some tests, call `finish` expclitly, in others let the destructor
         // handle this.

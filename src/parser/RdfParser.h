@@ -124,9 +124,9 @@ class TurtleParser : public RdfParserBase {
 
  private:
   // Impl of the method above, also used in rdfLiteral parsing.
-  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+  TripleComponent literalAndDatatypeToTripleComponentImpl(
       std::string_view normalizedLiteralContent,
-      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
+      const TripleComponent::Iri& typeIri);
 
   static constexpr std::array<const char*, 12> integerDatatypes_ = {
       XSD_INT_TYPE,
@@ -442,12 +442,12 @@ CPP_template(typename Parser)(
     return std::move(parser.triples_[0].object_);
   }
 
-  string_view getUnparsedRemainder() const { return this->tok_.view(); }
+  std::string_view getUnparsedRemainder() const { return this->tok_.view(); }
 
   // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
-  void raiseManually(string_view message) { this->raise(message); }
+  void raiseManually(std::string_view message) { this->raise(message); }
 
   void setPositionOffset(size_t offset) { positionOffset_ = offset; }
 
@@ -636,11 +636,14 @@ class RdfParallelParser : public Parser {
   // interacts with the functions next to it.
   void finishTripleCollectorIfLastBatch();
   // Parse the single `batch` and push the result to the `triplesCollector_`.
-  void parseBatch(size_t parsePosition, auto batch);
+  template <typename Batch>
+  void parseBatch(size_t parsePosition, Batch batch);
+
   // Read all the batches from the file and feed them to the parallel parser
   // threads. The argument is the first batch which might have been leftover
   // from the initialization phase where the prefixes are parsed.
-  void feedBatchesToParser(auto remainingBatchFromInitialization);
+  template <typename Batch>
+  void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
   using Parser::isParserExhausted_;
   using Parser::tok_;

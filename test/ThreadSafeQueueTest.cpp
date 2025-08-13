@@ -4,14 +4,13 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <atomic>
 #include <ranges>
 
 #include "./util/GTestHelpers.h"
-#include "absl/cleanup/cleanup.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
@@ -57,7 +56,8 @@ constexpr size_t numValues = 200;
 // Run the `test` function with a `ThreadSafeQueue` and an
 // `OrderedThreadSafeQueue`. Both queues have a size of `queueSize` and `size_t`
 // as their value type.
-void runWithBothQueueTypes(const auto& testFunction) {
+template <typename F>
+void runWithBothQueueTypes(const F& testFunction) {
   testFunction(ThreadSafeQueue<size_t>{queueSize});
   testFunction(OrderedThreadSafeQueue<size_t>{queueSize});
 }

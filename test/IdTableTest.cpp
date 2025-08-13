@@ -229,8 +229,8 @@ TEST(IdTable, rowIterators) {
 // the second one (if present) is a `std::vector` with `NumIdTables` entries
 // that represent the additional arguments that are needed to instantiate an
 // `IdTable` (e.g. an allocator or a `BufferedVector`).
-template <size_t NumIdTables>
-void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
+template <size_t NumIdTables, typename T>
+void runTestForDifferentTypes(T testCase, std::string testCaseName) {
   using Buffer = ad_utility::BufferedVector<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
@@ -1014,8 +1014,10 @@ TEST(IdTable, setColumnSubset) {
   ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
   ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
 
-  // Empty column subset is not allowed.
-  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{}));
+  // Empty column subset
+  t.setColumnSubset(std::array<ColumnIndex, 0>{});
+  ASSERT_EQ(0, t.numColumns());
+
   // Duplicate columns are not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
   // A column index is out of range.

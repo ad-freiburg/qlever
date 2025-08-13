@@ -89,7 +89,7 @@ class PatternCreator {
   // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
-    PatternID patternId_ = 0;
+    Pattern::PatternId patternId_ = 0;
     uint64_t count_ = 0;
   };
   using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
@@ -130,7 +130,7 @@ class PatternCreator {
 
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename, Id idOfHasPattern,
+  explicit PatternCreator(const std::string& basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
@@ -183,7 +183,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
-  PatternID finishPattern(const Pattern& pattern);
+  Pattern::PatternId finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

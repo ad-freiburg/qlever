@@ -14,11 +14,15 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/Distinct.h"
-#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Union.h"
+#include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -32,35 +36,89 @@ TransitivePathBase::TransitivePathBase(
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
-      maxDist_(maxDist) {
+      maxDist_(maxDist),
+      activeGraphs_{std::move(activeGraphs)} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
   if (lhs_.isVariable()) {
-    variableColumns_[std::get<Variable>(lhs_.value_)] =
-        makeAlwaysDefinedColumn(0);
+    variableColumns_[lhs_.value_.getVariable()] = makeAlwaysDefinedColumn(0);
   }
   if (rhs_.isVariable()) {
-    variableColumns_[std::get<Variable>(rhs_.value_)] =
-        makeAlwaysDefinedColumn(1);
+    variableColumns_[rhs_.value_.getVariable()] = makeAlwaysDefinedColumn(1);
   }
-  if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
-    emptyPathBound_ = true;
-    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
-                             0);
+  if (minDist_ == 0) {
+    auto& startingSide = decideDirection().first;
+    // If we have hardcoded differing values left and right, we can increase the
+    // minimum distance to 1. Example: The triple pattern `<x> <p>* <y>` cannot
+    // possibly match with length zero because <x> != <y>. Instead we compute
+    // `<x> <p>+ <y>` which avoids the performance pessimisation of having to
+    // match the iri or literal against the knowledge graph.
+    if (!lhs_.isVariable() && !rhs_.isVariable() &&
+        lhs_.value_ != rhs_.value_) {
+      minDist_ = 1;
+    } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
+      boundVariableIsForEmptyPath_ = true;
+      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs_), 0);
+    } else if (!startingSide.isVariable()) {
+      startingSide.treeAndCol_.emplace(
+          joinWithIndexScan(qec, activeGraphs_, startingSide.value_), 0);
+    }
   }
 
   lhs_.outputCol_ = 0;
   rhs_.outputCol_ = 1;
 }
 
+namespace {
+auto makeInternalVariable(std::string_view string) {
+  return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+}
+}  // namespace
+
 // _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
-    QueryExecutionContext* qec, Graphs activeGraphs) {
-  auto makeInternalVariable = [](std::string_view string) {
-    return Variable{absl::StrCat("?internal_property_path_variable_", string)};
-  };
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
+    QueryExecutionContext* qec, Graphs activeGraphs,
+    const TripleComponent& tripleComponent) {
+  // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
+  // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
+
   // Dummy variables to get a full scan of the index.
   auto x = makeInternalVariable("x");
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+
+  auto joinWithValues = [qec, &tripleComponent, &x](
+                            std::shared_ptr<QueryExecutionTree> executionTree) {
+    auto valuesClause = ad_utility::makeExecutionTree<Values>(
+        qec, parsedQuery::SparqlValues{{x}, {{tripleComponent}}});
+    return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
+                                               std::move(valuesClause), 0, 0);
+  };
+  auto selectXVariable =
+      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
+        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
+        return executionTree;
+      };
+  auto allValues = ad_utility::makeExecutionTree<Union>(
+      qec,
+      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
+          activeGraphs))),
+      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
+          activeGraphs))));
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
+                                                 std::vector<ColumnIndex>{0});
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
+    QueryExecutionContext* qec, Graphs activeGraphs,
+    std::optional<Variable> variable) {
+  // Dummy variables to get a full scan of the index.
+  auto x = std::move(variable).value_or(makeInternalVariable("x"));
   auto y = makeInternalVariable("y");
   auto z = makeInternalVariable("z");
   // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
@@ -75,18 +133,14 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
       qec,
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs)),
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs)));
-  auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
-      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
-      std::vector<ColumnIndex>{0});
-  return uniqueValues;
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
+                                                 std::vector<ColumnIndex>{0});
 }
 
 // _____________________________________________________________________________
@@ -109,12 +163,12 @@ TransitivePathBase::decideDirection() {
 // _____________________________________________________________________________
 Result::Generator TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    size_t skipCol, bool yieldOnce, size_t inputWidth) const {
-  return ad_utility::callFixedSize(
+    bool yieldOnce, size_t inputWidth) const {
+  return ad_utility::callFixedSizeVi(
       std::array{inputWidth, getResultWidth()},
-      [&]<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>() {
+      [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
-            std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
+            std::move(hull), startSideCol, targetSideCol, yieldOnce);
       });
 }
 
@@ -123,7 +177,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         size_t startSideCol,
                                                         size_t targetSideCol,
                                                         bool yieldOnce) const {
-  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
+  return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
     return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
                                            targetSideCol, yieldOnce);
   });
@@ -133,7 +187,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::Generator TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    bool yieldOnce, size_t skipCol) const {
+    bool yieldOnce) const {
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
@@ -147,7 +201,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       table.reserve(linkedNodes.size());
     }
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable != nullptr) {
+    if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
     for (Id linkedNode : linkedNodes) {
@@ -157,7 +211,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 
       if (inputView.has_value()) {
         copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow, skipCol);
+                                               inputRow, outputRow);
       }
 
       outputRow++;
@@ -184,7 +238,14 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 // _____________________________________________________________________________
 std::string TransitivePathBase::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << " minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
+  os << "TRANSITIVE PATH ";
+  if (lhs_.isVariable() && lhs_.value_ == rhs_.value_) {
+    // Use a different cache key if the same variable is used left and right,
+    // because that changes the behaviour of this operation and variable names
+    // are not found in the children's cache keys.
+    os << "symmetric ";
+  }
+  os << "minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
   os << "Left side:\n";
   os << lhs_.getCacheKey();
@@ -205,21 +266,8 @@ std::string TransitivePathBase::getDescriptor() const {
   if (minDist_ > 1 || maxDist_ < std::numeric_limits<size_t>::max()) {
     os << "[" << minDist_ << ", " << maxDist_ << "] ";
   }
-  auto getName = [this](ValueId id) {
-    auto optStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType(getIndex(), id, {});
-    if (optStringAndType.has_value()) {
-      return optStringAndType.value().first;
-    } else {
-      return absl::StrCat("#", id.getBits());
-    }
-  };
   // Left variable or entity name.
-  if (lhs_.isVariable()) {
-    os << std::get<Variable>(lhs_.value_).name();
-  } else {
-    os << getName(std::get<Id>(lhs_.value_));
-  }
+  os << lhs_.value_;
   // The predicate.
   auto scanOperation =
       std::dynamic_pointer_cast<IndexScan>(subtree_->getRootOperation());
@@ -230,11 +278,7 @@ std::string TransitivePathBase::getDescriptor() const {
     os << R"( <???> )";
   }
   // Right variable or entity name.
-  if (rhs_.isVariable()) {
-    os << std::get<Variable>(rhs_.value_).name();
-  } else {
-    os << getName(std::get<Id>(rhs_.value_));
-  }
+  os << rhs_.value_;
   return std::move(os).str();
 }
 
@@ -242,7 +286,7 @@ std::string TransitivePathBase::getDescriptor() const {
 size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+std::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
   if (lhs_.isSortedOnInputCol()) {
     return {0};
   }
@@ -260,7 +304,12 @@ VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 bool TransitivePathBase::knownEmptyResult() {
-  return subtree_->knownEmptyResult();
+  auto sideHasKnownEmptyResult = [this]() {
+    auto tree = decideDirection().first.treeAndCol_;
+    return tree.has_value() && tree.value().first->knownEmptyResult();
+  };
+  return (subtree_->knownEmptyResult() && minDist_ > 0) ||
+         sideHasKnownEmptyResult();
 }
 
 // _____________________________________________________________________________
@@ -272,8 +321,7 @@ float TransitivePathBase::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 uint64_t TransitivePathBase::getSizeEstimateBeforeLimit() {
-  if (std::holds_alternative<Id>(lhs_.value_) ||
-      std::holds_alternative<Id>(rhs_.value_)) {
+  if (!lhs_.isVariable() || !rhs_.isVariable()) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
     // job of avoiding query plans that first generate large intermediate
@@ -345,7 +393,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 }
 
 // _____________________________________________________________________________
-vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
+std::vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
   std::vector<QueryExecutionTree*> res;
   auto addChildren = [](std::vector<QueryExecutionTree*>& res,
                         TransitivePathSide side) {
@@ -372,9 +420,49 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
+    size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
+  auto [originalVar, info] =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
+
+  // If we're not explicitly handling the empty path, the first step will
+  // already filter out non-matching values.
+  if (minDist_ > 0) {
+    return leftOrRightOp;
+  }
+
+  // Remove undef values, these are definitely not in the graph, and are
+  // problematic when joining.
+  if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
+    using namespace sparqlExpression;
+    SparqlExpressionPimpl pimpl{
+        makeBoundExpression(std::make_unique<VariableExpression>(originalVar)),
+        absl::StrCat("BOUND(", originalVar.name(), ")")};
+    leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
+        getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
+    AD_CORRECTNESS_CHECK(
+        inputCol == leftOrRightOp->getVariableColumn(originalVar),
+        "The column index should not change when applying a filter.");
+  }
+
+  // If we cannot guarantee the values are part of the graph, we have to join
+  // with it first.
+  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+          originalVar)) {
+    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(leftOrRightOp),
+        makeEmptyPathSide(getExecutionContext(), activeGraphs_, originalVar),
+        inputCol, 0);
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
+  }
+  return leftOrRightOp;
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
+  leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
   // Enforce required sorting of `leftOrRightOp`.
   leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
                                                        {inputCol});
@@ -389,9 +477,13 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   auto rhs = rhs_;
   if (isLeft) {
     lhs.treeAndCol_ = {leftOrRightOp, inputCol};
+    // Remove placeholder tree if binding actual tree.
+    if (!rhs.isVariable()) {
+      rhs.treeAndCol_ = std::nullopt;
+    }
   } else {
-    // Remove empty path tree if binding actual tree.
-    if (emptyPathBound_) {
+    // Remove placeholder tree if binding actual tree.
+    if (boundVariableIsForEmptyPath_ || !lhs.isVariable()) {
       lhs.treeAndCol_ = std::nullopt;
     }
     rhs.treeAndCol_ = {leftOrRightOp, inputCol};
@@ -437,7 +529,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 // _____________________________________________________________________________
 bool TransitivePathBase::isBoundOrId() const {
   // Don't make the execution tree for the empty path count as "bound".
-  return !emptyPathBound_ &&
+  return !boundVariableIsForEmptyPath_ &&
          (!lhs_.isUnboundVariable() || !rhs_.isUnboundVariable());
 }
 
@@ -445,18 +537,11 @@ bool TransitivePathBase::isBoundOrId() const {
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                                     size_t inputRow, size_t outputRow,
-                                     size_t skipCol) {
+                                     size_t inputRow, size_t outputRow) {
   size_t inCol = 0;
   size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 == outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
-    if (skipCol == inCol) {
-      inCol++;
-      continue;
-    }
-
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;
@@ -464,7 +549,8 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
-  auto [it, success] = map.try_emplace(key, allocator());
-  it->second.insert(value);
+bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  return variable == lhs_.value_ || variable == rhs_.value_;
 }

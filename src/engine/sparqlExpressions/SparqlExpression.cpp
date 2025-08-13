@@ -66,10 +66,10 @@ std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
 }
 
 // _____________________________________________________________________________
-const string& SparqlExpression::descriptor() const { return _descriptor; }
+const std::string& SparqlExpression::descriptor() const { return _descriptor; }
 
 // _____________________________________________________________________________
-string& SparqlExpression::descriptor() { return _descriptor; }
+std::string& SparqlExpression::descriptor() { return _descriptor; }
 
 // _____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -131,7 +131,7 @@ bool SparqlExpression::isConstantExpression() const { return false; }
 bool SparqlExpression::isStrExpression() const { return false; }
 
 // _____________________________________________________________________________
-std::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
+ql::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
     const {
   return children();
 }
@@ -144,18 +144,18 @@ std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> SparqlExpression::children() {
+ql::span<SparqlExpression::Ptr> SparqlExpression::children() {
   return childrenImpl();
 }
 
 // _____________________________________________________________________________
-std::span<const SparqlExpression::Ptr> SparqlExpression::children() const {
+ql::span<const SparqlExpression::Ptr> SparqlExpression::children() const {
   auto children = const_cast<SparqlExpression&>(*this).children();
   return {children.data(), children.size()};
 }
 
 // _____________________________________________________________________________
-std::span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
+ql::span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
     const {
   // Default implementation: This expression adds no strings or variables.
   return {};

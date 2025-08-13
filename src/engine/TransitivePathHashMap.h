@@ -8,10 +8,9 @@
 
 #include <memory>
 
-#include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorWithLimit.h"
 
 /**
  * @class HashMapWrapper
@@ -20,6 +19,12 @@
  *
  */
 struct HashMapWrapper {
+  // We deliberately use the `std::` variants of a hash map because `absl`s
+  // types are not exception safe.
+  using Map = std::unordered_map<
+      Id, Set, absl::Hash<Id>, std::equal_to<Id>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+
   Map map_;
   Set emptySet_;
 
@@ -40,6 +45,17 @@ struct HashMapWrapper {
       return emptySet_;
     }
     return iterator->second;
+  }
+
+  // Retrieve pointer to equal id from `map_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto iterator = map_.find(node);
+    if (iterator == map_.end()) {
+      return nullptr;
+    }
+    return &iterator->first;
   }
 };
 

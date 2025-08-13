@@ -38,6 +38,9 @@ class PrefixRegexExpression : public SparqlExpression {
   PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
       delete;
 
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      bool isNegated) const override;
+
   // Check if the children of this expression allow for the prefix regex
   // optimization. If this is the case, a `PrefixRegexExpression` is returned,
   // otherwise `std::nullopt`.
@@ -58,7 +61,7 @@ class PrefixRegexExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<Ptr> childrenImpl() override;
+  ql::span<Ptr> childrenImpl() override;
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.

@@ -4,8 +4,9 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H
 
-#include "./SparqlExpression.h"
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 /// The (SAMPLE(?x) as ?sample) expression
@@ -20,12 +21,12 @@ class SampleExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // __________________________________________________________________________
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
   }
 
   // __________________________________________________________________________
-  std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
+  ql::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
   // SAMPLE is an aggregate, the distinctness doesn't matter, so we return "not
   // distinct", because that allows for more efficient implementations in GROUP

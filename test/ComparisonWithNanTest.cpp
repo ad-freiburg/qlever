@@ -36,7 +36,8 @@ TEST(ComparisonWithNan, Sorting) {
 
 // Test several invariants of the relations `<, <=, ==, !=, >, >=` for two
 // arbitrary inputs `a, b`.
-void testInvariants(auto a, auto b) {
+template <typename T1, typename T2>
+void testInvariants(T1 a, T2 b) {
   // `==` and `!=` are symmetric.
   ASSERT_EQ(eq(a, b), eq(b, a));
   ASSERT_EQ(ne(a, b), ne(b, a));
@@ -50,7 +51,8 @@ void testInvariants(auto a, auto b) {
 }
 
 // Run exhaustive tests for numbers `a, b` where `a < b`.
-void testLess(auto a, auto b) {
+template <typename T1, typename T2>
+void testLess(T1 a, T2 b) {
   ASSERT_TRUE(lt(a, b));
   ASSERT_TRUE(le(a, b));
   ASSERT_FALSE(eq(a, b));
@@ -58,7 +60,8 @@ void testLess(auto a, auto b) {
 }
 
 // Run exhaustive tests for numbers `a, b` where `a == b`.
-void testEqual(auto a, auto b) {
+template <typename T1, typename T2>
+void testEqual(T1 a, T2 b) {
   ASSERT_FALSE(lt(a, b));
   ASSERT_TRUE(le(a, b));
   ASSERT_TRUE(eq(a, b));

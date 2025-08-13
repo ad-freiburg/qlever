@@ -3,14 +3,14 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
-#include <parser/SparqlParserHelpers.h>
 
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "SparqlAntlrParserTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
+#include "parser/SparqlParserHelpers.h"
 
 namespace m = matchers;
 using namespace ad_utility::testing;
@@ -21,58 +21,61 @@ using TC = TripleComponent;
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
-  auto expectTransformPost = CPP_template_lambda()(typename RequestT)(
+  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
+                                                  TestIndexConfig{});
+  auto expectTransformPost = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
       const testing::Matcher<const ParsedQuery&>& matcher,
       ad_utility::source_location l = ad_utility::source_location::current())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
+                matcher);
   };
 
   expectTransformPost(
       makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."), DEFAULT{},
-      m::UpdateClause(
-          m::GraphUpdate(
-              {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-              std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           std::monostate{}}}),
+                      m::GraphPattern()));
   expectTransformPost(
       makePostRequest("/?default", "application/n-triples", "<a> <b> <c> ."),
       DEFAULT{},
-      m::UpdateClause(
-          m::GraphUpdate(
-              {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-              std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           std::monostate{}}}),
+                      m::GraphPattern()));
   expectTransformPost(
       makePostRequest("/?graph=bar", "application/n-triples", "<a> <b> <c> ."),
       iri("<bar>"),
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {{iri("<a>"), iri("<b>"), iri("<c>"), iri("<bar>")}},
-                         std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           iri("<bar>")}}),
+                      m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(
-              "/?default", "application/sparql-results+xml", ""),
-          DEFAULT{}),
+              "/?default", "application/sparql-results+xml", "f"),
+          DEFAULT{}, index),
       testing::HasSubstr(
           "Mediatype \"application/sparql-results+xml\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(
+              "/?default", "application/sparql-results+xml", ""),
+          DEFAULT{}, index),
+      testing::HasSubstr("Request body is empty."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPost(
+          ad_utility::testing::makePostRequest(
               "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
-          DEFAULT{}),
+          DEFAULT{}, index),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"application/n-quads\"."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(
               "/?default", "application/unknown", "fantasy"),
-          DEFAULT{}),
+          DEFAULT{}, index),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"application/unknown\"."));
 }
@@ -88,45 +91,49 @@ TEST(GraphStoreProtocolTest, transformGet) {
         EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
       };
   expectTransformGet(
-      DEFAULT{}, m::ConstructQuery(
-                     {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
-                     m::GraphPattern(matchers::Triples(
-                         {SparqlTriple(TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
+      DEFAULT{},
+      m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                        m::GraphPattern(matchers::Triples({SparqlTriple(
+                            TC(Var{"?s"}), Var{"?p"}, TC(Var{"?o"}))}))));
   expectTransformGet(
       iri("<foo>"),
       m::ConstructQuery(
           {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
           m::GraphPattern(m::GroupGraphPatternWithGraph(
-              iri("<foo>"), m::Triples({SparqlTriple(TC(Var{"?s"}), "?p",
+              iri("<foo>"), m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
                                                      TC(Var{"?o"}))})))));
 }
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
+  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
+                                                  TestIndexConfig{});
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
-                  ad_utility::testing::makeGetRequest("/?default")),
-              m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
-                                m::GraphPattern(matchers::Triples({SparqlTriple(
-                                    TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
+                  ad_utility::testing::makeGetRequest("/?default"), index),
+              testing::ElementsAre(m::ConstructQuery(
+                  {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                  m::GraphPattern(matchers::Triples({SparqlTriple(
+                      TC(Var{"?s"}), Var{"?p"}, TC(Var{"?o"}))})))));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makePostRequest(
-              "/?default", "application/n-triples", "<foo> <bar> <baz> .")),
-      m::UpdateClause(m::GraphUpdate({},
-                                     {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
-                                       std::monostate{}}},
-                                     std::nullopt),
-                      m::GraphPattern()));
+              "/?default", "application/n-triples", "<foo> <bar> <baz> ."),
+          index),
+      testing::ElementsAre(m::UpdateClause(
+          m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
+                               std::monostate{}}}),
+          m::GraphPattern())));
   auto expectUnsupportedMethod =
-      [](const http::verb method, ad_utility::source_location l =
-                                      ad_utility::source_location::current()) {
+      [&index](const http::verb method,
+               ad_utility::source_location l =
+                   ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
         AD_EXPECT_THROW_WITH_MESSAGE(
             GraphStoreProtocol::transformGraphStoreProtocol(
                 GraphStoreOperation{DEFAULT{}},
-                ad_utility::testing::makeRequest(method, "/?default")),
+                ad_utility::testing::makeRequest(method, "/?default"), index),
             testing::HasSubstr(
                 absl::StrCat(std::string{boost::beast::http::to_string(method)},
                              " in the SPARQL Graph Store HTTP Protocol")));
@@ -139,7 +146,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
-                                           "/?default")),
+                                           "/?default"),
+          index),
       testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
 }
 
@@ -195,16 +203,55 @@ TEST(GraphStoreProtocolTest, parseTriples) {
 }
 
 // _____________________________________________________________________________________________
+// If the `TripleComponent` is a `ValueId` which is a `BlankNodeIndex` then
+// `sub` must match on it.
+MATCHER_P(IfBlankNode, sub, "") {
+  if (arg.isId()) {
+    auto id = arg.getId();
+    if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      return testing::ExplainMatchResult(sub, id.getBlankNodeIndex(),
+                                         result_listener);
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
+  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
+                                                  TestIndexConfig{});
+  Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
   auto expectConvert =
-      [](const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
-         const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+      [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
+            const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,
+            ad_utility::source_location l =
+                ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
+        auto convertedTriples =
+            GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
+        EXPECT_THAT(convertedTriples,
+                    AD_FIELD(updateClause::UpdateTriples, triples_,
+                             testing::Eq(expectedTriples)));
+        auto AllComponents =
+            [](const testing::Matcher<const TripleComponent&>& sub)
+            -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+          return testing::AllOf(AD_FIELD(SparqlTripleSimpleWithGraph, s_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, p_, sub),
+                                AD_FIELD(SparqlTripleSimpleWithGraph, o_, sub));
+        };
+        auto BlankNodeContained = [](const LocalVocab& lv)
+            -> testing::Matcher<const BlankNodeIndex&> {
+          return testing::ResultOf(
+              [&lv](const BlankNodeIndex& i) {
+                return lv.isBlankNodeIndexContained(i);
+              },
+              testing::IsTrue());
+        };
         EXPECT_THAT(
-            GraphStoreProtocol::convertTriples(graph, std::move(triples)),
-            testing::Eq(expectedTriples));
+            convertedTriples,
+            AD_FIELD(updateClause::UpdateTriples, triples_,
+                     testing::Each(AllComponents(IfBlankNode(
+                         BlankNodeContained(convertedTriples.localVocab_))))));
       };
   expectConvert(DEFAULT{}, {}, {});
   expectConvert(iri("<a>"), {}, {});
@@ -212,4 +259,20 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                 {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                              std::monostate{}}});
   expectConvert(iri("<a>"), {}, {});
+  expectConvert(
+      iri("<a>"), {{{iri("<a>")}, {iri("<b>")}, TC("_:a")}},
+      {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"),
+                                   bn.getBlankNodeIndex("_:a"), iri("<a>")}});
+
+  expectConvert(
+      iri("<a>"),
+      {{TC("_:b"), {iri("<b>")}, iri("<c>")},
+       {TC("_:b"), {iri("<d>")}, iri("<e>")},
+       {TC("_:c"), {iri("<f>")}, iri("<g>")}},
+      {SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<b>"),
+                                   iri("<c>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:b"), iri("<d>"),
+                                   iri("<e>"), iri("<a>")},
+       SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:c"), iri("<f>"),
+                                   iri("<g>"), iri("<a>")}});
 }

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "MmapVector.h"
+#include "backports/shift.h"
 
 namespace ad_utility {
 
@@ -106,7 +107,8 @@ class BufferedVector {
   // add element specified by arg el at the end of the array
   // possibly invalidates iterators
  private:
-  void push_backImpl(auto&&... args) {
+  template <typename... Args>
+  void push_backImpl(Args&&... args) {
     auto oldSize = size();
     if (!_isInternal) {
       _extVec.push_back(T{AD_FWD(args)...});
@@ -125,7 +127,10 @@ class BufferedVector {
 
  public:
   void push_back(const T& el) { push_backImpl(el); }
-  void emplace_back(auto&&... args) { push_backImpl(AD_FWD(args)...); }
+  template <typename... Args>
+  void emplace_back(Args&&... args) {
+    push_backImpl(AD_FWD(args)...);
+  }
 
   // Change the size of the `BufferedVector` to `newSize`. This might move
   // the data from the internal to the external vector or vice versa. If
@@ -156,7 +161,8 @@ class BufferedVector {
   // `[it1, it2)` into the vector at `target`. The `it1` and `it2` must not
   // overlap with `this` and `target` must be a valid iterator for `this`. Both
   // of these conditions are checked via an `AD_CONTRACT_CHECK`.
-  void insert(T* target, auto it1, auto it2) {
+  template <typename It>
+  void insert(T* target, It it1, It it2) {
     AD_CONTRACT_CHECK(target >= begin() && target <= end());
     AD_CONTRACT_CHECK(it2 >= it1);
     auto addr1 = &(*it1);
@@ -166,7 +172,7 @@ class BufferedVector {
     size_t numInserted = it2 - it1;
     size_t offset = target - begin();
     resize(size() + numInserted);
-    std::shift_right(begin() + offset, end(), numInserted);
+    ql::shift_right(begin() + offset, end(), numInserted);
     for (auto it = it1; it != it2; ++it) {
       (*this)[offset++] = *it;
     }
@@ -179,7 +185,7 @@ class BufferedVector {
   void erase(T* it1, T* it2) {
     AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 <= end());
     size_t numErased = it2 - it1;
-    std::shift_left(it1, end(), numErased);
+    ql::shift_left(it1, end(), numErased);
     resize(size() - numErased);
   }
 

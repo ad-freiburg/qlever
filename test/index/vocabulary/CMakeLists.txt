@@ -1,11 +1,19 @@
-addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
+addLinkAndDiscoverTestNoLibs(VocabularyInMemoryTest vocabulary)
 
-addLinkAndDiscoverTest(VocabularyOnDiskTest index)
+addLinkAndDiscoverTestNoLibs(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
+addLinkAndDiscoverTestNoLibs(UnicodeVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(VocabularyInternalExternalTest vocabulary)
+addLinkAndDiscoverTestNoLibs(VocabularyInternalExternalTest vocabulary)
 
-addLinkAndDiscoverTest(VocabularyInMemoryBinSearchTest vocabulary)
+addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)
+
+addLinkAndDiscoverTestNoLibs(PolymorphicVocabularyTest vocabulary parser util)
+
+addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
+
+addLinkAndDiscoverTest(GeoVocabularyTest vocabulary parser util)
+
+addLinkAndDiscoverTest(SplitVocabularyTest index)

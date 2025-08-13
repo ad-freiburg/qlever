@@ -71,8 +71,8 @@ class IndexMetaData {
  private:
   off_t offsetAfter_ = 0;
 
-  string name_;
-  string filename_;
+  std::string name_;
+  std::string filename_;
 
   // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
@@ -156,11 +156,11 @@ class IndexMetaData {
 
   // The number of distinct Col0Ids has to be passed in manually, as it cannot
   // be computed.
-  string statistics() const;
+  std::string statistics() const;
 
-  void setName(const string& name) { name_ = name; }
+  void setName(const std::string& name) { name_ = name; }
 
-  const string& getName() const { return name_; }
+  const std::string& getName() const { return name_; }
 
   size_t getVersion() const { return version_; }
 

@@ -38,6 +38,14 @@ struct RowAdder {
     AD_CONTRACT_CHECK(x1 == y1);
     target_->push_back(std::array{x1, x2, y2});
   }
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
+  }
 
   void addOptionalRow(size_t leftIndex) {
     auto [x1, x2] = (*left_)[leftIndex];
@@ -208,6 +216,67 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
   testOptionalJoin(a, b, expectedResult);
 }
 
+// Regression tests for https://github.com/ad-freiburg/qlever/issues/2051
+TEST(JoinAlgorithms, JoinWithEquivalentValuesOverMultipleEnclosedBlocks) {
+  // The number of equivalent blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}, {{1, 102}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 10, 102}, {1, 11, 100},
+        {1, 11, 101}, {1, 11, 102}, {1, 12, 100}, {1, 12, 101},
+        {1, 12, 102}, {1, 13, 100}, {1, 13, 101}, {1, 13, 102},
+    };
+    testJoin(a, b, expectedResult);
+  }
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 11, 100}, {1, 11, 101},
+        {1, 12, 100}, {1, 12, 101}, {1, 13, 100}, {1, 13, 101}};
+    testJoin(a, b, expectedResult);
+  }
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}, {{1, 102}, {3, 300}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 10, 102}, {1, 11, 100},
+        {1, 11, 101}, {1, 11, 102}, {1, 12, 100}, {1, 12, 101},
+        {1, 12, 102}, {1, 13, 100}, {1, 13, 101}, {1, 13, 102}};
+    testJoin(a, b, expectedResult);
+  }
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}, {{3, 300}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 11, 100}, {1, 11, 101},
+        {1, 12, 100}, {1, 12, 101}, {1, 13, 100}, {1, 13, 101}};
+    testJoin(a, b, expectedResult);
+  }
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}, {{1, 102}}, {{1, 103}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 10, 102}, {1, 10, 103},
+        {1, 11, 100}, {1, 11, 101}, {1, 11, 102}, {1, 11, 103},
+        {1, 12, 100}, {1, 12, 101}, {1, 12, 102}, {1, 12, 103},
+        {1, 13, 100}, {1, 13, 101}, {1, 13, 102}, {1, 13, 103}};
+    testJoin(a, b, expectedResult);
+  }
+  {
+    NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
+    NestedBlock b{{{1, 100}}, {{1, 101}}, {{1, 102}}, {{1, 103}}, {{1, 104}}};
+    std::vector<std::array<size_t, 3>> expectedResult{
+        {1, 10, 100}, {1, 10, 101}, {1, 10, 102}, {1, 10, 103}, {1, 10, 104},
+        {1, 11, 100}, {1, 11, 101}, {1, 11, 102}, {1, 11, 103}, {1, 11, 104},
+        {1, 12, 100}, {1, 12, 101}, {1, 12, 102}, {1, 12, 103}, {1, 12, 104},
+        {1, 13, 100}, {1, 13, 101}, {1, 13, 102}, {1, 13, 103}, {1, 13, 104}};
+    testJoin(a, b, expectedResult);
+  }
+}
+
 namespace {
 
 // Replacement for `Id`, but with an additional tag to distinguish between ids
@@ -247,6 +316,15 @@ struct RowAdderWithUndef {
     auto id1 = (*left_)[leftIndex];
     auto id2 = (*right_)[rightIndex];
     output_.push_back({id1, id2});
+  }
+
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
   }
 
   void addOptionalRow(size_t leftIndex) {

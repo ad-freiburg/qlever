@@ -1,8 +1,11 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
+#include <optional>
+
 #include "backports/algorithm.h"
 #include "util/Views.h"
 
@@ -57,7 +60,7 @@ CPP_class_template(typename View, typename F)(requires(
     // with lazy `generator`s.
     if (!it_.has_value()) {
       it_ = view_.begin();
-    } else {
+    } else if (*it_ != view_.end()) {
       ++(it_.value());
     }
     if (*it_ == view_.end()) {
@@ -65,6 +68,10 @@ CPP_class_template(typename View, typename F)(requires(
     }
     return std::invoke(transfomation_, *it_.value());
   }
+
+  // Get access to the underlying view.
+  const View& underlyingView() { return view_; }
+
   // Give the mixin access to the private `get` function.
   friend class InputRangeFromGet<Res>;
 };
@@ -77,7 +84,8 @@ CachingTransformInputRange(Range&&, F)
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
-// like `break`, `continue`, or `yield a value`.
+// like `break`, `continue`, `yield a value`, or `yield all values of a given
+// range`.
 template <typename T>
 struct LoopControl {
  private:
@@ -92,12 +100,22 @@ struct LoopControl {
 
  public:
   using type = T;
-  using V = std::variant<T, Continue, Break, BreakWithValue>;
+  using Range = InputRangeTypeErased<T>;
+  using V = std::variant<T, Continue, Break, BreakWithValue, Range>;
   V v_;
   bool isContinue() const { return std::holds_alternative<Continue>(v_); }
   bool isBreak() const {
     return std::holds_alternative<Break>(v_) ||
            std::holds_alternative<BreakWithValue>(v_);
+  }
+
+  // If the variant holds a `Range<T>`, return the range by moving it out,
+  // else `nullopt`.
+  std::optional<Range> moveRangeIfPresent() {
+    if (std::holds_alternative<Range>(v_)) {
+      return std::move(std::get<Range>(v_));
+    }
+    return std::nullopt;
   }
 
   // If the variant either holds a `T` or a `BreakWithValue`, return the `T` by
@@ -109,6 +127,8 @@ struct LoopControl {
         return std::nullopt;
       } else if constexpr (ad_utility::SimilarTo<U, T>) {
         return std::move(v);
+      } else if constexpr (ad_utility::SimilarTo<U, InputRangeTypeErased<T>>) {
+        AD_FAIL();
       } else {
         static_assert(ad_utility::SimilarTo<U, BreakWithValue>);
         return std::move(v.value_);
@@ -124,6 +144,14 @@ struct LoopControl {
     return LoopControl{BreakWithValue{std::move(t)}};
   }
   static LoopControl yieldValue(T t) { return LoopControl{std::move(t)}; }
+
+  // Note: If the input is an lvalue, then by default the range will
+  // often be taken by reference. Make sure to `std::move` if it would be
+  // dangling.
+  template <typename R>
+  static LoopControl yieldAll(R&& r) {
+    return LoopControl{InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}};
+  };
 };
 
 // `loopControlValueT` is a helper variable to get the stored type out of a
@@ -160,17 +188,80 @@ using LoopControl = loopControl::LoopControl<T>;
 // 4. If the value of `F(curElement)` is a `BreakWithValue` object, then the
 // value is yielded, but the iteration stops afterward (this is similar to a
 // `return` statement in a for-loop).
-// 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
+// 5. If the value of `F(curElement)` is a `yieldAll(Range)` object, then all
+//    the elements of the range are yielded.
+// 6. Otherwise, the value of `F(curElement)` is a plain value, then that value
 // is yielded and the iteration resumes.
 
-// First a small helper to get the actual value type of the class below.
+// First some small helpers to get the actual value types of the classes below.
 namespace detail {
 template <typename View, typename F>
 using Res = loopControl::loopControlValueT<
     std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>;
-}
 
-// Actual class definition.
+template <typename F>
+using ResFromFunction = loopControl::loopControlValueT<std::invoke_result_t<F>>;
+}  // namespace detail
+
+// A class that allows to synthesize an input range directly from a callable
+// that returns `LoopControl<T>`.
+CPP_class_template(typename F)(
+    requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
+    : InputRangeFromGet<detail::ResFromFunction<F>> {
+ private:
+  using T = detail::ResFromFunction<F>;
+  F getFunction_;
+  std::optional<InputRangeTypeErased<T>> innerRange_;
+  using Res = detail::ResFromFunction<F>;
+  static_assert(std::is_object_v<Res>,
+                "The functor of `InputRangeFromLoopControlGet` must yield an "
+                "object type, not a reference");
+
+  // If set to true then we have seen a `break` statement and no more values
+  // are yielded.
+  bool receivedBreak_ = false;
+
+ public:
+  // Constructor.
+  explicit InputRangeFromLoopControlGet(F transformation = {})
+      : getFunction_{std::move(transformation)} {}
+
+  // The central `get` function, required by the mixin.
+  std::optional<Res> get() {
+    if (receivedBreak_) {
+      return std::nullopt;
+    }
+    // This loop is executed exactly once unless there is a `continue`
+    // statement.
+    while (true) {
+      if (innerRange_.has_value()) {
+        auto res = innerRange_.value().get();
+        if (!res.has_value()) {
+          innerRange_.reset();
+        } else {
+          return res;
+        }
+      }
+      auto loopControl = getFunction_();
+      if (loopControl.isContinue()) {
+        continue;
+      }
+      if (loopControl.isBreak()) {
+        receivedBreak_ = true;
+      }
+
+      innerRange_ = loopControl.moveRangeIfPresent();
+      if (innerRange_.has_value()) {
+        continue;
+      }
+      return loopControl.moveValueIfPresent();
+    }
+  }
+};
+
+// A class that takes a view and a function that transforms the elements of the
+// view into a `LoopControl` object, and synthesizes an `input_range` from these
+// arguments.
 CPP_class_template(typename View, typename F)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>)) struct CachingContinuableTransformInputRange
@@ -188,6 +279,7 @@ CPP_class_template(typename View, typename F)(requires(
   // If set to true then we have seen a `break` statement and no more values
   // are yielded.
   bool receivedBreak_ = false;
+  std::optional<InputRangeTypeErased<Res>> innerRange_;
 
  public:
   // Constructor.
@@ -204,6 +296,14 @@ CPP_class_template(typename View, typename F)(requires(
     // This loop is executed exactly once unless there is a `continue`
     // statement.
     while (true) {
+      if (innerRange_.has_value()) {
+        auto res = innerRange_.value().get();
+        if (!res.has_value()) {
+          innerRange_.reset();
+        } else {
+          return res;
+        }
+      }
       auto opt = impl_.get();
       if (!opt.has_value()) {
         return std::nullopt;
@@ -215,6 +315,10 @@ CPP_class_template(typename View, typename F)(requires(
       if (loopControl.isBreak()) {
         receivedBreak_ = true;
       }
+      innerRange_ = loopControl.moveRangeIfPresent();
+      if (innerRange_.has_value()) {
+        continue;
+      }
       return loopControl.moveValueIfPresent();
     }
   }
@@ -225,4 +329,17 @@ template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
 
+// A function that returns a lazy range that yields a single value. The value
+// is the result of invoking `singleValueGetter`.
+CPP_template(typename F)(requires std::is_invocable_v<
+                         F>) auto lazySingleValueRange(F singleValueGetter) {
+  using T = std::invoke_result_t<F>;
+  static_assert(std::is_object_v<T>,
+                "The functor of `lazySingleValueRange` must yield an "
+                "object type, not a reference");
+  return InputRangeFromLoopControlGet(
+      [singleValueGetter = std::move(singleValueGetter)]() mutable {
+        return LoopControl<T>::breakWithValue(singleValueGetter());
+      });
+}
 }  // namespace ad_utility

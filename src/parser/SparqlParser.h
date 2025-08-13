@@ -8,6 +8,7 @@
 #include <string>
 
 #include "parser/ParsedQuery.h"
+#include "util/BlankNodeManager.h"
 
 // The SPARQL parser used by QLever. The actual parsing is delegated to a parser
 // that is based on ANTLR4, which recognises the complete SPARQL 1.1 QL grammar.
@@ -20,7 +21,9 @@ class SparqlParser {
   // Passing no datasets means that the datasets are set normally from the
   // query or update.
   static ParsedQuery parseQuery(
-      std::string queryOrUpdate,
+      std::string query, const std::vector<DatasetClause>& datasets = {});
+  static std::vector<ParsedQuery> parseUpdate(
+      ad_utility::BlankNodeManager* bnodeManager, std::string update,
       const std::vector<DatasetClause>& datasets = {});
 };
 

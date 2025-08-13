@@ -8,8 +8,8 @@
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
-                     const vector<ColumnIndex>& entityColumns,
-                     const vector<ColumnIndex>& scoreColumns)
+                     const std::vector<ColumnIndex>& entityColumns,
+                     const std::vector<ColumnIndex>& scoreColumns)
     : Operation(qec),
       limit_(limit),
       child_(std::move(child)),
@@ -141,8 +141,8 @@ Variable TextLimit::getTextRecordVariable() const {
 }
 
 // _____________________________________________________________________________
-vector<Variable> TextLimit::getEntityVariables() const {
-  vector<Variable> entityVars;
+std::vector<Variable> TextLimit::getEntityVariables() const {
+  std::vector<Variable> entityVars;
   for (auto col : entityColumns_) {
     entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
   }
@@ -150,8 +150,8 @@ vector<Variable> TextLimit::getEntityVariables() const {
 }
 
 // _____________________________________________________________________________
-vector<Variable> TextLimit::getScoreVariables() const {
-  vector<Variable> scoreVars;
+std::vector<Variable> TextLimit::getScoreVariables() const {
+  std::vector<Variable> scoreVars;
   for (auto col : scoreColumns_) {
     scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
   }
@@ -164,17 +164,19 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextLimit::resultSortedOn() const { return entityColumns_; }
+std::vector<ColumnIndex> TextLimit::resultSortedOn() const {
+  return entityColumns_;
+}
 
 // _____________________________________________________________________________
-string TextLimit::getDescriptor() const {
+std::string TextLimit::getDescriptor() const {
   std::ostringstream os;
   os << "TextLimit with limit: " << limit_;
   return os.str();
 }
 
 // _____________________________________________________________________________
-string TextLimit::getCacheKeyImpl() const {
+std::string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
      << " with n: " << limit_ << ", with child: " << child_->getCacheKey()

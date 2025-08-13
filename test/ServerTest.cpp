@@ -2,18 +2,21 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#include <engine/QueryPlanner.h>
-#include <engine/Server.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
 
+#include "engine/QueryPlanner.h"
+#include "engine/Server.h"
+#include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
+#include "util/json.h"
+
+using nlohmann::json;
 
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -29,6 +32,7 @@ TEST(ServerTest, determineResultPinning) {
               testing::Pair(false, false));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, determineMediaType) {
   auto MakeRequest = [](const std::optional<std::string>& accept,
                         const http::verb method = http::verb::get,
@@ -44,39 +48,83 @@ TEST(ServerTest, determineMediaType) {
   };
   auto checkActionMediatype = [&](const std::string& actionName,
                                   ad_utility::MediaType expectedMediaType) {
-    EXPECT_THAT(Server::determineMediaType({{"action", {actionName}}},
-                                           MakeRequest(std::nullopt)),
-                testing::Eq(expectedMediaType));
+    EXPECT_THAT(Server::determineMediaTypes({{"action", {actionName}}},
+                                            MakeRequest(std::nullopt)),
+                testing::ElementsAre(expectedMediaType));
   };
   // The media type associated with the action overrides the `Accept` header.
-  EXPECT_THAT(Server::determineMediaType(
+  EXPECT_THAT(Server::determineMediaTypes(
                   {{"action", {"csv_export"}}},
                   MakeRequest("application/sparql-results+json")),
-              testing::Eq(ad_utility::MediaType::csv));
+              testing::ElementsAre(ad_utility::MediaType::csv));
   checkActionMediatype("csv_export", ad_utility::MediaType::csv);
   checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
   checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
   checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
   checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
   checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
-  EXPECT_THAT(Server::determineMediaType(
+  EXPECT_THAT(Server::determineMediaTypes(
                   {}, MakeRequest("application/sparql-results+json")),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
   // No supported media type in the `Accept` header. (Contrary to it's docstring
   // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
   // exception if no supported media type is found.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::determineMediaType({}, MakeRequest("text/css")),
+      Server::determineMediaTypes({}, MakeRequest("text/css")),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"text/css\"."));
   // No `Accept` header means that any content type is allowed.
-  EXPECT_THAT(Server::determineMediaType({}, MakeRequest(std::nullopt)),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest(std::nullopt)),
+              testing::ElementsAre());
   // No `Accept` header and an empty `Accept` header are not distinguished.
-  EXPECT_THAT(Server::determineMediaType({}, MakeRequest("")),
-              testing::Eq(ad_utility::MediaType::sparqlJson));
+  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest("")),
+              testing::ElementsAre());
 }
 
+// _____________________________________________________________________________
+TEST(ServerTest, chooseBestFittingMediaType) {
+  auto askQuery = SparqlParser::parseQuery("ASK {}");
+  auto selectQuery = SparqlParser::parseQuery("SELECT * {}");
+  auto constructQuery = SparqlParser::parseQuery("CONSTRUCT WHERE {}");
+  using enum ad_utility::MediaType;
+
+  auto choose = &Server::chooseBestFittingMediaType;
+
+  // Empty case
+  EXPECT_EQ(choose({}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({}, constructQuery), turtle);
+
+  // Single matching element
+  EXPECT_EQ(choose({sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, constructQuery), turtle);
+  EXPECT_EQ(choose({qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, constructQuery), qleverJson);
+
+  // Single non-matching element
+  EXPECT_EQ(choose({tsv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream}, constructQuery), turtle);
+
+  // Multiple matching elements
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, constructQuery), turtle);
+
+  // One matching, one non-matching element
+  EXPECT_EQ(choose({tsv, qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({octetStream, qleverJson}, constructQuery), qleverJson);
+
+  // Multiple non-matching elements
+  EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
@@ -100,6 +148,23 @@ TEST(ServerTest, getQueryId) {
   // Without custom query ids, unique ids are generated.
   auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
+}
+
+TEST(ServerTest, composeStatsJson) {
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  json expectedJson{{"git-hash-index", "git short hash not set"},
+                    {"git-hash-server", "git short hash not set"},
+                    {"name-index", ""},
+                    {"name-text-index", ""},
+                    {"num-entity-occurrences", 0},
+                    {"num-permutations", 2},
+                    {"num-predicates-internal", 0},
+                    {"num-predicates-normal", 0},
+                    {"num-text-records", 0},
+                    {"num-triples-internal", 0},
+                    {"num-triples-normal", 0},
+                    {"num-word-occurrences", 0}};
+  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
 }
 
 TEST(ServerTest, createMessageSender) {
@@ -149,7 +214,10 @@ TEST(ServerTest, createResponseMetadata) {
   const Index& index = qec->getIndex();
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
-  ParsedQuery pq = SparqlParser::parseQuery(update);
+  ad_utility::BlankNodeManager bnm;
+  auto pqs = SparqlParser::parseUpdate(&bnm, update);
+  EXPECT_THAT(pqs, testing::SizeIs(1));
+  ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
@@ -185,4 +253,43 @@ TEST(ServerTest, createResponseMetadata) {
                   "SPARQL 1.1 Update for QLever is experimental."}));
   EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
+}
+
+TEST(ServerTest, adjustParsedQueryLimitOffset) {
+  using enum ad_utility::MediaType;
+  auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
+    ParsedQuery parsed = SparqlParser::parseQuery(std::move(operation));
+    QueryExecutionTree qet =
+        QueryPlanner{ad_utility::testing::getQec(),
+                     std::make_shared<ad_utility::CancellationHandle<>>()}
+            .createExecutionTree(parsed);
+    return {std::move(parsed), std::move(qet)};
+  };
+  auto expectExportLimit =
+      [&makePlannedQuery](
+          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
+          std::string operation =
+              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
+          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
+                                                                      {"12"}}},
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(l);
+        auto pq = makePlannedQuery(std::move(operation));
+        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
+        EXPECT_THAT(pq.parsedQuery_._limitOffset.exportLimit_,
+                    testing::Eq(limit));
+      };
+
+  std::string complexQuery{
+      "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
+      "BIND(RAND() as ?r) . } OFFSET 5"};
+  // The export limit is only set for media type `qleverJson`.
+  expectExportLimit(qleverJson, 12);
+  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
+                    {{"send", {"13"}}});
+  expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
+  expectExportLimit(csv, std::nullopt);
+  expectExportLimit(csv, std::nullopt, complexQuery);
+  expectExportLimit(tsv, std::nullopt);
 }

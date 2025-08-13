@@ -38,13 +38,8 @@
 
 grammar SparqlAutomatic;
 
-// query and update are disjoint in the grammar;
-// add a common parent for easier parsing
-queryOrUpdate: (query | update) EOF
-    ;
-
 query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause
+    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
     ;
 
 prologue
@@ -151,8 +146,8 @@ valuesClause : ( VALUES dataBlock )?;
 
 // We have replaced the original recursive definition with an equivalent
 // non-recursive definition for performance reasons.
-// Original definition: `update: prologue (update1 (';' update)? )? ;`
-update: prologue (update1 (';' prologue update1)* (';' prologue)? )? ;
+// Original definition: `update: prologue (update1 (';' update)? )? EOF ;`
+update: prologue (update1 (';' prologue update1)* (';' prologue)? )? EOF ;
 
 update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
 
@@ -922,20 +917,20 @@ PN_LOCAL_ESC :
 
 fragment
 PN_CHARS_BASE
-    : 'A'..'Z'
-    | 'a'..'z'
-    | '\u00C0'..'\u00D6'
-    | '\u00D8'..'\u00F6'
-    | '\u00F8'..'\u02FF'
-    | '\u0370'..'\u037D'
-    | '\u037F'..'\u1FFF'
-    | '\u200C'..'\u200D'
-    | '\u2070'..'\u218F'
-    | '\u2C00'..'\u2FEF'
-    | '\u3001'..'\uD7FF'
-    | '\uF900'..'\uFDCF'
-    | '\uFDF0'..'\uFFFD'
-    // not supported by antlr4 | '\U00010000'..'\U000EFFFF'
+    : [A-Z]
+    | [a-z]
+    | [\u00C0-\u00D6]
+    | [\u00D8-\u00F6]
+    | [\u00F8-\u02FF]
+    | [\u0370-\u037D]
+    | [\u037F-\u1FFF]
+    | [\u200C-\u200D]
+    | [\u2070-\u218F]
+    | [\u2C00-\u2FEF]
+    | [\u3001-\uD7FF]
+    | [\uF900-\uFDCF]
+    | [\uFDF0-\uFFFD]
+    | [\u{00010000}-\u{000EFFFF}]
     ;
 
 fragment

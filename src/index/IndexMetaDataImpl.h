@@ -90,7 +90,7 @@ void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
 
 // _____________________________________________________________________________
 template <class MapType>
-string IndexMetaData<MapType>::statistics() const {
+std::string IndexMetaData<MapType>::statistics() const {
   std::ostringstream os;
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);

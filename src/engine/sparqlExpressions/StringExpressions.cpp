@@ -41,6 +41,23 @@ static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(s, &isUtf8CodepointStart);
 }
 
+// Initialize or append a Literal. If both literals are valid and initialized,
+// concatenate nextLiteral into literalSoFar. If not initialized yet, set
+// literalSoFar to nextLiteral. If either is UNDEF, set literalSoFar to nullopt
+// to indicate an undefined result.
+void concatOrSetLiteral(
+    std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
+    const std::optional<ad_utility::triple_component::Literal>& nextLiteral,
+    const bool isFirstLiteral) {
+  if (!nextLiteral.has_value() || !literalSoFarOpt.has_value()) {
+    literalSoFarOpt = std::nullopt;  // UNDEF
+  } else if (isFirstLiteral) {
+    literalSoFarOpt = nextLiteral.value();
+  } else {
+    literalSoFarOpt.value().concat(nextLiteral.value());
+  }
+}
+
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
 // string length, the byte offset will be set to the size of the string.
 static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
@@ -248,43 +265,24 @@ CPP_template(typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
-    const SparqlExpression* child0 = this->getChildAtIndex(0).value();
-    const SparqlExpression* child1 = this->getChildAtIndex(1).value();
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
 
-    const auto getPrefilterExprVariableVec =
-        [](const SparqlExpression* child0, const SparqlExpression* child1,
-           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
-      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
-      if (!varExpr) {
-        return {};
-      }
-
-      const auto& optReferenceValue =
-          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
-      if (optReferenceValue.has_value()) {
-        return prefilterExpressions::detail::makePrefilterExpressionVec<
-            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
-                                              varExpr->value(), startsWithVar);
-      }
-      return {};
-    };
-    // Remark: With the current implementation we only prefilter w.r.t. one
-    // bound.
-    // TODO: It is technically possible to pre-filter more precisely by
-    // introducing a second bound.
-    //
-    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
-    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
-    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
-    if (!resVec.empty()) {
-      return resVec;
+    auto var = children[0].get()->getVariableOrNullopt();
+    if (!var.has_value()) {
+      return prefilterVec;
     }
-    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
-    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
-    // Option 3:
-    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
-    return getPrefilterExprVariableVec(child1, child0, true);
+    auto prefixStr = getLiteralFromLiteralExpression(children[1].get());
+    if (!prefixStr.has_value()) {
+      return prefilterVec;
+    }
+
+    prefilterVec.emplace_back(
+        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+            prefixStr.value()),
+        var.value());
+    return prefilterVec;
   }
 };
 
@@ -316,35 +314,43 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::optional<ad_utility::triple_component::Literal> literal,
+    [](std::optional<ad_utility::triple_component::Literal> optLiteral,
        std::optional<ad_utility::triple_component::Literal> optPattern)
     -> IdOrLiteralOrIri {
-  if (!optPattern.has_value() || !literal.has_value()) {
+  if (!optPattern.has_value() || !optLiteral.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto& literal = optLiteral.value();
+  const auto& patternLit = optPattern.value();
+  // Check if arguments are compatible with their language tags.
+  if (patternLit.hasLanguageTag() &&
+      (!literal.hasLanguageTag() ||
+       literal.getLanguageTag() != patternLit.getLanguageTag())) {
     return Id::makeUndefined();
   }
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
   //  Required by the SPARQL standard.
   if (pattern.empty()) {
     if (isStrAfter) {
-      return LiteralOrIri(std::move(literal.value()));
+      return LiteralOrIri(std::move(literal));
     } else {
-      literal.value().setSubstr(0, 0);
-      return LiteralOrIri(std::move(literal.value()));
+      literal.setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal));
     }
   }
-  auto literalContent = literal.value().getContent();
+  auto literalContent = literal.getContent();
   auto pos = asStringViewUnsafe(literalContent).find(pattern);
   if (pos >= literalContent.size()) {
     return toLiteral("");
   }
   if constexpr (isStrAfter) {
-    literal.value().setSubstr(pos + pattern.size(),
-                              literalContent.size() - pos - pattern.size());
+    literal.setSubstr(pos + pattern.size(),
+                      literalContent.size() - pos - pattern.size());
   } else {
     // STRBEFORE
-    literal.value().setSubstr(0, pos);
+    literal.setSubstr(0, pos);
   }
-  return LiteralOrIri(std::move(literal.value()));
+  return LiteralOrIri(std::move(literal));
 };
 
 auto strAfter = strAfterOrBeforeImpl<true>;
@@ -409,7 +415,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using StringVec = VectorWithMemoryLimit<std::string>;
+    using Literal = ad_utility::triple_component::Literal;
+    using LiteralVec = VectorWithMemoryLimit<std::optional<Literal>>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -419,39 +426,73 @@ class ConcatExpression : public detail::VariadicExpression {
     // have constant results (in which case, we need to evaluate the whole
     // expression only once).
 
-    // We store the (intermediate) result either as single string or a vector.
-    // If the result is a string, then all the previously evaluated children
+    // We store the (intermediate) result either as single literal or a vector.
+    // If the result is a Literal, then all the previously evaluated children
     // were constants (see above).
-    std::variant<std::string, StringVec> result{std::string{""}};
+
+    // `LiteralVec` stores literals whose string contents are the result of
+    // concatenation. Each literal also carries a suffix (language tag or
+    // datatype) that is determined by the previously processed children. For
+    // each row, the suffix reflects either the current matching suffix or a
+    // mismatch (in which case the final suffix will be empty).
+
+    auto valueGetter =
+        sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{};
+    std::variant<std::optional<Literal>, LiteralVec> result =
+        Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
+    bool isFirstLiteral = true;
+
+    auto moveLiteralToResult =
+        [](std::optional<Literal>& literal) -> IdOrLiteralOrIri {
+      if (!literal.has_value()) {
+        return Id::makeUndefined();
+      }
+      return LiteralOrIri(std::move(literal.value()));
+    };
+
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
-                                           std::is_rvalue_reference_v<T&&>) {
+        &ctx, &result, &isFirstLiteral, &valueGetter)(typename T)(T && s)(
+        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
-        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
-        if (std::holds_alternative<std::string>(result)) {
-          // All previous children were constants, and the current child also is
-          // a constant.
-          std::get<std::string>(result).append(strFromConstant);
-        } else {
-          // One of the previous children was not a constant, so we already
-          // store a vector.
-          auto& resultAsVector = std::get<StringVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
-            target.append(strFromConstant);
+        auto literalFromConstant = valueGetter(std::forward<T>(s), ctx);
+
+        auto concatOrSetLitFromConst =
+            [&](std::optional<Literal>& literalSoFar) {
+              concatOrSetLiteral(literalSoFar, literalFromConstant,
+                                 isFirstLiteral);
+            };
+
+        // All previous children were constants, and the current child also is
+        // a constant.
+        auto visitLiteralConcat =
+            [&concatOrSetLitFromConst](std::optional<Literal>&& literalSoFar) {
+              concatOrSetLitFromConst(literalSoFar);
+            };
+
+        // One of the previous children was not a constant, so we already
+        // store a vector.
+        auto visitLiteralVecConcat = [&concatOrSetLitFromConst](
+                                         LiteralVec&& literalVec) {
+          ql::ranges::for_each(std::move(literalVec), [&](auto& literalSoFar) {
+            concatOrSetLitFromConst(literalSoFar);
           });
-        }
+        };
+
+        std::visit(ad_utility::OverloadCallOperator{visitLiteralConcat,
+                                                    visitLiteralVecConcat},
+                   std::move(result));
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
 
-        if (std::holds_alternative<std::string>(result)) {
+        if (std::holds_alternative<std::optional<Literal>>(result)) {
           // All previous children were constants, but now we have a
           // non-constant child, so we have to expand the `result` from a single
           // string to a vector.
-          std::string constantResultSoFar =
-              std::move(std::get<std::string>(result));
-          result.emplace<StringVec>(ctx->_allocator);
-          auto& resultAsVec = std::get<StringVec>(result);
+          std::optional<Literal> constantResultSoFar =
+              std::move(std::get<std::optional<Literal>>(result));
+          result.emplace<LiteralVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<LiteralVec>(result);
           resultAsVec.reserve(ctx->size());
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
                       constantResultSoFar);
@@ -459,37 +500,45 @@ class ConcatExpression : public detail::VariadicExpression {
 
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
-        auto& resultAsVec = std::get<StringVec>(result);
+        auto& resultAsVec = std::get<LiteralVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
-          if (auto str = StringValueGetter{}(std::move(el), ctx);
-              str.has_value()) {
-            resultAsVec[i].append(str.value());
-          }
+          auto literal = valueGetter(std::move(el), ctx);
+          concatOrSetLiteral(resultAsVec[i], literal, isFirstLiteral);
           ctx->cancellationHandle_->throwIfCancelled();
           ++i;
         }
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    ql::ranges::for_each(
-        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
-          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
-        });
+    ql::ranges::for_each(childrenVec(), [&ctx, &visitSingleExpressionResult,
+                                         &isFirstLiteral](const auto& child) {
+      std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+      isFirstLiteral = false;
+    });
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    if (std::holds_alternative<std::string>(result)) {
-      return IdOrLiteralOrIri{toLiteral(std::get<std::string>(result))};
-    } else {
-      auto& stringVec = std::get<StringVec>(result);
+
+    auto visitLiteralResult =
+        [&moveLiteralToResult](
+            std::optional<Literal>& literalSoFar) -> ExpressionResult {
+      return moveLiteralToResult(literalSoFar);
+    };
+
+    auto visitLiteralVecResult =
+        [&ctx,
+         &moveLiteralToResult](LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
-      resultAsVec.reserve(stringVec.size());
-      ql::ranges::copy(stringVec | ql::views::transform(toLiteral),
+      resultAsVec.reserve(literalVec.size());
+      ql::ranges::copy(literalVec | ql::views::transform(moveLiteralToResult),
                        std::back_inserter(resultAsVec));
       return resultAsVec;
-    }
+    };
+    return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
+                                                       visitLiteralVecResult},
+                      result);
   }
 };
 
@@ -524,39 +573,37 @@ using LangMatches =
 
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
-    [](std::optional<std::string> input,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        std::optional<std::string> langTag) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !langTag.has_value()) {
+  if (!literal.has_value() || !langTag.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else if (!ad_utility::strIsLangTag(langTag.value())) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(input.value()),
-            std::move(langTag.value()));
-    return LiteralOrIri{lit};
+    literal.value().addLanguageTag(std::move(langTag.value()));
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
-using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
+using StrLangTagged =
+    LiteralExpressionImpl<2, decltype(strLangTag), StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
 [[maybe_unused]] inline auto strIriDtTag =
-    [](std::optional<std::string> inputStr,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        OptIri inputIri) -> IdOrLiteralOrIri {
-  if (!inputStr.has_value() || !inputIri.has_value()) {
+  if (!literal.has_value() || !inputIri.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
-    return LiteralOrIri{lit};
+    literal.value().addDatatype(inputIri.value());
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
 using StrIriTagged =
-    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+    LiteralExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
 
 // HASH
 template <auto HashFunc>

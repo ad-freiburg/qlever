@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "./WordsAndDocsFileLineCreator.h"
+#include "./util/GTestHelpers.h"
 #include "parser/WordsAndDocsFileParser.h"
 
 // All lambdas and type aliases used in this file contained here
@@ -85,19 +86,22 @@ auto testDocsFileParser = [](const std::string& docsFilePath,
 
 // Passing the testText as copy to make sure it stays alive during the usage of
 // tokenizer
-auto testTokenizeAndNormalizeText = [](std::string testText,
-                                       const StringVec& normalizedTextAsVec) {
-  size_t i = 0;
-  LocaleManager localeManager = getLocaleManager();
-  for (auto normalizedWord :
-       tokenizeAndNormalizeText(testText, localeManager)) {
-    ASSERT_TRUE(i < normalizedTextAsVec.size());
-    ASSERT_EQ(normalizedWord, normalizedTextAsVec.at(i));
+auto testTokenizeAndNormalizeText =
+    [](std::string testText, const StringVec& normalizedTextAsVec,
+       ad_utility::source_location loc =
+           ad_utility::source_location::current()) {
+      auto t = generateLocationTrace(loc);
+      size_t i = 0;
+      LocaleManager localeManager = getLocaleManager();
+      for (auto normalizedWord :
+           tokenizeAndNormalizeText(testText, localeManager)) {
+        ASSERT_TRUE(i < normalizedTextAsVec.size());
+        ASSERT_EQ(normalizedWord, normalizedTextAsVec.at(i));
 
-    ++i;
-  }
-  ASSERT_EQ(i, normalizedTextAsVec.size());
-};
+        ++i;
+      }
+      ASSERT_EQ(i, normalizedTextAsVec.size());
+    };
 
 }  // namespace
 
@@ -162,4 +166,17 @@ TEST(TokenizeAndNormalizeText, tokenizeAndNormalizeTextTest) {
   testTokenizeAndNormalizeText(
       "test\twith\ndifferent,separators.here ,.\t",
       {"test", "with", "different", "separators", "here"});
+
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2244
+  testTokenizeAndNormalizeText("�", {});
+}
+
+// _____________________________________________________________________________
+TEST(TokenizeAndNormalizeText, Unicode) {
+  testTokenizeAndNormalizeText(
+      "Äpfel über,affen\U0001F600háusen, ääädä\U0001F600blubä",
+      {"äpfel", "über", "affen", "háusen", "ääädä", "blubä"});
+
+  AD_EXPECT_THROW_WITH_MESSAGE(testTokenizeAndNormalizeText("\255", {}),
+                               ::testing::HasSubstr("Invalid UTF-8"));
 }

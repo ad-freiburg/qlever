@@ -1,18 +1,20 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "index/Vocabulary.h"
 
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
-#include "parser/RdfEscaping.h"
-#include "parser/Tokenizer.h"
-#include "util/HashSet.h"
-#include "util/json.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 using std::string;
 
@@ -39,20 +41,8 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
   vocabulary_.close();
   vocabulary_.open(fileName);
-  if constexpr (isCompressed_) {
-    const auto& internalExternalVocab =
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-    LOG(INFO) << "Done, number of words: "
-              << internalExternalVocab.internalVocab().size() << std::endl;
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << internalExternalVocab.externalVocab().size() << std::endl;
-  } else {
-    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
-  }
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -75,7 +65,17 @@ void Vocabulary<S, C, I>::createFromSet(
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  vocabulary_.build(words, filename);
+  auto writerPtr = makeWordWriterPtr(filename);
+  auto writeWords = [&writer = *writerPtr](std::string_view word) {
+    // All words are stored in the internal vocab (this is consistent with the
+    // previous behavior). NOTE: This function is currently only used for the
+    // text index and for few unit tests, where we don't have an external
+    // vocabulary anyway.
+    writer(word, false);
+  };
+  ql::ranges::for_each(words, writeWords);
+  writerPtr->finish();
+  vocabulary_.open(filename);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
@@ -87,20 +87,13 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
-  // TODO<joka921> Completely refactor the Vocabulary on the different
-  // Types, it is a mess.
-
-  // If the string is not compressed, this means that this is a text vocabulary
-  // and thus doesn't support externalization.
-  if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!stringIsLiteral(s)) {
-      return shouldEntityBeExternalized(s);
-    } else {
-      return shouldLiteralBeExternalized(s);
-    }
+bool Vocabulary<S, C, I>::shouldBeExternalized(std::string_view s) const {
+  // TODO<joka921> We should have a completely separate layer that handles the
+  // externalization, not the Vocab.
+  if (!stringIsLiteral(s)) {
+    return shouldEntityBeExternalized(s);
   } else {
-    return false;
+    return shouldLiteralBeExternalized(s);
   }
 }
 
@@ -109,7 +102,7 @@ template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
     std::string_view word) const {
   // Never externalize the internal IRIs as they are sometimes added before or
-  // after the externalization happens and we thus get inconsistent behavior
+  // after the externalization happens, and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
   if (word.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
     return false;
@@ -195,8 +188,12 @@ void Vocabulary<S, C, I>::initializeInternalizedLangs(const StringRange& s) {
 template <typename S, typename C, typename I>
 std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
-  AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
+  AD_CONTRACT_CHECK(word.ends_with(PREFIX_CHAR));
   IdRange<I> range;
+  if (word.size() == 1) {
+    range = IdRange{I::make(0), I::make(size()).decremented()};
+    return range;
+  }
   auto [begin, end] = vocabulary_.prefix_range(word.substr(0, word.size() - 1));
   bool notEmpty =
       begin.has_value() && (!end.has_value() || end.value() > begin.value());
@@ -230,6 +227,33 @@ auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
 }
 
 // _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+    IndexType idx) const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesGeometryInfo<S>) {
+    return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
+  } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
+    return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
+  // For more information on the concepts used here, please see
+  // their definitions in `VocabularyConstraints.h`.
+  if constexpr (MaybeProvidesGeometryInfo<S>) {
+    return vocabulary_.getUnderlyingVocabulary().isGeoInfoAvailable();
+  } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
+    return false;
+  }
+};
+
+// _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
@@ -242,14 +266,18 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::getPositionOfWord(std::string_view word) const
+    -> std::pair<IndexType, IndexType> {
+  auto [lower, upper] = vocabulary_.getPositionOfWord(word);
+  return {IndexType::make(lower), IndexType::make(upper)};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // need the TOTAL level because we want the unique word.
-  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
-  if (wordAndIndex.isEnd()) {
-    return false;
-  }
-  idx->get() = wordAndIndex.index();
-  return wordAndIndex.word() == word;
+  auto [lower, upper] = vocabulary_.getPositionOfWord(word);
+  idx->get() = lower;
+  return lower != upper;
 }
 
 // ___________________________________________________________________________
@@ -264,17 +292,17 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::operator[](IndexType idx) const
-    -> AccessReturnType_t<S> {
-  AD_CONTRACT_CHECK(idx.get() < size());
+template <typename UnderlyingVocabulary, typename C, typename I>
+auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
+    -> AccessReturnType {
   return vocabulary_[idx.get()];
 }
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator,
-                          VocabIndex>;
-template class Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
+                          TripleComponentComparator, VocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabTextVocabulary,
+                          SimpleStringComparator, WordVocabIndex>;
 
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);

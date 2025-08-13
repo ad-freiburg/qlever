@@ -18,10 +18,13 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "parser/RdfEscaping.h"
+#include "parser/TripleComponent.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
@@ -62,25 +65,27 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  std::vector<cppcoro::generator<QueueWord>> generators;
-
-  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
+  // Open and prepare all infiles and mmap output vectors.
+  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
-    TripleComponentWithIndex val;
-    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
-      infile >> val;
-      QueueWord word{std::move(val), fileIdx};
-      co_yield word;
-    }
-  };
 
-  // Open and prepare all infiles and mmap output vectors.
+    return ad_utility::CachingTransformInputRange{
+        ad_utility::integerRange(numWords),
+        [fileIndex, infile{std::move(infile)}](
+            [[maybe_unused]] const std::size_t i) mutable {
+          TripleComponentWithIndex val;
+          infile >> val;
+          return QueueWord{std::move(val), fileIndex};
+        }};
+  };
+  std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(numFiles);
-  for (size_t i = 0; i < numFiles; i++) {
-    generators.push_back(makeGenerator(i));
+
+  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+    generators.push_back(makeWordRangeFromFile(i));
     idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
@@ -145,7 +150,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
 // ________________________________________________________________________________
 CPP_template_def(typename C, typename L)(
-    requires WordCallback<C> CPP_and
+    requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
@@ -177,11 +182,12 @@ CPP_template_def(typename C, typename L)(
       // idVecs to have a more useful external access pattern.
 
       // Write the new word to the vocabulary.
-      const auto& nextWord = lastTripleComponent_.value();
+      auto& nextWord = lastTripleComponent_.value();
       if (nextWord.isBlankNode()) {
-        lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
+        nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+        nextWord.index_ =
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
@@ -256,8 +262,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
 }
 
 // ________________________________________________________________________________________________________
+template <typename T>
 inline void writeMappedIdsToExtVec(
-    const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
@@ -283,7 +290,7 @@ inline void writeMappedIdsToExtVec(
 
 // _________________________________________________________________________________________________________
 inline void writePartialVocabularyToFile(const ItemVec& els,
-                                         const string& fileName) {
+                                         const std::string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(1'000'000'000);
@@ -359,7 +366,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const string& mmapFilename) {
+    const std::string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto& [partialId, globalId] : vec) {

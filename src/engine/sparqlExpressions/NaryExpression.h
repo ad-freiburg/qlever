@@ -10,9 +10,14 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <optional>
 
 #include "backports/concepts.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
@@ -50,8 +55,25 @@ SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeDistWithUnitExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
+
+template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2);
+
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
+
+template <ad_utility::BoundingCoordinate RequestedCoordinate>
+SparqlExpression::Ptr makeBoundingCoordinateExpression(
+    SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);
