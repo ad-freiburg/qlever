@@ -150,10 +150,16 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
-  add("spatial-join-max-threads",
-      optionFactory.getProgramOption<"spatial-join-max-threads">(),
+  add("spatial-join-max-num-threads",
+      optionFactory.getProgramOption<"spatial-join-max-num-threads">(),
       "The maximum number of threads to be used for spatial join processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
+  add("spatial-join-prefilter-max-size",
+      optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
+      "The maximum size in square coordinates of the aggregated bounding box "
+      "of the smaller join partner in a spatial join, such that prefiltering "
+      "will be employed. To disable prefiltering for non-point geometries, set "
+      "this option to 0.");
   po::variables_map optionsMap;
 
   try {
