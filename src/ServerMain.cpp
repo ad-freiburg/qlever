@@ -150,6 +150,12 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
+  add("spatial-join-prefilter-max-size",
+      optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
+      "The maximum size in square coordinates of the aggregated bounding box "
+      "of the smaller join partner in a spatial join, such that prefiltering "
+      "will be employed. To disable prefiltering for non-point geometries, set "
+      "this option to 0.");
   po::variables_map optionsMap;
 
   try {

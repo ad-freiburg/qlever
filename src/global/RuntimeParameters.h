@@ -99,6 +99,9 @@ inline auto& RuntimeParameters() {
         // variables in a SELECT clause change
         // between otherwise equal queries.
         Bool<"strip-columns">{false},
+        // The maximum size of the `prefilterBox` for
+        // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+        SizeT<"spatial-join-prefilter-max-size">{2'500},
     };
   }();
   return params;
