@@ -40,11 +40,11 @@ class TextIndexLiteralFilter {
 
  private:
   // The regex string used to do the comparison
-  std::unique_ptr<RE2> regex_ = nullptr;
+  std::unique_ptr<RE2> regex_;
   // Determine whether the regex should act as whitelist or blacklist
-  LiteralFilterType filterType_ = LiteralFilterType::AcceptMatching;
+  LiteralFilterType filterType_;
   // True when all literals not only objects should be added
-  bool addAllLiterals_ = false;
+  bool addAllLiterals_;
 };
 
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXLITERALFILTER_H
