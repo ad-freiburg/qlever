@@ -12,6 +12,7 @@
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "GroupByStrategyHelpers.h"
 #include "engine/GroupByImpl.h"
 #include "engine/GroupByStrategyChooser.h"
 #include "engine/QueryExecutionContext.h"
@@ -23,11 +24,11 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Log.h"
 
-#include "GroupByStrategyHelpers.h"
 namespace {
 auto I = ad_utility::testing::IntId;
 using ad_utility::AllocatorWithLimit;
 }  // namespace
+
 class GroupBySamplingTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
