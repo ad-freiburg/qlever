@@ -65,15 +65,15 @@ IdTable SortedIdTableMerger::mergeIdTables(
     return *indexWithMinIt;
   };
 
-  // For each idTable to merge this vector contains a vector that will contain
-  // the index a row belongs to in the result idTable.
+  // For each idTable to merge this vector contains a vector that maps the rows
+  // to the result idTable
   std::vector<std::vector<size_t>> permutationIdTables;
   permutationIdTables.reserve(idTablesToMerge.size());
-  ql::ranges::for_each(
-      ::ranges::views::enumerate(idTablesToMerge), [&](auto pair) {
-        permutationIdTables.emplace_back(std::vector<size_t>{});
-        permutationIdTables.at(pair.first).reserve(pair.second.size());
-      });
+  ql::ranges::for_each(idTablesToMerge,
+                       [&permutationIdTables](const auto& idTable) {
+                         permutationIdTables.emplace_back();
+                         permutationIdTables.back().reserve(idTable.size());
+                       });
 
   // Fill the first column (which is the sorted one) and track in which order
   // the `IdTable`s are accessed.
@@ -94,18 +94,28 @@ IdTable SortedIdTableMerger::mergeIdTables(
     possibleCurrentMinIdTable = minElementIdTable(iterators, sentinels);
   }
 
-  for (size_t idTableIndex = 0; idTableIndex < idTablesToMerge.size();
-       ++idTableIndex) {
-    // Start at second column since first has been written
-    auto& idTable = idTablesToMerge.at(idTableIndex);
-    for (size_t column = 1; column < idTable.numColumns(); ++column) {
-      decltype(auto) resultColumn = result.getColumn(column);
-      decltype(auto) idTableColumn = idTable.getColumn(column);
-      for (size_t rowIndex = 0; rowIndex < idTableColumn.size(); ++rowIndex) {
-        resultColumn[permutationIdTables.at(idTableIndex).at(rowIndex)] =
-            idTableColumn[rowIndex];
-      }
-    }
-  }
+  // For each idTable iterate over each column except the first one since that
+  // has already been written. For each column iterate over the values and look
+  // up where the value belongs in the result table. Write the value to the
+  // correct place. This method ensures cache locality during the iteration of
+  // the idTables that have to be merged.
+  ql::ranges::for_each(
+      ::ranges::views::enumerate(idTablesToMerge),
+      [&result, &permutationIdTables](auto idTablePair) {
+        ql::ranges::for_each(
+            ql::ranges::views::iota(size_t{1}, idTablePair.second.numColumns()),
+            [&result, &idTablePair, &permutationIdTables](auto columnIndex) {
+              decltype(auto) resultColumn = result.getColumn(columnIndex);
+              decltype(auto) idTableColumn =
+                  idTablePair.second.getColumn(columnIndex);
+              ql::ranges::for_each(
+                  ql::ranges::views::iota(size_t{0}, idTableColumn.size()),
+                  [&resultColumn, &idTableColumn, &permutationIdTables,
+                   &idTablePair](auto rowIndex) {
+                    resultColumn[permutationIdTables.at(idTablePair.first)
+                                     .at(rowIndex)] = idTableColumn[rowIndex];
+                  });
+            });
+      });
   return result;
 }
