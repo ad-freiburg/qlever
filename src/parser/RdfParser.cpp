@@ -1107,7 +1107,6 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   } catch (std::exception& e) {
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
-    parallelParser_.finish();
   }
 };
 
@@ -1141,7 +1140,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
       auto batchSize = inputBatch.size();
       auto parseThisBatch = [this, parsePosition,
                              batch = std::move(inputBatch)]() mutable {
-        return parseBatch(parsePosition, std::move(batch));
+        parseBatch(parsePosition, std::move(batch));
       };
       parsePosition += batchSize;
       numBatchesTotal_.fetch_add(1);
@@ -1189,7 +1188,7 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
 
   auto feedBatches = [this, firstBatch = std::move(
                                 remainingBatchFromInitialization)]() mutable {
-    return feedBatchesToParser(std::move(firstBatch));
+    feedBatchesToParser(std::move(firstBatch));
   };
 
   parseFuture_ = std::async(std::launch::async, feedBatches);
@@ -1212,6 +1211,7 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
                      << std::endl;
         // In case of multiple errors in parallel batches, we always report the
         // first error.
+        parallelParser_.finish();
         parallelParser_.waitUntilFinished();
         auto errors = std::move(*errorMessages_.wlock());
         const auto& firstError =

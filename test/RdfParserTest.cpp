@@ -814,7 +814,7 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
     ad_utility::MemorySize bufferSize = 1_kB) {
-  auto parserChild = [&]() {
+  auto parser = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                     bufferSize};
@@ -822,7 +822,6 @@ std::vector<TurtleTriple> parseFromFile(
       return Parser{filename, bufferSize};
     }
   }();
-  RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
   if (useBatchInterface) {
