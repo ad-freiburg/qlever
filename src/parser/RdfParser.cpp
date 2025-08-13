@@ -1194,9 +1194,9 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
   parseFuture_ = std::async(std::launch::async, feedBatches);
 }
 
-// _______________________________________________________________________
+// _____________________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+bool RdfParallelParser<T>::processTriples() {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -1227,28 +1227,26 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
     // OptionalTripleTask fills the triples_ vector
     (*optionalTripleTask)();
   }
-
-  // we now have at least one triple, return it.
-  *triple = std::move(triples_.back());
-  triples_.pop_back();
   return true;
 }
 
 // _______________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  // we need a while in case there is a batch that contains no triples
-  // (this should be rare, // TODO warn about this
-  while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
-    if (!optionalTripleTask) {
-      // everything has been parsed
-      return std::nullopt;
-    }
-    (*optionalTripleTask)();
+bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+  bool triplesRemaining = processTriples();
+  if (triplesRemaining) {
+    // we now have at least one triple, return it.
+    *triple = std::move(triples_.back());
+    triples_.pop_back();
   }
+  return triplesRemaining;
+}
 
-  return std::move(triples_);
+// _______________________________________________________________________
+template <class T>
+std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
+  bool triplesRemaining = processTriples();
+  return triplesRemaining ? std::optional{std::move(triples_)} : std::nullopt;
 }
 
 // __________________________________________________________

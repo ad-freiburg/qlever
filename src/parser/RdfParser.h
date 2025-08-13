@@ -645,6 +645,11 @@ class RdfParallelParser : public Parser {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
+  // Helper function used by `getBatch()` and `getLimeImpl()` to abstract away
+  // common code. Return true if some triples could be collected and false if
+  // the input has been fully consumed.
+  bool processTriples();
+
   using Parser::isParserExhausted_;
   using Parser::tok_;
   using Parser::triples_;
