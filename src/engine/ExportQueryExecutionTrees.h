@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
@@ -251,8 +252,8 @@ class ExportQueryExecutionTrees {
 
  private:
   // Yield all `IdTables` provided by the given `result`.
-  static cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
-  getIdTables(const Result& result);
+  static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
+      const Result& result);
 
   // Generate the result in "blocks" and, when iterating over the generator
   // from beginning to end, return the total number of rows in the result

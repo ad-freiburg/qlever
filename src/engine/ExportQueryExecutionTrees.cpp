@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -78,17 +79,20 @@ ad_utility::streams::stream_generator computeResultForAsk(
 }
 
 // __________________________________________________________________________
-cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+ad_utility::InputRangeTypeErased<
+    ExportQueryExecutionTrees::TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
+  using namespace ad_utility;
   if (result.isFullyMaterialized()) {
-    TableConstRefWithVocab pair{result.idTable(), result.localVocab()};
-    co_yield pair;
-  } else {
-    for (const Result::IdTableVocabPair& pair : result.idTables()) {
-      TableConstRefWithVocab tableWithVocab{pair.idTable_, pair.localVocab_};
-      co_yield tableWithVocab;
-    }
+    return InputRangeTypeErased(lazySingleValueRange([&result]() {
+      return TableConstRefWithVocab{result.idTable(), result.localVocab()};
+    }));
   }
+
+  return InputRangeTypeErased(CachingTransformInputRange(
+      result.idTables(), [](const Result::IdTableVocabPair& pair) {
+        return TableConstRefWithVocab{pair.idTable_, pair.localVocab_};
+      }));
 }
 
 // _____________________________________________________________________________
