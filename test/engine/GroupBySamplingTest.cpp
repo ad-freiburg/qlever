@@ -12,6 +12,7 @@
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "GroupByStrategyHelpers.h"
 #include "engine/GroupByImpl.h"
 #include "engine/GroupByStrategyChooser.h"
 #include "engine/QueryExecutionContext.h"
@@ -26,89 +27,12 @@
 namespace {
 auto I = ad_utility::testing::IntId;
 using ad_utility::AllocatorWithLimit;
-
-// A mock operation that returns a pre-computed result.
-class MockOperation : public Operation {
- private:
-  IdTable table_;
-
- public:
-  MockOperation(QueryExecutionContext* qec, const IdTable& table)
-      : Operation(qec), table_(table.clone()) {}
-
-  // These are the pure virtual functions from `Operation` that need to be
-  // implemented.
-
-  std::string getCacheKeyImpl() const override { return "MockOperation"; }
-  std::string getDescriptor() const override { return "MockOperation"; }
-  size_t getResultWidth() const override { return table_.numColumns(); }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
-  bool knownEmptyResult() override { return table_.empty(); }
-  float getMultiplicity(size_t) override { return 1; }
-  uint64_t getSizeEstimateBeforeLimit() override { return table_.size(); }
-  uint64_t getCostEstimate() override { return table_.size(); }
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    VariableToColumnMap map;
-    // Single variable ?a mapped to column 0, always defined
-    map[Variable{"?a"}] = ColumnIndexAndTypeInfo{
-        0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
-    return map;
-  }
-
-  std::unique_ptr<Operation> cloneImpl() const override {
-    // We create a new instance with the same properties rather than trying to
-    // copy, because `Operation` is not copyable.
-    return std::make_unique<MockOperation>(getExecutionContext(), table_);
-  }
-
- private:
-  // Compute the result synchronously for testing.
-  Result computeResult(bool /*requestLaziness*/) override {
-    LocalVocab localVocab{};
-    return Result(table_.clone(), std::vector<ColumnIndex>{},
-                  std::move(localVocab));
-  }
-};
 }  // namespace
 
-// A test fixture that sets up a `GroupByImpl` operation for testing.
 class GroupBySamplingTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-
-  // Helper to create a `GroupByImpl` operation with a simple subtree that
-  // returns the given `table`.
-  static std::unique_ptr<GroupByImpl> setupGroupBy(const IdTable& table,
-                                                   QueryExecutionContext* qec) {
-    Variable varA{"?a"};
-    auto mockOperation = std::make_shared<MockOperation>(qec, table);
-    auto subtree = std::make_shared<QueryExecutionTree>(qec, mockOperation);
-
-    // Create the GroupByImpl operation.
-    return std::make_unique<GroupByImpl>(qec, std::vector{varA},
-                                         std::vector<Alias>{}, subtree);
-  }
-
-  // Helper to create a simple IdTable with one column.
-  static IdTable createIdTable(size_t numRows,
-                               const std::function<int64_t(size_t)>& generator,
-                               AllocatorWithLimit<Id>& allocator) {
-    IdTable table(1, allocator);
-    table.resize(numRows);
-    for (size_t i = 0; i < numRows; ++i) {
-      table(i, 0) = I(generator(i));
-    }
-    return table;
-  }
 };
-
-// void printRuntimeInfo(const GroupByImpl& groupBy) {
-//   auto& info = groupBy.getRootOperation()->getRuntimeInfoWholeQuery();
-//   std::cout << info.toString() << std::endl;
-//   // or: info.toJson() for machine-readable output
-// }
 
 // Test that an empty input table correctly results in `false`.
 TEST_F(GroupBySamplingTest, edgeCaseEmptyInput) {
