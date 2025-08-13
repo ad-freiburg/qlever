@@ -31,17 +31,18 @@ class GroupByStrategyChooser {
                                         LogLevel logLevel = LogLevel::INFO);
 
   // Estimate total distinct groups via Chao1 estimator for any map-like
-  // container
+  // container. LogLevel::FATAL = no logging.
   template <typename Map>
   static size_t estimateNumberOfTotalGroups(
-      const Map& groupCounts, LogLevel logLevel = LogLevel::INFO) {
+      const Map& groupCounts, LogLevel logLevel = LogLevel::FATAL,
+      double multiplier = 1.0) {
     // Chao1 estimator = d_obs + (f1 * f1) / (2 * f2)
     // d_obs: number of distinct groups observed
     // f1: number of groups with exactly one occurrence
     // f2: number of groups with exactly two occurrences
     size_t dObs = groupCounts.size(), f1 = 0, f2 = 0;
     for (auto& [key, cnt] : groupCounts) {
-      if (cnt == 1)
+      if (cnt == 1) 
         ++f1;
       else if (cnt == 2)
         ++f2;
@@ -51,7 +52,7 @@ class GroupByStrategyChooser {
       AD_LOG_DEBUG << "dObs=" << dObs << ", f1=" << f1 << ", f2=" << f2
                    << std::endl;
     }
-    return dObs + static_cast<size_t>(chaoCorrection);
+    return dObs + static_cast<size_t>(chaoCorrection * multiplier);
   }
 
   // Data structure to be able to use IdTable rows as keys in a hash map.
