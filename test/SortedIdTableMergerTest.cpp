@@ -13,26 +13,25 @@ using namespace ad_utility::testing;
 
 namespace {
 
-// TEST(SortedIdTableMerge, ErrorChecks) {
-//   // Row sizes differ
-//   std::vector<IdTable> idTables;
-//   idTables.push_back(makeIdTableFromVector({{0}, {1}}));
-//   idTables.push_back(makeIdTableFromVector({{0, 0}, {1, 1}}));
-//   AD_EXPECT_THROW_WITH_MESSAGE(
-//       SortedIdTableMerger::mergeIdTables(std::move(idTables),
-//       makeAllocator()),
-//       ::testing::HasSubstr(
-//           "All idTables to merge should have the same number of columns.
-//           First " "table had: 1 columns. Failed table had: 2 columns"));
-//
-//   // Empty IdTables
-//   std::vector<IdTable> emptyIdTables{};
-//   AD_EXPECT_THROW_WITH_MESSAGE(
-//       SortedIdTableMerger::mergeIdTables(std::move(emptyIdTables),
-//                                         makeAllocator()),
-//       ::testing::HasSubstr(
-//           "This method shouldn't be called without idTables to merge"));
-// }
+TEST(SortedIdTableMerger, ErrorChecks) {
+  // Row sizes differ
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIdTableFromVector({{0}, {1}}));
+  idTables.push_back(makeIdTableFromVector({{0, 0}, {1, 1}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SortedIdTableMerger::mergeIdTables(std::move(idTables), makeAllocator()),
+      ::testing::HasSubstr(
+          "All idTables to merge should have the same number of columns. First "
+          "idTable has: 1 columns. Failed table had: 2 columns"));
+
+  // Empty IdTables
+  std::vector<IdTable> emptyIdTables{};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SortedIdTableMerger::mergeIdTables(std::move(emptyIdTables),
+                                         makeAllocator()),
+      ::testing::HasSubstr(
+          "mergeIdTables shouldn't be called with no idTables to merge."));
+}
 
 TEST(SortedIdTableMerger, StandardComparator) {
   // Only one IdTable

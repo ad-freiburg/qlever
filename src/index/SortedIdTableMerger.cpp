@@ -8,13 +8,25 @@
 IdTable SortedIdTableMerger::mergeIdTables(
     std::vector<IdTable> idTablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator) {
-  // TODO Check if all have same num columns
+  AD_CONTRACT_CHECK(
+      !idTablesToMerge.empty(),
+      "mergeIdTables shouldn't be called with no idTables to merge.");
+
+  size_t numCols = idTablesToMerge.at(0).numColumns();
+  ql::ranges::for_each(idTablesToMerge, [&numCols](const auto& idTable) {
+    AD_CONTRACT_CHECK(idTable.numColumns() == numCols,
+                      "All idTables to merge should have the same number of "
+                      "columns. First idTable has: ",
+                      numCols,
+                      " columns. Failed table had: ", idTable.numColumns(),
+                      " columns");
+  });
 
   auto sizes = idTablesToMerge | std::views::transform(&IdTable::size);
   auto sizesSum = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
 
   IdTable result(allocator);
-  result.setNumColumns(idTablesToMerge.at(0).numColumns());
+  result.setNumColumns(numCols);
   result.resize(sizesSum);
 
   std::vector<ColumnIterator> iterators;
@@ -53,38 +65,47 @@ IdTable SortedIdTableMerger::mergeIdTables(
     return *indexWithMinIt;
   };
 
-  // This vector saves the ordering of which IdTable was accessed to get the
-  // next element
-  std::vector<size_t> accessedIdTables;
-  accessedIdTables.reserve(sizesSum);
+  // For each idTable to merge this vector contains a vector that will contain
+  // the index a row belongs to in the result idTable.
+  std::vector<std::vector<size_t>> permutationIdTables;
+  permutationIdTables.reserve(idTablesToMerge.size());
+  ql::ranges::for_each(
+      ::ranges::views::enumerate(idTablesToMerge), [&](auto pair) {
+        permutationIdTables.emplace_back(std::vector<size_t>{});
+        permutationIdTables.at(pair.first).reserve(pair.second.size());
+      });
 
   // Fill the first column (which is the sorted one) and track in which order
   // the `IdTable`s are accessed.
   getIteratorsForColumn(0);
   auto resultOrderedColIt = result.getColumn(0).begin();
   auto resultOrderedColEnd = result.getColumn(0).end();
-  for (std::optional<size_t> currentMinIdTable =
-           minElementIdTable(iterators, sentinels);
-       currentMinIdTable.has_value();
-       currentMinIdTable = minElementIdTable(iterators, sentinels)) {
-    size_t currentIdTable = currentMinIdTable.value();
+  std::optional<size_t> possibleCurrentMinIdTable =
+      minElementIdTable(iterators, sentinels);
+  size_t rowIndex = 0;
+  while (possibleCurrentMinIdTable.has_value()) {
+    size_t currentMinIdTable = possibleCurrentMinIdTable.value();
     AD_CORRECTNESS_CHECK(resultOrderedColIt != resultOrderedColEnd);
-    *resultOrderedColIt = *iterators[currentIdTable];
-    accessedIdTables.push_back(currentIdTable);
-    ++(iterators[currentIdTable]);
+    *resultOrderedColIt = *iterators[currentMinIdTable];
+    permutationIdTables.at(currentMinIdTable).push_back(rowIndex);
+    ++(iterators[currentMinIdTable]);
     ++resultOrderedColIt;
+    ++rowIndex;
+    possibleCurrentMinIdTable = minElementIdTable(iterators, sentinels);
   }
 
-  for (size_t i = 1; i < result.numColumns(); ++i) {
-    getIteratorsForColumn(i);
-    auto resultColIt = result.getColumn(i).begin();
-    auto resultColEnd = result.getColumn(i).end();
-    ql::ranges::for_each(accessedIdTables, [&](size_t tableIndex) {
-      AD_CORRECTNESS_CHECK(resultColIt != resultColEnd);
-      *resultColIt = *iterators[tableIndex];
-      ++(iterators[tableIndex]);
-      ++resultColIt;
-    });
+  for (size_t idTableIndex = 0; idTableIndex < idTablesToMerge.size();
+       ++idTableIndex) {
+    // Start at second column since first has been written
+    auto& idTable = idTablesToMerge.at(idTableIndex);
+    for (size_t column = 1; column < idTable.numColumns(); ++column) {
+      decltype(auto) resultColumn = result.getColumn(column);
+      decltype(auto) idTableColumn = idTable.getColumn(column);
+      for (size_t rowIndex = 0; rowIndex < idTableColumn.size(); ++rowIndex) {
+        resultColumn[permutationIdTables.at(idTableIndex).at(rowIndex)] =
+            idTableColumn[rowIndex];
+      }
+    }
   }
   return result;
 }
