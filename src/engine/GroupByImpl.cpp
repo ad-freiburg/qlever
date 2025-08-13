@@ -31,6 +31,7 @@
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
 #include "util/HashSet.h"
+#include "util/Log.h"
 #include "util/Timer.h"
 
 using groupBy::detail::VectorOfAggregationData;
@@ -1607,56 +1608,37 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     const auto& [inputTableRef, inputLocalVocabRef] = *it;
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
-    
+
     // Merge the local vocab of each input block.
     //
     // NOTE: If the input blocks have very similar or even identical non-empty
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(inputLocalVocab);
-    
+
     updateHashMapWithTable(inputTable, localVocab, columnIndices,
                            aggregationData, aggregateAliases, &lookupTimer,
                            &aggregationTimer);
-                           
+
     processedEntries += inputTable.size();
-    // If the number of processed entries is below the sample size, we skip sampling
+    // If the number of processed entries is below the sample size, we skip
+    // sampling
     if (processedEntries < sampleSize) {
       continue;
     }
-    size_t totalGroups = static_cast<size_t>(GroupByStrategyChooser::estimateNumberOfTotalGroups(
-        aggregationData.getMap()) * sampleSize / processedEntries);
+    size_t totalGroups =
+        static_cast<size_t>(GroupByStrategyChooser::estimateNumberOfTotalGroups(
+            aggregationData.getMap(), LogLevel::FATAL,
+            sampleSize / processedEntries));
     if (totalGroups > groupThreshold) {
-      AD_LOG_DEBUG << "GroupBy HashMap (est: "
-                   << totalGroups << ") > (thr: "
-                   << groupThreshold
+      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
+                   << ") > (thr: " << groupThreshold
                    << "), switching to sort-based aggregation" << std::endl;
       // Batch existing-group rows and buffer new-group rows
       const auto& [beginIdTableRef, beginLocalVocabRef] = *beginIt;
       const IdTable& beginIdTable = beginIdTableRef;
       const size_t inWidth = beginIdTable.numColumns();
-      IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
-      IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
-      auto& countsMap = aggregationData.getMap();
-      for (auto tailIt = ++it; tailIt != endIt; ++tailIt) {
-        const auto& [tblRef, localVocabRef] = *tailIt;
-        const IdTable& tbl = tblRef;
-        for (size_t r = 0; r < tbl.size(); ++r) {
-          typename HashMapAggregationData<
-              NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
-              key;
-          resizeIfVector(key, columnIndices.size());
-          for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
-            key[ci] = tbl(r, columnIndices[ci]);
-          }
-          bool keyInMap = countsMap.find(key) != countsMap.end();
-          IdTable* tableToUse = keyInMap ? &existingTable : &restTable;
-          tableToUse->emplace_back();
-          size_t dest = tableToUse->numRows() - 1;
-          for (size_t c = 0; c < inWidth; ++c) {
-            (*tableToUse)(dest, c) = tbl(r, c);
-          }
-        }
-      }
+      auto [existingTable, restTable] = splitRowsByExistingGroups(
+          inWidth, endIt, columnIndices, aggregationData, it);
       // process all existing-group rows in one block
       if (!existingTable.empty()) {
         updateHashMapWithTable(existingTable, localVocab, columnIndices,
@@ -1686,6 +1668,37 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
 
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
+}
+
+template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
+std::pair<IdTable, IdTable> GroupByImpl::splitRowsByExistingGroups(
+    size_t inWidth, Sentinel endIt, const std::vector<size_t>& columnIndices,
+    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+    Iterator it) const {
+  IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
+  IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+  auto& countsMap = aggregationData.getMap();
+  for (auto tailIt = ++it; tailIt != endIt; ++tailIt) {
+    const auto& [tblRef, localVocabRef] = *tailIt;
+    const IdTable& tbl = tblRef;
+    for (size_t r = 0; r < tbl.size(); ++r) {
+      typename HashMapAggregationData<
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
+          key;
+      resizeIfVector(key, columnIndices.size());
+      for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
+        key[ci] = tbl(r, columnIndices[ci]);
+      }
+      bool keyInMap = countsMap.find(key) != countsMap.end();
+      IdTable* tableToUse = keyInMap ? &existingTable : &restTable;
+      tableToUse->emplace_back();
+      size_t dest = tableToUse->numRows() - 1;
+      for (size_t c = 0; c < inWidth; ++c) {
+        (*tableToUse)(dest, c) = tbl(r, c);
+      }
+    }
+  }
+  return {std::move(existingTable), std::move(restTable)};
 }
 
 // _____________________________________________________________________________
