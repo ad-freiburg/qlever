@@ -99,6 +99,8 @@ inline auto& RuntimeParameters() {
         // variables in a SELECT clause change
         // between otherwise equal queries.
         Bool<"strip-columns">{false},
+        // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+        SizeT<"spatial-join-max-num-threads">{8},
         // The maximum size of the `prefilterBox` for
         // `SpatialJoinAlgorithms::libspatialjoinParse()`.
         SizeT<"spatial-join-prefilter-max-size">{2'500},

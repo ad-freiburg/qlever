@@ -150,6 +150,10 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
+  add("spatial-join-max-num-threads",
+      optionFactory.getProgramOption<"spatial-join-max-num-threads">(),
+      "The maximum number of threads to be used for spatial join processing. "
+      "If this option is set to `0`, the number of CPU threads will be used.");
   add("spatial-join-prefilter-max-size",
       optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
       "The maximum size in square coordinates of the aggregated bounding box "
