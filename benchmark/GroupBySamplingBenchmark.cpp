@@ -20,7 +20,7 @@
 #include "util/Log.h"
 
 // Shared testing helpers for sampling
-#include "../test/engine/GroupBySamplingHelpers.h"
+#include "../test/engine/GroupByStrategyHelpers.h"
 
 namespace ad_benchmark {
 

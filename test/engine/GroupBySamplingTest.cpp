@@ -23,24 +23,15 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Log.h"
 
-#include "GroupBySamplingHelpers.h"
-
+#include "GroupByStrategyHelpers.h"
 namespace {
 auto I = ad_utility::testing::IntId;
 using ad_utility::AllocatorWithLimit;
 }  // namespace
-
-// A test fixture that sets up a `GroupByImpl` operation for testing.
 class GroupBySamplingTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
-
-// void printRuntimeInfo(const GroupByImpl& groupBy) {
-//   auto& info = groupBy.getRootOperation()->getRuntimeInfoWholeQuery();
-//   std::cout << info.toString() << std::endl;
-//   // or: info.toJson() for machine-readable output
-// }
 
 // Test that an empty input table correctly results in `false`.
 TEST_F(GroupBySamplingTest, edgeCaseEmptyInput) {
