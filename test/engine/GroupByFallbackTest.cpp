@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
@@ -117,5 +118,93 @@ TEST_F(GroupByFallbackTest, LargeMixed) {
     EXPECT_EQ(out(i,0), IntId(i));
   }
 }
-// close anonymous namespace
+
+// Multi-column GROUP BY: should group on tuple
+TEST_F(GroupByFallbackTest, MultiColumn) {
+  forceFallback();
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  // Table with two columns, five rows, with three distinct pairs
+  IdTable table(2, allocator);
+  table.resize(5);
+  table(0,0)=IntId(1); table(0,1)=IntId(1);
+  table(1,0)=IntId(1); table(1,1)=IntId(2);
+  table(2,0)=IntId(1); table(2,1)=IntId(1);
+  table(3,0)=IntId(2); table(3,1)=IntId(2);
+  table(4,0)=IntId(2); table(4,1)=IntId(2);
+  // Build GroupBy on two variables
+  Variable varA{"?a"}, varB{"?b"};
+  auto mockOp = std::make_shared<MockOperation>(qec_, table);
+  auto tree = std::make_shared<QueryExecutionTree>(qec_, mockOp);
+  std::vector<ColumnIndex> sortCols{0, 1};
+  auto sortOp = std::make_shared<Sort>(qec_, tree, sortCols);
+  auto sortTree = std::make_shared<QueryExecutionTree>(qec_, sortOp);
+  auto gb = std::make_unique<GroupByImpl>(qec_, std::vector{varA, varB},
+                                         std::vector<Alias>{}, sortTree);
+  auto res = gb->computeResult(false);
+  const auto& out = res.idTable();
+  ASSERT_EQ(out.size(), 3);
+  EXPECT_EQ(out(0,0), IntId(1)); EXPECT_EQ(out(0,1), IntId(1));
+  EXPECT_EQ(out(1,0), IntId(1)); EXPECT_EQ(out(1,1), IntId(2));
+  EXPECT_EQ(out(2,0), IntId(2)); EXPECT_EQ(out(2,1), IntId(2));
 }
+
+// Distinct-ratio guard: with high threshold no fallback
+TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
+  // enable sampling guard
+  RuntimeParameters().set<"group-by-sample-enabled">(true);
+  RuntimeParameters().set<"group-by-sample-distinct-ratio">(1.0);
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  IdTable table = createIdTable(5, [](size_t i){ return static_cast<int64_t>(i); }, allocator);
+  auto gb = setupGroupBy(table, qec_);
+  auto res = gb->computeResult(false);
+  // fallback guard should skip hash-map, but result unchanged
+  const auto& out = res.idTable();
+  ASSERT_EQ(out.size(), 5);
+  for (size_t i = 0; i < 5; ++i) {
+    EXPECT_EQ(out(i,0), IntId(i));
+  }
+}
+
+// Partial fallback: splitRowsByExistingGroups behavior
+TEST_F(GroupByFallbackTest, PartialFallback) {
+  forceFallback();
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  // create 8 rows: first 2 unique, then 3 new, then repeats
+  IdTable table(1, allocator);
+  table.resize(8);
+  std::vector<Id> vals = {IntId(1), IntId(2), IntId(3), IntId(4), IntId(3), IntId(4), IntId(1), IntId(2)};
+  for (size_t i = 0; i < vals.size(); ++i) table(i,0) = vals[i];
+  auto gb = setupGroupBy(table, qec_);
+  auto res = gb->computeResult(false);
+  const auto& out = res.idTable();
+  // distinct values are 1,2,3,4
+  ASSERT_EQ(out.size(), 4);
+  std::vector<Id> expected = {IntId(1), IntId(2), IntId(3), IntId(4)};
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(out(i,0), expected[i]);
+  }
+}
+
+// Test global aggregation with no GROUP BY variables: should produce one empty row
+TEST_F(GroupByFallbackTest, ImplicitGroupOnly) {
+  // Create input table with 5 rows
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  IdTable table(1, allocator);
+  table.resize(5);
+  for (size_t i = 0; i < 5; ++i) {
+    table(i, 0) = IntId(i + 1);
+  }
+  // Build a GroupByImpl with no grouping variables and no aliases
+  auto mockOp = std::make_shared<MockOperation>(qec_, table);
+  auto tree = std::make_shared<QueryExecutionTree>(qec_, mockOp);
+  auto gb = std::make_unique<GroupByImpl>(qec_, std::vector<Variable>{},
+                                         std::vector<Alias>{}, tree);
+  auto res = gb->computeResult(false);
+  const auto& out = res.idTable();
+  // Expect one row and zero columns
+  ASSERT_EQ(out.size(), 1);
+  EXPECT_EQ(out.numColumns(), 0);
+}
+
+// TODO: Tests with aggregate functions (SUM, COUNT, MIN, MAX) once alias construction helpers are available
+}  // namespace

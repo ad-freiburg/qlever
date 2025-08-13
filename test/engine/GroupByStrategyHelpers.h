@@ -9,7 +9,6 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/Sort.h"
 #include "engine/GroupByImpl.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/Result.h"
@@ -64,19 +63,14 @@ class MockOperation : public Operation {
 };
 
 // Helper to create a `GroupByImpl` operation with a simple subtree that
-// returns the given `table`, wrapped in a Sort to enable hash-map fallback.
+// returns the given `table`.
 inline std::unique_ptr<GroupByImpl> setupGroupBy(const IdTable& table,
                                                  QueryExecutionContext* qec) {
   Variable varA{"?a"};
-  // Create mock operation returning the table
-  auto mockOp = std::make_shared<MockOperation>(qec, table);
-  auto mockTree = std::make_shared<QueryExecutionTree>(qec, mockOp);
-  // Wrap in Sort so GroupByImpl sees a sorted child and can use hash-map path
-  std::vector<ColumnIndex> sortCols{0};
-  auto sortOp = std::make_shared<Sort>(qec, mockTree, sortCols);
-  auto sortTree = std::make_shared<QueryExecutionTree>(qec, sortOp);
+  auto mockOperation = std::make_shared<MockOperation>(qec, table);
+  auto subtree = std::make_shared<QueryExecutionTree>(qec, mockOperation);
   return std::make_unique<GroupByImpl>(qec, std::vector{varA},
-                                       std::vector<Alias>{}, sortTree);
+                                       std::vector<Alias>{}, subtree);
 }
 
 // Helper to create a simple IdTable with one column.
