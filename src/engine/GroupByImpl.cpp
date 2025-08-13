@@ -1600,7 +1600,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     processedEntries += inputTable.size();
     // If the number of processed entries is below the sample size, we skip
     // sampling
-    if (processedEntries < sampleSize) {
+    if (processedEntries < sampleSize || processedEntries == 0) {
       continue;
     }
     size_t totalGroups =
