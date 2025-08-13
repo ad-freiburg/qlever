@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 
+#include <functional>
+
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -233,8 +235,12 @@ class ExportQueryExecutionTrees {
   // Public for testing.
  public:
   struct TableConstRefWithVocab {
-    const IdTable& idTable_;
-    const LocalVocab& localVocab_;
+    std::reference_wrapper<const IdTable> idTable_;
+    std::reference_wrapper<const LocalVocab> localVocab_;
+
+    const IdTable& idTable() const { return idTable_.get(); }
+
+    const LocalVocab& localVocab() const { return localVocab_.get(); }
   };
   // Helper type that contains an `IdTable` and a view with related indices to
   // access the `IdTable` with.

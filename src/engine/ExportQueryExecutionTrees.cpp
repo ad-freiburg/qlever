@@ -123,7 +123,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     // If all rows in the current block are before the effective offset, we can
     // skip the block entirely. If not, there is at least something to count
     // and maybe also something to yield.
-    uint64_t currentBlockSize = tableWithVocab.idTable_.numRows();
+    uint64_t currentBlockSize = tableWithVocab.idTable().numRows();
     if (effectiveOffset >= currentBlockSize) {
       effectiveOffset -= currentBlockSize;
       continue;
@@ -180,9 +180,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
-    auto& idTable = pair.idTable_;
+    auto& idTable = pair.idTable();
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
+      ConstructQueryExportContext context{i, idTable, pair.localVocab(),
                                           qet.getVariableColumns(),
                                           qet.getQec()->getIndex()};
       using enum PositionInTriple;
@@ -305,8 +305,8 @@ ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t rowIndex : range) {
-      co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
-                                      pair.idTable_)
+      co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab(), rowIndex,
+                                      pair.idTable())
           .dump();
       cancellationHandle->throwIfCancelled();
     }
@@ -730,7 +730,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           if (columnIndex.has_value()) {
             co_yield std::string_view{
                 reinterpret_cast<const char*>(
-                    &pair.idTable_(i, columnIndex.value().columnIndex_)),
+                    &pair.idTable()(i, columnIndex.value().columnIndex_)),
                 sizeof(Id)};
           }
         }
@@ -762,10 +762,10 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable_(i, val.columnIndex_);
+          Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
               idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
+                  qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
@@ -895,9 +895,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable_(i, val.columnIndex_);
+          Id id = pair.idTable()(i, val.columnIndex_);
           co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
-                                  pair.localVocab_);
+                                  pair.localVocab());
         }
       }
       co_yield "\n  </result>";
@@ -936,13 +936,12 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
 
-  auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
-                        const LocalVocab& localVocab) {
+  auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
     nlohmann::ordered_json binding = {};
     for (const auto& column : columns) {
-      auto optionalStringAndType =
-          idToStringAndType(qet.getQec()->getIndex(),
-                            idTable(i, column->columnIndex_), localVocab);
+      auto optionalStringAndType = idToStringAndType(
+          qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
+          pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
         const auto& [stringValue, xsdType] = optionalStringAndType.value();
         binding[column->variable_] =
@@ -965,7 +964,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       if (columns.empty()) {
         co_yield "{}";
       } else {
-        co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+        co_yield getBinding(pair, i);
       }
       cancellationHandle->throwIfCancelled();
       isFirstRow = false;
