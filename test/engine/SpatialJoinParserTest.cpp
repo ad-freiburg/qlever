@@ -112,18 +112,18 @@ TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
   SpatialJoinParseJob job3{point, 5, false, ""};
   SpatialJoinParseJob job4{undef, 5, true, ""};
 
-  ASSERT_TRUE(job1 == job1);
-  ASSERT_TRUE(job2 == job2);
-  ASSERT_TRUE(job3 == job3);
-  ASSERT_TRUE(job4 == job4);
-  ASSERT_TRUE(job1 == job1Copy);
+  EXPECT_EQ(job1, job1);
+  EXPECT_EQ(job2, job2);
+  EXPECT_EQ(job3, job3);
+  EXPECT_EQ(job4, job4);
+  EXPECT_EQ(job1, job1Copy);
 
-  ASSERT_FALSE(job1 == job2);
-  ASSERT_FALSE(job1 == job3);
-  ASSERT_FALSE(job1 == job4);
-  ASSERT_FALSE(job2 == job3);
-  ASSERT_FALSE(job2 == job4);
-  ASSERT_FALSE(job3 == job4);
+  EXPECT_NE(job1, job2);
+  EXPECT_NE(job1, job3);
+  EXPECT_NE(job1, job4);
+  EXPECT_NE(job2, job3);
+  EXPECT_NE(job2, job4);
+  EXPECT_NE(job3, job4);
 }
 
 }  // namespace

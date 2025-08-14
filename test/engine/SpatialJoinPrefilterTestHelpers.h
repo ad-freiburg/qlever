@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "../util/GTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
