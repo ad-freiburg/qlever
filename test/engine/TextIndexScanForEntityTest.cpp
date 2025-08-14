@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../WordsAndDocsFileLineCreator.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -21,15 +22,23 @@ namespace {
 std::string kg =
     "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
-    ". <b> <x2> <x> . <b> <x2> <xb2> .";
+    ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <fly> <Rocket> .";
 
 // Return a `QueryExecutionContext` from the given `kg`(see above) that has a
-// text index for the literals in the `kg`.
-auto qecWithTextIndex = []() {
-  TestIndexConfig config{kg};
-  config.createTextIndex = true;
-  return getQec(std::move(config));
-};
+// text index for the literals in the `kg`. If specified the text index uses the
+// given wordsFileContent and docsFileContent to build the text index.
+auto qecWithTextIndex =
+    [](bool useDocsFileForVocab = false, bool addEntitiesFromWordsFile = false,
+       std::optional<std::string> wordsFileContent = std::nullopt,
+       std::optional<std::string> docsFileContent = std::nullopt) {
+      TestIndexConfig config{kg};
+      config.createTextIndex = true;
+      config.useDocsFileForVocab = useDocsFileForVocab;
+      config.addEntitiesFromWordsFile = addEntitiesFromWordsFile;
+      config.contentsOfWordsFile = wordsFileContent;
+      config.contentsOfDocsFile = docsFileContent;
+      return getQec(std::move(config));
+    };
 
 TEST(TextIndexScanForEntity, ShortPrefixWord) {
   auto qec = qecWithTextIndex();
@@ -107,6 +116,100 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
+}
+
+TEST(TextIndexScanForEntity, DocsFileBuildWithEntitesFromWordsFile) {
+  std::string wordsFileContent =
+      createWordsFileLineAsString("astronomer", false, 1, 1) +
+      createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
+      createWordsFileLineAsString("scientist", false, 1, 1) +
+      createWordsFileLineAsString("field", false, 1, 1) +
+      createWordsFileLineAsString("astronomy", false, 1, 1) +
+      createWordsFileLineAsString("astronomer", false, 2, 0) +
+      createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
+      createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
+      createWordsFileLineAsString("scientist", false, 2, 0) +
+      createWordsFileLineAsString("field", false, 2, 0) +
+      createWordsFileLineAsString("astronomy", false, 2, 0) +
+      createWordsFileLineAsString("astronomy", false, 3, 1) +
+      createWordsFileLineAsString("concentrates", false, 3, 1) +
+      createWordsFileLineAsString("studies", false, 3, 1) +
+      createWordsFileLineAsString("specific", false, 3, 1) +
+      createWordsFileLineAsString("question", false, 3, 1) +
+      createWordsFileLineAsString("outside", false, 3, 1) +
+      createWordsFileLineAsString("scope", false, 3, 1) +
+      createWordsFileLineAsString("earth", false, 3, 1) +
+      createWordsFileLineAsString("astronomy", false, 4, 1) +
+      createWordsFileLineAsString("concentrates", false, 4, 1) +
+      createWordsFileLineAsString("studies", false, 4, 1) +
+      createWordsFileLineAsString("field", false, 4, 1) +
+      createWordsFileLineAsString("outside", false, 4, 1) +
+      createWordsFileLineAsString("scope", false, 4, 1) +
+      createWordsFileLineAsString("earth", false, 4, 1) +
+      createWordsFileLineAsString("tester", false, 5, 1) +
+      createWordsFileLineAsString("rockets", false, 5, 1) +
+      createWordsFileLineAsString("<Rocket>", true, 5, 0) +
+      createWordsFileLineAsString("astronomer", false, 5, 1) +
+      createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
+      createWordsFileLineAsString("although", false, 5, 1) +
+      createWordsFileLineAsString("astronomer", false, 6, 0) +
+      createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+      createWordsFileLineAsString("although", false, 6, 0) +
+      createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+      createWordsFileLineAsString("space", false, 6, 1) +
+      createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
+      createWordsFileLineAsString("space", false, 7, 0) +
+      createWordsFileLineAsString("earth", false, 7, 1);
+
+  std::string firstDocText =
+      "An astronomer is a scientist in the field of "
+      "astronomy who concentrates their studies on a "
+      "specific question or field outside of the scope of "
+      "Earth.";
+
+  std::string secondDocText =
+      "The Tester of the rockets can be an astronomer "
+      "too although they might not be in space but on "
+      "earth.";
+
+  std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
+                                createDocsFileLineAsString(7, secondDocText);
+
+  auto qec = qecWithTextIndex(true, true, wordsFileContent, docsFileContent);
+
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "test*"};
+
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 5);
+
+  ASSERT_EQ(h::combineToString(secondDocText, "<Astronomer>"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 0),
+                               h::getEntityFromResultTable(qec, result, 0)));
+  ASSERT_EQ(h::combineToString(secondDocText, "<Rocket>"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 1),
+                               h::getEntityFromResultTable(qec, result, 1)));
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 2));
+  ASSERT_EQ("\"testing can help\"",
+            h::getTextRecordFromResultTable(qec, result, 3));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getTextRecordFromResultTable(qec, result, 4));
+
+  TextIndexScanForEntity s2{qec, Variable{"?text2"}, "<Astronomer>",
+                            "astronomer"};
+
+  ASSERT_EQ(s2.getResultWidth(), 2);
+
+  result = s2.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 2);
+
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 1));
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
