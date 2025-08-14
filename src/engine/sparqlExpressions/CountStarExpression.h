@@ -7,8 +7,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
-// Return a `SparqlExpression::Ptr` that implements the `COUNT [DISTINCT} *`
-// function.
+// Return a `SparqlExpression::Ptr` that implements the `COUNT(*)` and
+// `COUNT(DISTINCT *)` function.
 namespace sparqlExpression {
 class CountStarExpression : public SparqlExpression {
  private:
@@ -31,6 +31,8 @@ class CountStarExpression : public SparqlExpression {
 
   // ___________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+
+  bool isDistinct() const { return distinct_; }
 };
 
 SparqlExpression::Ptr makeCountStarExpression(bool distinct);

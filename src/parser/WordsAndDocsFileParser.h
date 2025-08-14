@@ -110,9 +110,9 @@ struct LiteralsTokenizationDelimiter {
     while (pos < size) {
       size_t oldPos = pos;
       UChar32 codePoint;
-      U8_NEXT_OR_FFFD(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
-                      codePoint);
-      AD_CONTRACT_CHECK(codePoint != 0xFFFD, "Invalid UTF-8 in input");
+      U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
+              codePoint);
+      AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
       if (!u_isalnum(codePoint)) {
         return text.substr(oldPos, pos - oldPos);
       }

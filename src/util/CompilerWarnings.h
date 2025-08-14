@@ -20,6 +20,11 @@
   _Pragma("GCC diagnostic push")  \
       _Pragma("GCC diagnostic ignored \"-Wstringop-overread\"")
 
+// Disable the `stringop-overflow` warning, which has many false positives.
+#define DISABLE_STRINGOP_OVERFLOW_WARNINGS \
+  _Pragma("GCC diagnostic push")           \
+      _Pragma("GCC diagnostic ignored \"-Wstringop-overflow\"")
+
 // Disable the `non-template-friend` warning which sometimes can't be avoided
 // in generic code.
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND \
@@ -32,6 +37,7 @@
 #else
 #define DISABLE_UNINITIALIZED_WARNINGS
 #define DISABLE_OVERREAD_WARNINGS
+#define DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define GCC_REENABLE_WARNINGS
 #endif

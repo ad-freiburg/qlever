@@ -22,7 +22,7 @@ void GraphStoreProtocol::throwUnsupportedMediatype(
 }
 
 // ____________________________________________________________________________
-void GraphStoreProtocol::throwUnsupportedHTTPMethod(
+void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
     const std::string_view& method) {
   throw std::runtime_error(absl::StrCat(
       method,
@@ -32,7 +32,7 @@ void GraphStoreProtocol::throwUnsupportedHTTPMethod(
 
 // ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
-    const std::string& body, const ad_utility::MediaType contentType) {
+    const std::string& body, ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   switch (contentType) {
     case ad_utility::MediaType::turtle:
@@ -48,35 +48,48 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 }
 
 // ____________________________________________________________________________
-std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
-    const GraphOrDefault& graph, std::vector<TurtleTriple> triples) {
+updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
+    const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
+    Quads::BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
   }
-  auto transformTurtleTriple = [&tripleGraph](TurtleTriple&& triple) {
+  auto transformTc =
+      [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
+    if (tc.isString()) {
+      return blankNodeAdder.getBlankNodeIndex(tc.getString());
+    } else {
+      return std::move(tc);
+    }
+  };
+  auto transformTurtleTriple = [&tripleGraph,
+                                &transformTc](TurtleTriple&& triple) {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
                          triple.graphIri_.getId() ==
                              qlever::specialIds().at(DEFAULT_GRAPH_IRI));
 
-    return SparqlTripleSimpleWithGraph(std::move(triple.subject_),
-                                       std::move(triple.predicate_),
-                                       std::move(triple.object_), tripleGraph);
+    return SparqlTripleSimpleWithGraph(
+        transformTc(std::move(triple.subject_)),
+        transformTc(std::move(triple.predicate_)),
+        transformTc(std::move(triple.object_)), tripleGraph);
   };
-  return ad_utility::transform(std::move(triples), transformTurtleTriple);
+  return {ad_utility::transform(std::move(triples), transformTurtleTriple),
+          blankNodeAdder.localVocab_.clone()};
 }
 
 // ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
-  // Construct the parsed query from its short equivalent SPARQL Update string.
-  // This is easier and also provides e.g. the `_originalString` field.
-  std::string query;
-  if (const auto* iri =
-          std::get_if<ad_utility::triple_component::Iri>(&graph)) {
-    query = absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
-                         iri->toStringRepresentation(), " { ?s ?p ?o } }");
-  } else {
-    query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
-  }
-  return SparqlParser::parseQuery(query);
+  // Construct the parsed query from its short equivalent SPARQL Update
+  // string. This is easier and also provides e.g. the `_originalString` field.
+  auto getQuery = [&graph]() -> std::string {
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      return absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
+                          iri->toStringRepresentation(), " { ?s ?p ?o } }");
+    } else {
+      return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
+    }
+  };
+  return SparqlParser::parseQuery(getQuery());
 }

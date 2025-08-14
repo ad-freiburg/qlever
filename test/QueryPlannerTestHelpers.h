@@ -493,6 +493,35 @@ inline QetMatcher QetWithWarnings(
                actualMatcher);
 }
 
+// Matcher for checking stripped variables in a QueryExecutionTree
+inline QetMatcher HasStrippedVariables(
+    const std::vector<Variable>& expectedStrippedVariables) {
+  return AD_PROPERTY(QueryExecutionTree, getStrippedVariables,
+                     UnorderedElementsAreArray(expectedStrippedVariables));
+}
+
+// Matcher for checking that a QueryExecutionTree has no stripped variables
+inline QetMatcher HasNoStrippedVariables() {
+  return AD_PROPERTY(QueryExecutionTree, getStrippedVariables, IsEmpty());
+}
+
+// Matcher that asserts that a QueryExecutionTree exposes the correct set of
+// variables, without checking their correct order.
+inline QetMatcher hasVariables(ad_utility::HashSet<std::string> expected) {
+  ad_utility::HashSet<Variable> vars;
+  for (const auto& var : expected) {
+    vars.insert(Variable{var});
+  }
+  auto getVariables = [](const QueryExecutionTree& qet) {
+    ad_utility::HashSet<Variable> res;
+    for (const auto& [var, _] : qet.getVariableColumns()) {
+      res.insert(var);
+    }
+    return res;
+  };
+  return ::testing::ResultOf(getVariables, UnorderedElementsAreArray(vars));
+};
+
 // A query planner class mocking the filter substitute generation for testing
 // the substitution behavior.
 class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {

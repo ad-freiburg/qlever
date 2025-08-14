@@ -92,3 +92,33 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
                                 sortColumnIndices_);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  std::vector<Variable> sortVars;
+  const auto* vars = &variables;
+  for (const auto& jcl : sortColumnIndices_) {
+    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
+    sortVars.push_back(var);
+    if (!variables.contains(var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  // TODO<joka921> Code duplication including a former copy-paste bug.
+  auto subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
+  std::vector<ColumnIndex> sortColumnIndices;
+  for (const auto& var : sortVars) {
+    sortColumnIndices.push_back(subtree->getVariableColumn(var));
+  }
+
+  return ad_utility::makeExecutionTree<Sort>(
+      getExecutionContext(), std::move(subtree), sortColumnIndices);
+}
