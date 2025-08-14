@@ -49,8 +49,9 @@ class BinSearchMap {
   size_t sizeOfActiveGraph_;
 
  public:
-  BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
-               const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
+  BinSearchMap(
+      ql::span<const Id> startIds, ql::span<const Id> targetIds,
+      const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   /**
    * @brief Return the successors for the given id.
