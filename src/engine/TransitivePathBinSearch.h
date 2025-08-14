@@ -1,6 +1,8 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
@@ -36,20 +38,25 @@
  *
  */
 class BinSearchMap {
+  // All of these have the same size, for convenience the code represents "no
+  // graph" as an empty span for `graphIds_`, regardless of the amount of
+  // elements of the other ranges.
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
   ql::span<const Id> graphIds_;
-  size_t offset_ = 0;
-  size_t size_;
+  // Set the bounds of the currently active graph.
+  size_t offsetOfActiveGraph_ = 0;
+  size_t sizeOfActiveGraph_;
 
  public:
   BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
-               ql::span<const Id> graphIds);
+               const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   /**
    * @brief Return the successors for the given id.
    * The successors are all target ids, where the corresponding start id is
-   * equal to the given id `node`.
+   * equal to the given id `node`. Only values matching the active graph (set
+   * via `setGraphId`) will be returned.
    *
    * @param node The input id, which will be looked up in startIds_
    * @return A ql::span<Id>, which consists of all targetIds_ where
@@ -57,10 +64,23 @@ class BinSearchMap {
    */
   ql::span<const Id> successors(Id node) const;
 
-  // Return equivalent ids from the index, along with an associated graph id in
-  // case these are available.
-  absl::InlinedVector<std::pair<Id, Id>, 1> getEquivalentIds(Id node) const;
+  // Return a pair of matching ids + graph ids. If `node` originates from a
+  // `LocalVocab` an equivalent entry from the graph is used instead,
+  // eliminating the need to keep the `LocalVocab` around any longer. If no
+  // entry matches an empty vector is returned. The first id of the pair is
+  // always the same element. It is flattened out because all callers of this
+  // function need it in this format for convenience. The most common case is
+  // that there's a single matching entry, (especially when using this without
+  // an active graph,) which is why `absl::InlinedVector` is used with size 1.
+  //  If `node` is undefined, it
+  // will return all elements in the currently active graph, or all elements if
+  // no graph is set. Active graphs set via `setGraphId` are ignored. Entries
+  // are deduplicated.
+  IdWithGraphs getEquivalentIdAndMatchingGraphs(Id node) const;
 
+  // Prefilter the map for values of a certain graph. If graphs are active, i.e.
+  // the constructor of this class was called with a graph column, this has to
+  // be set before calling `successors`.
   void setGraphId(Id graphId);
 };
 

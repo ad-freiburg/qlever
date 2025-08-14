@@ -368,7 +368,7 @@ TEST(LocalVocab, propagation) {
   Minus minus1(testQec, qet(values1), qet(values2));
   checkLocalVocab(minus1, localVocab1);
   Minus minus2(testQec, qet(values1), qet(values3));
-  checkLocalVocab(minus2, localVocab13);
+  checkLocalVocab(minus2, localVocab1);
 
   // FILTER operation (the third argument is an expression; which one doesn't
   // matter for this test).

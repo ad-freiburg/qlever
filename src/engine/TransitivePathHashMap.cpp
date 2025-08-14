@@ -1,9 +1,10 @@
-// Copyright 2019, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
-//         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "TransitivePathHashMap.h"
+#include "engine/TransitivePathHashMap.h"
 
 #include <memory>
 
@@ -32,16 +33,12 @@ HashMapWrapper::HashMapWrapper(
 // _____________________________________________________________________________
 const Set& HashMapWrapper::successors(const Id node) const {
   auto iterator = map_->find(node);
-  if (iterator == map_->end()) {
-    return emptySet_;
-  }
-  return iterator->second;
+  return iterator == map_->end() ? emptySet_ : iterator->second;
 }
 
 // _____________________________________________________________________________
-absl::InlinedVector<std::pair<Id, Id>, 1> HashMapWrapper::getEquivalentIds(
-    Id node) const {
-  absl::InlinedVector<std::pair<Id, Id>, 1> result;
+IdWithGraphs HashMapWrapper::getEquivalentIdAndMatchingGraphs(Id node) const {
+  IdWithGraphs result;
   for (const auto& [graph, map] : graphMap_) {
     if (node.isUndefined()) {
       for (Id newId : map | ql::views::keys) {

@@ -1,17 +1,20 @@
 #ifndef QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "./../../src/util/GeoSparqlHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -25,6 +28,11 @@ constexpr inline auto makeAreaLiteral = [](std::string_view coordinateList) {
                       ">");
 };
 
+constexpr inline auto makeLineLiteral = [](std::string_view coordinateList) {
+  return absl::StrCat("\"LINESTRING(", coordinateList, ")\"^^<",
+                      GEO_WKT_LITERAL, ">");
+};
+
 const std::string pointUniFreiburg = makePointLiteral("7.83505", "48.01267");
 const std::string pointMinster = makePointLiteral("7.85298", "47.99557");
 const std::string pointLondonEye = makePointLiteral("-0.11957", "51.50333");
@@ -32,11 +40,44 @@ const std::string pointStatueOfLiberty =
     makePointLiteral("-74.04454", "40.68925");
 const std::string pointEiffelTower = makePointLiteral("2.29451", "48.85825");
 
+// University of Freiburg, Faculty of Engineering, Building 101
+// (osmway:33903391)
 const std::string areaUniFreiburg = makeAreaLiteral(
     "7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
     "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
     "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
     "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612");
+
+// University of Freiburg, Faculty of Engineering (TF) Campus (osmway:4498466)
+const std::string areaTFCampus = makeAreaLiteral(
+    "7.8278416 48.016703,7.8282441 48.0164402,7.8283204 48.016369,7.828855 "
+    "48.0159642,7.8288834 48.0159258,7.8288818 48.0158942,7.8288738 "
+    "48.0158783,7.8287715 48.0158153,7.8288154 48.0157832,7.82895 "
+    "48.0158739,7.8289928 48.0158847,7.8290285 48.015883,7.8291294 "
+    "48.0158092,7.8291437 48.0157653,7.8292358 48.0156941,7.8293001 "
+    "48.0156846,7.8308419 48.0145261,7.8308695 48.0144421,7.8309432 "
+    "48.0143582,7.8318878 48.013707,7.8320077 48.0136474,7.8324238 "
+    "48.0133321,7.8328302 48.0130885,7.8327804 48.0130455,7.8327513 "
+    "48.0130137,7.8327712 48.0129877,7.8328711 48.0129863,7.8335457 "
+    "48.0124878,7.8338729 48.0122785,7.8338498 48.0122546,7.8338247 "
+    "48.0122305,7.8337973 48.0121967,7.8339135 48.0120999,7.8340325 "
+    "48.0120126,7.834234 48.0118649,7.8344038 48.0117568,7.834554 "
+    "48.0118269,7.834706 48.0118978,7.8347734 48.0119292,7.8348309 "
+    "48.0119626,7.8349153 48.0120116,7.835218 48.0121874,7.83524 "
+    "48.0122002,7.835656 48.0124468,7.8357986 48.012562,7.8358592 "
+    "48.0125976,7.8358554 48.012613,7.8361429 48.0127895,7.8363173 "
+    "48.0129067,7.8365569 48.0131152,7.836597 48.0132091,7.8365875 "
+    "48.0133234,7.8365236 48.0134932,7.8365006 48.0136848,7.836484 "
+    "48.0137506,7.8363105 48.0139897,7.8361085 48.014288,7.8358456 "
+    "48.0145894,7.8348935 48.0154318,7.8347808 48.0155702,7.8346387 "
+    "48.0158077,7.8346283 48.0158193,7.8344963 48.015966,7.8340828 "
+    "48.015726,7.8333436 48.0161857,7.8325322 48.0156758,7.8305535 "
+    "48.0170765,7.8306651 48.0171513,7.8306952 48.0172179,7.831883 "
+    "48.0179668,7.8318479 48.0179919,7.8318203 48.0180117,7.8317885 "
+    "48.0180363,7.8317547 48.0180624,7.8317063 48.0180943,7.8315581 "
+    "48.0180033,7.8309992 48.0183963,7.8305873 48.018693,7.8298971 "
+    "48.018256,7.8298355 48.018298,7.8294452 48.0180508,7.8292188 "
+    "48.0179143,7.8295036 48.0177016,7.8278416 48.016703");
 
 const std::string areaMuenster = makeAreaLiteral(
     "7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 "
@@ -193,6 +234,46 @@ const std::string areaEiffelTower = makeAreaLiteral(
     "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
     "48.8583929,2.293536 48.8584028,2.2933119 48.858248");
 
+const std::string lineSegmentGeorgesKoehlerAllee = makeLineLiteral(
+    "7.8319663 48.0160027,7.8316588 48.0162235,7.8316005 48.0162654,7.8311307 "
+    "48.0165944,7.8304624 48.0170669,7.8303975 48.0171113,7.8302123 "
+    "48.0172493,7.8301693 48.0172828,7.8299157 48.0174643,7.8298043 "
+    "48.0175414,7.8297512 48.0175792,7.8296852 48.017627,7.8293452 "
+    "48.0178818,7.8279814 48.0189432");
+
+const std::string invalidWkt = makeLineLiteral("500 -500, 3 5, 7 8");
+
+// Cape Town (South Africa) railway station building (osmway:424212273)
+const std::string areaCapeTownStation = makeAreaLiteral(
+    "18.4239428 -33.9218041,18.424062 -33.9218917,18.4243962 "
+    "-33.9221303,18.4240967 -33.9224223,18.4244022 -33.9226457,18.4246379 "
+    "-33.9228157,18.4247068 -33.9228643,18.4248219 -33.922947,18.4256162 "
+    "-33.9235119,18.4257643 -33.9236197,18.4257509 -33.9236327,18.4257381 "
+    "-33.923645,18.4258098 -33.9236961,18.4258354 -33.9236714,18.4261581 "
+    "-33.9239098,18.4263337 -33.9240329,18.4265807 -33.9241133,18.426557 "
+    "-33.9241377,18.4270954 -33.9243265,18.4271005 -33.9243103,18.4271945 "
+    "-33.9243401,18.4272254 -33.9242965,18.4271805 -33.9242697,18.4272717 "
+    "-33.924185,18.4279261 -33.9235548,18.4278482 -33.9235027,18.4280764 "
+    "-33.9232808,18.4293565 -33.9241885,18.429566 -33.9243406,18.4296822 "
+    "-33.9244223,18.4298205 -33.9245447,18.4298352 -33.9245263,18.4303284 "
+    "-33.9248267,18.4303484 -33.9248421,18.4304129 -33.9241276,18.4304162 "
+    "-33.9239336,18.4299987 -33.9236321,18.4286665 -33.9226768,18.4285158 "
+    "-33.9225678,18.428275 -33.9223935,18.4279125 -33.9221395,18.4277046 "
+    "-33.9219894,18.4272815 -33.9216927,18.4272584 -33.9216763,18.4272245 "
+    "-33.9216523,18.4271381 -33.9215911,18.4270934 -33.9216054,18.4271497 "
+    "-33.9215509,18.4272394 -33.9214642,18.427113 -33.9213742,18.4266565 "
+    "-33.9210495,18.4266069 -33.9210988,18.4265124 -33.9211862,18.426392 "
+    "-33.9210984,18.4264259 -33.9210649,18.4263622 -33.9210188,18.4262943 "
+    "-33.9209687,18.4262843 -33.9209787,18.4261382 -33.920872,18.4261028 "
+    "-33.9208471,18.4259513 -33.9207406,18.4256839 -33.9205527,18.4256066 "
+    "-33.9206256,18.4254692 -33.9205318,18.4254018 -33.920485,18.4253126 "
+    "-33.9204253,18.4252575 -33.9204795,18.4252394 -33.9204665,18.4247033 "
+    "-33.9209865,18.4248021 -33.9210563,18.4248173 -33.9210669,18.4247905 "
+    "-33.9210928,18.4247428 -33.9211389,18.4246928 -33.9211871,18.4248106 "
+    "-33.9212715,18.4248311 -33.9212862,18.4245963 -33.9215152,18.4250865 "
+    "-33.9218652,18.425016 -33.9219314,18.4247123 -33.9222264,18.4241463 "
+    "-33.9218115,18.4240269 -33.9217222,18.4239428 -33.9218041");
+
 // compared to the other areas, this one is not real, because it would be way
 // too large. Here the borders of germany get approximated by just a few points
 // to not make this file too crowded. As this geometry is only needed because
@@ -205,8 +286,7 @@ const std::string approximatedAreaGermany = makeAreaLiteral(
     "50.36932046223437, "
     "13.674640551587391 48.68663848319227, 12.773761630400273 "
     "47.74969625921073, "
-    "7.720050609106677 47.64617710434852, 8.313312337693318 "
-    "48.997548751390326, "
+    "7.58917 47.59002, 8.03916 49.01783, "
     "6.50056816701192 49.535220384133375, 6.0391423781112 51.804566644690524, "
     "7.20369317867016 53.62121249029073");
 
@@ -338,36 +418,44 @@ inline std::string createTrueDistanceDataset() {
 
 // Build a `QueryExecutionContext` from the given turtle, but set some memory
 // defaults to higher values to make it possible to test large geometric
-// literals.
-inline auto buildQec(std::string turtleKg) {
+// literals. `vocabType` can be set
+inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
+  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  if (useGeoVocab) {
+    using enum ad_utility::VocabularyType::Enum;
+    vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
+  }
+  config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
 
-inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  return buildQec(createSmallDataset(useAreas));
+inline QueryExecutionContext* buildTestQEC(bool useAreas = false,
+                                           bool useGeoVocab = false) {
+  return buildQec(createSmallDataset(useAreas), useGeoVocab);
 }
 
 inline QueryExecutionContext* buildMixedAreaPointQEC(
-    bool useTrueDistanceDataset = false) {
+    bool useTrueDistanceDataset = false, bool useGeoVocab = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
-  return buildQec(kg);
+  return buildQec(kg, useGeoVocab);
 }
 
 // Create `QueryExecutionContext` with a dataset that contains an additional
 // area without `<name>` predicate (so that our `libspatialjoin` test has two
 // sides of different size), as well as an object with an invalid geometry.
-inline QueryExecutionContext* buildNonSelfJoinDataset() {
+inline QueryExecutionContext* buildNonSelfJoinDataset(
+    bool useGeoVocab = false) {
   std::string kg = createTrueDistanceDataset();
   kg += absl::StrCat(
       "<nodeAreaAdded> <hasGeometry> <geometryAreaAdded> .\n",
       "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
       "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
       "<geometryInvalidAdded> <asWKT> 42 .\n");
-  return buildQec(kg);
+  return buildQec(kg, useGeoVocab);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildIndexScan(

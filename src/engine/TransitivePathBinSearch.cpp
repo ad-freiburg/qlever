@@ -1,8 +1,10 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Author:
+//   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
+//   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "TransitivePathBinSearch.h"
+#include "engine/TransitivePathBinSearch.h"
 
 #include <memory>
 #include <utility>
@@ -12,18 +14,28 @@
 // _____________________________________________________________________________
 BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
                            ql::span<const Id> targetIds,
-                           ql::span<const Id> graphIds)
+                           const std::optional<ql::span<const Id>>& graphIds)
     : startIds_{startIds},
       targetIds_{targetIds},
-      graphIds_{graphIds},
-      size_{startIds_.size()} {
+      graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},
+      // Set size to zero if graphs are active to avoid undefined behaviour in
+      // case we forget to call `setActiveGraph`.
+      sizeOfActiveGraph_{graphIds.has_value() ? 0 : startIds_.size()} {
   AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
-  AD_CORRECTNESS_CHECK(startIds.size() == graphIds.size() || graphIds.empty());
+  AD_CORRECTNESS_CHECK(startIds.size() == graphIds_.size() ||
+                       !graphIds.has_value());
+  if (graphIds.has_value()) {
+    AD_EXPENSIVE_CHECK(
+        ql::ranges::is_sorted(::ranges::views::zip(graphIds_, startIds)));
+  } else {
+    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(startIds));
+  }
 }
 
 // _____________________________________________________________________________
 ql::span<const Id> BinSearchMap::successors(Id node) const {
-  auto range = ql::ranges::equal_range(startIds_.subspan(offset_, size_), node);
+  auto range = ql::ranges::equal_range(
+      startIds_.subspan(offsetOfActiveGraph_, sizeOfActiveGraph_), node);
 
   auto startIndex = std::distance(startIds_.begin(), range.begin());
 
@@ -31,10 +43,11 @@ ql::span<const Id> BinSearchMap::successors(Id node) const {
 }
 
 // _____________________________________________________________________________
-absl::InlinedVector<std::pair<Id, Id>, 1> BinSearchMap::getEquivalentIds(
-    Id node) const {
-  absl::InlinedVector<std::pair<Id, Id>, 1> result;
+IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
+  IdWithGraphs result;
   if (graphIds_.empty()) {
+    // We fill the graph id with undefined here, because it's supposed to be
+    // unused, and `setGraphId` is no-op in this case using this value.
     if (node.isUndefined()) {
       for (Id id : startIds_) {
         if (result.empty() || result.back().first != id) {
@@ -69,8 +82,8 @@ void BinSearchMap::setGraphId(Id graphId) {
     auto range = ql::ranges::equal_range(graphIds_, graphId);
     auto startIndex = std::distance(graphIds_.begin(), range.begin());
 
-    offset_ = startIndex;
-    size_ = range.size();
+    offsetOfActiveGraph_ = startIndex;
+    sizeOfActiveGraph_ = range.size();
   }
 }
 
@@ -106,9 +119,10 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   return BinSearchMap{
       dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),
-      graphVariable_.has_value() ? dynSub.getColumn(subtree_->getVariableColumn(
-                                       graphVariable_.value()))
-                                 : ql::span<const Id>{}};
+      graphVariable_.has_value()
+          ? std::optional{dynSub.getColumn(
+                subtree_->getVariableColumn(graphVariable_.value()))}
+          : std::nullopt};
 }
 
 // _____________________________________________________________________________

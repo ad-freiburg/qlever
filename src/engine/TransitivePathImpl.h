@@ -13,6 +13,8 @@
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
+using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
+
 namespace detail {
 
 // Helper struct that allows to group a read-only view of a column of a table
@@ -46,11 +48,11 @@ struct TableColumnWithVocab {
                if (std::get<0>(tuple).isUndefined() ||
                    (checkGraph && std::get<1>(tuple).isUndefined()))
                    [[unlikely]] {
-                 return edges.getEquivalentIds(std::get<0>(tuple));
+                 return edges.getEquivalentIdAndMatchingGraphs(
+                     std::get<0>(tuple));
                } else {
-                 return absl::InlinedVector<std::pair<Id, Id>, 1>{
-                     std::pair{std::move(std::get<0>(tuple)),
-                               std::move(std::get<1>(tuple))}};
+                 return IdWithGraphs{std::pair{std::move(std::get<0>(tuple)),
+                                               std::move(std::get<1>(tuple))}};
                }
              }) |
              ql::views::join;
@@ -350,8 +352,8 @@ class TransitivePathImpl : public TransitivePathBase {
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways. This also augments the id with matching graph ids.
-    auto ids = edges.getEquivalentIds(startId);
-    result.insert(ids.begin(), ids.end());
+    auto idAndGraphs = edges.getEquivalentIdAndMatchingGraphs(startId);
+    result.insert(idAndGraphs.begin(), idAndGraphs.end());
     return result;
   }
 
