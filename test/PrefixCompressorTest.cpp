@@ -66,16 +66,32 @@ TEST(PrefixCompressor, MaximumNumberOfPrefixes) {
   }
 }
 
-TEST(PrefixCompressor, NewlinesInPrefixCompression) {
+// _____________________________________________________________________________
+TEST(PrefixCompressor, prefixCompression) {
+  using namespace ::testing;
+
+  EXPECT_THAT(calculatePrefixes({}, 1), UnorderedElementsAre());
+  EXPECT_THAT(calculatePrefixes({"", "a", "ab", "abc"}, 1),
+              UnorderedElementsAre("a"));
+  EXPECT_THAT(calculatePrefixes({"", "a", "ab", "abc"}, 2),
+              UnorderedElementsAre("a", "ab"));
+  EXPECT_THAT(calculatePrefixes({"", "a", "ab", "abc", "abcd"}, 2),
+              UnorderedElementsAre("a", "ab"));
+  EXPECT_THAT(calculatePrefixes({"", "a", "ab", "abc", "abcd"}, 3),
+              UnorderedElementsAre("a", "ab", "abc"));
+  EXPECT_THAT(calculatePrefixes({"", "a", "ab", "abc", "abcd"}, 4),
+              UnorderedElementsAre("", "a", "ab", "abc"));
+  EXPECT_THAT(calculatePrefixes({"a", "b"}, 1), UnorderedElementsAre(""));
+  EXPECT_THAT(calculatePrefixes({"a", "b"}, 2), UnorderedElementsAre("", ""));
+
+  // Newlines handling
   std::vector<std::string> input;
   for (size_t i : ad_utility::integerRange(200UL)) {
     input.push_back(absl::StrCat("\"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\""));
   }
-  using namespace ::testing;
-
-  const auto& prefixes = calculatePrefixes(input, 127, 1, true);
 
   // There must be at least one of the compression prefixes that compresses the
   // common structure of the literals.
-  EXPECT_THAT(prefixes, Contains(ContainsRegex("\nabc\t\n")));
+  EXPECT_THAT(calculatePrefixes(input, 127),
+              Contains(ContainsRegex("\nabc\t\n")));
 }

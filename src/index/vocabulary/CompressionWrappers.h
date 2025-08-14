@@ -119,8 +119,7 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
     ql::ranges::sort(stringsCopy);
-    auto prefixes =
-        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
+    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);
     Strings compressedStrings;
     for (const auto& string : strings) {

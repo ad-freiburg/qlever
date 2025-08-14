@@ -17,20 +17,12 @@
 // Arguments: vocabulary  - The vocabulary that is to be compressed. Must be
 //                          sorted ascending by `std::less<std::string>`
 //            numPrefixes - the number of prefixes we want to compute
-//            codelength  - the (fixed) length of the code for the prefixes we
-//                          want the algorithm to assume.
-//            alwaysAddCode - this means that a encoding of size codelength will
-//                            be added to every word, no matter if it is
-//                            actually compressed. (This is true for the
-//                            vocabulary in QLever). The Algorithm has to know
-//                            this in order to choose the correct prefixes.
 //
 // Returns:   Vector of suitable prefixes which have been selected by the
 //            algorithm
 //
 std::vector<std::string> calculatePrefixes(
-    const std::vector<std::string>& vocabulary, size_t numPrefixes,
-    size_t codelength, bool alwaysAddCode = false);
+    const std::vector<std::string>& vocabulary, size_t numPrefixes);
 
 namespace ad_utility {
 
