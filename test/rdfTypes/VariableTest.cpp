@@ -71,6 +71,9 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
   // Invalid UTF-8 will throw an exception.
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x").getMatchingWordVariable("\255"),
                                ::testing::HasSubstr("Invalid UTF-8"));
+
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2244
+  EXPECT_NO_THROW(Variable("?x").getMatchingWordVariable("�"));
 }
 
 // _____________________________________________________________________________
