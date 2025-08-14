@@ -353,6 +353,11 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 //    join full scan, object count).
 // 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
 // grouping.
+// 4) If the hash-map grows too large mid-aggregation:
+//    1. We process all remaining rows, adding the rows of existing groups to
+//       the hash-map and adding rows of new groups to a new table.
+//    2. We then sort & process the new table, materialize the results from the
+//       hash-map, and append the two tables.
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
