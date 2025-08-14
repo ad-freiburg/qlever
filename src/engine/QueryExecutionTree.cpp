@@ -112,8 +112,12 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
-  std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
-    return !varToColMap.contains(pair.second);
+
+  // Note: Variables that have been stripped are still semantically part of the
+  // query, and thus can be prefiltered.
+  std::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
+    return !varToColMap.contains(pair.second) &&
+           !strippedVariables_.contains(pair.second);
   });
 
   if (prefilterPairs.empty()) {
@@ -190,15 +194,34 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variables) {
+    const std::set<Variable>& variables,
+    HideStrippedColumns hideStrippedColumns) {
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
-  if (optTree.has_value()) {
-    AD_CORRECTNESS_CHECK(optTree.value() != nullptr);
-    return std::move(optTree.value());
+  if (!optTree.has_value()) {
+    return ad_utility::makeExecutionTree<StripColumns>(
+        rootOperation->getExecutionContext(), std::move(qet), variables);
   }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      rootOperation->getExecutionContext(), std::move(qet), variables);
+
+  auto& resultTree = optTree.value();
+  AD_CORRECTNESS_CHECK(resultTree != nullptr);
+  // Only store stripped variables if `hideStrippedColumns` is `False`
+  if (hideStrippedColumns == HideStrippedColumns::False) {
+    // Calculate the variables that will be stripped (present in the input, but
+    // not in the stripped result of this function).
+    ad_utility::HashSet<Variable> strippedVariables;
+    const auto& originalVariableColumns = qet->getVariableColumns();
+    for (const auto& [var, colInfo] : originalVariableColumns) {
+      if (!variables.contains(var)) {
+        strippedVariables.insert(var);
+      }
+    }
+
+    // Store the stripped variables in the result tree
+    resultTree->strippedVariables_ = std::move(strippedVariables);
+  }
+
+  return resultTree;
 }
 
 // _____________________________________________________________________________
