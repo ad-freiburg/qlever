@@ -1087,5 +1087,39 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
+
+    // Edge case, all graphs are filtered out
+    graphs.clear();
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector({}));
+
+    // std::nullopt matches all graphs.
+    spec =
+        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    std::array additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector({{3, 4, 0},
+                                               {3, 4, 1},
+                                               {7, 4, 0},
+                                               {8, 4, 0},
+                                               {8, 5, 0},
+                                               {8, 5, 1},
+                                               {9, 4, 1},
+                                               {9, 5, 1}}));
+
+    // std::nullopt matches all graphs, but without `additionalColumns` they
+    // should be deduplicated.
+    spec =
+        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }
 }
