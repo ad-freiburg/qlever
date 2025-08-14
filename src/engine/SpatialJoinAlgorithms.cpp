@@ -94,8 +94,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       qec_->getIndex());
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
-  // TODO: can we avoid this loop and add the IdTable en-block?
   for (size_t row = 0; row < idTable->size(); row++) {
+    // TODO not every time?
     throwIfCancelled();
 
     const auto id = idTable->at(row, column);

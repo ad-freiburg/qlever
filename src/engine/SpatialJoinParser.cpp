@@ -6,6 +6,7 @@
 #include "engine/SpatialJoinParser.h"
 
 #include "engine/SpatialJoinAlgorithms.h"
+#include "range/v3/numeric/accumulate.hpp"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -23,24 +24,17 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
   for (size_t i = 0; i < _thrds.size(); i++) {
     _thrds[i] = std::thread(&WKTParser::processQueue, this, i);
   }
+  _curBatch.reserve(10000);
 }
 
 // _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
-  size_t res = 0;
-  for (auto c : _numSkipped) {
-    res += c;
-  }
-  return res;
+  return ::ranges::accumulate(_numSkipped, 0);
 };
 
 // _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
-  size_t res = 0;
-  for (auto c : _numParsed) {
-    res += c;
-  }
-  return res;
+  return ::ranges::accumulate(_numParsed, 0);
 };
 
 // _____________________________________________________________________________
@@ -112,12 +106,12 @@ void WKTParser::processQueue(size_t t) {
 
 // _____________________________________________________________________________
 void WKTParser::addValueIdToQueue(ValueId valueId, size_t id, bool side) {
-  _curBatch.reserve(10000);
   _curBatch.push_back({valueId, id, side, ""});
 
-  if (_curBatch.size() > 10000) {
+  if (_curBatch.size() >= 10000) {
     _jobs.add(std::move(_curBatch));
     _curBatch.clear();
+    _curBatch.reserve(10000);
   }
 }
 
