@@ -204,9 +204,9 @@ class TransitivePathBase : public Operation {
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
-  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, bool yieldOnce,
-                                      size_t inputWidth) const;
+  Result::LazyResult fillTableWithHull(NodeGenerator hull, size_t startSideCol,
+                                       size_t targetSideCol, bool yieldOnce,
+                                       size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -219,9 +219,9 @@ class TransitivePathBase : public Operation {
    * the hull
    * @param yieldOnce If true, the generator will yield only a single time.
    */
-  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol,
-                                      bool yieldOnce) const;
+  Result::LazyResult fillTableWithHull(NodeGenerator hull, size_t startSideCol,
+                                       size_t targetSideCol,
+                                       bool yieldOnce) const;
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
@@ -244,10 +244,10 @@ class TransitivePathBase : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
 
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  Result::Generator fillTableWithHullImpl(NodeGenerator hull,
-                                          size_t startSideCol,
-                                          size_t targetSideCol,
-                                          bool yieldOnce) const;
+  Result::LazyResult fillTableWithHullImpl(NodeGenerator hull,
+                                           size_t startSideCol,
+                                           size_t targetSideCol,
+                                           bool yieldOnce) const;
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // of the subjects or objects in the knowledge graph, so if the graph does not
