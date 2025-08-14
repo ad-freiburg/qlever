@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
+#include "index/EncodedIriManager.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
@@ -209,16 +210,17 @@ class TripleComponent {
   /// Convert the `TripleComponent` to an ID if it is not a string. In case of a
   /// string return `std::nullopt`. This is used in `toValueId` below and during
   /// the index building when we haven't built the vocabulary yet.
-  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const;
+  [[nodiscard]] std::optional<Id> toValueIdIfNotString(
+      const EncodedIriManager* encodedIriManager) const;
 
   // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
   // string, the IDs are resolved using the `vocabulary`. If a string is not
   // found in the vocabulary, `std::nullopt` is returned.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary) const {
+      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
     AD_CONTRACT_CHECK(!isString());
-    std::optional<Id> vid = toValueIdIfNotString();
+    std::optional<Id> vid = toValueIdIfNotString(&evManager);
     if (vid != std::nullopt) return vid;
     AD_CORRECTNESS_CHECK(isLiteral() || isIri());
     VocabIndex idx;
@@ -239,8 +241,9 @@ class TripleComponent {
   // `std::string` when passing it to the local vocabulary.
   template <typename Vocabulary>
   [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
-                             LocalVocab& localVocab) && {
-    std::optional<Id> id = toValueId(vocabulary);
+                             LocalVocab& localVocab,
+                             const EncodedIriManager& encodedIriManager) && {
+    std::optional<Id> id = toValueId(vocabulary, encodedIriManager);
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.

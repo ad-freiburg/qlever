@@ -183,8 +183,8 @@ TEST(PropertyPath, getInvertedChild) {
 TEST(PropertyPath, handlePath) {
   auto path0 = PropertyPath::fromIri(iri("<a>"));
   EXPECT_EQ(path0.handlePath<int>(
-                [](const ad_utility::triple_component::Iri& value) {
-                  EXPECT_EQ(value, iri("<a>"));
+                [](const TripleComponent& value) {
+                  EXPECT_EQ(value.getIri(), iri("<a>"));
                   return 0;
                 },
                 [](const std::vector<PropertyPath>&, PropertyPath::Modifier) {
@@ -199,7 +199,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path1 = PropertyPath::makeInverse(path0);
   EXPECT_EQ(path1.handlePath<int>(
-                [](const ad_utility::triple_component::Iri&) {
+                [](const TripleComponent&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -219,7 +219,7 @@ TEST(PropertyPath, handlePath) {
       PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>")));
   auto path2 = PropertyPath::makeNegated({innerPath2});
   EXPECT_EQ(path2.handlePath<int>(
-                [](const ad_utility::triple_component::Iri&) {
+                [](const TripleComponent&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -236,7 +236,7 @@ TEST(PropertyPath, handlePath) {
             1);
   auto path3 = PropertyPath::makeAlternative({path1, path2});
   EXPECT_EQ(path3.handlePath<int>(
-                [](const ad_utility::triple_component::Iri&) {
+                [](const TripleComponent&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -254,7 +254,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path4 = PropertyPath::makeSequence({path1, path2});
   EXPECT_EQ(path4.handlePath<int>(
-                [](const ad_utility::triple_component::Iri&) {
+                [](const TripleComponent&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -272,7 +272,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path5 = PropertyPath::makeWithLength(path0, 0, 1);
   EXPECT_EQ(path5.handlePath<int>(
-                [](const ad_utility::triple_component::Iri&) {
+                [](const TripleComponent&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -287,4 +287,41 @@ TEST(PropertyPath, handlePath) {
                   return 2;
                 }),
             2);
+}
+
+// _____________________________________________________________________________
+TEST(PropertyPath, TripleComponentSupport) {
+  using TripleComponent = ::TripleComponent;
+  using Id = ::Id;
+
+  // Test creating PropertyPath from TripleComponent with IRI
+  auto iri = Iri::fromIriref("<http://example.org/test>");
+  auto tripleComponentIri = TripleComponent{iri};
+  auto pathFromTripleComponent =
+      PropertyPath::fromTripleComponent(tripleComponentIri);
+
+  // Test creating PropertyPath from IRI directly
+  auto pathFromIri = PropertyPath::fromIri(iri);
+
+  // Both should be recognized as IRIs
+  EXPECT_TRUE(pathFromTripleComponent.isIri());
+  EXPECT_TRUE(pathFromIri.isIri());
+
+  // Both should give the same IRI when accessed
+  EXPECT_EQ(pathFromTripleComponent.getIri(), iri);
+  EXPECT_EQ(pathFromIri.getIri(), iri);
+
+  // Test with encoded ID (using a dummy encoded value)
+  auto encodedId = Id::makeFromBool(true);  // Simple test ID
+  auto tripleComponentEncoded = TripleComponent{encodedId};
+  auto pathFromEncoded =
+      PropertyPath::fromTripleComponent(tripleComponentEncoded);
+
+  // This should not be recognized as an IRI but should work as TripleComponent
+  EXPECT_FALSE(pathFromEncoded.isIri());
+  EXPECT_EQ(pathFromEncoded.getTripleComponent(), tripleComponentEncoded);
+
+  // Test string representation
+  EXPECT_EQ(pathFromIri.asString(), "<http://example.org/test>");
+  EXPECT_EQ(pathFromTripleComponent.asString(), "<http://example.org/test>");
 }

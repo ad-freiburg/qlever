@@ -35,7 +35,8 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 // _____________________________________________________________________________
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
-    const Index::Vocab& vocab, const VariableToColumnMap& variableColumns,
+    const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
+    const VariableToColumnMap& variableColumns,
     std::vector<SparqlTripleSimpleWithGraph>&& triples) {
   // This LocalVocab only contains IDs that are related to the
   // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
@@ -44,13 +45,14 @@ ExecuteUpdate::transformTriplesTemplate(
   LocalVocab localVocab{};
 
   auto transformSparqlTripleComponent =
-      [&vocab, &localVocab,
+      [&vocab, &localVocab, &encodedIriManager,
        &variableColumns](TripleComponent component) -> IdOrVariableIndex {
     if (component.isVariable()) {
       AD_CORRECTNESS_CHECK(variableColumns.contains(component.getVariable()));
       return variableColumns.at(component.getVariable()).columnIndex_;
     } else {
-      return std::move(component).toValueId(vocab, localVocab);
+      return std::move(component).toValueId(vocab, localVocab,
+                                            encodedIriManager);
     }
   };
   Id defaultGraphIri = [&transformSparqlTripleComponent] {
@@ -60,16 +62,18 @@ ExecuteUpdate::transformTriplesTemplate(
     return std::get<Id>(defaultGraph);
   }();
   auto transformGraph = [&vocab, &localVocab, &defaultGraphIri,
-                         &variableColumns](
+                         &variableColumns, &encodedIriManager](
                             SparqlTripleSimpleWithGraph::Graph graph) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
               return defaultGraphIri;
             },
-            [&vocab, &localVocab](const ad_utility::triple_component::Iri& iri)
+            [&vocab, &localVocab,
+             &encodedIriManager](const ad_utility::triple_component::Iri& iri)
                 -> IdOrVariableIndex {
-              return TripleComponent(iri).toValueId(vocab, localVocab);
+              return TripleComponent(iri).toValueId(vocab, localVocab,
+                                                    encodedIriManager);
             },
             [&variableColumns](const Variable& var) -> IdOrVariableIndex {
               AD_CORRECTNESS_CHECK(variableColumns.contains(var));
@@ -139,12 +143,13 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // Start the timer once the where clause has been evaluated.
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
+  const auto& encodedIriManager = index.encodedIriManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns,
+      [&vocab, &variableColumns, &encodedIriManager,
        &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(vocab, variableColumns,
+            transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
                                      std::move(tripleTemplates));
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.

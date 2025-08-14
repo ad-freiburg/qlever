@@ -156,7 +156,9 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            auto idOpt = field.toValueId(testQec->getIndex().getVocab());
+            const auto& idx = testQec->getIndex();
+            auto idOpt =
+                field.toValueId(idx.getVocab(), idx.encodedIriManager());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
@@ -296,8 +298,9 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate(&blankNodeManager_,
-                                                "LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(
+      &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
+      "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

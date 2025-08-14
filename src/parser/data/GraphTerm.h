@@ -10,6 +10,7 @@
 #include <string>
 #include <variant>
 
+#include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/BlankNode.h"
