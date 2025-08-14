@@ -744,6 +744,39 @@ TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
 }
 
 // ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit) {
+  std::array limitsAndOffsets{
+      LimitOffsetClause{1},
+      LimitOffsetClause{std::nullopt, 1},
+      LimitOffsetClause{1, 1},
+  };
+  for (const LimitOffsetClause& limitOffset : limitsAndOffsets) {
+    auto service = std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            true},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json"));
+
+    service->applyLimitOffset(limitOffset);
+
+    auto sibling =
+        std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
+
+    EXPECT_NO_THROW(
+        Service::precomputeSiblingResult(sibling, service, true, false));
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+  }
+}
+
+// ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResult) {
   auto service = std::make_shared<Service>(
       testQec,

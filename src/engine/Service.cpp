@@ -567,6 +567,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
 
+  // If this operation is constrained by a `LIMIT` or `OFFSET` we can't apply
+  // the optimization.
+  if (!service->getLimitOffset().isUnconstrained()) {
+    return;
+  }
+
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
