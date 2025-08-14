@@ -184,21 +184,52 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   auto vIdUni = getValId(nMap, "uni");
   auto vIdGkAllee = getValId(nMap, "gk-allee");
 
-  // Intersects with prefiltering, but prefiltering is not used due to too large
-  // bounding box
-  SweeperTestResult testResult;
-  runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS}, testResult,
-                       true, true);
-  checkSweeperTestResult(vMap, testResult,
-                         {{{INTERSECTS, vIdUni, vIdUniSep, 0},
-                           {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
-                          boundingBoxVeryLarge,
-                          boundingBoxUniSeparate,
-                          8,
-                          0,
-                          7,
-                          1},
-                         INTERSECTS, true);
+  {
+    auto cleanUp =
+        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(2'500);
+
+    // Intersects with prefiltering, but prefiltering is not used due to too
+    // large bounding box
+    SweeperTestResult testResult;
+    runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS}, testResult,
+                         true, true);
+    checkSweeperTestResult(vMap, testResult,
+                           {{{INTERSECTS, vIdUni, vIdUniSep, 0},
+                             {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
+                            boundingBoxVeryLarge,
+                            boundingBoxUniSeparate,
+                            8,
+                            0,
+                            7,
+                            1},
+                           INTERSECTS, true);
+  }
+
+  // Update runtime parameter for second test
+  double bbSize = util::geo::area(boundingBoxVeryLarge);
+  EXPECT_GT(bbSize, 2'500);
+  EXPECT_LT(bbSize, 10'000);
+
+  {
+    auto cleanUp =
+        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(10'000);
+
+    // Using the custom max size of the prefilter box, prefiltering should now
+    // be used again.
+    SweeperTestResult testResultCustomMax;
+    runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS},
+                         testResultCustomMax, true, false);
+    checkSweeperTestResult(vMap, testResultCustomMax,
+                           {{{INTERSECTS, vIdUni, vIdUniSep, 0},
+                             {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
+                            boundingBoxVeryLarge,
+                            boundingBoxUniSeparate,
+                            8,
+                            0,
+                            7,
+                            1},
+                           INTERSECTS, true);
+  }
 }
 
 // _____________________________________________________________________________
