@@ -280,4 +280,7 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 
+constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
+    "http-graph-store";
+
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

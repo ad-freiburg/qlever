@@ -32,13 +32,13 @@ inline auto makeRequest(
 }
 
 // Constructs a boost::beast GET request with the target path.
-inline auto makeGetRequest(const std::string& target) {
+inline auto makeGetRequest(std::string_view target) {
   return makeRequest(http::verb::get, target);
 }
 
 // Constructs a boost::beast POST request with the target path, body content
 // type and body content.
-inline auto makePostRequest(const std::string& target,
+inline auto makePostRequest(std::string_view target,
                             const std::string& contentType,
                             const std::string& body) {
   return makeRequest(http::verb::post, target,

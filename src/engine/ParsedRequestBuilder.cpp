@@ -4,6 +4,8 @@
 
 #include "ParsedRequestBuilder.h"
 
+#include "engine/HttpError.h"
+
 using namespace ad_utility::url_parser::sparqlOperation;
 
 // ____________________________________________________________________________
@@ -12,8 +14,22 @@ ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  if (request.find(boost::beast::http::field::host) != request.end()) {
+    host_ = request[boost::beast::http::field::host];
+  }
   parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
                     std::move(parsedUrl.parameters_), None{}};
+}
+
+// ____________________________________________________________________________
+bool ParsedRequestBuilder::isGraphStoreOperationDirect() const {
+  auto result = boost::urls::parse_path(parsedRequest_.path_);
+  // The path being parsed is the path we got from parsing the request target,
+  // so it should be valid.
+  AD_CORRECTNESS_CHECK(!result.has_error());
+  auto segments = result.value();
+  return !segments.empty() &&
+         segments.front() == GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX;
 }
 
 // ____________________________________________________________________________
@@ -39,26 +55,46 @@ bool ParsedRequestBuilder::parameterIsContainedExactlyOnce(
 }
 
 // ____________________________________________________________________________
-bool ParsedRequestBuilder::isGraphStoreOperation() const {
+bool ParsedRequestBuilder::isGraphStoreOperationIndirect() const {
   return parameterIsContainedExactlyOnce("graph") ||
          parameterIsContainedExactlyOnce("default");
 }
 
 // ____________________________________________________________________________
-void ParsedRequestBuilder::extractGraphStoreOperation() {
+void ParsedRequestBuilder::extractGraphStoreOperationIndirect() {
   // SPARQL Graph Store HTTP Protocol with indirect graph identification
+  AD_CORRECTNESS_CHECK(isGraphStoreOperationIndirect());
   if (parameterIsContainedExactlyOnce("graph") &&
       parameterIsContainedExactlyOnce("default")) {
     throw std::runtime_error(
         R"(Parameters "graph" and "default" must not be set at the same time.)");
   }
   AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
-  // We only support passing the target graph as a query parameter
-  // (`Indirect Graph Identification`). `Direct Graph Identification` (the
-  // URL is the graph) is not supported. See also
+  // We support passing the target graph as a query parameter (`Indirect Graph
+  // Identification`). `Direct Graph Identification` (the URL is the graph) is
+  // only supported on the fixed sub path
+  // `GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX`. See also
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
   parsedRequest_.operation_ =
       GraphStoreOperation{extractTargetGraph(parsedRequest_.parameters_)};
+}
+
+// ____________________________________________________________________________
+void ParsedRequestBuilder::extractGraphStoreOperationDirect() {
+  AD_CORRECTNESS_CHECK(isGraphStoreOperationDirect());
+  // SPARQL Graph Store HTTP Protocol with direct graph identification. We
+  // cannot deduce the used protocol (http/https) from the raw HTTP request. We
+  // default to `http` for the constructed IRIs.
+  AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
+  if (!host_.has_value()) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        "Request for Graph Store Protocol with direct graph identification "
+        "requires the `host` header to be set.");
+  }
+  parsedRequest_.operation_ =
+      GraphStoreOperation{GraphRef::fromIrirefWithoutBrackets(
+          absl::StrCat("http://", host_.value(), parsedRequest_.path_))};
 }
 
 // ____________________________________________________________________________
@@ -74,7 +110,7 @@ ad_utility::url_parser::ParsedRequest ParsedRequestBuilder::build() && {
 // ____________________________________________________________________________
 void ParsedRequestBuilder::reportUnsupportedContentTypeIfGraphStore(
     std::string_view contentType) const {
-  if (isGraphStoreOperation()) {
+  if (isGraphStoreOperationIndirect()) {
     throw std::runtime_error(absl::StrCat("Unsupported Content type \"",
                                           contentType,
                                           "\" for Graph Store protocol."));

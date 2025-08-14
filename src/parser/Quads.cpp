@@ -5,8 +5,9 @@
 #include "Quads.h"
 
 // ____________________________________________________________________________________
-Id Quads::BlankNodeAdder::getBlankNodeIndex(const std::string& label) {
-  auto [it, isNew] = map_.try_emplace(label, Id::makeUndefined());
+Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
+  AD_CORRECTNESS_CHECK(label.starts_with("_:"));
+  auto [it, isNew] = map_.try_emplace(label.substr(2), Id::makeUndefined());
   auto& id = it->second;
   if (isNew) {
     id = Id::makeFromBlankNodeIndex(

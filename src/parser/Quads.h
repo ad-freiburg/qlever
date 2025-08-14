@@ -49,7 +49,7 @@ struct Quads {
 
     // Get an `Id` for the `label`. If the same `label` was previously passed to
     // the same `BlankNodeAdder`, this will result in the same `Id`.
-    Id getBlankNodeIndex(const std::string& label);
+    Id getBlankNodeIndex(std::string_view label);
   };
   // Return the quads in a format for use as an update template.
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set

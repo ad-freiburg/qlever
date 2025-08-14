@@ -9,12 +9,14 @@
 
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
 // Graph Store and internal operations) according to the SPARQL specifications.
-class SPARQLProtocol {
-  FRIEND_TEST(SPARQLProtocolTest, parseGET);
-  FRIEND_TEST(SPARQLProtocolTest, parseUrlencodedPOST);
-  FRIEND_TEST(SPARQLProtocolTest, parseQueryPOST);
-  FRIEND_TEST(SPARQLProtocolTest, parseUpdatePOST);
-  FRIEND_TEST(SPARQLProtocolTest, parsePOST);
+class SparqlProtocol {
+  FRIEND_TEST(SparqlProtocolTest, parseGET);
+  FRIEND_TEST(SparqlProtocolTest, parseUrlencodedPOST);
+  FRIEND_TEST(SparqlProtocolTest, parseQueryPOST);
+  FRIEND_TEST(SparqlProtocolTest, parseUpdatePOST);
+  FRIEND_TEST(SparqlProtocolTest, parsePOST);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect);
+  FRIEND_TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect);
 
   static constexpr std::string_view contentTypeUrlEncoded =
       "application/x-www-form-urlencoded";
@@ -46,10 +48,17 @@ class SPARQLProtocol {
   static ad_utility::url_parser::ParsedRequest parsePOST(
       const RequestType& request);
 
+  // Parse a Graph Store Protocol request with direct or indirect graph
+  // identification.
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolIndirect(
+      const RequestType& request);
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolDirect(
+      const RequestType& request);
+
  public:
   // Parse a HTTP request.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const RequestType& request);
+      RequestType& request);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

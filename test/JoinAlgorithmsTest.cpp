@@ -38,6 +38,14 @@ struct RowAdder {
     AD_CONTRACT_CHECK(x1 == y1);
     target_->push_back(std::array{x1, x2, y2});
   }
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
+  }
 
   void addOptionalRow(size_t leftIndex) {
     auto [x1, x2] = (*left_)[leftIndex];
@@ -308,6 +316,15 @@ struct RowAdderWithUndef {
     auto id1 = (*left_)[leftIndex];
     auto id2 = (*right_)[rightIndex];
     output_.push_back({id1, id2});
+  }
+
+  template <typename R1, typename R2>
+  void addRows(const R1& left, const R2& right) {
+    for (auto a : left) {
+      for (auto b : right) {
+        addRow(a, b);
+      }
+    }
   }
 
   void addOptionalRow(size_t leftIndex) {

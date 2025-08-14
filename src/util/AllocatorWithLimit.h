@@ -168,7 +168,7 @@ class AllocatorWithLimit {
   /// Obtain an AllocatorWithLimit<OtherType> that refers to the
   /// same limit.
   template <typename U>
-  AllocatorWithLimit<U> as() {
+  AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(memoryLeft_);
   }
   AllocatorWithLimit() = delete;
