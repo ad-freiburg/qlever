@@ -17,12 +17,14 @@
 
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/Log.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -595,9 +597,13 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-};
 
-// _____________________________________________________________________________
+  friend bool GroupByStrategyChooser::shouldSkipHashMapGrouping(
+      const GroupByImpl&, const IdTable&, LogLevel);
+
+};  // class GroupByImpl
+
+// Concept to identify aggregation data vectors
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =
