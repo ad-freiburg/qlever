@@ -43,9 +43,11 @@ CPP_concept BinaryIteratorFunction =
 // Helper type to indicate the different join modes.
 enum class JoinType { JOIN, OPTIONAL, MINUS };
 
-// Helper type to indicate the mode at compile-time.
-template <JoinType Mode>
-using ConstantJoinType = std::integral_constant<JoinType, Mode>;
+// Types for callers of `zipperJoinForBlocksWithoutUndef` and
+// `zipperJoinForBlocksWithPotentialUndef` to use as function parameters for
+// implicit template type deduction.
+using OptionalJoinTag = std::integral_constant<JoinType, JoinType::OPTIONAL>;
+using MinusJoinTag = std::integral_constant<JoinType, JoinType::MINUS>;
 
 // Note: In the following functions, two rows of IDs are called `compatible` if
 // for each position they are equal, or at least one of them is UNDEF. This is
@@ -1466,19 +1468,20 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           .template runJoin<joinType>();
       return;
     }
+    constexpr bool isOptionalOrMinus = joinType != JoinType::JOIN;
     while (true) {
       BlockStatus blockStatus = fillBuffer();
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
         addRemainingUndefPairs();
-        if constexpr (joinType != JoinType::JOIN) {
+        if constexpr (isOptionalOrMinus) {
           if (!hasUndef(rightSide_)) {
             fillWithAllFromLeft();
           }
         }
         return;
       }
-      joinBuffers<joinType != JoinType::JOIN, ProjectedEl>(blockStatus);
+      joinBuffers<isOptionalOrMinus, ProjectedEl>(blockStatus);
     }
   }
   // Don't clutter other compilation units with these aliases.
@@ -1530,13 +1533,11 @@ template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
           JoinType joinType = JoinType::JOIN>
-void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
-                                     RightBlocks&& rightBlocks,
-                                     const LessThan& lessThan,
-                                     CompatibleRowAction& compatibleRowAction,
-                                     LeftProjection leftProjection = {},
-                                     RightProjection rightProjection = {},
-                                     ConstantJoinType<joinType> = {}) {
+void zipperJoinForBlocksWithoutUndef(
+    LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
+    const LessThan& lessThan, CompatibleRowAction& compatibleRowAction,
+    LeftProjection leftProjection = {}, RightProjection rightProjection = {},
+    std::integral_constant<JoinType, joinType> = {}) {
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
@@ -1555,7 +1556,7 @@ void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
     const LessThan& lessThan, CompatibleRowAction& compatibleRowAction,
     LeftProjection leftProjection = {}, RightProjection rightProjection = {},
-    ConstantJoinType<joinType> = {}) {
+    std::integral_constant<JoinType, joinType> = {}) {
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 

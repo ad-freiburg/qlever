@@ -475,7 +475,7 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
         [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
           ad_utility::zipperJoinForBlocksWithPotentialUndef(
               leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-              ad_utility::ConstantJoinType<ad_utility::JoinType::OPTIONAL>{});
+              ad_utility::OptionalJoinTag{});
         },
         leftRange, rightRange);
     auto localVocab = std::move(rowAdder.localVocab());
