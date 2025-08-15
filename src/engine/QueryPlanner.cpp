@@ -2348,24 +2348,6 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
-
-// Check if an unbound transitive path is somewhere in the tree. This is because
-// the optimization with `Union` currently only makes sense if there is a
-// transitive path in the tree that benefits from directly applying the join.
-bool hasUnboundTransitivePathInTree(const Operation& operation) {
-  if (auto* transitivePath =
-          dynamic_cast<const TransitivePathBase*>(&operation)) {
-    return !transitivePath->isBoundOrId();
-  }
-  // Only check `UNION`s for children.
-  if (!dynamic_cast<const Union*>(&operation)) {
-    return false;
-  }
-  return ql::ranges::any_of(
-      operation.getChildren(), [](const QueryExecutionTree* child) {
-        return hasUnboundTransitivePathInTree(*child->getRootOperation());
-      });
-}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2383,9 +2365,6 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
-    // TODO<joka921> This changes the behavior to consider applying the
-    // distribution to ALL unions. Evaluate the impact and make sure that the
-    // documentation is correct.
     if (!unionOperation) {
       return;
     }
@@ -3162,7 +3141,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
     if (RuntimeParameters().get<"strip-columns">()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
-          std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
+          std::move(plan._qet), selectedVariables);
     } else {
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
           select.getSelectedVariables());
