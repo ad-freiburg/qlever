@@ -39,7 +39,7 @@ string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
 Result Minus::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Minus result computation..." << endl;
+  AD_LOG_DEBUG << "Minus result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
   // its sibling.
@@ -64,20 +64,18 @@ Result Minus::computeResult(bool requestLaziness) {
                          requestLaziness);
   }
 
-  LOG(DEBUG) << "Minus subresult computation done" << std::endl;
+  AD_LOG_DEBUG << "Minus subresult computation done" << std::endl;
 
-  LOG(DEBUG) << "Computing minus of results of size "
-             << leftResult->idTable().size() << " and "
-             << rightResult->idTable().size() << endl;
+  AD_LOG_DEBUG << "Computing minus of results of size "
+               << leftResult->idTable().size() << " and "
+               << rightResult->idTable().size() << endl;
 
   IdTable idTable = computeMinus(leftResult->idTable(), rightResult->idTable(),
                                  _matchedColumns);
 
-  LOG(DEBUG) << "Minus result computation done" << endl;
-  // If only one of the two operands has a non-empty local vocabulary, share
-  // with that one (otherwise, throws an exception).
+  AD_LOG_DEBUG << "Minus result computation done" << endl;
   return {std::move(idTable), resultSortedOn(),
-          Result::getMergedLocalVocab(*leftResult, *rightResult)};
+          leftResult->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
