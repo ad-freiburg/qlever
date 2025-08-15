@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "util/Generator.h"
 
@@ -98,3 +98,195 @@ TEST(Generator, getSingleElement) {
   }();
   EXPECT_ANY_THROW(cppcoro::getSingleElement(std::move(gen3)));
 }
+
+struct HandleFrame {
+  using F = void(void*);
+  using B = bool(void*);
+  void* target;
+  F* resumeFunc;
+  F* destroyFunc;
+  B* doneFunc;
+};
+
+template <typename Promise = void>
+struct Handle {
+  HandleFrame* ptr;
+  void resume() { ptr->resumeFunc(ptr->target); }
+  static Handle from_promise(Promise& p) {
+    // TODO<joka921> This has to take into account the alignment.
+    auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
+                                              sizeof(HandleFrame));
+    /*
+    std::cerr << "Address of frame computed " << reinterpret_cast<intptr_t>(ptr)
+              << std::endl;
+              */
+    return Handle{ptr};
+  }
+
+  operator bool() const { return static_cast<bool>(ptr); }
+
+  bool done() const { return ptr->doneFunc(ptr->target); }
+
+  // TODO<joka921> This has to take into account the alignment.
+  Promise& promise() {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+  const Promise& promise() const {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  void destroy() { ptr->destroyFunc(ptr->target); }
+};
+
+bool co_await_impl(auto&& awaiter, auto handle) {
+  if (awaiter.await_ready()) {
+    return true;
+  }
+  using type = decltype(awaiter.await_suspend(handle));
+  static_assert(std::is_void_v<decltype(awaiter.await_resume())>);
+  if constexpr (std::is_void_v<type>) {
+    awaiter.await_suspend(handle);
+    return false;
+  } else if constexpr (std::same_as<type, bool>) {
+    return !awaiter.await_suspend(handle);
+  } else {
+    static_assert(ad_utility::alwaysFalse<type>,
+                  "await_suspend with symmetric transfer is not yet supported");
+  }
+}
+#define CO_YIELD(value)                                   \
+  {                                                       \
+    auto&& awaiter = promise().yield_value(value);        \
+    curState = __LINE__;                                  \
+    if (!co_await_impl(awaiter, Hdl::from_promise(pt))) { \
+      return;                                             \
+    }                                                     \
+  }                                                       \
+  [[fallthrough]];                                        \
+  case __LINE__:
+
+template <typename Derived, typename PromiseType, typename... payloadVars>
+struct GeneratorStateMachineMixin {
+  HandleFrame frm;
+  PromiseType pt;
+  static void CHECK() {
+    static_assert(offsetof(GeneratorStateMachineMixin, pt) -
+                      offsetof(GeneratorStateMachineMixin, frm) ==
+                  sizeof(HandleFrame));
+  }
+  size_t curState = 0;
+  std::tuple<payloadVars...> payLoad;
+  using Hdl = Handle<PromiseType>;
+
+  PromiseType& promise() { return pt; }
+
+  static auto cast(void* blubb) {
+    return static_cast<Derived*>(reinterpret_cast<GeneratorStateMachineMixin*>(
+        reinterpret_cast<char*>(blubb) -
+        offsetof(GeneratorStateMachineMixin, frm)));
+  }
+
+  static void resume(void* blubb) { cast(blubb)->doStep(); }
+
+  // TODO<joka921> Allocator support.
+  static void destroy(void* blubb) { delete (cast(blubb)); }
+  static bool done([[maybe_unused]] void* blubb) {
+    // TODO extend to more general things.
+    return false;
+  }
+
+  GeneratorStateMachineMixin() {
+    CHECK();
+    frm.target = this;
+    frm.resumeFunc = &GeneratorStateMachineMixin::resume;
+    frm.destroyFunc = &GeneratorStateMachineMixin::destroy;
+    frm.doneFunc = &GeneratorStateMachineMixin::done;
+  }
+
+  static auto make() {
+    // TODO allocator support
+    auto* frame = new Derived;
+    return frame->pt.get_return_object();
+  }
+};
+
+#define GENERATOR_HEADER(returnType, ...)                              \
+  using PromiseType =                                                  \
+      cppcoro::generator<returnType, int, Handle>::promise_type;       \
+  struct GeneratorStateMachine                                         \
+      : GeneratorStateMachineMixin<GeneratorStateMachine, PromiseType, \
+                                   __VA_ARGS__> {                      \
+    void doStep() {
+#define GENERATOR_FOOTER \
+  }                      \
+  }                      \
+  }                      \
+  ;                      \
+  return GeneratorStateMachine::make();
+#define GENERATOR_HEADER_2 \
+  switch (curState) {      \
+    case 0:
+
+cppcoro::generator<int, int, std::coroutine_handle> actualGen() {
+  int payload = 0;
+  while (true) {
+    payload++;
+    co_yield (payload);
+    payload += 2;
+    co_yield (payload);
+  }
+}
+
+cppcoro::generator<int, int, Handle> dummyGen() {
+  GENERATOR_HEADER(int, int)
+  auto& [payload] = payLoad;
+  GENERATOR_HEADER_2
+  payload = 0;
+  while (true) {
+    payload++;
+    CO_YIELD(payload);
+    payload += 2;
+    CO_YIELD(payload);
+  }
+  GENERATOR_FOOTER
+};
+
+TEST(NewGenerator, Blubb) {
+  std::vector<int> v;
+  auto gen = dummyGen();
+  for (auto i : gen | ql::views::take(5)) {
+    v.push_back(i);
+  }
+  EXPECT_THAT(v, ::testing::ElementsAre(1, 3, 4, 6, 7));
+}
+
+// A simple allocator that logs all allocations and deallocations to stderr
+template <typename T>
+struct LoggingAllocator {
+  using value_type = T;
+
+  LoggingAllocator() = default;
+
+  template <typename U>
+  LoggingAllocator(const LoggingAllocator<U>&) {}
+
+  T* allocate(size_t n) {
+    auto p = static_cast<T*>(::operator new(n * sizeof(T)));
+    std::cerr << "Allocating " << n << " elements of size " << sizeof(T)
+              << " at " << static_cast<void*>(p) << std::endl;
+    return p;
+  }
+
+  void deallocate(T* p, size_t n) {
+    std::cerr << "Deallocating " << n << " elements at "
+              << static_cast<void*>(p) << std::endl;
+    ::operator delete(p);
+  }
+
+  template <typename U>
+  bool operator==(const LoggingAllocator<U>&) const {
+    return true;
+  }
+};
