@@ -7,10 +7,10 @@
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -5056,4 +5056,39 @@ LIMIT 1
 )";
   h::expect(q1, ::testing::_);
   h::expect(q2, ::testing::_);
+}
+
+// Test that subqueries strip columns correctly and that stripped variables
+// are not even stored as `stripped`.
+TEST(QueryPlanner, SubqueryColumnStripping) {
+  // Save current strip-columns setting and ensure it's enabled for this test
+  auto cleanup = setRuntimeParameterForTest<"strip-columns">(true);
+
+  // Test a subquery that selects only some variables, causing others to be
+  // stripped
+  std::string query = R"(
+    SELECT ?x ?y WHERE {
+      { SELECT ?x ?y WHERE { ?x <p1> ?y . ?x <p2> ?z . ?y <p3> ?w } }
+    }
+  )";
+
+  auto qec = ad_utility::testing::getQec();
+  for (bool doStrip : {true, false}) {
+    qec->clearCacheUnpinnedOnly();
+
+    // The outer cleanup will reset the original status, so we can safely
+    // modify the global parameter here.
+    RuntimeParameters().set<"strip-columns">(doStrip);
+
+    // The inner subquery should have ?z and ?w stripped (as they're not
+    // selected) but since it's a subquery, the stripped variables should not be
+    // stored in the `QueryExecutionTree`. (hideStrippedColumns=true)
+    auto qet = h::parseAndPlan(query, qec);
+
+    // The root should have no stripped variables (it's not created via
+    // makeTreeWithStrippedColumns)
+    EXPECT_THAT(qet, h::HasNoStrippedVariables());
+    EXPECT_THAT(qet, h::hasVariables({"?x", "?y"}));
+    EXPECT_EQ(qet.getResultWidth(), doStrip ? 2 : 4);
+  }
 }
