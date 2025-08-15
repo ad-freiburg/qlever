@@ -596,7 +596,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
-  AD_CORRECTNESS_CHECK(prefixAndBaseDisabled_);
+  AD_CORRECTNESS_CHECK(useSimplifiedGrammar_);
   raise(
       "@prefix or @base directives need to be at the beginning of the file "
       "when using the parallel parser. Later redundant redefinitions are "
@@ -610,7 +610,7 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
     const std::string& key, const ad_utility::triple_component::Iri& prefix) {
-  if (prefixAndBaseDisabled_ &&
+  if (useSimplifiedGrammar_ &&
       (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
     raiseDisallowedPrefixOrBaseError();
   }
@@ -645,17 +645,25 @@ bool TurtleParser<T>::booleanLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
+  AD_CORRECTNESS_CHECK(!allowMultilineLiterals || !useSimplifiedGrammar_);
   // manually parse strings for efficiency
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<std::string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  static constexpr std::array<std::string_view, 4> quotes{R"(""")", R"(''')",
+                                                          "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
       if (!allowMultilineLiterals && q.size() > 1) {
+        if (useSimplifiedGrammar_) {
+          raise(
+              "Found a multiline string literal with the parallel parser. This "
+              "is not supported. Please use `--parse-parallel false` or remove "
+              "the multiline string literal.");
+        }
         return false;
       }
       endPos = view.find(q, startPos);
@@ -1087,7 +1095,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
-    parser.disablePrefixParsing();
+    parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
@@ -1100,7 +1108,6 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   } catch (std::exception& e) {
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
-    parallelParser_.finish();
   }
 };
 
@@ -1134,7 +1141,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
       auto batchSize = inputBatch.size();
       auto parseThisBatch = [this, parsePosition,
                              batch = std::move(inputBatch)]() mutable {
-        return parseBatch(parsePosition, std::move(batch));
+        parseBatch(parsePosition, std::move(batch));
       };
       parsePosition += batchSize;
       numBatchesTotal_.fetch_add(1);
@@ -1182,15 +1189,15 @@ void RdfParallelParser<T>::initialize(const std::string& filename,
 
   auto feedBatches = [this, firstBatch = std::move(
                                 remainingBatchFromInitialization)]() mutable {
-    return feedBatchesToParser(std::move(firstBatch));
+    feedBatchesToParser(std::move(firstBatch));
   };
 
   parseFuture_ = std::async(std::launch::async, feedBatches);
 }
 
-// _______________________________________________________________________
+// _____________________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+bool RdfParallelParser<T>::processTriples() {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -1205,6 +1212,7 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
                      << std::endl;
         // In case of multiple errors in parallel batches, we always report the
         // first error.
+        parallelParser_.finish();
         parallelParser_.waitUntilFinished();
         auto errors = std::move(*errorMessages_.wlock());
         const auto& firstError =
@@ -1220,28 +1228,26 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
     // OptionalTripleTask fills the triples_ vector
     (*optionalTripleTask)();
   }
-
-  // we now have at least one triple, return it.
-  *triple = std::move(triples_.back());
-  triples_.pop_back();
   return true;
 }
 
 // _______________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  // we need a while in case there is a batch that contains no triples
-  // (this should be rare, // TODO warn about this
-  while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
-    if (!optionalTripleTask) {
-      // everything has been parsed
-      return std::nullopt;
-    }
-    (*optionalTripleTask)();
+bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+  bool triplesRemaining = processTriples();
+  if (triplesRemaining) {
+    // we now have at least one triple, return it.
+    *triple = std::move(triples_.back());
+    triples_.pop_back();
   }
+  return triplesRemaining;
+}
 
-  return std::move(triples_);
+// _______________________________________________________________________
+template <class T>
+std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
+  bool triplesRemaining = processTriples();
+  return triplesRemaining ? std::optional{std::move(triples_)} : std::nullopt;
 }
 
 // __________________________________________________________
