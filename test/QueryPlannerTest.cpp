@@ -19,6 +19,7 @@
 #include "range/v3/view/cartesian_product.hpp"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -4370,6 +4371,21 @@ TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
                    std::dynamic_pointer_cast<Join>(
                        operation->getChildren().at(1)->getRootOperation());
           })));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
+  using namespace ::testing;
+  auto qp = makeQueryPlanner();
+
+  auto cleanup = setRuntimeParameterForTest<"distributive-union">(false);
+  auto query = SparqlParser::parseQuery(
+      "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
+  auto plans = qp.createExecutionTrees(query);
+
+  ASSERT_EQ(plans.size(), 1);
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
 }
 
 // _____________________________________________________________________________

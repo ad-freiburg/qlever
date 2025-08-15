@@ -104,6 +104,9 @@ inline auto& RuntimeParameters() {
         // The maximum size of the `prefilterBox` for
         // `SpatialJoinAlgorithms::libspatialjoinParse()`.
         SizeT<"spatial-join-prefilter-max-size">{2'500},
+        // Push joins into both childs of unions if this leads to a cheaper
+        // cost-estimate.
+        Bool<"distributive-union">{true},
     };
   }();
   return params;
