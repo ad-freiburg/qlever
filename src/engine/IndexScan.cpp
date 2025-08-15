@@ -505,8 +505,8 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // Last fetched id from index scan.
-  std::optional<Id> lastId_ = std::nullopt;
+  // The join column entry in the last block that has already been fetched.
+  std::optional<Id> lastEntryInBlocks_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
@@ -563,19 +563,21 @@ struct IndexScan::SharedGeneratorState {
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
       if (!newBlocks.empty()) {
-        lastId_ = CompressedRelationReader::getRelevantIdFromTriple(
+        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
-      } else if (joinColumn[0] > lastId_.value_or(Id::makeUndefined())) {
-        if (!metaBlocks_.blockMetadata_.empty()) {
-          // The current `joinColumn` has no matching block in the index, we can
-          // safely skip appending it to `prefetchedValues_`, but future values
-          // might require later blocks from the index.
-          continue;
+      } else if (joinColumn[0] >
+                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
+        if (metaBlocks_.blockMetadata_.empty()) {
+          // We have seen entries in the join column that are larger than the
+          // largest block in the index scan, which means that there will be no
+          // more matches.
+          doneFetching_ = true;
+          return;
         }
-        // The current `joinColumn` has no matching block in the index, and
-        // there is nothing more left to search for subsequent values.
-        doneFetching_ = true;
-        return;
+        // The current `joinColumn` has no matching block in the index, we can
+        // safely skip appending it to `prefetchedValues_`, but future values
+        // might require later blocks from the index.
+        continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
