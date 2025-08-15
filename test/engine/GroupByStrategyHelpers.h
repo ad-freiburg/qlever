@@ -14,6 +14,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
