@@ -388,21 +388,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       });
 }
 
-// Helper function that enables a comparison of a triple with an `Id` in
-// the function `getBlocksForJoin` below.
-//
-// If the given triple matches `col0Id` of the given `ScanSpecification`, then
-// `col1Id` is returned.
-// respective other `Id` of the triple is returned.
-//
-// If the given triple matches neither, a sentinel value is returned (`Id::min`
-// if the triple is lower than all triples matching the `ScanSpecification`, or
-// `Id::max` if it is higher).
-namespace {
-auto getRelevantIdFromTriple(
+// _____________________________________________________________________________
+Id CompressedRelationReader::getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
-    const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
-        metadataAndBlocks) {
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // The `ScanSpecifcation`, which must ask for at least one column.
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
   AD_CORRECTNESS_CHECK(!scanSpec.col2Id());
@@ -458,7 +447,6 @@ auto getRelevantIdFromTriple(
                                maxId)
       .value_or(triple.col2Id_);
 }
-}  // namespace
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getBlocksForJoin(
@@ -1855,6 +1843,28 @@ void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
     std::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);
   checkBlockMetadataInvariantBlockConsistencyImpl(blocks, firstFreeColIndex);
+}
+
+// _____________________________________________________________________________
+void CompressedRelationReader::ScanSpecAndBlocks::removePrefix(
+    size_t numBlocksToRemove) {
+  auto it = blockMetadata_.begin();
+  auto end = blockMetadata_.end();
+  for (; it != end; ++it) {
+    auto& subspan = *it;
+    auto sz = ql::ranges::size(subspan);
+    if (numBlocksToRemove < sz) {
+      // Partially remove a subspan if it contains less blocks than we have
+      // to remove.
+      subspan.advance(numBlocksToRemove);
+      break;
+    } else {
+      // Completely remove the subspan (via the `erase` at the end).
+      numBlocksToRemove -= sz;
+    }
+  }
+  // Remove all the blocks that are to be erased completely.
+  blockMetadata_.erase(blockMetadata_.begin(), it);
 }
 
 // _____________________________________________________________________________

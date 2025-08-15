@@ -505,8 +505,8 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // The index of the last matching block that was found using the join column.
-  std::optional<size_t> lastBlockIndex_ = std::nullopt;
+  // The join column entry in the last block that has already been fetched.
+  std::optional<Id> lastEntryInBlocks_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
@@ -562,22 +562,25 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
-      if (newBlocks.empty()) {
-        // The current input table matches no blocks, so we don't have to yield
-        // it.
+      if (!newBlocks.empty()) {
+        lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
+            newBlocks.back().lastTriple_, metaBlocks_);
+      } else if (joinColumn[0] >
+                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
+        if (metaBlocks_.blockMetadata_.empty()) {
+          // We have seen entries in the join column that are larger than the
+          // largest block in the index scan, which means that there will be no
+          // more matches.
+          doneFetching_ = true;
+          return;
+        }
+        // The current `joinColumn` has no matching block in the index, we can
+        // safely skip appending it to `prefetchedValues_`, but future values
+        // might require later blocks from the index.
         continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
-      // Find first value that differs from the last one that was used to find
-      // matching blocks.
-      auto startIterator =
-          lastBlockIndex_.has_value()
-              ? ql::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
-                                        &CompressedBlockMetadata::blockIndex_)
-              : newBlocks.begin();
-      lastBlockIndex_ = newBlocks.back().blockIndex_;
-      ql::ranges::move(startIterator, newBlocks.end(),
-                       std::back_inserter(pendingBlocks_));
+      ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
     }
   }
 
