@@ -657,13 +657,6 @@ class RdfParallelParser : public Parser {
   // Initialized in the call to `initialize`.
   std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
 
-  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
-      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
-  ad_utility::TaskQueue<true> parallelParser_{
-      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
-      "parallel parser"};
-  std::future<void> parseFuture_;
-
   // Collect error messages in case of multiple failures. The `size_t` is the
   // start position of the corresponding batch, used to order the errors in case
   // the batches are finished out of order.
@@ -678,6 +671,15 @@ class RdfParallelParser : public Parser {
   TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
   std::chrono::milliseconds sleepTimeForTesting_{0};
+
+  // These datastructures are ordered last, such that all threads are joined
+  // before the rest of the members is gone when the destructor is called.
+  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
+      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
+  ad_utility::TaskQueue<true> parallelParser_{
+      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
+      "parallel parser"};
+  std::future<void> parseFuture_;
 };
 
 // This class is an RDF parser that parses multiple files in parallel. Each

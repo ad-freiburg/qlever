@@ -650,7 +650,8 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<std::string_view, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  static constexpr std::array<std::string_view, 4> quotes{R"(""")", R"(''')",
+                                                          "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
