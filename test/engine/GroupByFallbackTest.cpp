@@ -4,11 +4,12 @@
 
 #include <gtest/gtest.h>
 
+#include <numeric>
+
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "GroupByStrategyHelpers.h"
-#include "engine/GroupByImpl.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
@@ -50,8 +51,9 @@ TEST_F(GroupByFallbackTest, EmptyInput) {
 TEST_F(GroupByFallbackTest, AllSameRows) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  IdTable table = createIdTable(
-      100, [](size_t) { return 7; }, allocator);
+  // Single-column data
+  RowData rows(100, 7);
+  IdTable table = createIdTable(rows, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -63,9 +65,8 @@ TEST_F(GroupByFallbackTest, AllSameRows) {
 TEST_F(GroupByFallbackTest, MixedValues) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  std::vector<int64_t> vals = {2, 1, 3, 2, 0};
-  IdTable table = createIdTable(
-      vals.size(), [&](size_t i) { return vals[i]; }, allocator);
+  RowData vals = {2, 1, 3, 2, 0};
+  IdTable table = createIdTable(vals, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -80,8 +81,9 @@ TEST_F(GroupByFallbackTest, MixedValues) {
 TEST_F(GroupByFallbackTest, AllUniqueRows) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  IdTable table = createIdTable(
-      10, [](size_t i) { return static_cast<int64_t>(i); }, allocator);
+  RowData vals(10);
+  for (size_t i = 0; i < vals.size(); ++i) vals[i] = i;
+  IdTable table = createIdTable(vals, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -97,8 +99,9 @@ TEST_F(GroupByFallbackTest, LargeMixed) {
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   const size_t N = 10000;
   // 5 distinct groups
-  IdTable table = createIdTable(
-      N, [](size_t i) { return static_cast<int64_t>(i % 5); }, allocator);
+  RowData vals(N);
+  for (size_t i = 0; i < N; ++i) vals[i] = i % 5;
+  IdTable table = createIdTable(vals, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -114,12 +117,9 @@ TEST_F(GroupByFallbackTest, MultiColumn) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Table with two columns, five rows, with three distinct pairs
-  std::vector<std::array<int64_t, 2>> data = {
-      {1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}};
-  IdTable table = createIdTable(
-      2, data.size(),
-      [&](size_t r, size_t c) { return data[r][c]; },
-      allocator);
+  // Two-column row data
+  TableData data = {{1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}};
+  IdTable table = createIdTable(data, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -135,11 +135,13 @@ TEST_F(GroupByFallbackTest, MultiColumn) {
 // Distinct-ratio guard: with high threshold no fallback
 TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
   // enable sampling guard
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   RuntimeParameters().set<"group-by-sample-enabled">(true);
   RuntimeParameters().set<"group-by-sample-distinct-ratio">(1.0);
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  IdTable table = createIdTable(
-      5, [](size_t i) { return static_cast<int64_t>(i); }, allocator);
+  RowData vals(5);
+  for (size_t i = 0; i < 5; ++i) vals[i] = i;
+  IdTable table = createIdTable(vals, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   // fallback guard should skip hash-map, but result unchanged
@@ -154,19 +156,29 @@ TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
 TEST_F(GroupByFallbackTest, PartialFallback) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  // create 8 rows: first 2 unique, then 3 new, then repeats
-  std::vector<int64_t> pattern = {1, 2, 3, 4, 3, 4, 1, 2};
-  IdTable table = createIdTable(
-      pattern.size(), [&](size_t i) { return pattern[i]; }, allocator);
-  auto gb = setupGroupBy(table, qec_);
-  auto res = gb->computeResult(false);
+  // Partial fallback: two chunks of single-column data
+  RowData ch1(500);
+  std::iota(ch1.begin(), ch1.end(), 1);
+  RowData ch2(500);
+  std::iota(ch2.begin(), ch2.end(), 251);
+  auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
+  auto gb = setupLazyGroupBy(std::move(tables), qec_);
+  auto res = gb->computeResult(true);
   const auto& out = res.idTable();
-  // distinct values are 1,2,3,4
-  ASSERT_EQ(out.size(), 4);
-  std::vector<Id> expected = {IntId(1), IntId(2), IntId(3), IntId(4)};
-  for (size_t i = 0; i < 4; ++i) {
-    EXPECT_EQ(out(i, 0), expected[i]);
-  }
+  // Expect 750 rows, because 251..500 are in both chunks and the rest is unique
+  ASSERT_EQ(out.size(), 750);
+  // Checking output values
+  EXPECT_EQ(out(0, 0), IntId(1));
+  EXPECT_EQ(out(1, 0), IntId(2));
+  EXPECT_EQ(out(2, 0), IntId(3));
+  // ...
+  EXPECT_EQ(out(373, 0), IntId(374));
+  EXPECT_EQ(out(374, 0), IntId(375));
+  EXPECT_EQ(out(375, 0), IntId(376));
+  // ...
+  EXPECT_EQ(out(747, 0), IntId(748));
+  EXPECT_EQ(out(748, 0), IntId(749));
+  EXPECT_EQ(out(749, 0), IntId(750));
 }
 
 // Test global aggregation with no GROUP BY variables: should produce one empty
@@ -175,8 +187,10 @@ TEST_F(GroupByFallbackTest, ImplicitGroupOnly) {
   // Create input table with 5 rows
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Create input table with 5 rows
-  IdTable table = createIdTable(
-      5, [](size_t i) { return static_cast<int64_t>(i + 1); }, allocator);
+  // Single-column data for implicit group-only test: values 1..5
+  RowData rows(5);
+  for (size_t i = 0; i < rows.size(); ++i) rows[i] = i + 1;
+  IdTable table = createIdTable(rows, allocator);
   // Build a GroupByImpl with no grouping variables and no aliases
   auto mockOp = std::make_shared<MockOperation>(qec_, table);
   auto tree = std::make_shared<QueryExecutionTree>(qec_, mockOp);
