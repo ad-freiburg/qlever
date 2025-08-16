@@ -1659,6 +1659,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       IdTable hashResult = createResultFromHashMap(
           aggregationData, aggregateAliases, &localVocab);
       hashResult.reserve(hashResult.numRows() + restResult.numRows());
+      // Report sizes of hash-map and sorted fallback results.
+      // [Benke] (May be too much log, I will remove it if it's not important)
+      AD_LOG_DEBUG << "Hybrid fallback: hash groups=" << hashResult.numRows()
+                   << ", sorted tail groups=" << restResult.numRows()
+                   << std::endl;
       // Append rows from restResult; use prvalue binding
       for (auto&& row : restResult) {
         hashResult.push_back(std::forward<decltype(row)>(row));

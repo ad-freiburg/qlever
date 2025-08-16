@@ -50,8 +50,9 @@ TEST_F(GroupBySamplingTest, edgeCaseAllSame) {
   RuntimeParameters().set<"group-by-sample-min-table-size">(0);
   for (auto s : sizes) {
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-    IdTable table = createIdTable(
-        s, [](size_t) { return 42; }, allocator);
+    // Single-column data of all 42s
+    RowData rows(s, 42);
+    IdTable table = createIdTable(rows, allocator);
     auto groupBy = setupGroupBy(table, qec_);
     if (s == 1) {
       // For size 1, we expect the hash-map grouping to be skipped
@@ -71,8 +72,10 @@ TEST_F(GroupBySamplingTest, edgeCaseAllUnique) {
   for (auto s : sizes) {
     RuntimeParameters().set<"group-by-sample-min-table-size">(0);
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-    IdTable table = createIdTable(
-        s, [](size_t i) { return static_cast<int64_t>(i); }, allocator);
+    // Single-column data of 0..s-1
+    RowData rows(s);
+    for (size_t i = 0; i < s; ++i) rows[i] = i;
+    IdTable table = createIdTable(rows, allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
         *groupBy, table, LogLevel::DEBUG));
@@ -97,9 +100,10 @@ TEST_F(GroupBySamplingTest, belowThreshold) {
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     // Use 15% of s as the number of distinct groups
     size_t distinctGroups = static_cast<size_t>(s * 0.15);
-    IdTable table = createIdTable(
-        s, [distinctGroups](size_t i) { return i % distinctGroups; },
-        allocator);
+    // Single-column data with pattern i % distinctGroups
+    RowData rows(s);
+    for (size_t i = 0; i < s; ++i) rows[i] = i % distinctGroups;
+    IdTable table = createIdTable(rows, allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_FALSE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
         *groupBy, table, LogLevel::DEBUG));
@@ -115,9 +119,10 @@ TEST_F(GroupBySamplingTest, aboveThreshold) {
     AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
     // Use 95% of s as the number of distinct groups
     size_t distinctGroups = static_cast<size_t>(s * 0.95);
-    IdTable table = createIdTable(
-        s, [distinctGroups](size_t i) { return i % distinctGroups; },
-        allocator);
+    // Single-column data with pattern i % distinctGroups
+    RowData rows(s);
+    for (size_t i = 0; i < s; ++i) rows[i] = i % distinctGroups;
+    IdTable table = createIdTable(rows, allocator);
     auto groupBy = setupGroupBy(table, qec_);
     EXPECT_TRUE(GroupByStrategyChooser::shouldSkipHashMapGrouping(
         *groupBy, table, LogLevel::DEBUG));
