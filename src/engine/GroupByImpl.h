@@ -17,12 +17,14 @@
 
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/Log.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -73,7 +75,10 @@ class GroupByImpl : public Operation {
   virtual float getMultiplicity(size_t col) override;
 
  public:
+  // Overrides Operation::getSizeEstimateBeforeLimit()
   uint64_t getSizeEstimateBeforeLimit() override;
+  // Const overload for internal use.
+  uint64_t getSizeEstimateBeforeLimit() const;
   size_t getCostEstimate() override;
 
   /**
@@ -326,7 +331,8 @@ class GroupByImpl : public Operation {
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
   Result computeGroupByForHashMapOptimization(
       std::vector<HashMapAliasInformation>& aggregateAliases,
-      SubResults subresults, const std::vector<size_t>& columnIndices) const;
+      SubResults subresults, const std::vector<size_t>& columnIndices,
+      const std::vector<Aggregate>& aggregates) const;
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
@@ -400,6 +406,9 @@ class GroupByImpl : public Operation {
       return aggregationData_.at(aggregationDataIndex);
     }
 
+    // Expose map of group key to index for external use (e.g., sampling).
+    const auto& getMap() const { return map_; }
+
     // Get vector containing the aggregation data at `aggregationDataIndex`,
     // but const.
     [[nodiscard]] const AggregationDataVectors& getAggregationDataVariant(
@@ -427,6 +436,22 @@ class GroupByImpl : public Operation {
     // For `GROUP_CONCAT`, we require the type information.
     std::vector<HashMapAggregateTypeWithData> aggregateTypeWithData_;
   };
+
+  template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
+  std::pair<IdTable, IdTable> splitRowsByExistingGroups(
+      size_t inWidth, Sentinel endIt, const std::vector<size_t>& columnIndices,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      Iterator it) const;
+
+  // Incorporate existing-group rows into the hash map aggregation state
+  template <size_t NUM_GROUP_COLUMNS>
+  void updateHashMapWithTable(
+      const IdTable& existingTable, LocalVocab& localVocab,
+      const std::vector<size_t>& columnIndices,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      std::vector<HashMapAliasInformation>& aggregateAliases,
+      ad_utility::Timer* lookupTimer = nullptr,
+      ad_utility::Timer* aggregationTimer = nullptr) const;
 
   // Returns the aggregation results between `beginIndex` and `endIndex`
   // of the aggregates stored at `dataIndex`,
@@ -595,9 +620,13 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-};
 
-// _____________________________________________________________________________
+  friend bool GroupByStrategyChooser::shouldSkipHashMapGrouping(
+      const GroupByImpl&, const IdTable&, LogLevel);
+
+};  // class GroupByImpl
+
+// Concept to identify aggregation data vectors
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =

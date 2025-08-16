@@ -49,6 +49,15 @@ inline auto& RuntimeParameters() {
         Bool<"use-binsearch-transitive-path">{true},
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
+        // === Sampling-based hybrid GROUP BY thresholds ===
+        Bool<"group-by-sample-enabled">{true},
+        // Constant multiplier for sample size (k * sqrt(n)) in Chao1
+        Double<"group-by-sample-constant">{1},
+        // Avoid HashMap path if the fraction (sampled distinct groups / sample
+        // size) exceeds the distinct ratio AND the estimated number of
+        // distinct groups exceeds the group threshold.
+        Double<"group-by-sample-distinct-ratio">{0.9},
+        SizeT<"group-by-sample-min-table-size">{1000},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},
