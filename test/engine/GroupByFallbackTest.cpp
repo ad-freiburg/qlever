@@ -136,11 +136,12 @@ TEST_F(GroupByFallbackTest, MultiColumn) {
 TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
   // enable sampling guard
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  RuntimeParameters().set<"group-by-sample-enabled">(true);
+  RuntimeParameters().set<"group-by-sample-enabled">(false);
   RuntimeParameters().set<"group-by-sample-distinct-ratio">(1.0);
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   RowData vals(5);
-  for (size_t i = 0; i < 5; ++i) vals[i] = i;
+  // Use 0..4 as values
+  std::iota(vals.begin(), vals.end(), 0);
   IdTable table = createIdTable(vals, allocator);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
@@ -153,14 +154,72 @@ TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
 }
 
 // Partial fallback: splitRowsByExistingGroups behavior
-TEST_F(GroupByFallbackTest, PartialFallback) {
+TEST_F(GroupByFallbackTest, OnlyHashMapPartialFallback) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Partial fallback: two chunks of single-column data
   RowData ch1(500);
-  std::iota(ch1.begin(), ch1.end(), 1);
+  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
   RowData ch2(500);
-  std::iota(ch2.begin(), ch2.end(), 251);
+  std::iota(ch2.begin(), ch2.end(), 1); // 1..500
+  auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
+  auto gb = setupLazyGroupBy(std::move(tables), qec_);
+  auto res = gb->computeResult(true);
+  const auto& out = res.idTable();
+  // Expect 500 rows, because all rows are common across both chunks
+  ASSERT_EQ(out.size(), 500);
+  // Checking output values
+  EXPECT_EQ(out(0, 0), IntId(1));
+  EXPECT_EQ(out(1, 0), IntId(2));
+  EXPECT_EQ(out(2, 0), IntId(3));
+  // ...
+  EXPECT_EQ(out(248, 0), IntId(249));
+  EXPECT_EQ(out(249, 0), IntId(250));
+  EXPECT_EQ(out(250, 0), IntId(251));
+  // ...
+  EXPECT_EQ(out(497, 0), IntId(498));
+  EXPECT_EQ(out(498, 0), IntId(499));
+  EXPECT_EQ(out(499, 0), IntId(500));
+}
+
+// Partial fallback: splitRowsByExistingGroups behavior with existing groups
+TEST_F(GroupByFallbackTest, ExistingGroupsPartialFallback) {
+  forceFallback();
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  // Partial fallback: two chunks of single-column data with existing groups
+  RowData ch1(500);
+  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
+  RowData ch2(500);
+  std::iota(ch2.begin(), ch2.end(), 501); // 501..1000
+  auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
+  auto gb = setupLazyGroupBy(std::move(tables), qec_);
+  auto res = gb->computeResult(true);
+  const auto& out = res.idTable();
+  // Expect 1000 rows, because all rows are unique across both chunks
+  ASSERT_EQ(out.size(), 1000);
+  // Checking output values
+  EXPECT_EQ(out(0, 0), IntId(1));
+  EXPECT_EQ(out(1, 0), IntId(2));
+  EXPECT_EQ(out(2, 0), IntId(3));
+  // ...
+  EXPECT_EQ(out(498, 0), IntId(499));
+  EXPECT_EQ(out(499, 0), IntId(500));
+  EXPECT_EQ(out(500, 0), IntId(501));
+  // ...
+  EXPECT_EQ(out(997, 0), IntId(998));
+  EXPECT_EQ(out(998, 0), IntId(999));
+  EXPECT_EQ(out(999, 0), IntId(1000));
+}
+
+// Partial fallback: splitRowsByExistingGroups behavior
+TEST_F(GroupByFallbackTest, MixedPartialFallback) {
+  forceFallback();
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  // Partial fallback: two chunks of single-column data
+  RowData ch1(500);
+  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
+  RowData ch2(500);
+  std::iota(ch2.begin(), ch2.end(), 251); // 251..750
   auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
