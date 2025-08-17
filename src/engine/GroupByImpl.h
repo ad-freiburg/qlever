@@ -437,22 +437,6 @@ class GroupByImpl : public Operation {
     std::vector<HashMapAggregateTypeWithData> aggregateTypeWithData_;
   };
 
-  template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
-  std::pair<IdTable, IdTable> splitRowsByExistingGroups(
-      size_t inWidth, Sentinel endIt, const std::vector<size_t>& columnIndices,
-      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      Iterator it) const;
-
-  // Incorporate existing-group rows into the hash map aggregation state
-  template <size_t NUM_GROUP_COLUMNS>
-  void updateHashMapWithTable(
-      const IdTable& existingTable, LocalVocab& localVocab,
-      const std::vector<size_t>& columnIndices,
-      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      std::vector<HashMapAliasInformation>& aggregateAliases,
-      ad_utility::Timer* lookupTimer = nullptr,
-      ad_utility::Timer* aggregationTimer = nullptr) const;
-
   // Returns the aggregation results between `beginIndex` and `endIndex`
   // of the aggregates stored at `dataIndex`,
   // based on the groups stored in the first column of `resultTable`

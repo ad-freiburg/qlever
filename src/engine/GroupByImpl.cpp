@@ -1591,21 +1591,154 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       getExecutionContext()->getAllocator(), aggregateAliases,
       columnIndices.size());
 
-  // Buffer for tail blocks if we switch to sort
-  std::vector<Result::IdTableVocabPair> tailBlocks;
-  uint64_t tableSize = getSizeEstimateBeforeLimit();
-  double distinctRatio =
-      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
-  double k = RuntimeParameters().get<"group-by-sample-constant">();
-  double sampleSize = k * std::sqrt(double(tableSize));
-  size_t groupThreshold = static_cast<size_t>(tableSize * distinctRatio);
-
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
 
   auto beginIt = ql::ranges::begin(subresults);
   auto endIt = ql::ranges::end(subresults);
   uint64_t processedEntries = 0;
+
+  const auto& [beginIdTableRef, beginLocalVocabRef] = *beginIt;
+  const IdTable& beginIdTable = beginIdTableRef;
+  const size_t inWidth = beginIdTable.numColumns();
+
+  uint64_t tableSize = getSizeEstimateBeforeLimit();
+  double k = RuntimeParameters().get<"group-by-sample-constant">();
+  double sampleSize = k * std::sqrt(double(tableSize));
+  double distinctRatio =
+      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
+  size_t groupThreshold = static_cast<size_t>(tableSize * distinctRatio);
+
+  auto splitRowsByExistingGroups = [&](auto it) -> std::pair<IdTable, IdTable> {
+    IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
+    IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+    auto& countsMap = aggregationData.getMap();
+    for (auto tailIt = ++it; tailIt != endIt; ++tailIt) {
+      const auto& [tblRef, localVocabRef] = *tailIt;
+      const IdTable& tbl = tblRef;
+      for (size_t r = 0; r < tbl.size(); ++r) {
+        typename HashMapAggregationData<
+            NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
+            key;
+        resizeIfVector(key, columnIndices.size());
+        for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
+          key[ci] = tbl(r, columnIndices[ci]);
+        }
+        bool keyInMap = countsMap.find(key) != countsMap.end();
+        IdTable* tableToUse = keyInMap ? &existingTable : &restTable;
+        tableToUse->emplace_back();
+        size_t dest = tableToUse->numRows() - 1;
+        for (size_t c = 0; c < inWidth; ++c) {
+          (*tableToUse)(dest, c) = tbl(r, c);
+        }
+      }
+    }
+    return {std::move(existingTable), std::move(restTable)};
+  };
+
+  // TODO: only sample once
+  std::function<Result*(const IdTable&, decltype(beginIt), uint64_t)>
+      updateHashMapWithTable = [&](const IdTable& table, auto it,
+                                   uint64_t processedEntries) -> Result* {
+    // Setup the `EvaluationContext` for this block.
+    sparqlExpression::EvaluationContext evaluationContext(
+        *getExecutionContext(), _subtree->getVariableColumns(), table,
+        getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
+        deadline_);
+    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+        _groupByVariables.begin(), _groupByVariables.end()};
+    evaluationContext._isPartOfGroupBy = true;
+
+    // Iterate of the rows of this block. Process (up to)
+    // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
+    for (size_t i = 0; i < table.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
+      checkCancellation();
+
+      evaluationContext._beginIndex = i;
+      evaluationContext._endIndex =
+          std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, table.size());
+
+      auto currentBlockSize = evaluationContext.size();
+
+      // Perform HashMap lookup once for all groups in current block
+      using U = HashMapAggregationData<
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+      U groupValues;
+      resizeIfVector(groupValues, columnIndices.size());
+
+      // TODO<C++23> use views::enumerate
+      size_t j = 0;
+      for (auto& idx : columnIndices) {
+        groupValues[j] = table.getColumn(idx).subspan(
+            evaluationContext._beginIndex, currentBlockSize);
+        ++j;
+      }
+      lookupTimer.cont();
+      auto hashEntries = aggregationData.getHashEntries(groupValues);
+      lookupTimer.stop();
+
+      aggregationTimer.cont();
+      for (auto& aggregateAlias : aggregateAliases) {
+        for (auto& aggregate : aggregateAlias.aggregateInfo_) {
+          sparqlExpression::ExpressionResult expressionResult =
+              GroupByImpl::evaluateChildExpressionOfAggregateFunction(
+                  aggregate, evaluationContext);
+
+          auto& aggregationDataVariant =
+              aggregationData.getAggregationDataVariant(
+                  aggregate.aggregateDataIndex_);
+
+          std::visit(makeProcessGroupsVisitor(currentBlockSize,
+                                              &evaluationContext, hashEntries),
+                     std::move(expressionResult), aggregationDataVariant);
+        }
+      }
+      aggregationTimer.stop();
+    }
+    // We only do sampling if the number of processed entries is larger than
+    // `sampleSize` and the number of processed entries is not zero.
+    if (processedEntries >= sampleSize && processedEntries != 0) {
+      size_t totalGroups = static_cast<size_t>(
+          GroupByStrategyChooser::estimateNumberOfTotalGroups(
+              aggregationData.getMap(), LogLevel::FATAL,
+              sampleSize / processedEntries));
+      if (totalGroups > groupThreshold) {
+        AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
+                     << ") > (thr: " << groupThreshold
+                     << "), switching to sort-based aggregation" << std::endl;
+        // Batch existing-group rows and buffer new-group rows
+
+        auto [existingTable, restTable] = splitRowsByExistingGroups(it);
+        // process all existing-group rows in one block
+        if (!existingTable.empty()) {
+          updateHashMapWithTable(existingTable, it, 0);
+        }
+        // sort tail rows by grouping columns using parallel Engine sort
+        Engine::sort(restTable, columnIndices);
+        // perform sort-based grouping on buffered new groups
+        IdTable restResult = CALL_FIXED_SIZE(
+            (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy,
+            this, restTable, columnIndices, aggregates, &localVocab);
+        // combine hash-map result and restResult
+        IdTable hashResult = createResultFromHashMap(
+            aggregationData, aggregateAliases, &localVocab);
+        hashResult.reserve(hashResult.numRows() + restResult.numRows());
+        // Report sizes of hash-map and sorted fallback results.
+        // [Benke] (May be too much log, I will remove it if it's not important)
+        AD_LOG_DEBUG << "Hybrid fallback: hash groups=" << hashResult.numRows()
+                     << ", sorted tail groups=" << restResult.numRows()
+                     << std::endl;
+        // Append rows from restResult; use prvalue binding
+        for (auto&& row : restResult) {
+          hashResult.push_back(std::forward<decltype(row)>(row));
+        }
+        // Return a new Result on the heap to signal early exit
+        return new Result{std::move(hashResult), resultSortedOn(),
+                          std::move(localVocab)};
+      }
+    }
+    return nullptr;
+  };
 
   // Iterate through input blocks; break out and buffer the rest if threshold
   // exceeded
@@ -1620,55 +1753,13 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(inputLocalVocab);
 
-    updateHashMapWithTable(inputTable, localVocab, columnIndices,
-                           aggregationData, aggregateAliases, &lookupTimer,
-                           &aggregationTimer);
-
-    processedEntries += inputTable.size();
-    // If the number of processed entries is below the sample size, we skip
-    // sampling
-    if (processedEntries < sampleSize || processedEntries == 0) {
-      continue;
-    }
-    size_t totalGroups =
-        static_cast<size_t>(GroupByStrategyChooser::estimateNumberOfTotalGroups(
-            aggregationData.getMap(), LogLevel::FATAL,
-            sampleSize / processedEntries));
-    if (totalGroups > groupThreshold) {
-      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
-                   << ") > (thr: " << groupThreshold
-                   << "), switching to sort-based aggregation" << std::endl;
-      // Batch existing-group rows and buffer new-group rows
-      const auto& [beginIdTableRef, beginLocalVocabRef] = *beginIt;
-      const IdTable& beginIdTable = beginIdTableRef;
-      const size_t inWidth = beginIdTable.numColumns();
-      auto [existingTable, restTable] = splitRowsByExistingGroups(
-          inWidth, endIt, columnIndices, aggregationData, it);
-      // process all existing-group rows in one block
-      if (!existingTable.empty()) {
-        updateHashMapWithTable(existingTable, localVocab, columnIndices,
-                               aggregationData, aggregateAliases);
-      }
-      // sort tail rows by grouping columns using parallel Engine sort
-      Engine::sort(restTable, columnIndices);
-      // perform sort-based grouping on buffered new groups
-      IdTable restResult = CALL_FIXED_SIZE(
-          (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy,
-          this, restTable, columnIndices, aggregates, &localVocab);
-      // combine hash-map result and restResult
-      IdTable hashResult = createResultFromHashMap(
-          aggregationData, aggregateAliases, &localVocab);
-      hashResult.reserve(hashResult.numRows() + restResult.numRows());
-      // Report sizes of hash-map and sorted fallback results.
-      // [Benke] (May be too much log, I will remove it if it's not important)
-      AD_LOG_DEBUG << "Hybrid fallback: hash groups=" << hashResult.numRows()
-                   << ", sorted tail groups=" << restResult.numRows()
-                   << std::endl;
-      // Append rows from restResult; use prvalue binding
-      for (auto&& row : restResult) {
-        hashResult.push_back(std::forward<decltype(row)>(row));
-      }
-      return {std::move(hashResult), resultSortedOn(), std::move(localVocab)};
+    Result* resultPtr =
+        updateHashMapWithTable(inputTable, it, processedEntries);
+    // Check for early exit from hybrid fallback path
+    if (resultPtr != nullptr) {
+      Result movedResult = std::move(*resultPtr);
+      delete resultPtr;
+      return movedResult;
     }
   }
 
@@ -1680,101 +1771,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
 
-template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
-std::pair<IdTable, IdTable> GroupByImpl::splitRowsByExistingGroups(
-    size_t inWidth, Sentinel endIt, const std::vector<size_t>& columnIndices,
-    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    Iterator it) const {
-  IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
-  IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
-  auto& countsMap = aggregationData.getMap();
-  for (auto tailIt = ++it; tailIt != endIt; ++tailIt) {
-    const auto& [tblRef, localVocabRef] = *tailIt;
-    const IdTable& tbl = tblRef;
-    for (size_t r = 0; r < tbl.size(); ++r) {
-      typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
-          key;
-      resizeIfVector(key, columnIndices.size());
-      for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
-        key[ci] = tbl(r, columnIndices[ci]);
-      }
-      bool keyInMap = countsMap.find(key) != countsMap.end();
-      IdTable* tableToUse = keyInMap ? &existingTable : &restTable;
-      tableToUse->emplace_back();
-      size_t dest = tableToUse->numRows() - 1;
-      for (size_t c = 0; c < inWidth; ++c) {
-        (*tableToUse)(dest, c) = tbl(r, c);
-      }
-    }
-  }
-  return {std::move(existingTable), std::move(restTable)};
-}
+// template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
+// std::pair<IdTable, IdTable> GroupByImpl::
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void GroupByImpl::updateHashMapWithTable(
-    const IdTable& table, LocalVocab& localVocab,
-    const std::vector<size_t>& columnIndices,
-    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    std::vector<HashMapAliasInformation>& aggregateAliases,
-    ad_utility::Timer* lookupTimer, ad_utility::Timer* aggregationTimer) const {
-  // Setup the `EvaluationContext` for this block.
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), table,
-      getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
-      deadline_);
-  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
-      _groupByVariables.begin(), _groupByVariables.end()};
-  evaluationContext._isPartOfGroupBy = true;
-
-  // Iterate of the rows of this block. Process (up to)
-  // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
-  for (size_t i = 0; i < table.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
-    checkCancellation();
-
-    evaluationContext._beginIndex = i;
-    evaluationContext._endIndex =
-        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, table.size());
-
-    auto currentBlockSize = evaluationContext.size();
-
-    // Perform HashMap lookup once for all groups in current block
-    using U = HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<
-        ql::span<const Id>>;
-    U groupValues;
-    resizeIfVector(groupValues, columnIndices.size());
-
-    // TODO<C++23> use views::enumerate
-    size_t j = 0;
-    for (auto& idx : columnIndices) {
-      groupValues[j] = table.getColumn(idx).subspan(
-          evaluationContext._beginIndex, currentBlockSize);
-      ++j;
-    }
-    if (lookupTimer != nullptr) lookupTimer->cont();
-    auto hashEntries = aggregationData.getHashEntries(groupValues);
-    if (lookupTimer != nullptr) lookupTimer->stop();
-
-    if (aggregationTimer != nullptr) aggregationTimer->cont();
-    for (auto& aggregateAlias : aggregateAliases) {
-      for (auto& aggregate : aggregateAlias.aggregateInfo_) {
-        sparqlExpression::ExpressionResult expressionResult =
-            GroupByImpl::evaluateChildExpressionOfAggregateFunction(
-                aggregate, evaluationContext);
-
-        auto& aggregationDataVariant =
-            aggregationData.getAggregationDataVariant(
-                aggregate.aggregateDataIndex_);
-
-        std::visit(makeProcessGroupsVisitor(currentBlockSize,
-                                            &evaluationContext, hashEntries),
-                   std::move(expressionResult), aggregationDataVariant);
-      }
-    }
-    if (aggregationTimer != nullptr) aggregationTimer->stop();
-  }
-}
+// template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
 
 // _____________________________________________________________________________
 std::optional<Variable>
