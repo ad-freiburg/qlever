@@ -110,10 +110,18 @@ class SparqlTriple
       return std::nullopt;
     }
     const auto& path = std::get<PropertyPath>(p_);
-    return path.isIri()
-               ? std::optional<std::string_view>{path.getIri()
-                                                     .toStringRepresentation()}
-               : std::nullopt;
+    if (path.isIri()) {
+      const auto& tc = path.getIri();
+      if (tc.isIri()) {
+        return std::optional<std::string_view>{
+            tc.getIri().toStringRepresentation()};
+      } else {
+        // For encoded values, we can't return a string_view to a temporary
+        // Return nullopt for now - this might need a different approach
+        return std::nullopt;
+      }
+    }
+    return std::nullopt;
   }
 
   // If the predicate of the triples is a variable, return it. Note:

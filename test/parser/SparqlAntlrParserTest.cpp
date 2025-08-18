@@ -1198,12 +1198,15 @@ TEST(SparqlParser, ConstructQuery) {
 
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
-               ad_utility::Exception);
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
-               ad_utility::Exception);
+  static ad_utility::BlankNodeManager blankNodeManager;
+  SparqlQleverVisitor visitor{&blankNodeManager, evm(), {}, std::nullopt};
+
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
+      ad_utility::Exception);
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
+      ad_utility::Exception);
 }
 
 // Test that ASK queries are parsed as they should.
@@ -1704,13 +1707,15 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
     // properly handle encoded IRIs if they appear in the subject or predicate
     // of a query, but only in objects. That is of course not correct and has to
     // be addressed.
-    /*
-    EXPECT_THAT(parsedQuery, m::SelectQuery(
-        m::VariablesSelect({"?p", "?o"}),
-        m::GraphPattern(m::OrderedTriples({{{encodedIriManager->encode("<http://example.org/123>").value(),
-    Variable("?p"), Variable("?o")}}}))
-    ));
-    */
+    EXPECT_THAT(
+        parsedQuery,
+        m::SelectQuery(
+            m::VariablesSelect({"?p", "?o"}),
+            m::GraphPattern(m::OrderedTriples(
+                {{{TripleComponent{
+                       encodedIriManager->encode("<http://example.org/123>")
+                           .value()},
+                   Variable("?p"), Variable("?o")}}}))));
 
     // Note: The specific encoding check would require accessing the internal
     // representation For now, we verify that the query parses successfully with
@@ -1761,4 +1766,22 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
   // Both should parse completely
   EXPECT_TRUE(resultWith.remainingText_.empty());
   EXPECT_TRUE(resultWithout.remainingText_.empty());
+
+  // Test that predicates with encodable IRIs get properly encoded
+  {
+    auto result =
+        parseWithEncoding("SELECT * WHERE { ?s <http://example.org/456> ?o }");
+    auto& parsedQuery = result.resultOfParse_;
+
+    EXPECT_THAT(
+        parsedQuery,
+        m::SelectQuery(
+            m::VariablesSelect({"?s", "?o"}),
+            m::GraphPattern(m::OrderedTriples(
+                {{{Variable("?s"),
+                   PropertyPath::fromTripleComponent(TripleComponent{
+                       encodedIriManager->encode("<http://example.org/456>")
+                           .value()}),
+                   Variable("?o")}}}))));
+  }
 }
