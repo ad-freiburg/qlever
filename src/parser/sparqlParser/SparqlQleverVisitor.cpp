@@ -2189,14 +2189,19 @@ std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   if (ctx->iri()) {
-    return PropertyPath::fromIri(visit(ctx->iri()));
+    // Get the IRI string and try to encode it
+    auto iri = visit(ctx->iri());
+    if (auto encodedId =
+            encodedIriManager_->encode(iri.toStringRepresentation())) {
+      return PropertyPath::fromTripleComponent(TripleComponent{*encodedId});
+    }
+    return PropertyPath::fromIri(iri);
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
     return visit(ctx->pathNegatedPropertySet());
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    // Special keyword 'a'
     return PropertyPath::fromIri(a);
   }
 }
