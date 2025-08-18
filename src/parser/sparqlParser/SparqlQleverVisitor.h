@@ -74,6 +74,10 @@ class SparqlQleverVisitor {
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
 
+  // Convert a GraphTerm to TripleComponent with IRI encoding support
+  TripleComponent graphTermToTripleComponentWithEncoding(
+      const GraphTerm& graphTerm) const;
+
   size_t _blankNodeCounter = 0;
   // Counter that increments for every variable generated using
   // `getNewInternalVariable` to ensure distinctness.
@@ -678,8 +682,8 @@ class SparqlQleverVisitor {
   // stays semantically the same, but for blank nodes, this step converts them
   // into internal variables so they are interpreted correctly by the query
   // planner.
-  static parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples);
+  parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from

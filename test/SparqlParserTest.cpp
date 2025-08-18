@@ -26,7 +26,8 @@ auto iri = ad_utility::testing::iri;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
-  return std::get<PropertyPath>(varOrPath).getIri().toStringRepresentation();
+  const auto& tripleComponent = std::get<PropertyPath>(varOrPath).getIri();
+  return tripleComponent.toStringRepresentation();
 }
 auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {

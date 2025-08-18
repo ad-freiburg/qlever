@@ -193,13 +193,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       // Extract prefixes without angle brackets from the EncodedIriManager
       std::vector<std::string> prefixes;
       for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        // Remove the leading '<' and trailing '>' that were added during
-        // construction
-        if (prefix.starts_with('<') && prefix.ends_with('>')) {
-          prefixes.push_back(prefix.substr(1, prefix.size() - 2));
-        } else {
-          prefixes.push_back(prefix);
-        }
+        AD_CORRECTNESS_CHECK(prefix.starts_with('<') && !prefix.ends_with('>'));
+        prefixes.push_back(prefix.substr(1));
       }
       index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
     }
