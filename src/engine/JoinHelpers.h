@@ -99,13 +99,14 @@ inline GeneratorWithDetails convertGenerator(
 
   // Create the range with a pointer to the generator's details
   auto range = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(
-      CachingTransformInputRange(*generatorStorage, [](auto& table) {
-        // IndexScans don't have a local vocabulary, so we can just use an
-        // empty one
-        return IdTableAndFirstCol{std::move(table), LocalVocab{}};
-      }));
+      CachingTransformInputRange(
+          *generatorStorage, [generatorStorage](auto& table) {
+            (void)generatorStorage;  // Only captured for lifetime reasons.
+            // IndexScans don't have a local vocabulary, so we can just use an
+            return IdTableAndFirstCol{std::move(table), LocalVocab{}};
+          }));
 
-  return GeneratorWithDetails{std::move(range), &generatorStorage->details()};
+  return GeneratorWithDetails{std::move(range), generatorStorage->details()};
 }
 
 // Part of the implementation of `createResult`. This function is called when
