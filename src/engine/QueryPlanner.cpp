@@ -1045,41 +1045,53 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
 namespace {
 using std::string_view;
 // Split the children of a property path into forward and inverse children.
-std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
-    const std::vector<PropertyPath>& children) {
-  std::vector<string_view> forwardIris;
-  std::vector<string_view> inverseIris;
+std::pair<std::vector<const TripleComponent*>,
+          std::vector<const TripleComponent*>>
+splitChildren(const std::vector<PropertyPath>& children) {
+  std::vector<const TripleComponent*> forwardIris;
+  std::vector<const TripleComponent*> inverseIris;
   for (const auto& child : children) {
     if (auto unwrapped = child.getChildOfInvertedPath()) {
       const PropertyPath& path = unwrapped.value();
       AD_CORRECTNESS_CHECK(path.isIri());
-      const auto& tc = path.getIri();
-      inverseIris.emplace_back(tc.isIri() ? tc.getIri().toStringRepresentation()
-                                          : tc.toString());
+      inverseIris.emplace_back(&path.getIri());
     } else {
       AD_CORRECTNESS_CHECK(child.isIri());
-      const auto& tc = child.getIri();
-      forwardIris.emplace_back(tc.isIri() ? tc.getIri().toStringRepresentation()
-                                          : tc.toString());
+      forwardIris.emplace_back(&child.getIri());
     }
   }
   return {std::move(forwardIris), std::move(inverseIris)};
 }
 
-// Create a `SparqlExpression` that represents the expression `iri != variable`.
+// Create a `SparqlExpression` that represents the expression `tripleComponent
+// != variable`.
 std::unique_ptr<sparqlExpression::SparqlExpression> makeNotEqualExpression(
-    const Variable& variable, std::string_view iri) {
+    const Variable& variable, const TripleComponent& tripleComponent) {
   using namespace sparqlExpression;
+  std::unique_ptr<sparqlExpression::SparqlExpression> firstChild;
+
+  if (tripleComponent.isIri()) {
+    firstChild = std::make_unique<IriExpression>(tripleComponent.getIri());
+  } else {
+    // This is an encoded ID
+    firstChild = std::make_unique<IdExpression>(tripleComponent.getId());
+  }
+
   return std::make_unique<NotEqualExpression>(NotEqualExpression::Children{
-      std::make_unique<IriExpression>(
-          TripleComponent::Iri::fromStringRepresentation(std::string{iri})),
-      std::make_unique<VariableExpression>(variable)});
+      std::move(firstChild), std::make_unique<VariableExpression>(variable)});
 }
 
-// Appends a string to `os` that represents the expression `iri != variable`.
-void appendNotEqualString(std::ostream& os, std::string_view iri,
+// Appends a string to `os` that represents the expression `tripleComponent !=
+// variable`.
+void appendNotEqualString(std::ostream& os,
+                          const TripleComponent& tripleComponent,
                           const Variable& variable) {
-  os << iri << " != " << variable.name();
+  if (tripleComponent.isIri()) {
+    os << tripleComponent.getIri().toStringRepresentation()
+       << " != " << variable.name();
+  } else {
+    os << tripleComponent.toString() << " != " << variable.name();
+  }
 }
 }  // namespace
 
@@ -1089,26 +1101,27 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
     const TripleComponent& right) {
   AD_CORRECTNESS_CHECK(!paths.empty());
   const auto& [forwardIris, inverseIris] = splitChildren(paths);
-  auto makeFilterPattern = [this](const TripleComponent& left,
-                                  const TripleComponent& right,
-                                  const std::vector<string_view>& iris) {
-    using namespace sparqlExpression;
-    Variable variable = generateUniqueVarName();
-    ParsedQuery::GraphPattern pattern = seedFromVarOrIri(left, variable, right);
-    std::ostringstream descriptor;
-    auto expression = makeNotEqualExpression(variable, iris.at(0));
-    appendNotEqualString(descriptor, iris.at(0), variable);
-    // Combine subsequent iris with a logical AND.
-    for (const auto& iri : ql::views::drop(iris, 1)) {
-      expression = makeAndExpression(std::move(expression),
-                                     makeNotEqualExpression(variable, iri));
-      descriptor << " && ";
-      appendNotEqualString(descriptor, iri, variable);
-    }
-    pattern._filters.emplace_back(SparqlExpressionPimpl{
-        std::move(expression), std::move(descriptor).str()});
-    return pattern;
-  };
+  auto makeFilterPattern =
+      [this](const TripleComponent& left, const TripleComponent& right,
+             const std::vector<const TripleComponent*>& iris) {
+        using namespace sparqlExpression;
+        Variable variable = generateUniqueVarName();
+        ParsedQuery::GraphPattern pattern =
+            seedFromVarOrIri(left, variable, right);
+        std::ostringstream descriptor;
+        auto expression = makeNotEqualExpression(variable, *iris.at(0));
+        appendNotEqualString(descriptor, *iris.at(0), variable);
+        // Combine subsequent iris with a logical AND.
+        for (const auto& iri : ql::views::drop(iris, 1)) {
+          expression = makeAndExpression(
+              std::move(expression), makeNotEqualExpression(variable, *iri));
+          descriptor << " && ";
+          appendNotEqualString(descriptor, *iri, variable);
+        }
+        pattern._filters.emplace_back(SparqlExpressionPimpl{
+            std::move(expression), std::move(descriptor).str()});
+        return pattern;
+      };
   // If only one direction is negated, only return the pattern for that
   // direction. Only if both are given we apply a union.
   if (inverseIris.empty()) {
