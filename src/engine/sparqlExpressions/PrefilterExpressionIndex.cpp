@@ -544,7 +544,6 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
                                                referenceId, Comparison)
                               : getRangesForId(idRange.begin(), idRange.end(),
                                                referenceId, Comparison, false);
-  valueIdComparators::detail::simplifyRanges(relevantIdRanges);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
@@ -635,79 +634,18 @@ std::string IsDatatypeExpression<Datatype>::asString(
 }
 
 //______________________________________________________________________________
-template <IsDatatype Datatype>
-BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const Vocab& vocab,
-                                                 const ValueIdSubrange& idRange,
-                                                 BlockMetadataSpan blockRange,
-                                                 const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == IRI || Datatype == LITERAL);
-  using LVE = LocalVocabEntry;
-
-  auto combineSubExpressions = [&]<typename T>() {
-    return make<T>(make<T>(make<T>(make<IsNumericExpression>(isNegated),
-                                   make<LessThanExpression>(
-                                       LVE::fromStringRepresentation("<"))),
-                           make<detail::IsBoolExpression>(isNegated)),
-                   make<detail::IsDateExpression>(isNegated));
-  };
-
-  return Datatype == IRI
-             // Remark: Ids containing LITERAL values precede IRI related Ids
-             // in order. The smallest possible IRI is represented by "<>", we
-             // use its corresponding ValueId later on as a lower bound.
-             ? make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
-                   ->evaluateImpl(vocab, idRange, blockRange, isNegated)
-             // For pre-filtering LITERAL related ValueIds we use the ValueId
-             // representing the beginning of IRI values as an upper bound.
-             : (isNegated
-                    ? combineSubExpressions.template operator()<AndExpression>()
-                    : combineSubExpressions.template operator()<OrExpression>())
-                   ->evaluateImpl(vocab, idRange, blockRange, isNegated);
-}
-
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
+template <size_t N>
+static BlockMetadataRanges getRangesForDatatypes(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == BLANK || Datatype == NUMERIC);
-
+    const bool isNegated, std::array<Datatype, N> datatypes) {
   std::vector<ValueIdItPair> relevantRanges;
-  if constexpr (Datatype == BLANK) {
-    relevantRanges = {valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::BlankNodeIndex)};
-  } else {
-    // Remark: Swapping the defined relational order for Datatype::Int
-    // to Datatype::Double ValueIds (in ValueId.h) might affect the
-    // correctness of the following lines!
-    static_assert(Datatype::Int < Datatype::Double);
-
-    const auto& rangeInt = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Int);
-    const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Double);
-    // Differentiate here regarding the adjacency of Int and Double
-    // datatype values. This is relevant w.r.t.
-    // getRelevantBlocksFromIdRanges(), because we technically add to
-    // .second + 1 for the first datatype range. If we simply add
-    // rangeInt and rangeDouble given that datatype Int and Double are
-    // stored directly next to each other, we potentially add a block
-    // twice (forbidden). Remark: This is necessary even if
-    // simplifyRanges(relevantRanges) is performed later on.
-    if (rangeInt.second == rangeDouble.first ||
-        rangeDouble.second == rangeInt.first) {
-      relevantRanges.emplace_back(
-          std::min(rangeInt.first, rangeDouble.first),
-          std::max(rangeInt.second, rangeDouble.second));
-    } else {
-      relevantRanges.emplace_back(rangeInt);
-      relevantRanges.emplace_back(rangeDouble);
-    }
+  for (Datatype datatype : datatypes) {
+    relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
+        idRange.begin(), idRange.end(), datatype));
   }
   // Sort and remove overlapping ranges.
-  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  relevantRanges =
+      valueIdComparators::detail::simplifyRanges(std::move(relevantRanges));
   return isNegated
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantRanges, idRange, blockRange)
@@ -716,19 +654,64 @@ static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
 }
 
 //______________________________________________________________________________
-template <IsDatatype Datatype>
-BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::BLANK>::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  return getRangesForDatatypes(idRange, blockRange, isNegated_,
+                               std::array{Datatype::BlankNodeIndex});
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::NUMERIC>::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  return getRangesForDatatypes(idRange, blockRange, isNegated_,
+                               std::array{Datatype::Int, Datatype::Double});
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  using enum IsDatatype;
-  if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
-    return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
-                                                    isNegated_);
+  using LVE = LocalVocabEntry;
+  // Remark: Ids containing LITERAL values precede IRI related Ids
+  // in order. The smallest possible IRI is represented by "<>", we
+  // use its corresponding ValueId later on as a lower bound.
+  return make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
+      ->evaluateImpl(vocab, idRange, blockRange, isNegated_);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  using LVE = LocalVocabEntry;
+
+  // For pre-filtering LITERAL related ValueIds we use the ValueId representing
+  // the beginning of IRI values as an upper bound and add all the value types
+  // that are literals inlined into a compact representation.
+  auto inlinedRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_,
+      std::array{Datatype::Int, Datatype::Double, Datatype::Date,
+                 Datatype::Bool, Datatype::GeoPoint});
+  auto nonInlinedRanges =
+      make<LessThanExpression>(LVE::fromStringRepresentation("<"))
+          ->evaluateImpl(vocab, idRange, blockRange, isNegated_);
+
+  if (isNegated_) {
+    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
+        inlinedRanges, nonInlinedRanges);
   } else {
-    static_assert(Datatype == IRI || Datatype == LITERAL);
-    return evaluateIsIriOrIsLiteralImpl<Datatype>(vocab, idRange, blockRange,
-                                                  isNegated_);
+    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        inlinedRanges, nonInlinedRanges);
   }
 }
 
@@ -920,86 +903,6 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
-
-//______________________________________________________________________________
-bool IsBoolExpression::operator==(const PrefilterExpression& other) const {
-  if (auto* isBoolOther = dynamic_cast<const IsBoolExpression*>(&other)) {
-    return isBoolOther->isNegated_ == isNegated_;
-  }
-  return false;
-}
-
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> IsBoolExpression::clone() const {
-  return make<IsBoolExpression>(*this);
-}
-
-//______________________________________________________________________________
-std::string IsBoolExpression::asString([[maybe_unused]] size_t depth) const {
-  return absl::StrCat("IsBoolExpression(isNegated: ", isNegated_, ")");
-}
-
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> IsBoolExpression::logicalComplement()
-    const {
-  return make<IsBoolExpression>(!isNegated_);
-}
-
-//______________________________________________________________________________
-BlockMetadataRanges IsBoolExpression::evaluateImpl(
-    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  std::vector<ValueIdItPair> relevantRanges;
-  relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
-      idRange.begin(), idRange.end(), Datatype::Bool));
-  // Sort and remove overlapping ranges.
-  valueIdComparators::detail::simplifyRanges(relevantRanges);
-  return isNegated_ ? mapping::mapValueIdItRangesToBlockItRangesComplemented(
-                          relevantRanges, idRange, blockRange)
-                    : mapping::mapValueIdItRangesToBlockItRanges(
-                          relevantRanges, idRange, blockRange);
-}
-
-//______________________________________________________________________________
-bool IsDateExpression::operator==(const PrefilterExpression& other) const {
-  if (auto* isDateOther = dynamic_cast<const IsDateExpression*>(&other)) {
-    return isDateOther->isNegated_ == isNegated_;
-  }
-  return false;
-}
-
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> IsDateExpression::clone() const {
-  return make<IsDateExpression>(*this);
-}
-
-//______________________________________________________________________________
-std::string IsDateExpression::asString([[maybe_unused]] size_t depth) const {
-  return absl::StrCat("IsDateExpression(isNegated: ", isNegated_, ")");
-}
-
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> IsDateExpression::logicalComplement()
-    const {
-  return make<IsDateExpression>(!isNegated_);
-}
-
-//______________________________________________________________________________
-BlockMetadataRanges IsDateExpression::evaluateImpl(
-    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  std::vector<ValueIdItPair> relevantRanges;
-  relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
-      idRange.begin(), idRange.end(), Datatype::Date));
-  // Sort and remove overlapping ranges.
-  valueIdComparators::detail::simplifyRanges(relevantRanges);
-  return isNegated_ ? mapping::mapValueIdItRangesToBlockItRangesComplemented(
-                          relevantRanges, idRange, blockRange)
-                    : mapping::mapValueIdItRangesToBlockItRanges(
-                          relevantRanges, idRange, blockRange);
-}
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
