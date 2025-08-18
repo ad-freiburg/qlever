@@ -4378,7 +4378,7 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();
 
-  auto cleanup = setRuntimeParameterForTest<"distributive-union">(false);
+  auto cleanup = setRuntimeParameterForTest<"enable-distributive-union">(false);
   auto query = SparqlParser::parseQuery(
       "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
   auto plans = qp.createExecutionTrees(query);

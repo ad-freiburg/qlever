@@ -2360,7 +2360,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
   // Disable this optimization.
-  if (!RuntimeParameters().get<"distributive-union">()) {
+  if (!RuntimeParameters().get<"enable-distributive-union">()) {
     return candidates;
   }
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,

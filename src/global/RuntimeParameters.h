@@ -106,7 +106,7 @@ inline auto& RuntimeParameters() {
         SizeT<"spatial-join-prefilter-max-size">{2'500},
         // Push joins into both children of unions if this leads to a cheaper
         // cost-estimate.
-        Bool<"distributive-union">{true},
+        Bool<"enable-distributive-union">{true},
     };
   }();
   return params;
