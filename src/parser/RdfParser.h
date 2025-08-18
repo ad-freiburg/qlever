@@ -672,8 +672,9 @@ class RdfParallelParser : public Parser {
 
   std::chrono::milliseconds sleepTimeForTesting_{0};
 
-  // These datastructures are ordered last, such that all threads are joined
-  // before the rest of the members is gone when the destructor is called.
+  // These datastructures are ordered last, such that in the destructor all
+  // threads are joined before the other data members (which might be accessed
+  // by those threads) are destroyed.
   ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
       tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
   ad_utility::TaskQueue<true> parallelParser_{
