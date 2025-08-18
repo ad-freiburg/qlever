@@ -988,10 +988,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Handle non-matching rows from the left side for an optional join or a minus
   // join.
-  template <bool DoOptionalJoin>
+  template <bool DoOptionalJoinOrMinus>
   void addNonMatchingRowsFromLeftForOptionalJoin(
       const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
-    if constexpr (DoOptionalJoin) {
+    if constexpr (DoOptionalJoinOrMinus) {
       if (!hasUndef(rightSide_) &&
           ql::ranges::all_of(
               blocksRight | ql::views::transform(
@@ -1010,10 +1010,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Call `compatibleRowAction` for all pairs of elements in the Cartesian
   // product of the blocks in `blocksLeft` and `blocksRight`.
-  template <bool DoOptionalJoin>
+  template <bool DoOptionalJoinOrMinus>
   void addAll(const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
-    addNonMatchingRowsFromLeftForOptionalJoin<DoOptionalJoin>(blocksLeft,
-                                                              blocksRight);
+    addNonMatchingRowsFromLeftForOptionalJoin<DoOptionalJoinOrMinus>(
+        blocksLeft, blocksRight);
     addCartesianProduct(blocksLeft, blocksRight);
     compatibleRowAction_.flush();
   }
@@ -1103,7 +1103,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
   // The fully joined parts of the block are then removed from
   // `currentBlocksLeft/Right`, as they are not needed anymore.
-  template <bool DoOptionalJoin>
+  template <bool DoOptionalJoinOrMinus>
   void joinAndRemoveLessThanCurrentEl(LeftBlocks& currentBlocksLeft,
                                       RightBlocks& currentBlocksRight,
                                       const ProjectedEl& currentEl) {
@@ -1135,7 +1135,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     };
 
     auto addNotFoundRowIndex = [&]() {
-      if constexpr (DoOptionalJoin) {
+      if constexpr (DoOptionalJoinOrMinus) {
         return [this, begL = fullBlockLeft.get().begin()](auto itFromL) {
           AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
           compatibleRowAction_.addOptionalRow(itFromL - begL);
@@ -1234,12 +1234,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Combine the above functionality and perform one round of joining.
   // Has to be called alternately with `fillBuffer`.
-  template <bool DoOptionalJoin, typename ProjectedEl>
+  template <bool DoOptionalJoinOrMinus, typename ProjectedEl>
   void joinBuffers(BlockStatus& blockStatus) {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
     auto& currentBlocksRight = rightSide_.currentBlocks_;
     ProjectedEl currentEl = getCurrentEl();
-    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
+    joinAndRemoveLessThanCurrentEl<DoOptionalJoinOrMinus>(
         currentBlocksLeft, currentBlocksRight, currentEl);
 
     // At this point the `currentBlocksLeft/Right` only consist of elements `>=
@@ -1270,7 +1270,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
       joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
                           equalToCurrentElRight);
-      addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
+      addAll<DoOptionalJoinOrMinus>(equalToCurrentElLeft,
+                                    equalToCurrentElRight);
       switch (blockStatus) {
         case BlockStatus::allFilled:
           removeEqualToCurrentEl(currentBlocksLeft, currentEl);
@@ -1468,6 +1469,9 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           .template runJoin<joinType>();
       return;
     }
+    static_assert(joinType == JoinType::JOIN ||
+                  joinType == JoinType::OPTIONAL ||
+                  joinType == JoinType::MINUS);
     constexpr bool isOptionalOrMinus = joinType != JoinType::JOIN;
     while (true) {
       BlockStatus blockStatus = fillBuffer();
