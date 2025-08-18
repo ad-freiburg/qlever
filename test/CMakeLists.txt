@@ -122,6 +122,7 @@ add_subdirectory(parser)
 add_subdirectory(index)
 add_subdirectory(backports)
 add_subdirectory(rdfTypes)
+add_subdirectory(joinAlgorithms)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
