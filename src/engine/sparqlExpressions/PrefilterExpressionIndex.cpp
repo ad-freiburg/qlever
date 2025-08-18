@@ -634,10 +634,9 @@ std::string IsDatatypeExpression<Datatype>::asString(
 }
 
 //______________________________________________________________________________
-template <size_t N>
 static BlockMetadataRanges getRangesForDatatypes(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated, std::array<Datatype, N> datatypes) {
+    const bool isNegated, const ql::span<Datatype>& datatypes) {
   std::vector<ValueIdItPair> relevantRanges;
   for (Datatype datatype : datatypes) {
     relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
@@ -659,8 +658,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::BLANK>::evaluateImpl(
     [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  return getRangesForDatatypes(idRange, blockRange, isNegated_,
-                               std::array{Datatype::BlankNodeIndex});
+  std::array datatypes{Datatype::BlankNodeIndex};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -669,8 +668,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::NUMERIC>::evaluateImpl(
     [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  return getRangesForDatatypes(idRange, blockRange, isNegated_,
-                               std::array{Datatype::Int, Datatype::Double});
+  std::array datatypes{Datatype::Int, Datatype::Double};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -698,12 +697,12 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // For pre-filtering LITERAL related ValueIds we use the ValueId representing
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
-  auto inlinedRanges = getRangesForDatatypes(
-      idRange, blockRange, isNegated_,
-      std::array{Datatype::Int, Datatype::Double, Datatype::Date,
-                 Datatype::Bool, Datatype::GeoPoint});
+  std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
+                       Datatype::Bool, Datatype::GeoPoint};
+  auto inlinedRanges =
+      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
   auto nonInlinedRanges =
-      make<LessThanExpression>(LVE::fromStringRepresentation("<"))
+      make<LessThanExpression>(LVE::fromStringRepresentation("<>"))
           ->evaluateImpl(vocab, idRange, blockRange, isNegated_);
 
   if (isNegated_) {
