@@ -862,19 +862,23 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   // Test isLiteral
-  // Blocks b18 - b22 contain LITERAL values.
-  makeTestIsDatatype(isLit(), {b18, b19, b21, b22}, true);
+  // Blocks b18 - b22 contain arbitrary LITERAL values. The other blocks contain
+  // inlined literals like int, float, bool, date and point.
+  makeTestIsDatatype(isLit(),
+                     {b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13, b14,
+                      b15, b16, b17, b18, b19, b21, b22, b25, b27, b28},
+                     true);
   // Block b18GapiriAndLiteral contains possibly hidden literal values.
   // Remark: b28 is a block holding mixed datatypes, this block should also be
   // returned with the current implementation of getSetDifference (see
   // PrefilterExpressionIndex.cpp).
-  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
+  makeTestIsDatatype(isLit(), {b16, b17, b18GapIriAndLiteral, b27, b28}, false,
                      {b16, b17, b18GapIriAndLiteral, b27, b28});
   makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
   makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
                      {b18GapIriAndLiteral, b28});
-  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
+  makeTestIsDatatype(isLit(), {b14, b15, b16, b18GapIriAndLiteral}, false,
                      {b14, b15, b16, b18GapIriAndLiteral});
   // Test inlined literals
   makeTestIsDatatype(isLit(), {b6, b7}, false, {b1, b6, b7});
@@ -928,19 +932,15 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 
   // Test !isLiteral
   // Blocks b19 - b21 contain only IRI related Ids (not contained in expected)
-  makeTestIsDatatype(notExpr(isLit()),
-                     {b1,  b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13, b14,
-                      b15, b16, b17, b18, b22, b23, b24, b25, b27, b28},
-                     true);
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b22, b23, b24, b25, b28}, true);
   // b18GapIriAndLiteral should be considered relevant when evaluating
   // expression !isLit.
   makeTestIsDatatype(notExpr(isLit()), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b17, b18GapIriAndLiteral},
-                     false, {b1, b2, b17, b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()),
-                     {b1, b2, b17, b18GapIriAndLiteral, b27, b28}, false,
-                     {b1, b2, b17, b18GapIriAndLiteral, b27, b28});
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b18GapIriAndLiteral}, false,
+                     {b1, b2, b17, b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b18GapIriAndLiteral, b28},
+                     false, {b1, b2, b17, b18GapIriAndLiteral, b27, b28});
 
   // Test !isIri
   // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
