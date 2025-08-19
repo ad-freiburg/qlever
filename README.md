@@ -28,7 +28,7 @@ which makes it very easy to get started and also helps to write your own `Qlever
 QLever via docker (which is the default setting), the script pulls the most recent docker image automatically and you
 don't have to download or compile the code.
 
-If the `qlever` script does not work for you for whatever reason, have a look at the [Dockerfile for Ubuntu 22.04](https://github.com/ad-freiburg/qlever/blob/master/Dockerfile) or the [Dockerfiles for older Ubuntu versions](https://github.com/ad-freiburg/qlever/tree/master/Dockerfiles). The [source code of the qlever script](https://github.com/ad-freiburg/qlever-control/blob/main/qlever) also provides information on how to use QLever (in particular, note the functions `action_start` and `action_index`).
+If the `qlever` script does not work for you for whatever reason, have a look at the [Dockerfile for Ubuntu 22.04](https://github.com/ad-freiburg/qlever/blob/master/Dockerfile) or the [Dockerfiles for older Ubuntu versions](https://github.com/ad-freiburg/qlever/tree/master/Dockerfiles). The [source code of the qlever script]([https://github.com/ad-freiburg/qlever-control/blob/main/qlever]) also provides information on how to use QLever (in particular, note the functions `action_start` and `action_index`).
 
 An older (and not quite up-to-date anymore) step-by-step instruction can be found [here](docs/quickstart.md).
 QLever's [advanced features are described here](docs/advanced_features.md).
