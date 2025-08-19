@@ -14,7 +14,6 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/ExistsJoin.h"
-#include "engine/GroupByStrategyChooser.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -33,7 +32,6 @@
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
 #include "util/HashSet.h"
-#include "util/Log.h"
 #include "util/Timer.h"
 
 using groupBy::detail::VectorOfAggregationData;
@@ -200,7 +198,7 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
-uint64_t GroupByImpl::getSizeEstimateBeforeLimit() const {
+uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -213,11 +211,6 @@ uint64_t GroupByImpl::getSizeEstimateBeforeLimit() const {
   float minMultiplicity = ql::ranges::min(
       _groupByVariables | ql::views::transform(varToMultiplicity));
   return _subtree->getSizeEstimate() / minMultiplicity;
-}
-
-uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
-  // Delegate to the const overload
-  return static_cast<const GroupByImpl&>(*this).getSizeEstimateBeforeLimit();
 }
 
 size_t GroupByImpl::getCostEstimate() {
@@ -375,26 +368,14 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subresult;
   if (useHashMapOptimization) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
+    // Skip sorting
     subresult = child->getResult(true);
-    // Sampling-based guard: decide whether to skip hash-map grouping based on
-    // estimated number of groups
-    if (subresult->isFullyMaterialized() &&
-        GroupByStrategyChooser::shouldSkipHashMapGrouping(
-            *this, subresult->idTable())) {
-      // You will see this if you use qlever with --verbose-runtime-info
-      runtimeInfo().addDetail("hashMapOptimization",
-                              "Skipped due to high estimated group count, "
-                              "falling back to sort-based grouping.");
-      useHashMapOptimization = false;
-    } else {
-      // Update runtime information
-      auto runTimeInfoChildren =
-          child->getRootOperation()->getRuntimeInfoPointer();
-      _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-          {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
-    }
-  }
-  if (!useHashMapOptimization) {
+    // Update runtime information
+    auto runTimeInfoChildren =
+        child->getRootOperation()->getRuntimeInfoPointer();
+    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
+  } else {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
     metadataForUnsequentialData =
@@ -1585,18 +1566,13 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
   auto beginIt = ql::ranges::begin(subresults);
   auto endIt = ql::ranges::end(subresults);
-  uint64_t processedEntries = 0;
 
   const auto& [beginIdTableRef, beginLocalVocabRef] = *beginIt;
   const IdTable& beginIdTable = beginIdTableRef;
   const size_t inWidth = beginIdTable.numColumns();
 
-  uint64_t tableSize = getSizeEstimateBeforeLimit();
-  double k = RuntimeParameters().get<"group-by-sample-constant">();
-  double sampleSize = k * std::sqrt(double(tableSize));
-  double distinctRatio =
-      RuntimeParameters().get<"group-by-sample-distinct-ratio">();
-  size_t groupThreshold = static_cast<size_t>(tableSize * distinctRatio);
+  size_t groupThreshold = RuntimeParameters()
+                              .get<"group-by-hash-map-group-threshold">();
 
   // If the hash map optimization is not possible, we use a hybrid
   // approach, where we add all entries with existing groups to the hash map,
@@ -1727,21 +1703,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                   std::move(localVocab)};
   };
 
-  auto hashMapIsTooLarge = [&](uint64_t processedEntries) {
-    // Only start sampling once we've processed at least sampleSize entries
-    if (processedEntries < sampleSize || processedEntries == 0) {
-      return false;
-    }
-    size_t totalGroups =
-        static_cast<size_t>(GroupByStrategyChooser::estimateNumberOfTotalGroups(
-            aggregationData.getMap(), LogLevel::FATAL,
-            sampleSize / processedEntries));
-    if (totalGroups > groupThreshold) {
-      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
+  auto hashMapIsTooLarge = [&](uint64_t numberOfGroups) {
+    if (numberOfGroups > groupThreshold) {
+      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << numberOfGroups
                    << ") > (thr: " << groupThreshold
                    << "), switching to sort-based aggregation" << std::endl;
-      // prevent further sampling attempts
-      sampleSize = std::numeric_limits<double>::infinity();
       return true;
     }
     return false;
@@ -1761,11 +1727,9 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     localVocab.mergeWith(inputLocalVocab);
     // Load the table into the hash map.
     updateHashMapWithTable(inputTable);
-    // If we have enough entries that we can do sampling on them, we check if
-    // the estimated number of groups exceeds the threshold.
-    // If it is, we switch to the hybrid approach.
-    processedEntries += inputTable.size();
-    if (hashMapIsTooLarge(processedEntries)) {
+    // If the number of groups in the hash map exceeds the threshold,
+    // we switch to a hybrid approach.
+    if (hashMapIsTooLarge(aggregationData.getNumberOfGroups())) {
       return handleRemainderUsingHybridApproach(it);
     }
   }

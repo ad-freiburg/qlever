@@ -166,16 +166,11 @@ int main(int argc, char** argv) {
       "intermediate results. This is faster for small groups, but uses more "
       "memory. If not set, the GROUP BY operation will use a sort-based "
       "algorithm.");
-  add("group-by-sample-enabled",
-      optionFactory.getProgramOption<"group-by-sample-enabled">(),
-      "If set, then the GROUP BY operation will use a sampling-based hybrid "
-      "algorithm to decide whether to use a hash map or a sort-based algorithm "
-      "for grouping. If not set, the GROUP BY operation will always use a "
-      "sort-based algorithm.");
-  add("group-by-sample-distinct-ratio",
-      optionFactory.getProgramOption<"group-by-sample-distinct-ratio">(),
-      "Switch to sort if the fraction (sampled distinct groups / sample size) "
-      "exceeds this ratio.");
+  add("group-by-hash-map-group-threshold",
+      optionFactory.getProgramOption<"group-by-hash-map-group-threshold">(),
+      "The maximum number of groups for which the hash map should be used. "
+      "If the number of groups exceeds this threshold, a hybrid approach "
+      "will be used instead, that sorts entries that don't belong to the hash map.");
   po::variables_map optionsMap;
 
   try {
