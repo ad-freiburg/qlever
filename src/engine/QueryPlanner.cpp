@@ -2424,25 +2424,35 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   if (jcs.size() > 2) {
     return std::nullopt;
   }
+  auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
+  auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
+  // Since this function is only called for unbound transitive paths, we know
+  // that any extra variables have to be the graph var.
+  auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
   if (jcs.size() == 1) {
-    size_t transitiveCol = jcs[0][!leftSideTransitivePath];
-    size_t otherCol = jcs[0][leftSideTransitivePath];
-    // We can't bind if the only matching column is the graph col.
-    if (transitiveCol >= 2) {
+    size_t transitiveCol = jcs[0][transitivePathIndex];
+    size_t otherCol = jcs[0][otherIndex];
+    // We can't bind if the only matching column is the graph col. The
+    // `TransitivePathImpl` doesn't support this.
+    if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
+    // Bind on non-graph column.
     return std::tuple{transitiveCol, otherCol};
   }
-  size_t transitiveColA = jcs[0][!leftSideTransitivePath];
-  size_t otherColA = jcs[0][leftSideTransitivePath];
-  size_t transitiveColB = jcs[1][!leftSideTransitivePath];
-  size_t otherColB = jcs[1][leftSideTransitivePath];
-  if (transitiveColA <= 1) {
-    AD_CORRECTNESS_CHECK(transitiveColB == 2);
+  // Bind on two columns, one graph column and one other column.
+  size_t transitiveColA = jcs[0][transitivePathIndex];
+  size_t otherColA = jcs[0][otherIndex];
+  size_t transitiveColB = jcs[1][transitivePathIndex];
+  size_t otherColB = jcs[1][otherIndex];
+  if (transitiveColA < graphColIndex) {
+    // The "A" columns are non-graph columns.
+    AD_CORRECTNESS_CHECK(transitiveColB == graphColIndex);
     return std::tuple{transitiveColA, otherColA};
   }
-  AD_CORRECTNESS_CHECK(transitiveColB <= 1);
-  AD_CORRECTNESS_CHECK(transitiveColA == 2);
+  // The "B" columns are the non-graph columns.
+  AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
+  AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
   return std::tuple{transitiveColB, otherColB};
 }
 

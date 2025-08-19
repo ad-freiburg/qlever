@@ -93,23 +93,25 @@ using PayloadTable = std::optional<IdTableView<0>>;
 // not represent anything meaningful and should not be used.
 struct NodeWithTargets {
   Id node_;
+  // Graph id, undefined if no graph is set.
+  Id graph_;
+  // Set of target ids.
   Set targets_;
   LocalVocab localVocab_;
   PayloadTable idTable_;
+  // Corresponding row in `idTable_`.
   size_t row_;
-  // Graph id, undefined if no graph is set.
-  Id graph_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  PayloadTable idTable, size_t row, Id graph)
+  NodeWithTargets(Id node, Id graph, Set targets, LocalVocab localVocab,
+                  PayloadTable idTable, size_t row)
       : node_{node},
+        graph_{graph},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
         idTable_{std::move(idTable)},
-        row_{row},
-        graph_{graph} {}
+        row_{row} {}
 };
 
 using NodeGenerator = cppcoro::generator<NodeWithTargets>;
@@ -349,6 +351,10 @@ class TransitivePathBase : public Operation {
   alternativeSubtrees() const {
     return {};
   }
+
+  // Returns the index of the first column that can contain the graph variable,
+  // or payload variables from the "bound" case.
+  static size_t firstGraphOrPayloadColumnIndex() { return 2; }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H

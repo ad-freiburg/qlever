@@ -35,24 +35,23 @@ struct TableColumnWithVocab {
         vocab_{std::move(vocab)} {}
 
   // Return a range substituting undefined values with all corresponding values
-  // from `edges`.
+  // from `edges`. If `startNodes_` doesn't contain any undefined values, then
+  // the range returned by this function is identical.
   decltype(auto) expandStartNodes([[maybe_unused]] const auto& edges,
                                   bool checkGraph) {
-    // In the bound case we know that all values are defined so we can use a
-    // shortcut.
+    // This is the unbound case, e.g. `?x wdt:P279+ ?y` where the left side of
+    // the P279+ is guaranteed to be defined.
     if constexpr (std::is_same_v<ColumnType, SetWithGraph>) {
       return static_cast<const ColumnType&>(startNodes_);
     } else {
       return startNodes_ |
              ql::views::transform([&edges, checkGraph](auto tuple) {
-               if (std::get<0>(tuple).isUndefined() ||
-                   (checkGraph && std::get<1>(tuple).isUndefined()))
-                   [[unlikely]] {
-                 return edges.getEquivalentIdAndMatchingGraphs(
-                     std::get<0>(tuple));
+               const auto& [startId, graphId] = tuple;
+               if (startId.isUndefined() ||
+                   (checkGraph && graphId.isUndefined())) [[unlikely]] {
+                 return edges.getEquivalentIdAndMatchingGraphs(startId);
                } else {
-                 return IdWithGraphs{std::pair{std::move(std::get<0>(tuple)),
-                                               std::move(std::get<1>(tuple))}};
+                 return IdWithGraphs{std::pair{startId, graphId}};
                }
              }) |
              ql::views::join;
@@ -246,6 +245,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edgesVocab The `LocalVocab` holding the vocabulary of the edges.
    * @param startNodes A range that yields an instantiation of
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
+   * @param start Start `TripleComponent`. If it's a variable, and the same as
+   * an optional graph variable, values where these values are not equal are
+   * skipped.
    * @param target Target `TripleComponent`. If it's not a variable, paths that
    * don't end with a matching value are discarded.
    * @param yieldOnce This has to be set to the same value as the consuming
@@ -272,8 +274,7 @@ class TransitivePathImpl : public TransitivePathBase {
     bool endsWithGraphVariable =
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
-        graphVariable_.has_value() && start.isVariable() &&
-        graphVariable_.value() == start.getVariable();
+        start.isVariable() && graphVariable_ == start.getVariable();
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
@@ -297,10 +298,12 @@ class TransitivePathImpl : public TransitivePathBase {
         if (!connectedNodes.empty()) {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           timer.stop();
-          co_yield NodeWithTargets{
-              startNode,           std::move(connectedNodes),
-              mergedVocab.clone(), tableColumn.payload_,
-              currentRow,          graphId};
+          co_yield NodeWithTargets{startNode,
+                                   graphId,
+                                   std::move(connectedNodes),
+                                   mergedVocab.clone(),
+                                   tableColumn.payload_,
+                                   currentRow};
           timer.cont();
           // Reset vocab to prevent merging the same vocab over and over again.
           if (yieldOnce) {
