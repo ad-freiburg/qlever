@@ -300,6 +300,9 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
   auto tr = TextResult{qec, result};
   ASSERT_EQ(result.idTable().numColumns(), 3);
   ASSERT_EQ(result.idTable().size(), 10);
+  // TODO<Flixtastic> write test methods that can check if certain rows contain
+  // a word. Similar to the e2e mechanics. This becomes necessary if there is
+  // no certain order in the idTable other than the first row.
 
   // Check if word and text are correctly retrieved
   ASSERT_EQ(withFirst("astronomer"), tr.getRow(0));

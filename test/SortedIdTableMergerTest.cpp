@@ -19,7 +19,7 @@ TEST(SortedIdTableMerger, ErrorChecks) {
   idTables.push_back(makeIdTableFromVector({{0}, {1}}));
   idTables.push_back(makeIdTableFromVector({{0, 0}, {1, 1}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SortedIdTableMerger::mergeIdTables(std::move(idTables), makeAllocator()),
+      SortedIdTableMerge::mergeIdTables(std::move(idTables), makeAllocator()),
       ::testing::HasSubstr(
           "All idTables to merge should have the same number of columns. First "
           "idTable has: 1 columns. Failed table had: 2 columns"));
@@ -27,8 +27,8 @@ TEST(SortedIdTableMerger, ErrorChecks) {
   // Empty IdTables
   std::vector<IdTable> emptyIdTables{};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SortedIdTableMerger::mergeIdTables(std::move(emptyIdTables),
-                                         makeAllocator()),
+      SortedIdTableMerge::mergeIdTables(std::move(emptyIdTables),
+                                        makeAllocator()),
       ::testing::HasSubstr(
           "mergeIdTables shouldn't be called with no idTables to merge."));
 }
@@ -38,7 +38,7 @@ TEST(SortedIdTableMerger, StandardComparator) {
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector({{0, 0}, {1, 1}}));
   auto merged =
-      SortedIdTableMerger::mergeIdTables(std::move(idTables), makeAllocator());
+      SortedIdTableMerge::mergeIdTables(std::move(idTables), makeAllocator());
   EXPECT_EQ(merged.size(), 2);
   EXPECT_EQ(merged.numColumns(), 2);
   EXPECT_THAT(merged, matchesIdTableFromVector({{0, 0}, {1, 1}}));
@@ -47,24 +47,39 @@ TEST(SortedIdTableMerger, StandardComparator) {
   std::vector<IdTable> idTables2;
   idTables2.push_back(makeIdTableFromVector({{0, 1}, {1, 1}}));
   idTables2.push_back(makeIdTableFromVector({{0, 2}, {1, 0}}));
-  auto merged2 =
-      SortedIdTableMerger::mergeIdTables(std::move(idTables2), makeAllocator());
+  auto merged2 = SortedIdTableMerge::mergeIdTables(std::move(idTables2),
+                                                   makeAllocator(), {0, 1});
   EXPECT_EQ(merged2.size(), 4);
   EXPECT_EQ(merged2.numColumns(), 2);
   EXPECT_THAT(merged2,
-              matchesIdTableFromVector({{0, 1}, {0, 2}, {1, 1}, {1, 0}}));
+              matchesIdTableFromVector({{0, 1}, {0, 2}, {1, 0}, {1, 1}}));
 
   // Three IdTables
   std::vector<IdTable> idTables3;
   idTables3.push_back(makeIdTableFromVector({{2, 1}, {3, 1}}));
   idTables3.push_back(makeIdTableFromVector({{0, 2}, {1, 0}}));
-  idTables3.push_back(makeIdTableFromVector({{0, 1}, {1, 0}}));
-  auto merged3 =
-      SortedIdTableMerger::mergeIdTables(std::move(idTables3), makeAllocator());
+  idTables3.push_back(makeIdTableFromVector({{0, 1}, {1, 1}}));
+  auto merged3 = SortedIdTableMerge::mergeIdTables(std::move(idTables3),
+                                                   makeAllocator(), {0, 1});
   EXPECT_EQ(merged3.size(), 6);
   EXPECT_EQ(merged3.numColumns(), 2);
   EXPECT_THAT(merged3, matchesIdTableFromVector(
-                           {{0, 2}, {0, 1}, {1, 0}, {1, 0}, {2, 1}, {3, 1}}));
+                           {{0, 1}, {0, 2}, {1, 0}, {1, 1}, {2, 1}, {3, 1}}));
+
+  // Four IdTables only sorted on the first col
+  std::vector<IdTable> idTables4;
+  idTables4.push_back(makeIdTableFromVector({{2, 1}, {3, 0}}));
+  idTables4.push_back(makeIdTableFromVector({{1, 1}, {4, 0}}));
+  idTables4.push_back(makeIdTableFromVector({{8, 1}, {9, 2}}));
+  idTables4.push_back(makeIdTableFromVector({{5, 3}, {6, 2}}));
+  auto merged4 =
+      SortedIdTableMerge::mergeIdTables(std::move(idTables4), makeAllocator());
+  EXPECT_EQ(merged4.size(), 8);
+  EXPECT_EQ(merged4.numColumns(), 2);
+  EXPECT_THAT(
+      merged4,
+      matchesIdTableFromVector(
+          {{1, 1}, {2, 1}, {3, 0}, {4, 0}, {5, 3}, {6, 2}, {8, 1}, {9, 2}}));
 }
 
 }  // namespace

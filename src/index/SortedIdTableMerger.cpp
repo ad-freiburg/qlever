@@ -4,10 +4,11 @@
 
 #include "index/SortedIdTableMerger.h"
 
+namespace SortedIdTableMerge {
 // _____________________________________________________________________________
-IdTable SortedIdTableMerger::mergeIdTables(
-    std::vector<IdTable> idTablesToMerge,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) {
+IdTable mergeIdTables(std::vector<IdTable> idTablesToMerge,
+                      const ad_utility::AllocatorWithLimit<Id>& allocator,
+                      std::vector<size_t> sortPerm) {
   AD_CONTRACT_CHECK(
       !idTablesToMerge.empty(),
       "mergeIdTables shouldn't be called with no idTables to merge.");
@@ -22,48 +23,23 @@ IdTable SortedIdTableMerger::mergeIdTables(
                       " columns");
   });
 
+  AD_CONTRACT_CHECK(sortPerm.size() <= numCols,
+                    "The given sortPerm does not contain less than or equal "
+                    "the amount of columns the idTablesToMerge have.");
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
+                        sortPerm, [&numCols](size_t i) { return i < numCols; }),
+                    "The given sortPerm contains column indices outside of the "
+                    "range of the idTablesToMerge.");
+  auto set = ad_utility::HashSet<size_t>{sortPerm.begin(), sortPerm.end()};
+  AD_CONTRACT_CHECK(set.size() == sortPerm.size(),
+                    "The given sortPerm contains duplicate column indices.");
+
   auto sizes = idTablesToMerge | std::views::transform(&IdTable::size);
   auto sizesSum = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
 
   IdTable result(allocator);
   result.setNumColumns(numCols);
   result.resize(sizesSum);
-
-  std::vector<ColumnIterator> iterators;
-  std::vector<ColumnSentinel> sentinels;
-
-  auto getIteratorsForColumn = [&iterators, &sentinels,
-                                &idTablesToMerge](size_t col) {
-    iterators.clear();
-    sentinels.clear();
-    ql::ranges::for_each(idTablesToMerge,
-                         [&iterators, &sentinels, &col](const auto& idTable) {
-                           iterators.push_back(idTable.getColumn(col).begin());
-                           sentinels.push_back(idTable.getColumn(col).end());
-                         });
-  };
-
-  // Lambda to find from which idTable the next smallest element is. If all
-  // iterators are at the end then return `std::nullopt`
-  auto minElementIdTable = [](const std::vector<ColumnIterator>& iterators,
-                              const std::vector<ColumnSentinel>& sentinels)
-      -> std::optional<size_t> {
-    auto indices = ql::views::iota(size_t{0}, iterators.size()) |
-                   ql::views::filter(
-                       [&](size_t i) { return iterators[i] != sentinels[i]; });
-
-    if (indices.begin() == indices.end()) {
-      return std::nullopt;
-    }
-
-    auto indexWithMinIt =
-        ql::ranges::min_element(indices, [&](size_t lhs, size_t rhs) {
-          return iterators[lhs]->compareWithoutLocalVocab(*iterators[rhs]) ==
-                 std::strong_ordering::less;
-        });
-
-    return *indexWithMinIt;
-  };
 
   // For each idTable to merge this vector contains a vector that maps the rows
   // to the result idTable
@@ -75,35 +51,31 @@ IdTable SortedIdTableMerger::mergeIdTables(
                          permutationIdTables.back().reserve(idTable.size());
                        });
 
-  // Fill the first column (which is the sorted one) and track in which order
-  // the `IdTable`s are accessed.
-  getIteratorsForColumn(0);
-  auto resultOrderedColIt = result.getColumn(0).begin();
-  auto resultOrderedColEnd = result.getColumn(0).end();
-  std::optional<size_t> possibleCurrentMinIdTable =
-      minElementIdTable(iterators, sentinels);
-  size_t rowIndex = 0;
-  while (possibleCurrentMinIdTable.has_value()) {
-    size_t currentMinIdTable = possibleCurrentMinIdTable.value();
-    AD_CORRECTNESS_CHECK(resultOrderedColIt != resultOrderedColEnd);
-    *resultOrderedColIt = *iterators[currentMinIdTable];
-    permutationIdTables.at(currentMinIdTable).push_back(rowIndex);
-    ++(iterators[currentMinIdTable]);
-    ++resultOrderedColIt;
-    ++rowIndex;
-    possibleCurrentMinIdTable = minElementIdTable(iterators, sentinels);
+  // Fill the permutationIdTables by iterating over the idTablesToMerge
+  MinRowIterator iterator(idTablesToMerge, sortPerm);
+  auto idTableAndResultRow = iterator.next();
+  while (idTableAndResultRow != std::nullopt) {
+    permutationIdTables.at(idTableAndResultRow->first)
+        .push_back(idTableAndResultRow->second);
+    idTableAndResultRow = iterator.next();
   }
 
-  // For each idTable iterate over each column except the first one since that
-  // has already been written. For each column iterate over the values and look
-  // up where the value belongs in the result table. Write the value to the
-  // correct place. This method ensures cache locality during the iteration of
-  // the idTables that have to be merged.
+  // Write the result from the permutation.
+  writeIdTableFromPermutation(std::move(idTablesToMerge),
+                              std::move(permutationIdTables), result);
+
+  return result;
+}
+
+// _____________________________________________________________________________
+void writeIdTableFromPermutation(
+    std::vector<IdTable> idTablesToMerge,
+    std::vector<std::vector<size_t>> permutationIdTables, IdTable& result) {
   ql::ranges::for_each(
       ::ranges::views::enumerate(idTablesToMerge),
       [&result, &permutationIdTables](auto idTablePair) {
         ql::ranges::for_each(
-            ql::ranges::views::iota(size_t{1}, idTablePair.second.numColumns()),
+            ql::ranges::views::iota(size_t{0}, idTablePair.second.numColumns()),
             [&result, &idTablePair, &permutationIdTables](auto columnIndex) {
               decltype(auto) resultColumn = result.getColumn(columnIndex);
               decltype(auto) idTableColumn =
@@ -117,5 +89,96 @@ IdTable SortedIdTableMerger::mergeIdTables(
                   });
             });
       });
-  return result;
 }
+
+// _____________________________________________________________________________
+MinRowIterator::MinRowIterator(const std::vector<IdTable>& idTablesToMerge,
+                               std::vector<size_t> sortPerm)
+    : rowCounter_(size_t{0}) {
+  // For all idTables
+  ql::ranges::for_each(
+      ::ranges::views::enumerate(idTablesToMerge),
+      [this, &sortPerm](auto idTablePair) {
+        // Add all relevant columns
+        std::vector<ColumnRange> columnRangesForIdTable;
+        ql::ranges::for_each(sortPerm, [this, &idTablePair,
+                                        &columnRangesForIdTable](size_t col) {
+          auto span = idTablePair.second.getColumn(col);
+          columnRangesForIdTable.push_back({span.begin(), span.end()});
+        });
+        idTableToColumnRangesMap_.emplace(idTablePair.first,
+                                          std::move(columnRangesForIdTable));
+      });
+  // Check if there are iterators for empty containers and if so throw
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(idTableToColumnRangesMap_,
+                         [](const auto& keyValuePair) {
+                           return ql::ranges::all_of(
+                               keyValuePair.second,
+                               [](const ColumnRange& columnRange) {
+                                 return columnRange.first != columnRange.second;
+                               });
+                         }),
+      "At least one of the idTablesToMerge has an empty column.");
+  // Fill heap with the first rows
+  ql::ranges::for_each(
+      idTableToColumnRangesMap_, [this](const auto& keyValuePair) {
+        minHeap_.emplace(keyValuePair.first,
+                         getRowSubsetAndAdvanceForIdTable(keyValuePair.first));
+      });
+}
+
+// _____________________________________________________________________________
+std::optional<IdTableAndResultRow> MinRowIterator::next() {
+  if (minHeap_.empty()) {
+    return std::nullopt;
+  }
+  // Retrieve element
+  HeapElement nextMin = minHeap_.top();
+  minHeap_.pop();
+
+  // Get next row for idTable retrieved if now empty
+  auto it = idTableToColumnRangesMap_.find(nextMin.first);
+  if (it != idTableToColumnRangesMap_.end()) {
+    minHeap_.push(HeapElement{nextMin.first,
+                              getRowSubsetAndAdvanceForIdTable(nextMin.first)});
+  }
+  return std::make_optional(IdTableAndResultRow{nextMin.first, rowCounter_++});
+};
+
+// _____________________________________________________________________________
+std::vector<const Id*> MinRowIterator::getRowSubsetAndAdvanceForIdTable(
+    IdTableIndex idTableIndex) {
+  auto it = idTableToColumnRangesMap_.find(idTableIndex);
+  AD_CONTRACT_CHECK(
+      it != idTableToColumnRangesMap_.end(),
+      "The idTableIndex is not in the columnRanges_ map. The index was: ",
+      idTableIndex);
+  auto& columnRanges = it->second;
+  std::vector<const Id*> rowSubset;
+  for (auto& columnRange : columnRanges) {
+    rowSubset.push_back(&(*columnRange.first));
+  }
+  incrementColumnRangesForIdTable(idTableIndex);
+  return rowSubset;
+}
+
+// _____________________________________________________________________________
+void MinRowIterator::incrementColumnRangesForIdTable(
+    IdTableIndex idTableIndex) {
+  auto it = idTableToColumnRangesMap_.find(idTableIndex);
+  AD_CONTRACT_CHECK(
+      it != idTableToColumnRangesMap_.end(),
+      "The idTableIndex is not in the columnRanges_ map. The index was: ",
+      idTableIndex);
+
+  for (auto& columnRange : it->second) {
+    ++columnRange.first;
+    if (columnRange.first == columnRange.second) {
+      idTableToColumnRangesMap_.erase(idTableIndex);
+      break;
+    }
+  }
+}
+
+}  // namespace SortedIdTableMerge

@@ -87,8 +87,8 @@ IdTable IndexImpl::mergeTextBlockResults(
   }
   // Combine the partial results to one IdTable
   if (textScanMode == TextScanMode::WordScan) {
-    auto result = SortedIdTableMerger::mergeIdTables(std::move(partialResults),
-                                                     allocator);
+    auto result =
+        SortedIdTableMerge::mergeIdTables(std::move(partialResults), allocator);
     // If not entitySearch don't filter duplicates
     return std::move(result).toDynamic<>();
   }
