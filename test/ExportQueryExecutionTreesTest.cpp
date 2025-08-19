@@ -319,7 +319,8 @@ auto matchesIdTables(const Tables&... tables) {
 }
 
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
+    ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
+        generator) {
   std::vector<IdTable> result;
   for (const auto& [pair, range] : generator) {
     const auto& idTable = pair.idTable();

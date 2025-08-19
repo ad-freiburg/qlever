@@ -272,7 +272,7 @@ class ExportQueryExecutionTrees {
   //
   // Blocks after the LIMIT are not even requested.
  public:
-  static cppcoro::generator<TableWithRange> getRowIndices(
+  static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result,
       uint64_t& resutSizeTotal);
 

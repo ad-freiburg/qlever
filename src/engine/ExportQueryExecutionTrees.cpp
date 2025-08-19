@@ -96,10 +96,11 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
+ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result,
                                          uint64_t& resultSize) {
+  using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
   resultSize = 0;
@@ -107,7 +108,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // If the LIMIT is zero, there are no blocks to yield and the total result
   // size is zero.
   if (limitOffset._limit.value_or(1) == 0) {
-    co_return;
+    return InputRangeTypeErased(ql::span<TableWithRange>());
   }
 
   // The effective offset, limit, and export limit. These will be updated after
@@ -122,57 +123,77 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // export limit beyond the limit has no effect).
   effectiveExportLimit = std::min(effectiveExportLimit, effectiveLimit);
 
-  // Iterate over the result in blocks.
-  for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
-    // If all rows in the current block are before the effective offset, we can
-    // skip the block entirely. If not, there is at least something to count
-    // and maybe also something to yield.
-    uint64_t currentBlockSize = tableWithVocab.idTable().numRows();
-    if (effectiveOffset >= currentBlockSize) {
-      effectiveOffset -= currentBlockSize;
-      continue;
-    }
-    AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
-    AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+  auto makeResult = [](TableConstRefWithVocab& tableWithVocab,
+                       uint64_t rangeBegin, uint64_t numRowsToBeExported) {
+    return ExportQueryExecutionTrees::TableWithRange{
+        std::move(tableWithVocab),
+        ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
+  };
 
-    // Compute the range of rows to be exported (can by zero) and to be counted
-    // (always non-zero at this point).
-    uint64_t rangeBegin = effectiveOffset;
-    uint64_t numRowsToBeExported =
-        std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
-    uint64_t numRowsToBeCounted =
-        std::min(effectiveLimit, currentBlockSize - rangeBegin);
-    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= currentBlockSize);
-    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= currentBlockSize);
-    AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
+  using LoopControl = LoopControl<ExportQueryExecutionTrees::TableWithRange>;
+  auto range = CachingContinuableTransformInputRange(
+      getIdTables(result),
+      [&resultSize, makeResult = std::move(makeResult),
+       effectiveOffset = effectiveOffset, effectiveLimit = effectiveLimit,
+       effectiveExportLimit = effectiveExportLimit](
+          TableConstRefWithVocab& tableWithVocab) mutable {
+        // If all rows in the current block are before the effective offset, we
+        // can skip the block entirely. If not, there is at least something to
+        // count and maybe also something to yield.
+        uint64_t currentBlockSize = tableWithVocab.idTable().numRows();
+        if (effectiveOffset >= currentBlockSize) {
+          effectiveOffset -= currentBlockSize;
+          return LoopControl::makeContinue();
+        }
+        AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
+        AD_CORRECTNESS_CHECK(effectiveLimit > 0);
 
-    // If there is something to be exported, yield it.
-    if (numRowsToBeExported > 0) {
-      co_yield {std::move(tableWithVocab),
-                ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
-    }
+        // Compute the range of rows to be exported (can by zero) and to be
+        // counted (always non-zero at this point).
+        uint64_t rangeBegin = effectiveOffset;
+        uint64_t numRowsToBeExported =
+            std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
+        uint64_t numRowsToBeCounted =
+            std::min(effectiveLimit, currentBlockSize - rangeBegin);
+        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <=
+                             currentBlockSize);
+        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <=
+                             currentBlockSize);
+        AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
 
-    // Add to `resultSize` and update the effective offset (which becomes zero
-    // after the first non-skipped block) and limits (make sure to never go
-    // below zero and `std::numeric_limits<uint64_t>::max()` stays there).
-    resultSize += numRowsToBeCounted;
-    effectiveOffset = 0;
-    auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
-      if (limit != std::numeric_limits<uint64_t>::max()) {
-        limit = limit > subtrahend ? limit - subtrahend : 0;
-      }
-    };
-    reduceLimit(effectiveLimit, numRowsToBeCounted);
-    reduceLimit(effectiveExportLimit, numRowsToBeCounted);
+        // Add to `resultSize` and update the effective offset (which becomes
+        // zero after the first non-skipped block) and limits (make sure to
+        // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
+        // there).
+        resultSize += numRowsToBeCounted;
+        effectiveOffset = 0;
+        auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
+          if (limit != std::numeric_limits<uint64_t>::max()) {
+            limit = limit > subtrahend ? limit - subtrahend : 0;
+          }
+        };
+        reduceLimit(effectiveLimit, numRowsToBeCounted);
+        reduceLimit(effectiveExportLimit, numRowsToBeCounted);
 
-    // If the effective limit is zero, there is nothing to yield and nothing
-    // to count anymore. This should come at the end of this loop and not at
-    // the beginning, to avoid unnecessarily fetching another block from
-    // `result`.
-    if (effectiveLimit == 0) {
-      co_return;
-    }
-  }
+        // If the effective limit is zero, there is nothing to yield and nothing
+        // to count anymore. This should come at the end of this loop and not at
+        // the beginning, to avoid unnecessarily fetching another block from
+        // `result`.
+        if (effectiveLimit == 0) {
+          return numRowsToBeExported > 0
+                     ? LoopControl::breakWithValue(makeResult(
+                           tableWithVocab, rangeBegin, numRowsToBeExported))
+                     : LoopControl::makeBreak();
+        }
+
+        // If there is something to be exported, yield it.
+        return numRowsToBeExported > 0
+                   ? LoopControl::yieldValue(makeResult(
+                         tableWithVocab, rangeBegin, numRowsToBeExported))
+                   : LoopControl::makeContinue();
+      });
+
+  return InputRangeTypeErased(std::move(range));
 }
 
 // _____________________________________________________________________________
