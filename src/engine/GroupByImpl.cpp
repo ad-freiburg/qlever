@@ -9,6 +9,8 @@
 
 #include <absl/strings/str_join.h>
 
+#include <limits>
+
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/ExistsJoin.h"
@@ -345,19 +347,6 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
-// Hybrid GROUP BY fallback strategy (SORT vs. HASH MAP):
-// 1) Sample a fraction of rows and estimate distinct group count via hash
-// sketch;
-//    if estimated groups exceed threshold, skip hash-map path entirely.
-// 2) Attempt index-scan-based shortcuts (single index count, full index scan,
-//    join full scan, object count).
-// 3) Otherwise, compute subresult (lazy if possible) and apply hash-map
-// grouping.
-// 4) If the hash-map grows too large mid-aggregation:
-//    1. We process all remaining rows, adding the rows of existing groups to
-//       the hash-map and adding rows of new groups to a new table.
-//    2. We then sort & process the new table, materialize the results from the
-//       hash-map, and append the two tables.
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -1609,6 +1598,14 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       RuntimeParameters().get<"group-by-sample-distinct-ratio">();
   size_t groupThreshold = static_cast<size_t>(tableSize * distinctRatio);
 
+  // If the hash map optimization is not possible, we use a hybrid
+  // approach, where we add all entries with existing groups to the hash map,
+  // and then perform a sort-based grouping on the remaining entries.
+  //
+  // This function separates the entries belonging to existing groups
+  // from the remaining entries, and returns them in two separate tables.
+  // === This will very soon be replaced by another approach because it is
+  //     not efficient to copy the whole table ===
   auto splitRowsByExistingGroups = [&](auto it) -> std::pair<IdTable, IdTable> {
     IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
     IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
@@ -1636,10 +1633,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     return {std::move(existingTable), std::move(restTable)};
   };
 
-  // TODO: only sample once
-  std::function<Result*(const IdTable&, decltype(beginIt), uint64_t)>
-      updateHashMapWithTable = [&](const IdTable& table, auto it,
-                                   uint64_t processedEntries) -> Result* {
+  // Load entries from the given table to the hash map.
+  auto updateHashMapWithTable = [&](const IdTable& table) -> void {
     // Setup the `EvaluationContext` for this block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), table,
@@ -1695,49 +1690,61 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       }
       aggregationTimer.stop();
     }
-    // We only do sampling if the number of processed entries is larger than
-    // `sampleSize` and the number of processed entries is not zero.
-    if (processedEntries >= sampleSize && processedEntries != 0) {
-      size_t totalGroups = static_cast<size_t>(
-          GroupByStrategyChooser::estimateNumberOfTotalGroups(
-              aggregationData.getMap(), LogLevel::FATAL,
-              sampleSize / processedEntries));
-      if (totalGroups > groupThreshold) {
-        AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
-                     << ") > (thr: " << groupThreshold
-                     << "), switching to sort-based aggregation" << std::endl;
-        // Batch existing-group rows and buffer new-group rows
+  };
 
-        auto [existingTable, restTable] = splitRowsByExistingGroups(it);
-        // process all existing-group rows in one block
-        if (!existingTable.empty()) {
-          updateHashMapWithTable(existingTable, it, 0);
-        }
-        // sort tail rows by grouping columns using parallel Engine sort
-        Engine::sort(restTable, columnIndices);
-        // perform sort-based grouping on buffered new groups
-        IdTable restResult = CALL_FIXED_SIZE(
-            (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy,
-            this, restTable, columnIndices, aggregates, &localVocab);
-        // combine hash-map result and restResult
-        IdTable hashResult = createResultFromHashMap(
-            aggregationData, aggregateAliases, &localVocab);
-        hashResult.reserve(hashResult.numRows() + restResult.numRows());
-        // Report sizes of hash-map and sorted fallback results.
-        // [Benke] (May be too much log, I will remove it if it's not important)
-        AD_LOG_DEBUG << "Hybrid fallback: hash groups=" << hashResult.numRows()
-                     << ", sorted tail groups=" << restResult.numRows()
-                     << std::endl;
-        // Append rows from restResult; use prvalue binding
-        for (auto&& row : restResult) {
-          hashResult.push_back(std::forward<decltype(row)>(row));
-        }
-        // Return a new Result on the heap to signal early exit
-        return new Result{std::move(hashResult), resultSortedOn(),
-                          std::move(localVocab)};
-      }
+  // Helper function to handle the remainder of the input
+  // after the hash map threshold has been exceeded.
+  // It returns the Result consisting of the entries from the hash map
+  // and the sorted entries from the rest of the input.
+  auto handleRemainderUsingHybridApproach = [&](auto it) -> Result {
+    // Batch existing-group rows and buffer new-group rows
+    auto [existingTable, restTable] = splitRowsByExistingGroups(it);
+    // process all existing-group rows in one block
+    if (!existingTable.empty()) {
+      updateHashMapWithTable(existingTable);
     }
-    return nullptr;
+    // sort tail rows by grouping columns using parallel Engine sort
+    Engine::sort(restTable, columnIndices);
+    // perform sort-based grouping on buffered new groups
+    IdTable restResult = CALL_FIXED_SIZE(
+        (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy, this,
+        restTable, columnIndices, aggregates, &localVocab);
+    // combine hash-map result and restResult
+    IdTable hashResult =
+        createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
+    hashResult.reserve(hashResult.numRows() + restResult.numRows());
+    // Report sizes of hash-map and sorted fallback results.
+    // [Benke] (May be too much log, I will remove it if it's not important)
+    AD_LOG_DEBUG << "Hybrid fallback: hash groups=" << hashResult.numRows()
+                 << ", sorted tail groups=" << restResult.numRows()
+                 << std::endl;
+    // Append rows from restResult; use prvalue binding
+    for (auto&& row : restResult) {
+      hashResult.push_back(std::forward<decltype(row)>(row));
+    }
+    // Return a Result to signal early exit
+    return Result{std::move(hashResult), resultSortedOn(),
+                  std::move(localVocab)};
+  };
+
+  auto hashMapIsTooLarge = [&](uint64_t processedEntries) {
+    // Only start sampling once we've processed at least sampleSize entries
+    if (processedEntries < sampleSize || processedEntries == 0) {
+      return false;
+    }
+    size_t totalGroups =
+        static_cast<size_t>(GroupByStrategyChooser::estimateNumberOfTotalGroups(
+            aggregationData.getMap(), LogLevel::FATAL,
+            sampleSize / processedEntries));
+    if (totalGroups > groupThreshold) {
+      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << totalGroups
+                   << ") > (thr: " << groupThreshold
+                   << "), switching to sort-based aggregation" << std::endl;
+      // prevent further sampling attempts
+      sampleSize = std::numeric_limits<double>::infinity();
+      return true;
+    }
+    return false;
   };
 
   // Iterate through input blocks; break out and buffer the rest if threshold
@@ -1752,30 +1759,22 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // NOTE: If the input blocks have very similar or even identical non-empty
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(inputLocalVocab);
-
-    Result* resultPtr =
-        updateHashMapWithTable(inputTable, it, processedEntries);
-    // Check for early exit from hybrid fallback path
-    if (resultPtr != nullptr) {
-      Result movedResult = std::move(*resultPtr);
-      delete resultPtr;
-      return movedResult;
+    // Load the table into the hash map.
+    updateHashMapWithTable(inputTable);
+    // If we have enough entries that we can do sampling on them, we check if
+    // the estimated number of groups exceeds the threshold.
+    // If it is, we switch to the hybrid approach.
+    processedEntries += inputTable.size();
+    if (hashMapIsTooLarge(processedEntries)) {
+      return handleRemainderUsingHybridApproach(it);
     }
   }
-
   runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
   runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
   IdTable resultTable =
       createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
-
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
-
-// template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
-// std::pair<IdTable, IdTable> GroupByImpl::
-
-// _____________________________________________________________________________
-// template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
 
 // _____________________________________________________________________________
 std::optional<Variable>
