@@ -252,8 +252,15 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
+  // Create two instances of `IndexScan`, that share `variable`, but one scan
+  // uses it as its subject, and the other one as its object. (And properly use
+  // `activeGraphs` and the optional `graphVariable`.)
+  static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
+      QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
+      const std::optional<Variable>& graphVariable);
+
   // Return an execution tree, that "joins" the given `tripleComponent` with all
-  // of the subjects or objects in the knowledge graph, so if the graph does not
+  // the subjects or objects in the knowledge graph, so if the graph does not
   // contain this value it is filtered out.
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,

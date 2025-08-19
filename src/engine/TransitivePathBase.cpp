@@ -90,7 +90,53 @@ namespace {
 auto makeInternalVariable(std::string_view string) {
   return Variable{absl::StrCat("?internal_property_path_variable_", string)};
 }
+
+// Helper function to make a sorted tree distinct.
+auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree,
+                  bool hasGraph) {
+  auto* qec = executionTree->getRootOperation()->getExecutionContext();
+  std::vector<ColumnIndex> distinctColumns{0};
+  if (hasGraph) {
+    distinctColumns.push_back(1);
+  }
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(executionTree),
+                                                 std::move(distinctColumns));
+}
 }  // namespace
+
+// _____________________________________________________________________________
+std::array<std::shared_ptr<QueryExecutionTree>, 2>
+TransitivePathBase::makeIndexScanPair(
+    QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
+    const std::optional<Variable>& graphVariable) {
+  // Dummy variables to get a full scan of the index.
+  const auto& x = variable;
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+  std::set variables{x};
+  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
+  if (graphVariable.has_value()) {
+    additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                   graphVariable.value());
+    variables.emplace(graphVariable.value());
+  }
+  auto stripColumns =
+      [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
+        return QueryExecutionTree::makeTreeWithStrippedColumns(
+            std::move(executionTree), variables);
+      };
+
+  return {stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+              qec, Permutation::Enum::SPO,
+              SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z},
+                                 additionalColumns},
+              activeGraphs)),
+          stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+              qec, Permutation::Enum::OPS,
+              SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x},
+                                 additionalColumns},
+              activeGraphs))};
+}
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
@@ -100,10 +146,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
   // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
   // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
 
-  // Dummy variables to get a full scan of the index.
   auto x = makeInternalVariable("x");
-  auto y = makeInternalVariable("y");
-  auto z = makeInternalVariable("z");
 
   auto joinWithValues = [qec, &tripleComponent, &x](
                             std::shared_ptr<QueryExecutionTree> executionTree) {
@@ -112,35 +155,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
                                                std::move(valuesClause), 0, 0);
   };
-  std::vector variables{x};
-  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
-  std::vector<ColumnIndex> distinctIndices{0};
-  if (graphVariable.has_value()) {
-    additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                   graphVariable.value());
-    variables.push_back(graphVariable.value());
-    distinctIndices.push_back(1);
-  }
-  auto selectXVariable =
-      [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
-        executionTree->getRootOperation()->setSelectedVariablesForSubquery(
-            variables);
-        return executionTree;
-      };
+  auto [leftScan, rightScan] =
+      makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
   auto allValues = ad_utility::makeExecutionTree<Union>(
-      qec,
-      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::SPO,
-          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z},
-                             additionalColumns},
-          activeGraphs))),
-      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::OPS,
-          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x},
-                             additionalColumns},
-          activeGraphs))));
-  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::move(distinctIndices));
+      qec, joinWithValues(std::move(leftScan)),
+      joinWithValues(std::move(rightScan)));
+  return makeDistinct(std::move(allValues), graphVariable.has_value());
 }
 
 // _____________________________________________________________________________
@@ -148,42 +168,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
     QueryExecutionContext* qec, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable,
     std::optional<Variable> variable) {
-  // Dummy variables to get a full scan of the index.
-  auto x = std::move(variable).value_or(makeInternalVariable("x"));
-  auto y = makeInternalVariable("y");
-  auto z = makeInternalVariable("z");
-  std::vector variables{x};
-  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
-  std::vector<ColumnIndex> distinctIndices{0};
-  if (graphVariable.has_value()) {
-    additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                   graphVariable.value());
-    variables.push_back(graphVariable.value());
-    distinctIndices.push_back(1);
-  }
-  // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
-  // and ?z in the first place.
-  // We don't need to materialize the extra variables y and z in the union.
-  auto selectXVariable =
-      [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
-        executionTree->getRootOperation()->setSelectedVariablesForSubquery(
-            variables);
-        return executionTree;
-      };
+  auto [leftScan, rightScan] = makeIndexScanPair(
+      qec, std::move(activeGraphs),
+      std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
   auto allValues = ad_utility::makeExecutionTree<Union>(
-      qec,
-      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::SPO,
-          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z},
-                             additionalColumns},
-          activeGraphs)),
-      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::OPS,
-          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x},
-                             additionalColumns},
-          activeGraphs)));
-  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::move(distinctIndices));
+      qec, std::move(leftScan), std::move(rightScan));
+  return makeDistinct(std::move(allValues), graphVariable.has_value());
 }
 
 // _____________________________________________________________________________

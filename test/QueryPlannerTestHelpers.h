@@ -126,11 +126,12 @@ constexpr auto IndexScan =
        const std::vector<Permutation::Enum>& allowedPermutations = {},
        const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
        const std::vector<Variable>& additionalVariables = {},
-       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
-  size_t numVariables = static_cast<size_t>(subject.isVariable()) +
-                        static_cast<size_t>(predicate.isVariable()) +
-                        static_cast<size_t>(object.isVariable()) +
-                        additionalColumns.size();
+       const std::vector<ColumnIndex>& additionalColumns = {},
+       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+  size_t numVariables = strippedSize.value_or(
+      static_cast<size_t>(subject.isVariable()) +
+      static_cast<size_t>(predicate.isVariable()) +
+      static_cast<size_t>(object.isVariable()) + additionalColumns.size());
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
@@ -254,7 +255,8 @@ inline auto IndexScanFromStrings =
        const std::optional<ad_utility::HashSet<std::string>> graphs =
            std::nullopt,
        const std::vector<Variable>& additionalVariables = {},
-       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
+       const std::vector<ColumnIndex>& additionalColumns = {},
+       const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
@@ -273,7 +275,7 @@ inline auto IndexScanFromStrings =
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
-                   additionalColumns);
+                   additionalColumns, strippedSize);
 };
 
 // For the following Join algorithms the order of the children is not
