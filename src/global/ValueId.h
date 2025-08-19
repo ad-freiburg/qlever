@@ -56,7 +56,7 @@ constexpr std::string_view toString(Datatype type) {
     case Datatype::Int:
       return "Int";
     case Datatype::EncodedVal:
-      return "Encoded Iri or Literal";
+      return "EncodedIri";
     case Datatype::VocabIndex:
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
@@ -166,8 +166,10 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
+
+    using IdProxy = LocalVocabEntry::IdProxy;
     auto compareVocabAndLocalVocab =
-        [](::VocabIndex vocabIndex,
+        [](LocalVocabEntry::IdProxy vocabIndex,
            ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
       auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
@@ -180,12 +182,14 @@ class ValueId {
     };
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
-    if (type == VocabIndex && otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(getVocabIndex(),
+    if ((type == VocabIndex || type == EncodedVal) &&
+        otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(IdProxy::make(getBits()),
                                        other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
-      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
-                                                    getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               (otherType == VocabIndex || otherType == EncodedVal)) {
+      auto inverseOrder = compareVocabAndLocalVocab(
+          IdProxy::make(other.getBits()), getLocalVocabIndex());
       return 0 <=> inverseOrder;
     }
 
@@ -390,7 +394,7 @@ class ValueId {
     }
     auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
     if (upper != lower) {
-      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
+      return H::combine(std::move(h), lower.get(), 0);
     }
     return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }

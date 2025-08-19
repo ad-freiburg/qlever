@@ -14,12 +14,20 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // this word would be stored if it were present.
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
+
   const auto& vocab = index.getVocab();
 
-  auto [lower, upper] = vocab.getPositionOfWord(toStringRepresentation());
-  AD_CORRECTNESS_CHECK(upper.get() - lower.get() <= 1);
-  positionInVocab.lowerBound_ = lower;
-  positionInVocab.upperBound_ = upper;
+  auto [lower, upper] = [&]() {
+    if (auto opt = index.encodedValueManager().encode(toStringRepresentation());
+        opt.has_value()) {
+      return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
+    }
+    auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
+    AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
+    return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
+  }();
+  positionInVocab.lowerBound_ = IdProxy::make(lower.getBits());
+  positionInVocab.upperBound_ = IdProxy::make(upper.getBits());
 
   lowerBoundInVocab_.store(positionInVocab.lowerBound_,
                            std::memory_order_relaxed);

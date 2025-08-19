@@ -111,4 +111,10 @@ TEST(EncodedIriManger, illegalPrefixes) {
                                HasSubstr("Too many prefixes"));
 }
 
+// _____________________________________________________________________________
+TEST(EncodedIriManager, emptyPrefixes) {
+  EncodedIriManager em;
+  EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
+}
+
 }  // namespace

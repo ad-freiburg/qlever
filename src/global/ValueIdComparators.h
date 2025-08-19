@@ -515,7 +515,11 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
     return fromBool(std::invoke(comparator, a, b));
   }
 
-  // TODO<joka921> What about the `EncodedVal` type?
+  // TODO<joka921> We currently don't perform correct comparisons (other than
+  // equality) for the `EncodedVal` datatype. This will be added in a future
+  // PR. This is okay for now, as 1. the maintainer of an inex has to explicitly
+  // activate the encoding and 2. there are only few queries where the semantic
+  // ordering of IRIs is actually important.
 
   // If both are geo points, compare the raw IDs.
   if (a.getDatatype() == Datatype::GeoPoint &&

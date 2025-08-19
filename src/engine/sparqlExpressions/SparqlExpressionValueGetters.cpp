@@ -61,7 +61,7 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::BlankNodeIndex:
       return Undef;
     case Datatype::EncodedVal:
-      // This assumes that we never use this for empty IRI or Literals
+      // This assumes that we never use this for empty IRIs.
       return True;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();

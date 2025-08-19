@@ -384,7 +384,7 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  public:
-  NQuadParser(const EncodedIriManager* ev) : Base{ev} {};
+  explicit NQuadParser(const EncodedIriManager* ev) : Base{ev} {};
   explicit NQuadParser(const EncodedIriManager* ev,
                        TripleComponent defaultGraphId)
       : Base{ev}, defaultGraphId_{std::move(defaultGraphId)} {}
@@ -410,7 +410,7 @@ CPP_template(typename Parser)(
  public:
   using Parser::getLine;
   using Parser::prefixMap_;
-  RdfStringParser(const EncodedIriManager* encodedIriManager)
+  explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
       : Parser{encodedIriManager} {}
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
                            TripleComponent defaultGraph)
@@ -538,7 +538,7 @@ class RdfStreamParser : public Parser {
 
  public:
   // Default construction needed for tests
-  RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
+  explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
   explicit RdfStreamParser(
       const std::string& filename, const EncodedIriManager* ev,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
@@ -597,12 +597,12 @@ class RdfParallelParser : public Parser {
  public:
   using Triple = std::array<std::string, 3>;
   // Default construction needed for tests
-  RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
+  explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
 
   // If the `sleepTimeForTesting` is set, then after the initialization the
   // parser will sleep for the specified time before parsing each batch s.t.
   // certain corner cases can be tested.
-  explicit RdfParallelParser(
+  RdfParallelParser(
       const std::string& filename, const EncodedIriManager* ev,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       std::chrono::milliseconds sleepTimeForTesting =
@@ -698,7 +698,7 @@ class RdfParallelParser : public Parser {
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
-  RdfMultifileParser(const EncodedIriManager* encodedIriManager)
+  explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {};
 
   // Construct the parser from a vector of file specifications and eagerly start

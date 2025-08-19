@@ -357,8 +357,8 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
       // TODO<joka921> This is only to make the strange `toRdfLiteral` function
-      // work in the triple component class, remove that function which doesn't
-      // function properly anyway.
+      // work in the triple component class, which is only used to create cache
+      // keys etc. Consider removing it in the future.
     case EncodedVal:
       return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
     default:

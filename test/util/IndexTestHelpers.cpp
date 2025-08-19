@@ -362,7 +362,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    static EncodedIriManager encodedIriManager;
+    static const EncodedIriManager encodedIriManager;
     auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();

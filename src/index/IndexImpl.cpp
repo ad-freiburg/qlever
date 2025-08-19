@@ -1567,8 +1567,7 @@ size_t IndexImpl::getCardinality(
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId =
-          comp.toValueId(getVocab(), encodedValueManager());
-      relId.has_value()) {
+          comp.toValueId(getVocab(), encodedValueManager())) {
     return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
@@ -1596,8 +1595,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedValueManager());
-      keyId.has_value()) {
+  if (auto keyId = key.toValueId(getVocab(), encodedValueManager())) {
     auto meta = getPermutation(permutation)
                     .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {

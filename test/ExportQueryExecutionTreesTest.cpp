@@ -2036,3 +2036,56 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/789"));
   EXPECT_THAT(tsvResult, HasSubstr("http://test.com/id/111"));
 }
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
+  // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
+  // IRIs
+
+  // Create an EncodedIriManager with test prefixes
+  std::vector<std::string> prefixes = {"http://example.org/",
+                                       "http://test.com/"};
+  EncodedIriManager encodedIriManager{prefixes};
+
+  // Create a test index config with the encoded IRI manager
+  using namespace ad_utility::testing;
+  TestIndexConfig config;
+  config.encodedIriManager = encodedIriManager;
+  auto qec = getQec(std::move(config));
+
+  // Test driver lambda to reduce code duplication
+  LocalVocab emptyLocalVocab;
+  auto testEncodedIri = [&](const std::string& iri) {
+    // Encode the IRI
+    auto encodedIdOpt = encodedIriManager.encode(iri);
+    ASSERT_TRUE(encodedIdOpt.has_value()) << "Failed to encode IRI: " << iri;
+
+    Id encodedId = *encodedIdOpt;
+    EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
+
+    // Test getLiteralOrIriFromVocabIndex with the encoded ID
+    auto result = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+        qec->getIndex(), encodedId, emptyLocalVocab);
+
+    // The result should be the original IRI
+    EXPECT_TRUE(result.isIri());
+    EXPECT_EQ(result.toStringRepresentation(), iri);
+  };
+
+  // Test multiple encoded IRIs
+  testEncodedIri("<http://example.org/123>");
+  testEncodedIri("<http://test.com/456>");
+
+  // Test that non-encodable IRIs fall back to VocabIndex handling
+  // (This test assumes the test index has some vocabulary entries)
+  if (!qec->getIndex().getVocab().size()) {
+    VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
+    Id vocabId = Id::makeFromVocabIndex(vocabIndex);
+
+    auto vocabResult = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+        qec->getIndex(), vocabId, emptyLocalVocab);
+
+    // Should successfully return some IRI or literal from vocabulary
+    EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
+  }
+}

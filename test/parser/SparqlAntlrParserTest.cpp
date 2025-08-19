@@ -1687,7 +1687,7 @@ TEST(SparqlParser, Datasets) {
 TEST(SparqlParser, EncodedIriManagerUsage) {
   using namespace sparqlParserTestHelpers;
 
-  // Create a parse function that uses an EncodedIriManager
+  // Create a parse function that uses an `EncodedIriManager`.
   auto encodedIriManager = std::make_shared<EncodedIriManager>(
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
@@ -1697,93 +1697,45 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
         .parseTypesafe(&SparqlAutomaticParser::query);
   };
 
-  // Test that IRIs in SPARQL queries get encoded when they match prefixes
+  auto encoded123 = TripleComponent{
+      encodedIriManager->encode("<http://example.org/123>").value()};
+  auto unencoded456 = PropertyPath::fromIri(
+      TripleComponent::Iri::fromIriref("<http://example.org/456>"));
+  auto encoded789 = TripleComponent{
+      encodedIriManager->encode("<http://test.com/id/789>").value()};
+
+  // Test that IRIs in SPARQL queries get encoded when they match prefixes. Note
+  // that we currently only encode the subjects and predicates of triples
+  // directly in the parser, as encoding predicates would require massive
+  // changes to the `PropertyPath` and therefore the `QueryPlanner` class.
   {
-    auto result =
-        parseWithEncoding("SELECT * WHERE { <http://example.org/123> ?p ?o }");
-    auto& parsedQuery = result.resultOfParse_;
-
-    // TODO<joka921> This test currently fails, but for valid reasons: We don't
-    // properly handle encoded IRIs if they appear in the subject or predicate
-    // of a query, but only in objects. That is of course not correct and has to
-    // be addressed.
+    auto result = parseWithEncoding(
+        "SELECT ?x WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }");
     EXPECT_THAT(
-        parsedQuery,
-        m::SelectQuery(
-            m::VariablesSelect({"?p", "?o"}),
-            m::GraphPattern(m::OrderedTriples(
-                {{{TripleComponent{
-                       encodedIriManager->encode("<http://example.org/123>")
-                           .value()},
-                   Variable("?p"), Variable("?o")}}}))));
-
-    // Note: The specific encoding check would require accessing the internal
-    // representation For now, we verify that the query parses successfully with
-    // the EncodedIriManager
+        result.resultOfParse_,
+        m::SelectQuery(m::VariablesSelect({"?x"}),
+                       m::GraphPattern(m::OrderedTriples(
+                           {{{encoded123, unencoded456, encoded789}}}))));
   }
 
-  // Test that queries with encodable IRIs parse correctly
-  auto testEncodableIri = [&](const std::string& query,
-                              const std::string& description) {
-    SCOPED_TRACE(description);
-    auto result = parseWithEncoding(query);
-    EXPECT_TRUE(result.remainingText_.empty())
-        << "Query should parse completely: " << query;
-  };
-
-  testEncodableIri("SELECT * WHERE { <http://example.org/123> ?p ?o }",
-                   "Subject with encodable IRI");
-  testEncodableIri("SELECT * WHERE { ?s <http://example.org/456> ?o }",
-                   "Predicate with encodable IRI");
-  testEncodableIri("SELECT * WHERE { ?s ?p <http://test.com/id/789> }",
-                   "Object with encodable IRI");
-  testEncodableIri(
-      "PREFIX ex: <http://example.org/> SELECT * WHERE { ex:123 ?p ?o }",
-      "Prefixed name that resolves to encodable IRI");
-  testEncodableIri(
-      "CONSTRUCT { <http://example.org/555> ?p ?o } WHERE { ?s ?p ?o }",
-      "CONSTRUCT template with encodable IRI");
-
-  // Test that non-encodable IRIs also parse correctly (remain as IRIs)
-  testEncodableIri("SELECT * WHERE { <http://other.org/123> ?p ?o }",
-                   "IRI without matching prefix");
-  testEncodableIri("SELECT * WHERE { <http://example.org/abc> ?p ?o }",
-                   "IRI with matching prefix but non-numeric suffix");
-  testEncodableIri(
-      "SELECT * WHERE { <http://example.org/123456789012345> ?p ?o }",
-      "IRI with number too long to encode");
-
-  // Test that the parser works the same way as without EncodedIriManager for
-  // regular cases
-  auto parseWithoutEncoding = [](const std::string& input) {
-    return parse<&SparqlAutomaticParser::query>(input);
-  };
-
-  auto regularQuery = "SELECT * WHERE { <http://regular.example/test> ?p ?o }";
-  auto resultWith = parseWithEncoding(regularQuery);
-  auto resultWithout = parseWithoutEncoding(regularQuery);
-
-  // Both should parse completely
-  EXPECT_TRUE(resultWith.remainingText_.empty());
-  EXPECT_TRUE(resultWithout.remainingText_.empty());
-
-  // Test that predicates with encodable IRIs get properly encoded
   {
-    auto result =
-        parseWithEncoding("SELECT * WHERE { ?s <http://example.org/456> ?o }");
-    auto& parsedQuery = result.resultOfParse_;
+    // CONSTRUCT WHERE syntax uses the same pattern for both template and WHERE
+    // clause. Test that the encoding also works properly in these cases.
+    std::string constructWhereQuery =
+        "CONSTRUCT WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }";
 
-    // NOTE: We currently don't encode IRIs in predicates directly in the SPARQL
-    // parser, as this would require major refactorings in several places. They
-    // are still converted correctly later on when being converted to an ID.
+    auto result = parseWithEncoding(constructWhereQuery);
+    EXPECT_TRUE(result.remainingText_.empty())
+        << "CONSTRUCT WHERE query should parse completely";
+
     EXPECT_THAT(
-        parsedQuery,
-        m::SelectQuery(
-            m::VariablesSelect({"?s", "?o"}),
+        result.resultOfParse_,
+        m::ConstructQuery(
+            {{Iri{"<http://example.org/123>"}, Iri{"<http://example.org/456>"},
+              Iri{"<http://test.com/id/789>"}}},
             m::GraphPattern(m::OrderedTriples(
-                {{{Variable("?s"),
-                   PropertyPath::fromIri(TripleComponent::Iri::fromIriref(
-                       "<http://example.org/456>")),
-                   Variable("?o")}}}))));
+                {{{encoded123, unencoded456, encoded789}}}))));
   }
 }

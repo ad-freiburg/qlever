@@ -65,9 +65,22 @@ class EncodedIriManagerImpl {
     ql::ranges::sort(prefixesWithoutAngleBrackets);
 
     // Remove duplicates.
+    // Note: ql::ranges::unique doesn't work because of a discrepancy in the
+    // return types between `std::ranges` and `range-v3`.
     prefixesWithoutAngleBrackets.erase(
         ::ranges::unique(prefixesWithoutAngleBrackets),
         prefixesWithoutAngleBrackets.end());
+    static constexpr auto maxNumPrefixes = 1ULL << NumBitsTags;
+
+    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes) {
+      throw std::runtime_error(absl::StrCat(
+          "Too many prefixes specified for the numeric encoding of numeric "
+          "IRIs into IDs. The maximum is ",
+          maxNumPrefixes, " , but ", prefixesWithoutAngleBrackets.size(),
+          " prefixes were specified"));
+    }
+
+    // TODO<C++23> use `std::views::adjacent`.
     for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
       const auto& a = prefixesWithoutAngleBrackets.at(i);
       const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
@@ -77,14 +90,6 @@ class EncodedIriManagerImpl {
             "may be a prefix of another prefix. Violated for \"",
             a, "\" and \"", b, "\"."));
       }
-    }
-    static constexpr auto maxNumPrefixes = 1ull << NumBitsTags;
-    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes) {
-      throw std::runtime_error(absl::StrCat(
-          "Too many prefixes specified for the numeric encoding of numeric "
-          "IRIs into IDs. The maximum is ",
-          maxNumPrefixes, " , but ", prefixesWithoutAngleBrackets.size(),
-          " prefixes were specified"));
     }
     prefixes_.reserve(prefixesWithoutAngleBrackets.size());
     for (const auto& prefix : prefixesWithoutAngleBrackets) {
@@ -194,7 +199,7 @@ class EncodedIriManagerImpl {
       // padding nibble `0`.
       uint8_t digit = (digitChar - '0') + 1;
       result |= static_cast<uint64_t>(digit) << shift;
-      shift -= 4;
+      shift -= NibbleSize;
     }
     return result;
   }

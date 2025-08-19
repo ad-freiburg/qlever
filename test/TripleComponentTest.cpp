@@ -8,6 +8,7 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
+#include "index/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
@@ -140,6 +141,21 @@ TEST(TripleComponent, toRdfLiteral) {
   object = DateYearOrDuration{123456, DateYearOrDuration::Type::Year};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
+
+  // Test encoded IRI - covers the "else" branch in toRdfLiteral
+  // Create an EncodedIriManager with a test prefix
+  EncodedIriManager encodedIriManager{
+      std::vector<std::string>{"http://example.org/"}};
+  std::string encodableIri = "<http://example.org/123>";
+  auto encodedIdOpt = encodedIriManager.encode(encodableIri);
+
+  // Create a TripleComponent with the encoded ID
+  TripleComponent encodedIriComponent{encodedIdOpt.value()};
+  std::string result = encodedIriComponent.toRdfLiteral();
+
+  // This function is just used for cache keys etc, so it is not an issue that
+  // the result is not human readable
+  EXPECT_THAT(result, ::testing::HasSubstr("encodedId: "));
 }
 
 TEST(TripleComponent, toValueIdIfNotString) {

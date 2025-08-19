@@ -79,11 +79,11 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
             "Only one variable is allowed per search side");
       }
       LocalVocab lv;
-      auto opt = TripleComponent{comp}.toValueId(vocab, lv, encodedIriManager);
-      if (opt.getDatatype() == Datatype::LocalVocabIndex) {
+      auto id = TripleComponent{comp}.toValueId(vocab, lv, encodedIriManager);
+      if (id.getDatatype() == Datatype::LocalVocabIndex) {
         throw PathSearchException("No vocabulary entry for " + comp.toString());
       } else {
-        sideIds.push_back(opt);
+        sideIds.push_back(id);
       }
     }
     return sideIds;

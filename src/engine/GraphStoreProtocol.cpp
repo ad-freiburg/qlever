@@ -39,7 +39,9 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
     case ad_utility::MediaType::ntriples: {
       // TODO<joka921> We could pass in the actual manager here,
       // then the resulting triples could (possibly) be already much
-      // smaller.
+      // smaller. This will be done in a future version where we pass the state
+      // of the underlying index more consistently to all parsing and update
+      // functions.
       EncodedIriManager encodedIriManager;
       auto parser = Re2Parser(&encodedIriManager);
       parser.setInputStream(body);
