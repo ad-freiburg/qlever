@@ -274,22 +274,12 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     filterDuplicatesIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
-  auto deleteLastIfDuplicate = [&]() {
-    if (blockMetadata.lastTripleIsDuplicateOfFirstTripleInNextBlock_ &&
-        !desiredGraphs_.has_value()) {
-      AD_CORRECTNESS_CHECK(!block.empty());
-      block.erase(block.end() - 1);
-      return true;
-    }
-    return false;
-  };
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
-    return deleteLastIfDuplicate();
+    return false;
   }
   auto endUnique = std::unique(block.begin(), block.end());
   block.erase(endUnique, block.end());
-  deleteLastIfDuplicate();
   return true;
 }
 
@@ -662,7 +652,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // Helper lambda that returns the decompressed block or an empty block if
   // `readAndDecompressBlock` returns `std::nullopt`.
-  const DecompressedBlock& block = [&]() {
+  DecompressedBlock block = [&]() {
     auto result = readAndDecompressBlock(blockMetadata, config);
     if (scanMetadata.has_value()) {
       scanMetadata.value().get().update(result);
@@ -673,6 +663,11 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
   }();
+  if (manuallyDeleteGraphColumn) {
+    auto tie = [](const auto& row) { return std::tie(row[0], row[1], row[2]); };
+    auto unique = ::ranges::unique(block, ::ranges::equal_to{}, tie);
+    block.erase(unique, block.end());
+  }
 
   // We now compute the range of the block according to the `scanSpec`. We
   // start with the full range of the block.
@@ -1445,11 +1440,66 @@ template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
+
+  // Buffer to collect blocks and ensure equal first three columns stay together
+  std::optional<IdTable> bufferedBlock;
+
   for (auto& block : sortedBlocks) {
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+
+    // Skip empty blocks early
+    if (block.empty()) {
+      continue;
+    }
+
+    if (!bufferedBlock.has_value()) {
+      // First non-empty block - initialize buffer
+      bufferedBlock = std::move(block).toDynamic();
+      continue;
+    }
+
+    const auto& firstCurrentRow = bufferedBlock.value().front();
+
+    size_t mergeUpTo = 0;
+
+    // Find how many rows from current block have the same first three columns
+    // as the last row in the buffered block
+    for (; mergeUpTo < block.numRows(); ++mergeUpTo) {
+      const auto& currentRow = block[mergeUpTo];
+      if (currentRow[0] != firstCurrentRow[0] ||
+          currentRow[1] != firstCurrentRow[1] ||
+          currentRow[2] != firstCurrentRow[2]) {
+        break;
+      }
+    }
+
+    // If we found rows to merge, add them to the buffered block
+    if (mergeUpTo > 0) {
+      bufferedBlock->insertAtEnd(block, 0, mergeUpTo);
+
+      // Remove the merged rows from the current block
+      block.erase(block.begin(), block.begin() + mergeUpTo);
+    }
+
+    // If current block is empty after merge, continue (keep buffered block for
+    // potential future merges)
+    if (block.empty()) {
+      continue;
+    }
+
+    // Current block has remaining rows, write buffered block and use current as
+    // new buffer
     addBlockForLargeRelation(
-        col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
+        col0Id, std::make_shared<IdTable>(std::move(*bufferedBlock)));
+    bufferedBlock = std::move(block).toDynamic();
   }
+
+  // Write the final buffered block if it exists
+  if (bufferedBlock.has_value() && !bufferedBlock->empty()) {
+    addBlockForLargeRelation(
+        col0Id, std::make_shared<IdTable>(std::move(*bufferedBlock)));
+  }
+
   return finishLargeRelation(distinctCol1Counter.getAndReset());
 }
 
@@ -1609,15 +1659,31 @@ auto CompressedRelationWriter::createPermutationPair(
     for (size_t idx : ad_utility::integerRange(block.numRows())) {
       Id col0Id = firstCol[idx];
       decltype(auto) curRemainingCols = permutedCols[idx];
+
       if (col0Id != col0IdCurrentRelation) {
         finishRelation();
         col0IdCurrentRelation = col0Id;
       }
+
+      // Check if we need to create a new block before adding the current
+      // triple. We create a new block if:
+      // 1. The relation buffer is at the block size limit, AND
+      // 2. The current triple has different first three columns than the last
+      //    triple in the buffer (to ensure equal triples stay in same block)
+      if (relation.size() >= blocksize && !relation.empty()) {
+        // Compare first three columns of current triple with last buffered
+        // triple
+        const auto& lastBufferedRow = relation.back();
+        if (curRemainingCols[0] != lastBufferedRow[0] ||
+            curRemainingCols[1] != lastBufferedRow[1] ||
+            curRemainingCols[2] != lastBufferedRow[2]) {
+          addBlockForLargeRelation();
+        }
+      }
+
       distinctCol1Counter(curRemainingCols[c1Idx]);
       relation.push_back(curRemainingCols);
-      if (relation.size() >= blocksize) {
-        addBlockForLargeRelation();
-      }
+
       ++numTriplesProcessed;
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
@@ -1724,11 +1790,15 @@ auto CompressedRelationReader::getScanConfig(
   // will throw an assertion.
   auto [graphColumnIndex,
         deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
-    if (!scanSpec.graphsToFilter().has_value()) {
-      // No filtering required, these are dummy values that are ignored by the
-      // filtering logic.
-      return {0, false};
-    }
+    // TODO<joka921> figure out whether this is the correct fix.
+    /*
+if (!scanSpec.graphsToFilter().has_value()) {
+// No filtering required, these are dummy values that are ignored by the
+// filtering logic.
+// TODO<joka921> Those are not at all dummies...
+return {0, false};
+}
+*/
     auto idx = static_cast<size_t>(
         ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
         columnIndices.begin());

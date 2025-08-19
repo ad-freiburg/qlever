@@ -112,8 +112,6 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
-  bool lastTripleIsDuplicateOfFirstTripleInNextBlock_ = false;
-
   // Check for constant values in `firstTriple_` and `lastTriple` over all
   // columns `< columnIndex`.
   // Returns `true` if the respective column values of `firstTriple_` and
@@ -180,7 +178,6 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.lastTriple_;
   serializer | arg.graphInfo_;
   serializer | arg.containsDuplicatesWithDifferentGraphs_;
-  serializer | arg.lastTripleIsDuplicateOfFirstTripleInNextBlock_;
   serializer | arg.blockIndex_;
 }
 
@@ -343,10 +340,8 @@ class CompressedRelationWriter {
       return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
     };
     for (auto&& adjacent : ::ranges::views::sliding(result, 2)) {
-      if (tieWithoutGraph(adjacent.front().lastTriple_) ==
-          tieWithoutGraph(adjacent.back().firstTriple_)) {
-        adjacent.front().lastTripleIsDuplicateOfFirstTripleInNextBlock_ = true;
-      }
+      AD_CORRECTNESS_CHECK(tieWithoutGraph(adjacent.front().lastTriple_) !=
+                           tieWithoutGraph(adjacent.back().firstTriple_));
     }
     return result;
   }
@@ -364,7 +359,9 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const {
-    return uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
+    return std::max(
+        size_t{1},
+        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
   }
 
  private:

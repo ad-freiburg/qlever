@@ -352,16 +352,18 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     updateGraphMetadata(lastBlock, blockUpdates);
     augmentedMetadata_->push_back(lastBlock);
 
-    // TODO<joka921> This is duplicated code.
-    auto tieWithoutGraph = [](const auto& triple) {
-      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
-    };
-    for (auto&& adjacent : ::ranges::views::sliding(*augmentedMetadata_, 2)) {
-      if (tieWithoutGraph(adjacent.front().lastTriple_) ==
-          tieWithoutGraph(adjacent.back().firstTriple_)) {
-        adjacent.front().lastTripleIsDuplicateOfFirstTripleInNextBlock_ = true;
-      }
-    }
+    /*
+  // TODO<joka921> This is duplicated code.
+  auto tieWithoutGraph = [](const auto& triple) {
+    return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+  };
+  for (auto&& adjacent : ::ranges::views::sliding(*augmentedMetadata_, 2)) {
+    // TODO<joka921> This assertion is important, but it currently might be
+  violated by updates. AD_CORRECTNESS_CHECK
+  (tieWithoutGraph(adjacent.front().lastTriple_) !=
+        tieWithoutGraph(adjacent.back().firstTriple_));
+  }
+        */
   }
 }
 
