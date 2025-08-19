@@ -11,6 +11,7 @@
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
+#include <optional>
 #include <ranges>
 
 #include "rdfTypes/RdfEscaping.h"
@@ -20,6 +21,12 @@
 #include "util/json.h"
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
+constexpr char ExceptionMessagePrefix[] =
+    "\n !!!!>># An error has occurred while exporting the query result."
+    " Unfortunately due to limitations in the HTTP 1.1 protocol, "
+    "there is no better way to report this than to append it to the incomplete "
+    "result. The error message was:\n ";
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -1049,38 +1056,48 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     ad_utility::streams::stream_generator streamGenerator) {
+  using namespace ad_utility;
   // Immediately throw any exceptions that occur during the computation of the
   // first block outside the actual generator. That way we get a proper HTTP
   // response with error status codes etc. at least for those exceptions.
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
-  return [](auto innerGenerator, auto it) -> cppcoro::generator<std::string> {
-    std::optional<std::string> exceptionMessage;
-    try {
-      for (; it != innerGenerator.end(); ++it) {
-        co_yield std::string{*it};
-      }
-    } catch (const std::exception& e) {
-      exceptionMessage = e.what();
-    } catch (...) {
-      exceptionMessage = "A very strange exception, please report this";
-    }
-    // TODO<joka921, RobinTF> Think of a better way to propagate and log those
-    // errors. We can additionally send them via the websocket connection, but
-    // that doesn't solve the problem for users of the plain HTTP 1.1 endpoint.
-    if (exceptionMessage.has_value()) {
-      std::string prefix =
-          "\n !!!!>># An error has occurred while exporting the query result. "
-          "Unfortunately due to limitations in the HTTP 1.1 protocol, there is "
-          "no better way to report this than to append it to the incomplete "
-          "result. The error message was:\n";
-      co_yield prefix;
-      co_yield exceptionMessage.value();
-    }
-  }(std::move(streamGenerator), std::move(it));
+  return InputRangeTypeErased(InputRangeFromGetCallable(
+      [it = std::move(it), streamGenerator = std::move(streamGenerator),
+       isException = bool{false},
+       exceptionMessage = std::optional<std::string>(
+           std::nullopt)]() mutable -> std::optional<std::string> {
+        // TODO<joka921, RobinTF> Think of a better way to propagate and log
+        // those errors. We can additionally send them via the
+        // websocketconnection,but that doesn't solve the problem for users of
+        // the plain HTTP 1.1 endpoint.
+        if (exceptionMessage.has_value()) {
+          // Set the early exit flag so we dont yield any more
+          // after this exception message.
+          isException = true;
+          std::string exception = std::move(exceptionMessage.value());
+          exceptionMessage.reset();
+          return exception;
+        }
+        if (it == streamGenerator.end() || isException) {
+          return std::nullopt;
+        }
+
+        try {
+          std::string output{*it};
+          ++it;
+          return output;
+        } catch (const std::exception& e) {
+          exceptionMessage = e.what();
+        } catch (...) {
+          exceptionMessage = "A very strange exception, please report this";
+        }
+
+        return ExceptionMessagePrefix;
+      }));
 }
 
 void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
@@ -1126,7 +1143,12 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
                                   sparqlJson, qleverJson>{}(compute, mediaType);
-  return convertStreamGeneratorForChunkedTransfer(std::move(inner));
+
+  return [](auto range) -> cppcoro::generator<std::string> {
+    for (auto&& item : range) {
+      co_yield item;
+    }
+  }(convertStreamGeneratorForChunkedTransfer(std::move(inner)));
 }
 
 // _____________________________________________________________________________
