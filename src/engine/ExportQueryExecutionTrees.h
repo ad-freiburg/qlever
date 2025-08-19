@@ -183,7 +183,8 @@ class ExportQueryExecutionTrees {
 
   // Generate the bindings of the result of a SELECT query in the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
+  static ad_utility::InputRangeTypeErased<std::string>
+  selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
@@ -192,7 +193,7 @@ class ExportQueryExecutionTrees {
 
   // Generate the bindings of the result of a CONSTRUCT query in the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string>
+  static ad_utility::InputRangeTypeErased<std::string>
   constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,

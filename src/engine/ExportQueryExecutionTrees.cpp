@@ -269,7 +269,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
@@ -279,12 +279,15 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
   auto generator = constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
-  for (auto& triple : generator) {
-    auto binding = nlohmann::json::array({std::move(triple.subject_),
-                                          std::move(triple.predicate_),
-                                          std::move(triple.object_)});
-    co_yield binding.dump();
-  }
+
+  return ad_utility::InputRangeTypeErased<std::string>(
+      ad_utility::CachingTransformInputRange(
+          std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
+            auto binding = nlohmann::json::array({std::move(triple.subject_),
+                                                  std::move(triple.predicate_),
+                                                  std::move(triple.object_)});
+            return binding.dump();
+          }));
 }
 
 // _____________________________________________________________________________
@@ -692,18 +695,21 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string> askQueryResultToQLeverJSON(
+ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
-  AD_CORRECTNESS_CHECK(result != nullptr);
-  std::string_view value = getResultForAsk(result) ? "true" : "false";
-  std::string resultLit =
-      absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
-  nlohmann::json resultJson = std::vector{std::move(resultLit)};
-  co_yield resultJson.dump();
+  return ad_utility::InputRangeTypeErased(ad_utility::lazySingleValueRange(
+      [result = std::move(result)]() -> std::string {
+        AD_CORRECTNESS_CHECK(result != nullptr);
+        std::string_view value = getResultForAsk(result) ? "true" : "false";
+        std::string resultLit =
+            absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
+        nlohmann::json resultJson = std::vector{std::move(resultLit)};
+        return resultJson.dump();
+      }));
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -715,9 +721,11 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  return idTableToQLeverJSONBindings(qet, limitAndOffset, selectedColumnIndices,
-                                     std::move(result), resultSize,
-                                     std::move(cancellationHandle));
+  auto generator = idTableToQLeverJSONBindings(
+      qet, limitAndOffset, selectedColumnIndices, std::move(result), resultSize,
+      std::move(cancellationHandle));
+
+  return ad_utility::InputRangeTypeErased<std::string>(std::move(generator));
 }
 
 // _____________________________________________________________________________
