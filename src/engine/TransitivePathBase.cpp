@@ -500,11 +500,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
       inputCol = leftOrRightOp->getVariableColumn(originalVar);
     }
   } else if (graphIsJoin) {
-    // If the join column originates from the knowledge graph and it's the same
-    // as the active graph variable we still don't know for sure if the value is
-    // an actual graph name, so we have to join to get a column of genuine graph
-    // columns, which will then be compared for equality in
-    // `TransitivePathImpl::transitiveHull`.
+    // If the join column is a subject or object anywhere in the graph, we still
+    // don't know for sure if it is also a valid graph name. Hence, we need to
+    // join it with actual graphs. To get actual matching graph ids if they
+    // exist. We don't need a filter here, because
+    // `TransitivePathImpl::transitiveHull` already does the comparison.
     auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
                                           internalGraphHelper_, originalVar);
     leftOrRightOp = ad_utility::makeExecutionTree<Join>(

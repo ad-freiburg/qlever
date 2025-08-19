@@ -110,10 +110,12 @@ class TransitivePathImpl : public TransitivePathBase {
         std::move(edges), sub->getCopyOfLocalVocab(), std::move(nodes),
         startSide.value_, targetSide.value_, yieldOnce);
 
-    auto result = fillTableWithHull(
-        std::move(hull), startSide.outputCol_, targetSide.outputCol_, yieldOnce,
+    size_t numberOfPayloadColumns =
         startSide.treeAndCol_.value().first->getResultWidth() -
-            (graphVariable_.has_value() ? 2 : 1));
+        (graphVariable_.has_value() ? 2 : 1);
+    auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
+                                    targetSide.outputCol_, yieldOnce,
+                                    numberOfPayloadColumns);
 
     // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
