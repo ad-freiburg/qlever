@@ -82,4 +82,20 @@ TEST(SortedIdTableMerge, SimplePermutation) {
           {{1, 1}, {2, 1}, {3, 0}, {4, 0}, {5, 3}, {6, 2}, {8, 1}, {9, 2}}));
 }
 
+TEST(SortedIdTableMerge, CustomPermutation) {
+  std::vector<IdTable> idTable;
+  idTable.push_back(makeIdTableFromVector({{3, 0}, {2, 1}}));
+  idTable.push_back(makeIdTableFromVector({{4, 0}, {1, 1}}));
+  idTable.push_back(makeIdTableFromVector({{8, 1}, {9, 2}}));
+  idTable.push_back(makeIdTableFromVector({{6, 2}, {5, 3}}));
+  auto merged = SortedIdTableMerge::mergeIdTables(std::move(idTable),
+                                                  makeAllocator(), {1, 0});
+  EXPECT_EQ(merged.size(), 8);
+  EXPECT_EQ(merged.numColumns(), 2);
+  EXPECT_THAT(
+      merged,
+      matchesIdTableFromVector(
+          {{3, 0}, {4, 0}, {1, 1}, {2, 1}, {8, 1}, {6, 2}, {9, 2}, {5, 3}}));
+}
+
 }  // namespace
