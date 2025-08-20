@@ -455,6 +455,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   auto [originalVar, info] =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
 
+  // If we're not explicitly handling the empty path, the first step will
+  // already filter out non-matching values.
+  if (minDist_ > 0) {
+    return leftOrRightOp;
+  }
+
   if (graphVariable_.has_value()) {
     // Join with the starting side of a clone of the subtree to get the proper
     // graph values.
@@ -471,12 +477,6 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     AD_CORRECTNESS_CHECK(
         leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
             .has_value());
-  }
-
-  // If we're not explicitly handling the empty path, the first step will
-  // already filter out non-matching values.
-  if (minDist_ > 0) {
-    return leftOrRightOp;
   }
 
   bool graphIsJoin = originalVar == graphVariable_;
@@ -578,11 +578,17 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
   // If we have a distinct graph variable, 2 columns should match instead of one
+  bool usesHelperVar =
+      leftOrRightOp->getVariableColumnOrNullopt(internalGraphHelper_)
+          .has_value();
+  auto graphColumn =
+      graphVariable_.has_value()
+          ? leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
+          : std::nullopt;
   p->resultWidth_ -= static_cast<uint8_t>(
       graphVariable_.has_value() &&
-      (leftOrRightOp->getVariableColumnOrNullopt(internalGraphHelper_)
-           .has_value() ||
-       leftOrRightOp->getVariableColumn(graphVariable_.value()) != inputCol));
+      (usesHelperVar ||
+       (graphColumn.has_value() && graphColumn.value() != inputCol)));
   return std::move(p);
 }
 

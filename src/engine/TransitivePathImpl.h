@@ -35,26 +35,24 @@ struct TableColumnWithVocab {
         vocab_{std::move(vocab)} {}
 
   // Return a range substituting undefined values with all corresponding values
-  // from `edges`. If `startNodes_` doesn't contain any undefined values, then
-  // the range returned by this function is identical.
-  decltype(auto) expandStartNodes([[maybe_unused]] const auto& edges,
-                                  bool checkGraph) {
+  // from `edges`. If `tuple` doesn't contain any undefined values, then
+  // the range returned by this function just returns the tuple itself.
+  static decltype(auto) expandUndef(const auto& tuple,
+                                    [[maybe_unused]] const auto& edges,
+                                    bool checkGraph) {
     // This is the unbound case, e.g. `?x wdt:P279+ ?y` where the left side of
     // the P279+ is guaranteed to be defined.
     if constexpr (std::is_same_v<ColumnType, SetWithGraph>) {
-      return static_cast<const ColumnType&>(startNodes_);
+      return ql::views::single(tuple);
     } else {
-      return startNodes_ |
-             ql::views::transform([&edges, checkGraph](auto tuple) {
-               const auto& [startId, graphId] = tuple;
-               if (startId.isUndefined() ||
-                   (checkGraph && graphId.isUndefined())) [[unlikely]] {
-                 return edges.getEquivalentIdAndMatchingGraphs(startId);
-               } else {
-                 return IdWithGraphs{std::pair{startId, graphId}};
-               }
-             }) |
-             ql::views::join;
+      const auto& [startId, graphId] = tuple;
+      if (startId.isUndefined() || (checkGraph && graphId.isUndefined()))
+          [[unlikely]] {
+        return ad_utility::InputRangeTypeErased{
+            edges.getEquivalentIdAndMatchingGraphs(startId)};
+      } else {
+        return ad_utility::InputRangeTypeErased{ql::views::single(tuple)};
+      }
     }
   }
 };
@@ -112,7 +110,12 @@ class TransitivePathImpl : public TransitivePathBase {
 
     size_t numberOfPayloadColumns =
         startSide.treeAndCol_.value().first->getResultWidth() -
-        (graphVariable_.has_value() ? 2 : 1);
+        (graphVariable_.has_value() &&
+                 startSide.treeAndCol_.value()
+                     .first->getVariableColumnOrNullopt(graphVariable_.value())
+                     .has_value()
+             ? 2
+             : 1);
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
@@ -281,38 +284,39 @@ class TransitivePathImpl : public TransitivePathBase {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
-      size_t currentRow = 0;
-      for (const auto& [startNode, graphId] :
-           tableColumn.expandStartNodes(edges, graphVariable_.has_value())) {
-        // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
-        // where both `?g` variables are not the same.
-        if (startsWithGraphVariable && startNode != graphId) {
-          currentRow++;
-          continue;
-        }
-        if (sameVariableOnBothSides) {
-          targetId = startNode;
-        } else if (endsWithGraphVariable) {
-          targetId = graphId;
-        }
-        edges.setGraphId(graphId);
-        Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-        if (!connectedNodes.empty()) {
-          runtimeInfo().addDetail("Hull time", timer.msecs());
-          timer.stop();
-          co_yield NodeWithTargets{startNode,
-                                   graphId,
-                                   std::move(connectedNodes),
-                                   mergedVocab.clone(),
-                                   tableColumn.payload_,
-                                   currentRow};
-          timer.cont();
-          // Reset vocab to prevent merging the same vocab over and over again.
-          if (yieldOnce) {
-            mergedVocab = LocalVocab{};
+      for (const auto& [currentRow, pair] :
+           ::ranges::views::enumerate(tableColumn.startNodes_)) {
+        for (const auto& [startNode, graphId] :
+             tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
+          // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
+          // where both `?g` variables are not the same.
+          if (startsWithGraphVariable && startNode != graphId) {
+            continue;
+          }
+          if (sameVariableOnBothSides) {
+            targetId = startNode;
+          } else if (endsWithGraphVariable) {
+            targetId = graphId;
+          }
+          edges.setGraphId(graphId);
+          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
+          if (!connectedNodes.empty()) {
+            runtimeInfo().addDetail("Hull time", timer.msecs());
+            timer.stop();
+            co_yield NodeWithTargets{startNode,
+                                     graphId,
+                                     std::move(connectedNodes),
+                                     mergedVocab.clone(),
+                                     tableColumn.payload_,
+                                     static_cast<size_t>(currentRow)};
+            timer.cont();
+            // Reset vocab to prevent merging the same vocab over and over
+            // again.
+            if (yieldOnce) {
+              mergedVocab = LocalVocab{};
+            }
           }
         }
-        currentRow++;
       }
       timer.stop();
     }
@@ -379,7 +383,9 @@ class TransitivePathImpl : public TransitivePathBase {
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn =
-        graphVariable_.has_value()
+        graphVariable_.has_value() &&
+                tree->getVariableColumnOrNullopt(graphVariable_.value())
+                    .has_value()
             ? std::optional{tree->getVariableColumnOrNullopt(
                                     internalGraphHelper_)
                                 .value_or(tree->getVariableColumn(

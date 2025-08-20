@@ -1227,7 +1227,9 @@ TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperation) {
       {0, 1, 10, 0},
       {0, 0, 10, 1},
       {0, 1, 10, 1},
+      {2, 2, 20, 1},
       {2, 3, 20, 0},
+      {2, 3, 20, 1},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);

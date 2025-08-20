@@ -4576,50 +4576,26 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     "?_QLever_internal_variable_qp_1", {}, {}, {Variable{"?g"}},
                     {3}))))));
 
-    h::expect(
+    h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
-        h::transitivePath(
-            left, right, 1, std::numeric_limits<size_t>::max(),
-            h::Join(h::Distinct(
-                        {0, 1},
-                        // The sorts of index scans are because of missing graph
-                        // permutations.
-                        h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_y",
-                                     "?internal_property_path_variable_z", {},
-                                     {}, {Variable{"?g"}}, {3}, 2)),
-                                 h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_z",
-                                     "?internal_property_path_variable_y", "?a",
-                                     {}, {}, {Variable{"?g"}}, {3}, 2)))),
-                    h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
-            // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));
-    h::expect(
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?a) { (UNDEF) }"),
+                          // Sort by ?g
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, {},
+                              {Variable{"?g"}}, {3}))),
+        std::nullopt, {4, 16, 64'000'000});
+    h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { 1 } } }",
-        h::transitivePath(
-            left, right, 1, std::numeric_limits<size_t>::max(),
-            h::Join(h::Distinct(
-                        {0, 1},
-                        // The sorts of index scans are because of missing graph
-                        // permutations.
-                        h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_y",
-                                     "?internal_property_path_variable_z", {},
-                                     {}, {Variable{"?g"}}, {3}, 2)),
-                                 h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_z",
-                                     "?internal_property_path_variable_y", "?a",
-                                     {}, {}, {Variable{"?g"}}, {3}, 2)))),
-                    h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
-            // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?a) { (1) }"),
+                          // Sort by ?g
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, {},
+                              {Variable{"?g"}}, {3}))),
+        std::nullopt, {4, 16, 64'000'000});
 
     // Verify undef value is joined to graph
     h::expect(
