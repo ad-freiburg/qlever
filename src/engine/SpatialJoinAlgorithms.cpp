@@ -95,11 +95,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
-    // TODO not every time?
     throwIfCancelled();
-
-    const auto id = idTable->at(row, column);
-    parser.addValueIdToQueue(id, row, leftOrRightSide);
+    parser.addValueIdToQueue(idTable->at(row, column), row, leftOrRightSide);
   }
 
   // Wait for all parser threads to finish, then return the bounding box of all

@@ -28,6 +28,8 @@ struct SpatialJoinParseJob {
 
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
+  // The member attribute `wkt` is used only as an internal buffer during
+  // processing and is otherwise empty, therefore it is not compared here.
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
 }
 
@@ -40,8 +42,15 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
             const std::optional<util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
 
-  void addValueIdToQueue(ValueId valueId, size_t id, bool side);
+  // Enqueue a new row from the input table (given the `ValueId` of the
+  // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
+  // in the input table `id` and whether the geometry should be assigned to the
+  // left or right `side` of the spatial join)
+  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side);
 
+  // Accumulate the counters across all threads. They count the number of
+  // geometries skipped by bounding box prefilter and the number of parsed (that
+  // is, not skipped) geometries respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
 
@@ -49,11 +58,21 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   void processQueue(size_t t) override;
 
  private:
+  // Members are named `_member`, not `member_` for consistency with the base
+  // class from `libspatialjoin`.
+
+  // The vectors `_numSkipped` and `_numParsed` hold the number of geometries
+  // that were skipped by prefilter or actually parsed for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
 
+  // Configure prefiltering geometries by bounding box
   bool _usePrefiltering;
   std::optional<util::geo::DBox> _prefilterLatLngBox;
+
+  // A reference to QLever's index is required to access precomputed bounding
+  // boxes of geometries as well as for resolving `ValueId`s to WKT literal
+  // strings.
   const Index& _index;
 };
 

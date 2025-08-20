@@ -61,8 +61,7 @@ void WKTParser::processQueue(size_t t) {
         // If we have not filtered out this geometry, read and parse the full
         // string.
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseLine(const_cast<char*>(job.wkt.c_str()), job.wkt.size(), job.line,
-                  t, w, job.side);
+        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -78,8 +77,9 @@ void WKTParser::processQueue(size_t t) {
         // parse point directly
         auto mercPoint = latLngToWebMerc(utilPoint);
 
-        util::geo::I32Point addPoint{static_cast<int>(mercPoint.getX() * PREC),
-                                     static_cast<int>(mercPoint.getY() * PREC)};
+        util::geo::I32Point addPoint{
+            static_cast<int32_t>(mercPoint.getX() * PREC),
+            static_cast<int32_t>(mercPoint.getY() * PREC)};
         _bboxes[t] = util::geo::extendBox(
             _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
             _bboxes[t]);
@@ -90,8 +90,7 @@ void WKTParser::processQueue(size_t t) {
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
         if (literalOrIri.isLiteral()) {
           job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-          parseLine(const_cast<char*>(job.wkt.c_str()), job.wkt.size(),
-                    job.line, t, w, job.side);
+          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side);
           parseCounter++;
         }
       }
@@ -105,8 +104,8 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t id, bool side) {
-  _curBatch.push_back({valueId, id, side, ""});
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side) {
+  _curBatch.push_back({valueId, rowIndex, side, ""});
 
   if (_curBatch.size() >= 10000) {
     _jobs.add(std::move(_curBatch));
