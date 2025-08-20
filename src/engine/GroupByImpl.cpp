@@ -1592,7 +1592,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
           key;
       resizeIfVector(key, columnIndices.size());
       for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
-        key[ci] = tbl(r, columnIndices[ci]);
+        key[ci] = table(r, columnIndices[ci]);
       }
       if (countsMap.find(key) != countsMap.end()) {
         matching.push_back(r);
