@@ -232,6 +232,14 @@ class TransitivePathBase : public Operation {
                    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
                    size_t outputRow) const;
 
+  // Return how many columns would be joined given the passed `tree`. It is
+  // assumed that the tree always shares one variable with this instance of
+  // `TransitivePathBase` (indicated by `joinColumn`). If the graph variable is
+  // distinct and also shared return 2, otherwise return 1.
+  size_t getNumberOfPotentialJoinColumns(
+      const std::shared_ptr<QueryExecutionTree>& tree,
+      ColumnIndex joinColumn) const;
+
  public:
   std::string getDescriptor() const override;
 

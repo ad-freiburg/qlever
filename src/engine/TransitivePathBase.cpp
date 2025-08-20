@@ -286,6 +286,24 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
+size_t TransitivePathBase::getNumberOfPotentialJoinColumns(
+    const std::shared_ptr<QueryExecutionTree>& tree,
+    ColumnIndex joinColumn) const {
+  if (graphVariable_.has_value()) {
+    auto variableColumn =
+        tree->getVariableColumnOrNullopt(graphVariable_.value());
+    bool distinctGraphVariablePresent =
+        variableColumn.has_value() && variableColumn != joinColumn;
+    bool usesHelperVariable =
+        tree->getVariableColumnOrNullopt(internalGraphHelper_).has_value();
+    if (distinctGraphVariablePresent || usesHelperVariable) {
+      return 2;
+    }
+  }
+  return 1;
+}
+
+// _____________________________________________________________________________
 std::string TransitivePathBase::getDescriptor() const {
   std::ostringstream os;
   os << "TransitivePath ";
@@ -575,19 +593,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
     p->variableColumns_[variable] = columnIndexWithType;
   }
-  p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
-  // If we have a distinct graph variable, 2 columns should match instead of one
-  bool usesHelperVar =
-      leftOrRightOp->getVariableColumnOrNullopt(internalGraphHelper_)
-          .has_value();
-  auto graphColumn =
-      graphVariable_.has_value()
-          ? leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
-          : std::nullopt;
-  p->resultWidth_ -= static_cast<uint8_t>(
-      graphVariable_.has_value() &&
-      (usesHelperVar ||
-       (graphColumn.has_value() && graphColumn.value() != inputCol)));
+  p->resultWidth_ += leftOrRightOp->getResultWidth() -
+                     getNumberOfPotentialJoinColumns(leftOrRightOp, inputCol);
   return std::move(p);
 }
 

@@ -107,14 +107,10 @@ class TransitivePathImpl : public TransitivePathBase {
         std::move(edges), sub->getCopyOfLocalVocab(), std::move(nodes),
         startSide.value_, targetSide.value_, yieldOnce);
 
+    const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t numberOfPayloadColumns =
-        startSide.treeAndCol_.value().first->getResultWidth() -
-        (graphVariable_.has_value() &&
-                 startSide.treeAndCol_.value()
-                     .first->getVariableColumnOrNullopt(graphVariable_.value())
-                     .has_value()
-             ? 2
-             : 1);
+        tree->getResultWidth() -
+        getNumberOfPotentialJoinColumns(tree, joinColumn);
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
@@ -381,15 +377,7 @@ class TransitivePathImpl : public TransitivePathBase {
     using namespace ad_utility;
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t cols = tree->getResultWidth();
-    std::optional<ColumnIndex> graphColumn =
-        graphVariable_.has_value() &&
-                tree->getVariableColumnOrNullopt(graphVariable_.value())
-                    .has_value()
-            ? std::optional{tree->getVariableColumnOrNullopt(
-                                    internalGraphHelper_)
-                                .value_or(tree->getVariableColumn(
-                                    graphVariable_.value()))}
-            : std::nullopt;
+    std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
     auto columnsToRange = [graphColumn = std::move(graphColumn),
@@ -437,6 +425,22 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& targetSide) const = 0;
 
  private:
+  // Return the actual index of the graph column in `tree`. If
+  // `internalGraphHelper_` is present it takes precedence over
+  // `graphVariable_`. If this instance does not use graph variables, or none of
+  // the variables is present in the `tree`, return `std::nullopt`;
+  std::optional<ColumnIndex> getActualGraphColumnIndex(
+      const std::shared_ptr<QueryExecutionTree>& tree) const {
+    if (graphVariable_.has_value()) {
+      if (auto helperVar =
+              tree->getVariableColumnOrNullopt(internalGraphHelper_)) {
+        return helperVar;
+      }
+      return tree->getVariableColumnOrNullopt(graphVariable_.value());
+    }
+    return std::nullopt;
+  }
+
   // Helper function to filter the join column to not add it twice to the
   // result.
   static std::vector<ColumnIndex> computeColumnsWithoutJoinColumns(
