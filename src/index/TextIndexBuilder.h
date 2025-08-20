@@ -15,8 +15,13 @@ class TextIndexBuilder : public IndexImpl {
                             const std::string& onDiskBase)
       : IndexImpl(allocator) {
     setOnDiskBase(onDiskBase);
-    textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
-        onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
+    try {
+      textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+          onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
+      textIndexIndicesExist_ = true;
+    } catch (const std::exception& e) {
+      textIndexIndicesExist_ = false;
+    }
   }
 
   // Adds a text index to a complete KB index. Reads words from the given
