@@ -9,8 +9,6 @@
 
 #include <absl/strings/str_join.h>
 
-#include <limits>
-
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/ExistsJoin.h"
@@ -1636,7 +1634,6 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 
-      // TODO<C++23> use views::enumerate
       if (useRows) {
         for (size_t j = 0; j < columnIndices.size(); ++j) {
           std::vector<Id> tmp;
@@ -1648,6 +1645,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
           groupValues[j] = tmp;
         }
       } else {
+        // TODO<C++23> use views::enumerate
         size_t j = 0;
         for (auto& idx : columnIndices) {
           groupValues[j] = table.getColumn(idx).subspan(
