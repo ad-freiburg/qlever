@@ -1571,46 +1571,43 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   const IdTable& beginIdTable = beginIdTableRef;
   const size_t inWidth = beginIdTable.numColumns();
 
-  size_t groupThreshold = RuntimeParameters()
-                              .get<"group-by-hash-map-group-threshold">();
+  size_t groupThreshold =
+      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
   // If the hash map optimization is not possible, we use a hybrid
   // approach, where we add all entries with existing groups to the hash map,
   // and then perform a sort-based grouping on the remaining entries.
   //
-  // This function separates the entries belonging to existing groups
-  // from the remaining entries, and returns them in two separate tables.
-  // === This will very soon be replaced by another approach because it is
-  //     not efficient to copy the whole table ===
-  auto splitRowsByExistingGroups = [&](auto it) -> std::pair<IdTable, IdTable> {
-    IdTable existingTable{inWidth, getExecutionContext()->getAllocator()};
-    IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+  // This function splits the rows of the given table into two vectors:
+  // - `matching`: indexes of rows that match an existing group in the hash map
+  // - `nonmatching`: indexes of rows that do not match any existing group in
+  // the hash map
+  auto splitRowIndicesByExistingGroups = [&](const IdTable& table)
+      -> std::pair<std::vector<size_t>, std::vector<size_t>> {
     auto& countsMap = aggregationData.getMap();
-    for (auto tailIt = ++it; tailIt != endIt; ++tailIt) {
-      const auto& [tblRef, localVocabRef] = *tailIt;
-      const IdTable& tbl = tblRef;
-      for (size_t r = 0; r < tbl.size(); ++r) {
-        typename HashMapAggregationData<
-            NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
-            key;
-        resizeIfVector(key, columnIndices.size());
-        for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
-          key[ci] = tbl(r, columnIndices[ci]);
-        }
-        bool keyInMap = countsMap.find(key) != countsMap.end();
-        IdTable* tableToUse = keyInMap ? &existingTable : &restTable;
-        tableToUse->emplace_back();
-        size_t dest = tableToUse->numRows() - 1;
-        for (size_t c = 0; c < inWidth; ++c) {
-          (*tableToUse)(dest, c) = tbl(r, c);
-        }
+    std::vector<size_t> matching, nonmatching;
+    for (size_t r = 0; r < table.size(); ++r) {
+      typename HashMapAggregationData<
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
+          key;
+      resizeIfVector(key, columnIndices.size());
+      for (size_t ci = 0; ci < columnIndices.size(); ++ci) {
+        key[ci] = tbl(r, columnIndices[ci]);
+      }
+      if (countsMap.find(key) != countsMap.end()) {
+        matching.push_back(r);
+      } else {
+        nonmatching.push_back(r);
       }
     }
-    return {std::move(existingTable), std::move(restTable)};
+    return {std::move(matching), std::move(nonmatching)};
   };
 
   // Load entries from the given table to the hash map.
-  auto updateHashMapWithTable = [&](const IdTable& table) -> void {
+  // If the `rows` parameter is provided, only those rows are processed.
+  auto updateHashMapWithTable =
+      [&](const IdTable& table, const std::optional<std::vector<size_t>>& rows =
+                                    std::nullopt) -> void {
     // Setup the `EvaluationContext` for this block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), table,
@@ -1620,14 +1617,16 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;
 
+    bool useRows = rows.has_value();
+    size_t endIndex = useRows ? rows->size() : table.size();
     // Iterate of the rows of this block. Process (up to)
     // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
-    for (size_t i = 0; i < table.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
+    for (size_t i = 0; i < endIndex; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
       checkCancellation();
 
       evaluationContext._beginIndex = i;
       evaluationContext._endIndex =
-          std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, table.size());
+          std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, endIndex);
 
       auto currentBlockSize = evaluationContext.size();
 
@@ -1638,11 +1637,23 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       resizeIfVector(groupValues, columnIndices.size());
 
       // TODO<C++23> use views::enumerate
-      size_t j = 0;
-      for (auto& idx : columnIndices) {
-        groupValues[j] = table.getColumn(idx).subspan(
-            evaluationContext._beginIndex, currentBlockSize);
-        ++j;
+      if (useRows) {
+        for (size_t j = 0; j < columnIndices.size(); ++j) {
+          std::vector<Id> tmp;
+          tmp.reserve(currentBlockSize);
+          for (size_t k = evaluationContext._beginIndex;
+               k < evaluationContext._endIndex; ++k) {
+            tmp.push_back(table(rows.value()[k], columnIndices[j]));
+          }
+          groupValues[j] = tmp;
+        }
+      } else {
+        size_t j = 0;
+        for (auto& idx : columnIndices) {
+          groupValues[j] = table.getColumn(idx).subspan(
+              evaluationContext._beginIndex, currentBlockSize);
+          ++j;
+        }
       }
       lookupTimer.cont();
       auto hashEntries = aggregationData.getHashEntries(groupValues);
@@ -1673,11 +1684,29 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   // It returns the Result consisting of the entries from the hash map
   // and the sorted entries from the rest of the input.
   auto handleRemainderUsingHybridApproach = [&](auto it) -> Result {
+    IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
     // Batch existing-group rows and buffer new-group rows
-    auto [existingTable, restTable] = splitRowsByExistingGroups(it);
-    // process all existing-group rows in one block
-    if (!existingTable.empty()) {
-      updateHashMapWithTable(existingTable);
+    for (++it; it != endIt; ++it) {
+      const auto& [inputTableRef, inputLocalVocabRef] = *it;
+      const IdTable& inputTable = inputTableRef;
+      const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
+      // Merge the local vocab of each input block.
+      localVocab.mergeWith(inputLocalVocab);
+
+      auto [matching, nonmatching] =
+          splitRowIndicesByExistingGroups(inputTable);
+      if (!matching.empty()) {
+        updateHashMapWithTable(inputTable, matching);
+      }
+      // Copy the non-matching rows to the restTable
+      size_t oldSize = restTable.numRows();
+      restTable.resize(oldSize + nonmatching.size());
+      for (size_t i = 0; i < nonmatching.size(); ++i) {
+        for (size_t c = 0; c < inWidth; ++c) {
+          restTable(oldSize + i, c) = inputTable(nonmatching[i], c);
+        }
+      }
     }
     // sort tail rows by grouping columns using parallel Engine sort
     Engine::sort(restTable, columnIndices);

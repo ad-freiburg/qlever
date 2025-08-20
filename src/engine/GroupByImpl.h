@@ -401,6 +401,9 @@ class GroupByImpl : public Operation {
       return aggregationData_.at(aggregationDataIndex);
     }
 
+    // Expose map of group key to index for external use (e.g., sampling).
+    const auto& getMap() const { return map_; }
+
     // Get vector containing the aggregation data at `aggregationDataIndex`,
     // but const.
     [[nodiscard]] const AggregationDataVectors& getAggregationDataVariant(

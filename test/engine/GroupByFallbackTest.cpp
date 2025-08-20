@@ -30,9 +30,7 @@ class GroupByFallbackTest : public ::testing::Test {
 static void forceFallback() {
   // Enable hash-map grouping but disable skip-guard sampling
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  RuntimeParameters().set<"group-by-sample-enabled">(false);
-  // Set threshold to zero to trigger fallback within hash-map implementation
-  RuntimeParameters().set<"group-by-sample-distinct-ratio">(0.0);
+  RuntimeParameters().set<"group-by-hash-map-group-threshold">(0);
 }
 
 // Empty input should yield empty result
@@ -132,36 +130,15 @@ TEST_F(GroupByFallbackTest, MultiColumn) {
   EXPECT_EQ(out(2, 1), IntId(2));
 }
 
-// Distinct-ratio guard: with high threshold no fallback
-TEST_F(GroupByFallbackTest, DistinctRatioGuard) {
-  // enable sampling guard
-  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  RuntimeParameters().set<"group-by-sample-enabled">(false);
-  RuntimeParameters().set<"group-by-sample-distinct-ratio">(1.0);
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  RowData vals(5);
-  // Use 0..4 as values
-  std::iota(vals.begin(), vals.end(), 0);
-  IdTable table = createIdTable(vals, allocator);
-  auto gb = setupGroupBy(table, qec_);
-  auto res = gb->computeResult(false);
-  // fallback guard should skip hash-map, but result unchanged
-  const auto& out = res.idTable();
-  ASSERT_EQ(out.size(), 5);
-  for (size_t i = 0; i < 5; ++i) {
-    EXPECT_EQ(out(i, 0), IntId(i));
-  }
-}
-
-// Partial fallback: splitRowsByExistingGroups behavior
+// Partial fallback: behavior with existing groups
 TEST_F(GroupByFallbackTest, OnlyHashMapPartialFallback) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Partial fallback: two chunks of single-column data
   RowData ch1(500);
-  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
+  std::iota(ch1.begin(), ch1.end(), 1);  // 1..500
   RowData ch2(500);
-  std::iota(ch2.begin(), ch2.end(), 1); // 1..500
+  std::iota(ch2.begin(), ch2.end(), 1);  // 1..500
   auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
@@ -182,15 +159,15 @@ TEST_F(GroupByFallbackTest, OnlyHashMapPartialFallback) {
   EXPECT_EQ(out(499, 0), IntId(500));
 }
 
-// Partial fallback: splitRowsByExistingGroups behavior with existing groups
-TEST_F(GroupByFallbackTest, ExistingGroupsPartialFallback) {
+// Partial fallback: behavior with new groups
+TEST_F(GroupByFallbackTest, NewGroupsPartialFallback) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  // Partial fallback: two chunks of single-column data with existing groups
+  // Partial fallback: two chunks of single-column data with new groups
   RowData ch1(500);
-  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
+  std::iota(ch1.begin(), ch1.end(), 1);  // 1..500
   RowData ch2(500);
-  std::iota(ch2.begin(), ch2.end(), 501); // 501..1000
+  std::iota(ch2.begin(), ch2.end(), 501);  // 501..1000
   auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
@@ -211,15 +188,15 @@ TEST_F(GroupByFallbackTest, ExistingGroupsPartialFallback) {
   EXPECT_EQ(out(999, 0), IntId(1000));
 }
 
-// Partial fallback: splitRowsByExistingGroups behavior
+// Partial fallback: behavior with partly overlapping groups
 TEST_F(GroupByFallbackTest, MixedPartialFallback) {
   forceFallback();
   AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Partial fallback: two chunks of single-column data
   RowData ch1(500);
-  std::iota(ch1.begin(), ch1.end(), 1); // 1..500
+  std::iota(ch1.begin(), ch1.end(), 1);  // 1..500
   RowData ch2(500);
-  std::iota(ch2.begin(), ch2.end(), 251); // 251..750
+  std::iota(ch2.begin(), ch2.end(), 251);  // 251..750
   auto tables = createLazyIdTables(std::vector<RowData>{ch1, ch2}, allocator);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
