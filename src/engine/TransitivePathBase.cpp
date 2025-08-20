@@ -611,6 +611,9 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
+  // The first two columns are both sides of the transitive path, then they are
+  // followed by the payload columns (if present) and then the (optional) graph
+  // column follows (but it is not written in this function).
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(inputTable.numColumns() +
                            (graphVariable_.has_value() ? 3 : 2) ==
