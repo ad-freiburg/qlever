@@ -289,8 +289,8 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
     const std::shared_ptr<QueryExecutionTree>& tree) const {
   if (graphVariable_.has_value()) {
-    if (auto helperVar =
-            tree->getVariableColumnOrNullopt(internalGraphHelper_)) {
+    auto helperVar = tree->getVariableColumnOrNullopt(internalGraphHelper_);
+    if (helperVar.has_value()) {
       return helperVar;
     }
     return tree->getVariableColumnOrNullopt(graphVariable_.value());
