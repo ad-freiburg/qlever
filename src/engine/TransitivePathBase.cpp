@@ -492,13 +492,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
       leftOrRightOp = ad_utility::makeExecutionTree<MultiColumnJoin>(
           getExecutionContext(), std::move(leftOrRightOp),
           std::move(completeScan));
-      inputCol = leftOrRightOp->getVariableColumn(originalVar);
     } else {
       leftOrRightOp = ad_utility::makeExecutionTree<Join>(
           getExecutionContext(), std::move(leftOrRightOp),
           std::move(completeScan), inputCol, 0);
-      inputCol = leftOrRightOp->getVariableColumn(originalVar);
     }
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
   } else if (graphIsJoin) {
     // If the join column is a subject or object anywhere in the graph, we still
     // don't know for sure if it is also a valid graph name. Hence, we need to
