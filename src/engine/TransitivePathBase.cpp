@@ -286,21 +286,28 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePathBase::getNumberOfPotentialJoinColumns(
+std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
+    const std::shared_ptr<QueryExecutionTree>& tree) const {
+  if (graphVariable_.has_value()) {
+    if (auto helperVar =
+            tree->getVariableColumnOrNullopt(internalGraphHelper_)) {
+      return helperVar;
+    }
+    return tree->getVariableColumnOrNullopt(graphVariable_.value());
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+size_t TransitivePathBase::numJoinColumnsWith(
     const std::shared_ptr<QueryExecutionTree>& tree,
     ColumnIndex joinColumn) const {
-  if (graphVariable_.has_value()) {
-    auto variableColumn =
-        tree->getVariableColumnOrNullopt(graphVariable_.value());
-    bool distinctGraphVariablePresent =
-        variableColumn.has_value() && variableColumn != joinColumn;
-    bool usesHelperVariable =
-        tree->getVariableColumnOrNullopt(internalGraphHelper_).has_value();
-    if (distinctGraphVariablePresent || usesHelperVariable) {
-      return 2;
-    }
+  auto graphCol = getActualGraphColumnIndex(tree);
+  if (!graphCol.has_value() || graphCol.value() == joinColumn) {
+    return 1;
+  } else {
+    return 2;
   }
-  return 1;
 }
 
 // _____________________________________________________________________________
@@ -594,7 +601,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     p->variableColumns_[variable] = columnIndexWithType;
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() -
-                     getNumberOfPotentialJoinColumns(leftOrRightOp, inputCol);
+                     numJoinColumnsWith(leftOrRightOp, inputCol);
   return std::move(p);
 }
 
