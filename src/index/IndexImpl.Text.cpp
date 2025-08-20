@@ -92,26 +92,15 @@ IdTable IndexImpl::mergeTextBlockResults(
     // If not entitySearch don't filter duplicates
     return std::move(result).toDynamic<>();
   }
-  IdTable result{3, allocator};
-  result.reserve(std::accumulate(partialResults.begin(), partialResults.end(),
-                                 size_t{0},
-                                 [](size_t acc, const IdTable& partialResult) {
-                                   return acc + partialResult.numRows();
-                                 }));
-  for (const auto& partialResult : partialResults) {
-    result.insertAtEnd(partialResult);
-  }
+  // Merge and only sort by TextRecordIndex and VocabIndex
+  auto result = SortedIdTableMerge::mergeIdTables(std::move(partialResults),
+                                                  allocator, {0, 1});
   auto toSort = std::move(result).toStatic<3>();
-  // Sort the table
-  ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
-    return ql::ranges::lexicographical_compare(
-        std::begin(a), std::end(a), std::begin(b), std::end(b),
-        [](const Id& x, const Id& y) {
-          return x.compareWithoutLocalVocab(y) < 0;
-        });
-  });
-  // Filter duplicates
-  auto [newEnd, _] = std::ranges::unique(toSort);
+  // Filter duplicates (only check first and second col)
+  auto [newEnd, _] =
+      std::ranges::unique(toSort, [](const auto& a, const auto& b) {
+        return a[0] == b[0] && a[1] == b[1];
+      });
   toSort.erase(newEnd, toSort.end());
   return std::move(toSort).toDynamic<>();
 }
