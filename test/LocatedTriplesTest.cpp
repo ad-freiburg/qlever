@@ -833,7 +833,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
       1, 10, 10,
       12);  // Before block 0 (because `12` is smaller than the default graph)
   auto T2 = IT(1, 10, 10,
-               99999999);  // Becomes the lower bound of block 1, although it
+               99999999);  // Becomes the last triple of block 0, because it
                            // only differs in the graph info.
   auto T3 = IT(2, 12, 10, 17);  // Inside block 1, add graph 17.
   auto T4 = IT(2, 12, 10, 18);  // Inside block 1, add graph 18.
@@ -853,8 +853,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
     // set to `true`.
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
 
@@ -872,10 +872,13 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
 
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
+    // Note: Although the graph `9999999` is added to block 0, the graph info
+    // remains unchanged, because it was set to `nullopt` which means "too many
+    // graphs to keep track of them manually".
     expectedAugmentedMetadata[1].graphInfo_.value() =
-        std::vector{V(13), V(17), V(18), V(99999999)};
+        std::vector{V(13), V(17), V(18)};
 
     // We have added a triple `T5` after the last block, so there now is an
     // additional block, which also stores the correct graph info.
@@ -893,14 +896,6 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
-
-    // TODO<joka921> fix these tests etc. for the graph filtering.
-    /*
-    // The first and second block share the same triple, albeit in different
-    // graphs.
-    expectedAugmentedMetadata[0]
-        .lastTripleIsDuplicateOfFirstTripleInNextBlock_ = true;
-        */
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.

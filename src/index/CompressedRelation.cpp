@@ -1458,7 +1458,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
       continue;
     }
 
-    const auto& firstCurrentRow = bufferedBlock.value().front();
+    const auto& lastRowFromPrevious = bufferedBlock.value().back();
 
     size_t mergeUpTo = 0;
 
@@ -1466,9 +1466,9 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     // as the last row in the buffered block
     for (; mergeUpTo < block.numRows(); ++mergeUpTo) {
       const auto& currentRow = block[mergeUpTo];
-      if (currentRow[0] != firstCurrentRow[0] ||
-          currentRow[1] != firstCurrentRow[1] ||
-          currentRow[2] != firstCurrentRow[2]) {
+      if (currentRow[0] != lastRowFromPrevious[0] ||
+          currentRow[1] != lastRowFromPrevious[1] ||
+          currentRow[2] != lastRowFromPrevious[2]) {
         break;
       }
     }

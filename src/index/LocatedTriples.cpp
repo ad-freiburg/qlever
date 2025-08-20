@@ -31,10 +31,17 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // A triple belongs to the first block that contains at least one triple
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
+        // TODO<joka921> This is duplicated code.
+        auto tieWithoutGraph = [](const auto& triple) {
+          return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+        };
         size_t blockIndex =
-            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                    std::less<>{},
-                                    &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(
+                blockMetadata, triple.toPermutedTriple(),
+                [tieWithoutGraph](const auto& a, const auto& b) {
+                  return tieWithoutGraph(a) < tieWithoutGraph(b);
+                },
+                &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, insertOrDelete);
       },
@@ -352,18 +359,16 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     updateGraphMetadata(lastBlock, blockUpdates);
     augmentedMetadata_->push_back(lastBlock);
 
-    /*
-  // TODO<joka921> This is duplicated code.
-  auto tieWithoutGraph = [](const auto& triple) {
-    return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
-  };
-  for (auto&& adjacent : ::ranges::views::sliding(*augmentedMetadata_, 2)) {
-    // TODO<joka921> This assertion is important, but it currently might be
-  violated by updates. AD_CORRECTNESS_CHECK
-  (tieWithoutGraph(adjacent.front().lastTriple_) !=
-        tieWithoutGraph(adjacent.back().firstTriple_));
-  }
-        */
+    // TODO<joka921> This is duplicated code.
+    auto tieWithoutGraph = [](const auto& triple) {
+      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+    };
+    for (auto&& adjacent : ::ranges::views::sliding(*augmentedMetadata_, 2)) {
+      // TODO<joka921> This assertion is important, but it currently might be
+      // violated by updates.
+      AD_CORRECTNESS_CHECK(tieWithoutGraph(adjacent.front().lastTriple_) !=
+                           tieWithoutGraph(adjacent.back().firstTriple_));
+    }
   }
 }
 
