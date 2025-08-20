@@ -169,7 +169,7 @@ class ValueId {
 
     using IdProxy = LocalVocabEntry::IdProxy;
     auto compareVocabAndLocalVocab =
-        [](LocalVocabEntry::IdProxy vocabIndex,
+        [](IdProxy vocabIndex,
            ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
       auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
@@ -409,10 +409,10 @@ class ValueId {
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
   /// TODO<joka921> This currently still has limited functionality because
-  /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
-  /// `uint64_t` and the visitor cannot distinguish between them. Create strong
-  /// types for these indices and make the `ValueId` class use them.
-  /// TODO<joka921> Same goes for the `EncodedVal` type.
+  /// VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
+  /// the same type `uint64_t` and the visitor cannot distinguish between them.
+  /// Create strong types for these indices and make the `ValueId` class use
+  /// them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {

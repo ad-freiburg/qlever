@@ -2587,7 +2587,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
     auto tripleComponent =
         RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             visit(ctx->rdfLiteral()));
-    AD_CORRECTNESS_CHECK(!tripleComponent.isIri() ||
+    AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());

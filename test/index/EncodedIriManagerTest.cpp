@@ -113,7 +113,15 @@ TEST(EncodedIriManger, illegalPrefixes) {
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, emptyPrefixes) {
+  // Calls the default constructor.
   EncodedIriManager em;
+  // Note: It is tempting to use `AD_EXPECT_NULLOPT` etc. here, but that
+  // requires to pull in the equality comparison for IDs, which requires linking
+  // against basically the whole codebase.
+  EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
+
+  // Calls the constructor with an explicitly empty list of prefixes.
+  EncodedIriManager em2(std::vector<std::string>{});
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 }
 

@@ -416,7 +416,10 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
-      // TODO<joka921> check what the correct behavior is here.
+      // TODO<joka921> for the `EncodedVal` type, the behavior is only correct
+      // for equality, because there also might be regular IRIs (of type
+      // `[Local]VocabIndex` that are greater than or less than the encoded IRI.
+      // (This also goes for the other way round).
     case Datatype::EncodedVal:
     case Datatype::Bool:
     case Datatype::Date:

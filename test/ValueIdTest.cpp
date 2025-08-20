@@ -446,15 +446,14 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
       << "Different encoded IRIs should not be equal";
 
   // Test case 4: Ordering should also work correctly
+
+  auto inconsistentOrderingMessage =
+      "Ordering should be consistent between encoded and local vocab IDs";
   if (encodableIri < encodableIri2) {
-    EXPECT_LT(encodedId, localVocabId2)
-        << "Ordering should be consistent between encoded and local vocab IDs";
-    EXPECT_GT(localVocabId2, encodedId)
-        << "Ordering should be consistent between encoded and local vocab IDs";
+    EXPECT_LT(encodedId, localVocabId2) << inconsistentOrderingMessage;
+    EXPECT_GT(localVocabId2, encodedId) << inconsistentOrderingMessage;
   } else {
-    EXPECT_GT(encodedId, localVocabId2)
-        << "Ordering should be consistent between encoded and local vocab IDs";
-    EXPECT_LT(localVocabId2, encodedId)
-        << "Ordering should be consistent between encoded and local vocab IDs";
+    EXPECT_GT(encodedId, localVocabId2) << inconsistentOrderingMessage;
+    EXPECT_LT(localVocabId2, encodedId) << inconsistentOrderingMessage;
   }
 }
