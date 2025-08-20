@@ -252,9 +252,9 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
-  // Create two instances of `IndexScan`, that share `variable`, but one scan
-  // uses it as its subject, and the other one as its object. (And properly use
-  // `activeGraphs` and the optional `graphVariable`.)
+  // Create two instances of `IndexScan` that perform full scans using the
+  // pattern `?variable ?a ?b` and `?c ?d ?variable`, respectively and properly
+  // use `activeGraphs` and the optional `graphVariable`.
   static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
       QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
       const std::optional<Variable>& graphVariable);

@@ -4607,12 +4607,12 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                         // The sorts of index scans are because of missing graph
                         // permutations.
                         h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_y",
-                                     "?internal_property_path_variable_z", {},
+                                     "?a", "?internal_property_path_variable_a",
+                                     "?internal_property_path_variable_b", {},
                                      {}, {Variable{"?g"}}, {3}, 2)),
                                  h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_z",
-                                     "?internal_property_path_variable_y", "?a",
+                                     "?internal_property_path_variable_c",
+                                     "?internal_property_path_variable_d", "?a",
                                      {}, {}, {Variable{"?g"}}, {3}, 2)))),
                     h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
             // Sort by ?g
@@ -4629,12 +4629,12 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                         // The sorts of index scans are because of missing graph
                         // permutations.
                         h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_y",
-                                     "?internal_property_path_variable_z", {},
+                                     "?a", "?internal_property_path_variable_a",
+                                     "?internal_property_path_variable_b", {},
                                      {}, {Variable{"?g"}}, {3}, 2)),
                                  h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_z",
-                                     "?internal_property_path_variable_y", "?a",
+                                     "?internal_property_path_variable_c",
+                                     "?internal_property_path_variable_d", "?a",
                                      {}, {}, {Variable{"?g"}}, {3}, 2)))),
                     h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
             // Sort by ?g
@@ -4654,12 +4654,12 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     // The sorts of index scans are because of missing graph
                     // permutations.
                     h::Union(h::Sort(h::IndexScanFromStrings(
-                                 "?a", "?internal_property_path_variable_y",
-                                 "?internal_property_path_variable_z", {}, {},
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {}, {},
                                  {Variable{"?g"}}, {3}, 2)),
                              h::Sort(h::IndexScanFromStrings(
-                                 "?internal_property_path_variable_z",
-                                 "?internal_property_path_variable_y", "?a", {},
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
                                  {}, {Variable{"?g"}}, {3}, 2))))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
@@ -4681,14 +4681,14 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     // permutations.
                     h::Union(
                         h::Sort(h::IndexScanFromStrings(
-                            "?g", "?internal_property_path_variable_y",
-                            "?internal_property_path_variable_z", {}, {},
+                            "?g", "?internal_property_path_variable_a",
+                            "?internal_property_path_variable_b", {}, {},
                             {Variable{
                                 "?_Qlever_internal_transitive_path_graph"}},
                             {3}, 2)),
                         h::Sort(h::IndexScanFromStrings(
-                            "?internal_property_path_variable_z",
-                            "?internal_property_path_variable_y", "?g", {}, {},
+                            "?internal_property_path_variable_c",
+                            "?internal_property_path_variable_d", "?g", {}, {},
                             {Variable{
                                 "?_Qlever_internal_transitive_path_graph"}},
                             {3}, 2))))),
@@ -4710,12 +4710,12 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
           left, right, 0, std::numeric_limits<size_t>::max(),
           h::Distinct({0}, h::Union(h::IndexScanFromStrings(
                                         "?internal_property_path_variable_x",
-                                        "?internal_property_path_variable_y",
-                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_a",
+                                        "?internal_property_path_variable_b",
                                         {}, {{"<abc>"}}, {}, {}, 1),
                                     h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_z",
-                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_c",
+                                        "?internal_property_path_variable_d",
                                         "?internal_property_path_variable_x",
                                         {}, {{"<abc>"}}, {}, {}, 1))),
           h::IndexScanFromStrings(
@@ -4728,12 +4728,12 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
           left, right, 0, std::numeric_limits<size_t>::max(),
           h::Distinct({0}, h::Union(h::IndexScanFromStrings(
                                         "?internal_property_path_variable_x",
-                                        "?internal_property_path_variable_y",
-                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_a",
+                                        "?internal_property_path_variable_b",
                                         {}, {{"<abc>"}}, {}, {}, 1),
                                     h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_z",
-                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_c",
+                                        "?internal_property_path_variable_d",
                                         "?internal_property_path_variable_x",
                                         {}, {{"<abc>"}}, {}, {}, 1))),
           h::IndexScanFromStrings(
@@ -4817,15 +4817,15 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
               h::Union(
                   h::Join(h::IndexScanFromStrings(
                               "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_y",
-                              "?internal_property_path_variable_z", {}, {}, {},
+                              "?internal_property_path_variable_a",
+                              "?internal_property_path_variable_b", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
                               "VALUES (?internal_property_path_variable_x) { "
                               "(1) }"))),
                   h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_z",
-                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_c",
+                              "?internal_property_path_variable_d",
                               "?internal_property_path_variable_x", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
@@ -4845,15 +4845,15 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
               h::Union(
                   h::Join(h::IndexScanFromStrings(
                               "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_y",
-                              "?internal_property_path_variable_z", {}, {}, {},
+                              "?internal_property_path_variable_a",
+                              "?internal_property_path_variable_b", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
                               "VALUES (?internal_property_path_variable_x) { "
                               "(1) }"))),
                   h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_z",
-                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_c",
+                              "?internal_property_path_variable_d",
                               "?internal_property_path_variable_x", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
@@ -4870,15 +4870,15 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
               h::Union(
                   h::Join(h::IndexScanFromStrings(
                               "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_y",
-                              "?internal_property_path_variable_z", {}, {}, {},
+                              "?internal_property_path_variable_a",
+                              "?internal_property_path_variable_b", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
                               "VALUES (?internal_property_path_variable_x) { "
                               "(1) }"))),
                   h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_z",
-                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_c",
+                              "?internal_property_path_variable_d",
                               "?internal_property_path_variable_x", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
@@ -4917,16 +4917,16 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
                       h::Join(
                           h::IndexScanFromStrings(
                               "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_y",
-                              "?internal_property_path_variable_z", {}, {}, {},
+                              "?internal_property_path_variable_a",
+                              "?internal_property_path_variable_b", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
                               "VALUES (?internal_property_path_variable_x) { "
                               "(1) }"))),
                       h::Join(
                           h::IndexScanFromStrings(
-                              "?internal_property_path_variable_z",
-                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_c",
+                              "?internal_property_path_variable_d",
                               "?internal_property_path_variable_x", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
@@ -4949,16 +4949,16 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
                       h::Join(
                           h::IndexScanFromStrings(
                               "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_y",
-                              "?internal_property_path_variable_z", {}, {}, {},
+                              "?internal_property_path_variable_a",
+                              "?internal_property_path_variable_b", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
                               "VALUES (?internal_property_path_variable_x) { "
                               "(1) }"))),
                       h::Join(
                           h::IndexScanFromStrings(
-                              "?internal_property_path_variable_z",
-                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_c",
+                              "?internal_property_path_variable_d",
                               "?internal_property_path_variable_x", {}, {}, {},
                               {}, 1),
                           h::Sort(h::ValuesClause(
@@ -5060,12 +5060,12 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
           h::Join(h::Distinct(
                       {0},
                       h::Union(h::IndexScanFromStrings(
-                                   "?var", "?internal_property_path_variable_y",
-                                   "?internal_property_path_variable_z", {}, {},
+                                   "?var", "?internal_property_path_variable_a",
+                                   "?internal_property_path_variable_b", {}, {},
                                    {}, {}, 1),
                                h::IndexScanFromStrings(
-                                   "?internal_property_path_variable_z",
-                                   "?internal_property_path_variable_y", "?var",
+                                   "?internal_property_path_variable_c",
+                                   "?internal_property_path_variable_d", "?var",
                                    {}, {}, {}, {}, 1))),
                   h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
@@ -5080,12 +5080,12 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
           h::Join(h::Distinct(
                       {0},
                       h::Union(h::IndexScanFromStrings(
-                                   "?var", "?internal_property_path_variable_y",
-                                   "?internal_property_path_variable_z", {}, {},
+                                   "?var", "?internal_property_path_variable_a",
+                                   "?internal_property_path_variable_b", {}, {},
                                    {}, {}, 1),
                                h::IndexScanFromStrings(
-                                   "?internal_property_path_variable_z",
-                                   "?internal_property_path_variable_y", "?var",
+                                   "?internal_property_path_variable_c",
+                                   "?internal_property_path_variable_d", "?var",
                                    {}, {}, {}, {}, 1))),
                   h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",

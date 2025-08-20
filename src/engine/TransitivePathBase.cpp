@@ -110,10 +110,11 @@ TransitivePathBase::makeIndexScanPair(
     QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
     const std::optional<Variable>& graphVariable) {
   // Dummy variables to get a full scan of the index.
-  const auto& x = variable;
-  auto y = makeInternalVariable("y");
-  auto z = makeInternalVariable("z");
-  std::set variables{x};
+  auto a = makeInternalVariable("a");
+  auto b = makeInternalVariable("b");
+  auto c = makeInternalVariable("c");
+  auto d = makeInternalVariable("d");
+  std::set variables{variable};
   SparqlTripleSimple::AdditionalScanColumns additionalColumns;
   if (graphVariable.has_value()) {
     additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
@@ -126,16 +127,17 @@ TransitivePathBase::makeIndexScanPair(
             std::move(executionTree), variables);
       };
 
-  return {stripColumns(ad_utility::makeExecutionTree<IndexScan>(
-              qec, Permutation::Enum::SPO,
-              SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z},
-                                 additionalColumns},
-              activeGraphs)),
-          stripColumns(ad_utility::makeExecutionTree<IndexScan>(
-              qec, Permutation::Enum::OPS,
-              SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x},
-                                 additionalColumns},
-              activeGraphs))};
+  return {
+      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTripleSimple{TripleComponent{variable}, std::move(a),
+                             TripleComponent{std::move(b)}, additionalColumns},
+          activeGraphs)),
+      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTripleSimple{TripleComponent{std::move(c)}, std::move(d),
+                             TripleComponent{variable}, additionalColumns},
+          activeGraphs))};
 }
 
 // _____________________________________________________________________________
