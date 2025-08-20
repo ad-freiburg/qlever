@@ -1730,16 +1730,6 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                   std::move(localVocab)};
   };
 
-  auto hashMapIsTooLarge = [&](uint64_t numberOfGroups) {
-    if (numberOfGroups > groupThreshold) {
-      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: " << numberOfGroups
-                   << ") > (thr: " << groupThreshold
-                   << "), switching to sort-based aggregation" << std::endl;
-      return true;
-    }
-    return false;
-  };
-
   // Iterate through input blocks; break out and buffer the rest if threshold
   // exceeded
   for (auto it = beginIt; it != endIt; ++it) {
@@ -1756,7 +1746,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     updateHashMapWithTable(inputTable);
     // If the number of groups in the hash map exceeds the threshold,
     // we switch to a hybrid approach.
-    if (hashMapIsTooLarge(aggregationData.getNumberOfGroups())) {
+    if (aggregationData.getNumberOfGroups() > groupThreshold) {
+      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: "
+                   << aggregationData.getNumberOfGroups()
+                   << ") > (thr: " << groupThreshold
+                   << "), switching to sort-based aggregation" << std::endl;
       return handleRemainderUsingHybridApproach(it);
     }
   }
