@@ -18,6 +18,9 @@
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
+// The number of geometries per batch passed to a thread.
+constexpr inline size_t WKT_PARSER_BATCH_SIZE = 10'000;
+
 // Special parse job using `ValueId` instead of string.
 struct SpatialJoinParseJob {
   ValueId valueId;

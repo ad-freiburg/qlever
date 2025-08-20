@@ -24,7 +24,7 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
   for (size_t i = 0; i < _thrds.size(); i++) {
     _thrds[i] = std::thread(&WKTParser::processQueue, this, i);
   }
-  _curBatch.reserve(10000);
+  _curBatch.reserve(WKT_PARSER_BATCH_SIZE);
 }
 
 // _____________________________________________________________________________
@@ -107,10 +107,10 @@ void WKTParser::processQueue(size_t t) {
 void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side) {
   _curBatch.push_back({valueId, rowIndex, side, ""});
 
-  if (_curBatch.size() >= 10000) {
+  if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));
     _curBatch.clear();
-    _curBatch.reserve(10000);
+    _curBatch.reserve(WKT_PARSER_BATCH_SIZE);
   }
 }
 
