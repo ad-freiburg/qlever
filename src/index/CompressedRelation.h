@@ -326,7 +326,7 @@ class CompressedRelationWriter {
     ql::ranges::sort(
         blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
           return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                          bl.firstTriple_.col2Id_);
+                          bl.firstTriple_.col2Id_, bl.firstTriple_.graphId_);
         });
 
     std::vector<CompressedBlockMetadata> result;
@@ -334,6 +334,14 @@ class CompressedRelationWriter {
     // Write the correct block indices
     for (size_t i : ad_utility::integerRange(blocks.size())) {
       result.emplace_back(std::move(blocks.at(i)), i);
+    }
+
+    auto tieWithoutGraph = [](const auto& triple) {
+      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+    };
+    for (auto&& adjacent : ::ranges::views::sliding(result, 2)) {
+      AD_CORRECTNESS_CHECK(tieWithoutGraph(adjacent.front().lastTriple_) !=
+                           tieWithoutGraph(adjacent.back().firstTriple_));
     }
     return result;
   }
@@ -351,7 +359,9 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const {
-    return uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
+    return std::max(
+        size_t{1},
+        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
   }
 
  private:
@@ -476,8 +486,8 @@ class CompressedRelationReader {
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
-    static bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata);
+    bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a
