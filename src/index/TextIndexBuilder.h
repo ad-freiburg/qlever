@@ -50,6 +50,14 @@ class TextIndexBuilder : public IndexImpl {
   cppcoro::generator<WordsFileLine> wordsInTextRecords(
       std::string contextFile, bool addWordsFromLiterals) const;
 
+  // This is used in wordsInTextRecords to split up a literal given from a
+  // text into the respective `WordsFileLines`. The first line is the
+  // whole literal treated as entity and the following lines are the single
+  // words of the literals.
+  cppcoro::generator<WordsFileLine> literalToWordsFileLines(
+      std::string text, TextRecordIndex& contextId,
+      const LocaleManager& localeManager) const;
+
   void processEntityCaseDuringInvertedListProcessing(
       const WordsFileLine& line,
       ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,

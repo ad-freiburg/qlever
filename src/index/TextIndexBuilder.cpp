@@ -155,23 +155,49 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (const auto& index : textIndexIndices_) {
-      auto text = vocab_[index];
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
-      WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
-      co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
-        WordsFileLine wordLine{std::move(word), false, contextId, 1};
-        co_yield wordLine;
+    if (textIndexIndicesExist_) {
+      for (const auto& index : textIndexIndices_) {
+        // We need the explicit cast to `std::string` because the return type of
+        //  `indexToString` might be `string_view` if the vocabulary is stored
+        // uncompressed in memory.
+        for (auto line : literalToWordsFileLines(std::string{vocab_[index]},
+                                                 contextId, localeManager)) {
+          co_yield line;
+        }
       }
-      contextId = contextId.incremented();
+    } else {
+      for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
+           index = index.incremented()) {
+        auto text = vocab_[index];
+        if (!isLiteral(text)) {
+          continue;
+        }
+        for (auto line :
+             literalToWordsFileLines(text, contextId, localeManager)) {
+          co_yield line;
+        }
+      }
     }
   }
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<WordsFileLine> TextIndexBuilder::literalToWordsFileLines(
+    std::string text, TextRecordIndex& contextId,
+    const LocaleManager& localeManager) const {
+  // We need the explicit cast to `std::string` because the return type of
+  //  `indexToString` might be `string_view` if the vocabulary is stored
+  // uncompressed in memory.
+  WordsFileLine entityLine{text, true, contextId, 1, true};
+  co_yield entityLine;
+  std::string_view textView = text;
+  textView = textView.substr(0, textView.rfind('"'));
+  textView.remove_prefix(1);
+  for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
+    WordsFileLine wordLine{std::move(word), false, contextId, 1};
+    co_yield wordLine;
+  }
+  contextId = contextId.incremented();
 }
 
 // _____________________________________________________________________________
