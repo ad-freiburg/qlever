@@ -121,7 +121,7 @@ static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
                                               rowAdder, projection, projection,
-                                              std::true_type{});
+                                              ad_utility::OptionalJoinTag{});
   rowAdder.flush();
 }
 
