@@ -143,7 +143,7 @@ addLinkAndDiscoverTest(Simple8bTest)
 
 addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
 
-addLinkAndDiscoverTest(SortedIdTableMergerTest index)
+addLinkAndDiscoverTest(SortedIdTableMergeTest index)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 

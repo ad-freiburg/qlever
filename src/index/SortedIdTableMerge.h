@@ -1,8 +1,8 @@
 // Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
-#ifndef QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGER_H
-#define QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGER_H
+#ifndef QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGE_H
+#define QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGE_H
 
 #include <queue>
 
@@ -108,4 +108,4 @@ class MinRowIterator {
 
 }  // namespace SortedIdTableMerge
 
-#endif  // QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGER_H
+#endif  // QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGE_H

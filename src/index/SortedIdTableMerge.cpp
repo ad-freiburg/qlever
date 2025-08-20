@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#include "index/SortedIdTableMerger.h"
+#include "index/SortedIdTableMerge.h"
 
 namespace SortedIdTableMerge {
 // _____________________________________________________________________________
@@ -121,11 +121,9 @@ MinRowIterator::MinRowIterator(const std::vector<IdTable>& idTablesToMerge,
                          }),
       "At least one of the idTablesToMerge has an empty column.");
   // Fill heap with the first rows
-  ql::ranges::for_each(
-      idTableToColumnRangesMap_, [this](const auto& keyValuePair) {
-        minHeap_.emplace(keyValuePair.first,
-                         getRowSubsetAndAdvanceForIdTable(keyValuePair.first));
-      });
+  for (size_t i = 0; i < idTablesToMerge.size(); ++i) {
+    minHeap_.emplace(i, getRowSubsetAndAdvanceForIdTable(i));
+  }
 }
 
 // _____________________________________________________________________________
@@ -173,7 +171,7 @@ void MinRowIterator::incrementColumnRangesForIdTable(
       idTableIndex);
 
   for (auto& columnRange : it->second) {
-    ++columnRange.first;
+    ++(columnRange.first);
     if (columnRange.first == columnRange.second) {
       idTableToColumnRangesMap_.erase(idTableIndex);
       break;

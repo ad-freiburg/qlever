@@ -5,7 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "index/SortedIdTableMerger.h"
+#include "index/SortedIdTableMerge.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -13,7 +13,7 @@ using namespace ad_utility::testing;
 
 namespace {
 
-TEST(SortedIdTableMerger, ErrorChecks) {
+TEST(SortedIdTableMerge, ErrorChecks) {
   // Row sizes differ
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector({{0}, {1}}));
@@ -33,7 +33,7 @@ TEST(SortedIdTableMerger, ErrorChecks) {
           "mergeIdTables shouldn't be called with no idTables to merge."));
 }
 
-TEST(SortedIdTableMerger, StandardComparator) {
+TEST(SortedIdTableMerge, SimplePermutation) {
   // Only one IdTable
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector({{0, 0}, {1, 1}}));

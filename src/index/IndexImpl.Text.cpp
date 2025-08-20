@@ -15,7 +15,7 @@
 
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
-#include "index/SortedIdTableMerger.h"
+#include "index/SortedIdTableMerge.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
