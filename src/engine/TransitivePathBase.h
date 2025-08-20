@@ -359,8 +359,10 @@ class TransitivePathBase : public Operation {
     return {};
   }
 
-  // Returns the index of the first column that can contain the graph variable,
-  // or payload variables from the "bound" case.
+  // For an unbound transitive path with a graph variable, return the column
+  // index of the graph variable. For a bound transitive path the return value
+  // represents the first column of the payload. The graph follows after that
+  // (if present).
   static size_t firstGraphOrPayloadColumnIndex() { return 2; }
 };
 

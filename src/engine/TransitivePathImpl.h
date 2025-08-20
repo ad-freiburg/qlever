@@ -48,10 +48,9 @@ struct TableColumnWithVocab {
       const auto& [startId, graphId] = tuple;
       if (startId.isUndefined() || (checkGraph && graphId.isUndefined()))
           [[unlikely]] {
-        return ad_utility::InputRangeTypeErased{
-            edges.getEquivalentIdAndMatchingGraphs(startId)};
+        return edges.getEquivalentIdAndMatchingGraphs(startId);
       } else {
-        return ad_utility::InputRangeTypeErased{ql::views::single(tuple)};
+        return IdWithGraphs{tuple};
       }
     }
   }

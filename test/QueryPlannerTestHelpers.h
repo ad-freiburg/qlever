@@ -128,6 +128,10 @@ constexpr auto IndexScan =
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
+  // TODO<RobinTF> The matcher should be changed so that numVariables can
+  // properly account for stripped columns. Also `strippedSize` should be
+  // replaced by an explicit listing of the variables that are kept instead of
+  // just the size.
   size_t numVariables = strippedSize.value_or(
       static_cast<size_t>(subject.isVariable()) +
       static_cast<size_t>(predicate.isVariable()) +

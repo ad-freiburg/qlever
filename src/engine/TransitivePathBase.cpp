@@ -91,14 +91,13 @@ auto makeInternalVariable(std::string_view string) {
   return Variable{absl::StrCat("?internal_property_path_variable_", string)};
 }
 
-// Helper function to make a sorted tree distinct.
-auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree,
-                  bool hasGraph) {
+// Helper function to make a sorted tree distinct on all columns.
+auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree) {
   auto* qec = executionTree->getRootOperation()->getExecutionContext();
-  std::vector<ColumnIndex> distinctColumns{0};
-  if (hasGraph) {
-    distinctColumns.push_back(1);
-  }
+  std::vector<ColumnIndex> distinctColumns;
+  distinctColumns.reserve(executionTree->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(executionTree->getResultWidth()),
+                   std::back_inserter(distinctColumns));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(executionTree),
                                                  std::move(distinctColumns));
 }
@@ -159,10 +158,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
   };
   auto [leftScan, rightScan] =
       makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
-  auto allValues = ad_utility::makeExecutionTree<Union>(
+  return makeDistinct(ad_utility::makeExecutionTree<Union>(
       qec, joinWithValues(std::move(leftScan)),
-      joinWithValues(std::move(rightScan)));
-  return makeDistinct(std::move(allValues), graphVariable.has_value());
+      joinWithValues(std::move(rightScan))));
 }
 
 // _____________________________________________________________________________
@@ -173,9 +171,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
   auto [leftScan, rightScan] = makeIndexScanPair(
       qec, std::move(activeGraphs),
       std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
-  auto allValues = ad_utility::makeExecutionTree<Union>(
-      qec, std::move(leftScan), std::move(rightScan));
-  return makeDistinct(std::move(allValues), graphVariable.has_value());
+  return makeDistinct(ad_utility::makeExecutionTree<Union>(
+      qec, std::move(leftScan), std::move(rightScan)));
 }
 
 // _____________________________________________________________________________
@@ -457,8 +454,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   auto [originalVar, info] =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
 
-  // If we're not explicitly handling the empty path, the first step will
-  // already filter out non-matching values.
+  // If we don't include the empty path, then inputs which don't originate in
+  // the graph will be automatically filtered out because they cannot appear in
+  // the `subtree_`.
   if (minDist_ > 0) {
     return leftOrRightOp;
   }
