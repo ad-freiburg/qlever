@@ -44,8 +44,12 @@ void IndexImpl::addTextFromOnDiskIndex() {
     textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
         onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
     textIndexIndicesExist_ = true;
-  } catch (const std::exception& e) {
+  } catch (const std::runtime_error& e) {
     textIndexIndicesExist_ = false;
+    LOG(INFO) << "Text index literal indices file wasn't found. This can lead "
+                 "to some text records being empty in query results. The exact "
+                 "exception was: "
+              << e.what() << std::endl;
   }
 
   // Initialize the text records file aka docsDB. NOTE: The search also works

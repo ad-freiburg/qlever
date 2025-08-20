@@ -155,27 +155,36 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    if (textIndexIndicesExist_) {
-      for (const auto& index : textIndexIndices_) {
-        // We need the explicit cast to `std::string` because the return type of
-        //  `indexToString` might be `string_view` if the vocabulary is stored
-        // uncompressed in memory.
-        for (auto line : literalToWordsFileLines(std::string{vocab_[index]},
-                                                 contextId, localeManager)) {
-          co_yield line;
-        }
+    for (auto line : wordsInLiterals(contextId, std::move(localeManager))) {
+      co_yield line;
+    }
+  }
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiterals(
+    TextRecordIndex& contextId, LocaleManager localeManager) const {
+  if (textIndexIndicesExist_) {
+    for (const auto& index : textIndexIndices_) {
+      // We need the explicit cast to `std::string` because the return type of
+      //  `indexToString` might be `string_view` if the vocabulary is stored
+      // uncompressed in memory.
+      for (auto line :
+           literalToWordsFileLines(std::string{vocab_[index]}, contextId,
+                                   std::move(localeManager))) {
+        co_yield line;
       }
-    } else {
-      for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-           index = index.incremented()) {
-        auto text = vocab_[index];
-        if (!isLiteral(text)) {
-          continue;
-        }
-        for (auto line :
-             literalToWordsFileLines(text, contextId, localeManager)) {
-          co_yield line;
-        }
+    }
+  } else {
+    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
+         index = index.incremented()) {
+      auto text = vocab_[index];
+      if (!isLiteral(text)) {
+        continue;
+      }
+      for (auto line :
+           literalToWordsFileLines(text, contextId, std::move(localeManager))) {
+        co_yield line;
       }
     }
   }
@@ -184,7 +193,7 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::literalToWordsFileLines(
     std::string text, TextRecordIndex& contextId,
-    const LocaleManager& localeManager) const {
+    LocaleManager localeManager) const {
   // We need the explicit cast to `std::string` because the return type of
   //  `indexToString` might be `string_view` if the vocabulary is stored
   // uncompressed in memory.
