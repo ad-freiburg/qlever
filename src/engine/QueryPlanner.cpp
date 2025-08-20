@@ -2359,6 +2359,10 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
+  // Disable this optimization.
+  if (!RuntimeParameters().get<"enable-distributive-union">()) {
+    return candidates;
+  }
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
                                                   const SubtreePlan& other,
                                                   bool flipped) {
@@ -3141,7 +3145,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
     if (RuntimeParameters().get<"strip-columns">()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
-          std::move(plan._qet), selectedVariables);
+          std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
           select.getSelectedVariables());

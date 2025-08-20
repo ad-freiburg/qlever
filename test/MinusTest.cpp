@@ -144,6 +144,33 @@ TEST(Minus, computeMinus) {
 }
 
 // _____________________________________________________________________________
+TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
+  IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
+  IdTable b = makeIdTableFromVector({{0}});
+  LocalVocabEntry aEntry = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocab vocabA;
+  vocabA.getIndexAndAddIfNotContained(aEntry);
+  LocalVocab vocabB;
+  vocabB.getIndexAndAddIfNotContained(
+      LocalVocabEntry::fromStringRepresentation("\"b\""));
+
+  auto* qec = ad_utility::testing::getQec();
+  Minus m{qec,
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, std::move(a),
+              std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+              std::vector<ColumnIndex>{0}, std::move(vocabA)),
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, std::move(b),
+              std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+              std::vector<ColumnIndex>{0}, std::move(vocabB))};
+
+  auto result = m.computeResultOnlyForTesting(false);
+  EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+              ::testing::ElementsAre(::testing::Eq(aEntry)));
+}
+
+// _____________________________________________________________________________
 TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
