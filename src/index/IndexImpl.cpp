@@ -844,7 +844,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   // TODO: remove this conversion once CompressedRelationWriter will be
   // migrated to non coroutines
   auto sortedTriplesGenerator{
-      cppcoro::fromInputRange(std::move(sortedTriples))};
+      cppcoro::fromInputRange(std::forward<T>(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
