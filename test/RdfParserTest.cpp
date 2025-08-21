@@ -33,6 +33,10 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+
+auto isPositiveInfinity(double value) { return std::isinf(value) && value > 0; }
+
+auto isNegativeInfinity(double value) { return std::isinf(value) && value < 0; }
 }  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
@@ -246,6 +250,26 @@ TEST(RdfParserTest, rdfLiteral) {
           .getLastParseResult()
           .getDouble()));
 
+  auto posInfLiteral = R"("INF"^^)"s + "<" + XSD_DOUBLE_TYPE + ">";
+  EXPECT_TRUE(isPositiveInfinity(
+      checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(posInfLiteral)
+          .getLastParseResult()
+          .getDouble()));
+  EXPECT_TRUE(std::isinf(
+      checkParseResult<CtreParser, &CtreParser::rdfLiteral>(posInfLiteral)
+          .getLastParseResult()
+          .getDouble()));
+
+  auto negInfLiteral = R"("-INF"^^)"s + "<" + XSD_DOUBLE_TYPE + ">";
+  EXPECT_TRUE(isNegativeInfinity(
+      checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(negInfLiteral)
+          .getLastParseResult()
+          .getDouble()));
+  EXPECT_TRUE(isNegativeInfinity(
+      checkParseResult<CtreParser, &CtreParser::rdfLiteral>(negInfLiteral)
+          .getLastParseResult()
+          .getDouble()));
+
   auto runCommonTests = [](auto p) {
     p.prefixMap_["doof"] = iri("<www.doof.org/>");
 
@@ -268,6 +292,10 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
   ASSERT_EQ(ladttc("+42.2345", fromIri(XSD_DOUBLE_TYPE)), +42.2345);
   ASSERT_TRUE(std::isnan(ladttc("NaN", fromIri(XSD_DOUBLE_TYPE)).getDouble()));
+  ASSERT_TRUE(
+      isPositiveInfinity(ladttc("INF", fromIri(XSD_DOUBLE_TYPE)).getDouble()));
+  ASSERT_TRUE(
+      isNegativeInfinity(ladttc("-INF", fromIri(XSD_DOUBLE_TYPE)).getDouble()));
   ASSERT_EQ(ladttc("-142.321", fromIri(XSD_DECIMAL_TYPE)), -142.321);
   ASSERT_EQ(ladttc("-142321", fromIri(XSD_INT_TYPE)), -142321);
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);

@@ -325,12 +325,13 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       // in braces confuses the test coverage tool.
       return [id] {
         double d = id.getDouble();
-        if (std::isnan(d)) {
+        if (!std::isfinite(d)) {
           // The default formatter would output this all lowercase, which is not
-          // legal syntax for RDF. Also NaN is only legal for floating point
-          // types (float and double), not decimal, so we make a special
+          // legal syntax for RDF. Also NaN and INF are only legal for floating
+          // point types (float and double), not decimal, so we make a special
           // exception here.
-          return std::pair{"NaN"s, XSD_DOUBLE_TYPE};
+          return std::pair{std::isnan(d) ? "NaN"s : (d > 0 ? "INF"s : "-INF"s),
+                           XSD_DOUBLE_TYPE};
         }
         // Format as integer if fractional part is zero, let C++ decide
         // otherwise.
@@ -1225,8 +1226,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const char* i = XSD_INT_TYPE;
     const char* d = XSD_DECIMAL_TYPE;
     const char* b = XSD_BOOLEAN_TYPE;
-    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", which
-    // doesn't have a short form notation.
+    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
+    // "-INF", which doesn't have a short form notation.
     if (type == nullptr || type == i || type == d ||
         (type == b && literal.length() > 1)) {
       return std::move(literal);
