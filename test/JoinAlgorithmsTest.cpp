@@ -75,7 +75,8 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder, std::identity{},
-                                    std::identity{}, std::true_type{});
+                                    std::identity{},
+                                    ad_utility::OptionalJoinTag{});
   } else {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   }
