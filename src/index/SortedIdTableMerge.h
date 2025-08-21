@@ -28,15 +28,16 @@ using IdTableAndResultRow = std::pair<IdTableIndex, size_t>;
 // indices in which the table is sorted. E.g. `sortPerm` = {0, 2, 1} would mean
 // first compare the elements of the first column, if there is a tie then
 // compare the elements of the third column and lastly of the second. The
-// `sortPerm` doesn't need to include all indices.
+// `sortPerm` doesn't need to include all column indices.
 IdTable mergeIdTables(std::vector<IdTable> idTablesToMerge,
                       const ad_utility::AllocatorWithLimit<Id>& allocator,
                       std::vector<size_t> sortPerm = {0});
 
 // For each idTable iterate over each column. For each column iterate over the
 // values and look up where the value belongs in the result table. Write the
-// value to the correct place. This method ensures cache locality during the
-// iteration of the idTables that have to be merged.
+// value to the correct place. This method ensures cache locality in the input.
+// TODO write to a buffer that contains sequential rows. Afterwards push the
+// buffer to the result. This improves cache locality for the output.
 void writeIdTableFromPermutation(
     std::vector<IdTable> idTablesToMerge,
     std::vector<std::vector<size_t>> permutationIdTables, IdTable& result);
