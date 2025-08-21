@@ -101,11 +101,11 @@ MinRowIterator::MinRowIterator(const std::vector<IdTable>& idTablesToMerge,
       [this, &sortPerm](auto idTablePair) {
         // Add all relevant columns
         std::vector<ColumnRange> columnRangesForIdTable;
-        ql::ranges::for_each(sortPerm, [this, &idTablePair,
-                                        &columnRangesForIdTable](size_t col) {
-          auto span = idTablePair.second.getColumn(col);
-          columnRangesForIdTable.push_back({span.begin(), span.end()});
-        });
+        ql::ranges::for_each(
+            sortPerm, [&idTablePair, &columnRangesForIdTable](size_t col) {
+              auto span = idTablePair.second.getColumn(col);
+              columnRangesForIdTable.push_back({span.begin(), span.end()});
+            });
         idTableToColumnRangesMap_.emplace(idTablePair.first,
                                           std::move(columnRangesForIdTable));
       });
