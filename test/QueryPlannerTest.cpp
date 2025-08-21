@@ -19,6 +19,7 @@
 #include "range/v3/view/cartesian_product.hpp"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -4321,50 +4322,71 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                                 "?_QLever_internal_variable_qp_0", "<P279>",
                                 "?_QLever_internal_variable_qp_1"))),
       qec, {4, 16, 64'000'000});
+
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?x <P31> ?o ."
+      "{ VALUES ?x { 1 } } UNION { VALUES ?x { 2 } }}",
+      h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (1) }")),
+                       h::IndexScanFromStrings("?x", "<P31>", "?o")),
+               h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (2) }")),
+                       h::IndexScanFromStrings("?x", "<P31>", "?o"))),
+      qec, {4, 16, 64'000'000});
+
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?x <P31> ?o . "
+      "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 2 } } } "
+      "UNION "
+      "{ { VALUES ?x { 3 } } UNION { VALUES ?x { 4 } } } }",
+      h::Union(h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (1) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")),
+                        h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (2) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o"))),
+               h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (3) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")),
+                        h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (4) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")))),
+      qec, {4, 16, 64'000'000});
 }
 
-// TODO<joka921> Properly adapt those tests to the distributed union
-/*
 // _____________________________________________________________________________
-TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
-  auto qp = makeQueryPlanner();
-  {
-    auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o ."
-        "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }}");
-    auto plans = qp.createExecutionTrees(query);
-    ASSERT_EQ(plans.size(), 2);
-    EXPECT_TRUE(
-        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
-  }
-  {
-    auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o . "
-        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
-        "UNION "
-        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } }");
-    auto plans = qp.createExecutionTrees(query);
-    ASSERT_EQ(plans.size(), 1);
-    EXPECT_TRUE(
-        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
-  }
-}
- */
-
-// TODO<joka921> This test is no longer relevant with the distributed union,
-// find out what to properly replace it by.
-/*
-// _____________________________________________________________________________
-TEST(QueryPlanner, ensurePlanningIsSkippedWhenTransitivePathIsAlreadyBound) {
+TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
+  using namespace ::testing;
   auto qp = makeQueryPlanner();
   auto query = SparqlParser::parseQuery(
       "SELECT * { { VALUES ?x { 1 } } UNION { ?s <P279>+ 1 } . ?s <P31> ?o }");
   auto plans = qp.createExecutionTrees(query);
+
+  EXPECT_THAT(
+      plans,
+      UnorderedElementsAre(
+          Truly([](const auto& plan) {
+            // Case where join is at the top level.
+            return std::dynamic_pointer_cast<Join>(
+                plan._qet->getRootOperation());
+          }),
+          Truly([](const auto& plan) {
+            // Case where join is pushed into the union.
+            auto operation = plan._qet->getRootOperation();
+            return std::dynamic_pointer_cast<Union>(operation) &&
+                   std::dynamic_pointer_cast<Join>(
+                       operation->getChildren().at(1)->getRootOperation());
+          })));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
+  using namespace ::testing;
+  auto qp = makeQueryPlanner();
+
+  auto cleanup = setRuntimeParameterForTest<"enable-distributive-union">(false);
+  auto query = SparqlParser::parseQuery(
+      "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
+  auto plans = qp.createExecutionTrees(query);
+
   ASSERT_EQ(plans.size(), 1);
   EXPECT_TRUE(
       std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
 }
- */
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {

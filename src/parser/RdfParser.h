@@ -212,7 +212,10 @@ class TurtleParser : public RdfParserBase {
   static inline std::atomic<size_t> numParsers_ = 0;
   size_t blankNodePrefix_ = numParsers_.fetch_add(1);
 
-  bool prefixAndBaseDisabled_ = false;
+  // Used to restrict a worker for the parallel turtle parser to a simpler
+  // grammar that can be parsed in parallel. This disallows re-definitions of
+  // @base and @prefix as well as usage of multiline literals.
+  bool useSimplifiedGrammar_ = false;
 
  public:
   TurtleParser() = default;
@@ -272,14 +275,14 @@ class TurtleParser : public RdfParserBase {
   bool rdfLiteralImpl(bool allowMultilineStrings);
   bool rdfLiteral() {
     // Turtle allows for multiline strings.
-    return rdfLiteralImpl(true);
+    return rdfLiteralImpl(!useSimplifiedGrammar_);
   }
   bool numericLiteral();
   bool booleanLiteral();
   bool prefixedName();
   // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
   bool stringParseImpl(bool allowMultilineStrings);
-  bool stringParse() { return stringParseImpl(true); }
+  bool stringParse() { return stringParseImpl(!useSimplifiedGrammar_); }
 
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
@@ -480,8 +483,9 @@ CPP_template(typename Parser)(
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
 
-  // Disable prefix parsing for turtle parsers during parallel parsing.
-  void disablePrefixParsing() { this->prefixAndBaseDisabled_ = true; }
+  // Disable use of @base, @prefix and multiline string literals for turtle
+  // parsers during parallel parsing.
+  void useSimplifiedGrammar() { this->useSimplifiedGrammar_ = true; }
 
   FRIEND_TEST(RdfParserTest, prefixedName);
   FRIEND_TEST(RdfParserTest, prefixID);
@@ -641,19 +645,17 @@ class RdfParallelParser : public Parser {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
+  // Helper function used by `getBatch()` and `getLimeImpl()` to abstract away
+  // common code. Return true if some triples could be collected and false if
+  // the input has been fully consumed.
+  bool processTriples();
+
   using Parser::isParserExhausted_;
   using Parser::tok_;
   using Parser::triples_;
 
   // Initialized in the call to `initialize`.
   std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
-
-  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
-      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
-  ad_utility::TaskQueue<true> parallelParser_{
-      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
-      "parallel parser"};
-  std::future<void> parseFuture_;
 
   // Collect error messages in case of multiple failures. The `size_t` is the
   // start position of the corresponding batch, used to order the errors in case
@@ -669,6 +671,16 @@ class RdfParallelParser : public Parser {
   TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
   std::chrono::milliseconds sleepTimeForTesting_{0};
+
+  // These datastructures are ordered last, such that in the destructor all
+  // threads are joined before the other data members (which might be accessed
+  // by those threads) are destroyed.
+  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
+      tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
+  ad_utility::TaskQueue<true> parallelParser_{
+      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
+      "parallel parser"};
+  std::future<void> parseFuture_;
 };
 
 // This class is an RDF parser that parses multiple files in parallel. Each

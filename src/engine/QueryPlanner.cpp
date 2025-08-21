@@ -2348,24 +2348,6 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
-
-// Check if an unbound transitive path is somewhere in the tree. This is because
-// the optimization with `Union` currently only makes sense if there is a
-// transitive path in the tree that benefits from directly applying the join.
-bool hasUnboundTransitivePathInTree(const Operation& operation) {
-  if (auto* transitivePath =
-          dynamic_cast<const TransitivePathBase*>(&operation)) {
-    return !transitivePath->isBoundOrId();
-  }
-  // Only check `UNION`s for children.
-  if (!dynamic_cast<const Union*>(&operation)) {
-    return false;
-  }
-  return ql::ranges::any_of(
-      operation.getChildren(), [](const QueryExecutionTree* child) {
-        return hasUnboundTransitivePathInTree(*child->getRootOperation());
-      });
-}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2377,15 +2359,16 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
+  // Disable this optimization.
+  if (!RuntimeParameters().get<"enable-distributive-union">()) {
+    return candidates;
+  }
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
                                                   const SubtreePlan& other,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
-    // TODO<joka921> This changes the behavior to consider applying the
-    // distribution to ALL unions. Evaluate the impact and make sure that the
-    // documentation is correct.
     if (!unionOperation) {
       return;
     }

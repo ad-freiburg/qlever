@@ -814,7 +814,7 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
     ad_utility::MemorySize bufferSize = 1_kB) {
-  auto parserChild = [&]() {
+  auto parser = [&]() {
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                     bufferSize};
@@ -822,7 +822,6 @@ std::vector<TurtleTriple> parseFromFile(
       return Parser{filename, bufferSize};
     }
   }();
-  RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
   if (useBatchInterface) {
@@ -1114,6 +1113,32 @@ TEST(RdfParserTest,
       "<subject> <predicate> <object> . \n "
       "BASE <http://example.org/> \n";
   forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+}
+
+// Test for better error message in parallel parser when encountering a string
+// literal parsing error.
+TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
+  std::string filename{"betterErrorMessageOnMultilineLiteralError.dat"};
+  auto testWithParser = [&filename](auto t, bool useBatchInterface,
+                                    ad_utility::MemorySize bufferSize,
+                                    std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::AllOf(::testing::HasSubstr("`--parse-parallel false`"),
+                         ::testing::HasSubstr("multiline string literal")));
+    ad_utility::deleteFile(filename);
+  };
+  // Redefinition
+  std::string_view inputWithMultilineString =
+      "<subject1> <predicate1> <object1> . \n"
+      "<subject2> <predicate2> \"\"\".\n\"\"\" . \n"
+      "<subject3> <predicate3> <object3> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithMultilineString);
 }
 
 // Test that the parallel parser's destructor can be run quickly and without
