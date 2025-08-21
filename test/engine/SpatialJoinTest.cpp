@@ -227,14 +227,17 @@ using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
     SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+  EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries
   auto pqLeft = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
       "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
   auto pqRight = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};

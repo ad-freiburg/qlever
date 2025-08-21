@@ -36,7 +36,8 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  EncodedVal,
+  MaxValue = EncodedVal
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -54,6 +55,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
+    case Datatype::EncodedVal:
+      return "EncodedIri";
     case Datatype::VocabIndex:
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
@@ -163,8 +166,10 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
+
+    using IdProxy = LocalVocabEntry::IdProxy;
     auto compareVocabAndLocalVocab =
-        [](::VocabIndex vocabIndex,
+        [](IdProxy vocabIndex,
            ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
       auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
@@ -177,12 +182,14 @@ class ValueId {
     };
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
-    if (type == VocabIndex && otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(getVocabIndex(),
+    if ((type == VocabIndex || type == EncodedVal) &&
+        otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(IdProxy::make(getBits()),
                                        other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
-      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
-                                                    getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               (otherType == VocabIndex || otherType == EncodedVal)) {
+      auto inverseOrder = compareVocabAndLocalVocab(
+          IdProxy::make(other.getBits()), getLocalVocabIndex());
       return 0 <=> inverseOrder;
     }
 
@@ -293,6 +300,11 @@ class ValueId {
   static ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
+
+  static ValueId makeFromEncodedVal(uint64_t idx) {
+    return makeFromIndex(idx, Datatype::EncodedVal);
+  }
+
   static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
@@ -316,6 +328,11 @@ class ValueId {
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
+
+  [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
+    return removeDatatypeBits(_bits);
+  }
+
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
@@ -377,7 +394,7 @@ class ValueId {
     }
     auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
     if (upper != lower) {
-      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
+      return H::combine(std::move(h), lower.get(), 0);
     }
     return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
@@ -392,9 +409,10 @@ class ValueId {
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
   /// TODO<joka921> This currently still has limited functionality because
-  /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
-  /// `uint64_t` and the visitor cannot distinguish between them. Create strong
-  /// types for these indices and make the `ValueId` class use them.
+  /// VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
+  /// the same type `uint64_t` and the visitor cannot distinguish between them.
+  /// Create strong types for these indices and make the `ValueId` class use
+  /// them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
@@ -406,6 +424,8 @@ class ValueId {
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
         return std::invoke(visitor, getInt());
+      case Datatype::EncodedVal:
+        return std::invoke(visitor, getEncodedVal());
       case Datatype::VocabIndex:
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
@@ -437,8 +457,8 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t>) {
+      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
+                                                    uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");

@@ -202,7 +202,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab));
+              vocab, localVocab, getIndex().encodedIriManager()));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.

@@ -27,12 +27,14 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
 
  public:
   ParserAndVisitor(
-      ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+      ad_utility::BlankNodeManager* blankNodeManager,
+      const EncodedIriManager* encodedIriManager, std::string input,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
-      ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+      ad_utility::BlankNodeManager* blankNodeManager,
+      const EncodedIriManager* encodedIriManager, std::string input,
       SparqlQleverVisitor::PrefixMap prefixes,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =

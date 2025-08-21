@@ -383,20 +383,28 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 
 // ____________________________________________________________________________________
 parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
-    const ad_utility::sparql_types::Triples& triples) {
+    const ad_utility::sparql_types::Triples& triples) const {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
-  auto toTripleComponent = [](const auto& item) {
+  auto toTripleComponent = [this](const auto& item) {
     using T = std::decay_t<decltype(item)>;
     namespace tc = ad_utility::triple_component;
-    if constexpr (ad_utility::isSimilar<T, Variable>) {
+    if constexpr (ad_utility::SimilarToAny<T, Variable, TripleComponent>) {
       return TripleComponent{item};
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
       // Blank Nodes in the pattern are to be treated as internal variables
       // inside WHERE.
       return TripleComponent{blankNodeToInternalVariable(item.toSparql())};
+    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+      // Try to encode the IRI first, otherwise use the standard conversion
+      auto iriString = item.toSparql();
+      if (auto encodedId = encodedIriManager_->encode(iriString)) {
+        return TripleComponent{*encodedId};
+      }
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          iriString);
     } else {
-      static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
+      static_assert(ad_utility::isSimilar<T, Literal>);
       return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
           item.toSparql());
     }
@@ -1160,14 +1168,15 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     }
   };
   auto convertAndRegisterTriple =
-      [&registerIfVariable](
-          const TripleWithPropertyPath& triple) -> SparqlTriple {
+      [&registerIfVariable,
+       this](const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {triple.subject_.toTripleComponent(), triple.predicate_,
-            triple.object_.toTripleComponent()};
+    return {graphTermToTripleComponentWithEncoding(triple.subject_),
+            triple.predicate_,
+            graphTermToTripleComponentWithEncoding(triple.object_)};
   };
 
   BasicGraphPattern triples = {ad_utility::transform(
@@ -2584,7 +2593,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
-          tripleComponent.toValueIdIfNotString().value());
+          tripleComponent.toValueIdIfNotString(encodedIriManager_).value());
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
@@ -3120,4 +3129,32 @@ void SparqlQleverVisitor::visitWhereClause(
   auto [pattern, visibleVariables] = visit(whereClauseContext);
   query._rootGraphPattern = std::move(pattern);
   query.registerVariablesVisibleInQueryBody(visibleVariables);
+}
+
+// _____________________________________________________________________________
+TripleComponent SparqlQleverVisitor::graphTermToTripleComponentWithEncoding(
+    const GraphTerm& graphTerm) const {
+  return graphTerm.visit([this](const auto& element) -> TripleComponent {
+    using T = std::decay_t<decltype(element)>;
+    if constexpr (std::is_same_v<T, Variable>) {
+      return element;
+    } else if constexpr (std::is_same_v<T, Iri>) {
+      // Try to encode the IRI first, otherwise use the standard conversion
+      auto iriString = element.toSparql();
+      if (auto encodedId = encodedIriManager_->encode(iriString)) {
+        return *encodedId;
+      }
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+          iriString);
+    } else if constexpr (std::is_same_v<T, Literal>) {
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+          element.toSparql());
+    } else {
+      static_assert(std::is_same_v<T, BlankNode>);
+      const auto& blankNode = element.toSparql();
+      AD_CORRECTNESS_CHECK(blankNode.starts_with("_:"));
+      return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                                   blankNode.substr(2))};
+    }
+  });
 }
