@@ -137,11 +137,11 @@ void TextIndexBuilder::processWordsForInvertedLists(
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
     std::string contextFile, bool addWordsFromLiterals) const {
-  auto localeManager = textVocab_.getLocaleManager();
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
   TextRecordIndex contextId = TextRecordIndex::make(0);
   if (!contextFile.empty()) {
+    auto localeManager = textVocab_.getLocaleManager();
     WordsFileParser p(contextFile, localeManager);
     ad_utility::HashSet<std::string> items;
     for (auto& line : p) {
@@ -155,7 +155,7 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (auto line : wordsInLiterals(contextId, localeManager)) {
+    for (auto line : wordsInLiterals(contextId)) {
       co_yield line;
     }
   }
@@ -163,17 +163,18 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiterals(
-    TextRecordIndex& contextId, const LocaleManager& localeManager) const {
+    TextRecordIndex& contextId) const {
   if (textIndexIndices_.has_value()) {
-    return wordsInLiteralsFromIndices(contextId, localeManager);
+    return wordsInLiteralsFromIndices(contextId);
   } else {
-    return wordsInLiteralsFromVocabulary(contextId, localeManager);
+    return wordsInLiteralsFromVocabulary(contextId);
   }
 }
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiteralsFromIndices(
-    TextRecordIndex& contextId, const LocaleManager& localeManager) const {
+    TextRecordIndex& contextId) const {
+  auto localeManager = textVocab_.getLocaleManager();
   for (const auto& index : textIndexIndices_.value()) {
     // We need the explicit cast to `std::string` because the return type of
     //  `indexToString` might be `string_view` if the vocabulary is stored
@@ -188,7 +189,8 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiteralsFromIndices(
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine>
 TextIndexBuilder::wordsInLiteralsFromVocabulary(
-    TextRecordIndex& contextId, const LocaleManager& localeManager) const {
+    TextRecordIndex& contextId) const {
+  auto localeManager = textVocab_.getLocaleManager();
   for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
        index = index.incremented()) {
     auto text = vocab_[index];

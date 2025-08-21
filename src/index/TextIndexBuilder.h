@@ -66,13 +66,13 @@ class TextIndexBuilder : public IndexImpl {
   // file doesn't exist then just parses the whole RDF vocabulary for its
   // literals.
   cppcoro::generator<WordsFileLine> wordsInLiterals(
-      TextRecordIndex& contextId, const LocaleManager& localeManager) const;
+      TextRecordIndex& contextId) const;
 
   cppcoro::generator<WordsFileLine> wordsInLiteralsFromIndices(
-      TextRecordIndex& contextId, const LocaleManager& localeManager) const;
+      TextRecordIndex& contextId) const;
 
   cppcoro::generator<WordsFileLine> wordsInLiteralsFromVocabulary(
-      TextRecordIndex& contextId, const LocaleManager& localeManager) const;
+      TextRecordIndex& contextId) const;
 
   // This is used in wordsInTextRecords to split up a literal given from a
   // text into the respective `WordsFileLines`. The first line is the
