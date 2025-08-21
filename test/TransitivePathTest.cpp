@@ -1678,6 +1678,72 @@ TEST_P(TransitivePathTest, graphVariableConstrainedByTwoIrisEmptyPath) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
+  auto sub = makeIdTableFromVector({
+      {0, 1},
+      {1, 1},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 10},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto [path, qec] =
+      makePath(std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}},
+               left, right, 1, std::numeric_limits<size_t>::max());
+  EXPECT_THAT(path->resultSortedOn(), ::testing::ElementsAre());
+
+  {
+    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, side.clone(),
+        std::vector<std::optional<Variable>>{Variable{"?start"},
+                                             Variable{"?other"}});
+    auto boundPath = path->bindLeftSide(operation, 0);
+
+    EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
+  }
+
+  {
+    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, side.clone(),
+        std::vector<std::optional<Variable>>{Variable{"?start"},
+                                             Variable{"?other"}},
+        false, std::vector<ColumnIndex>{1});
+    auto boundPath = path->bindLeftSide(operation, 0);
+
+    EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
+  }
+
+  {
+    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, side.clone(),
+        std::vector<std::optional<Variable>>{Variable{"?start"},
+                                             Variable{"?other"}},
+        false, std::vector<ColumnIndex>{0});
+    auto boundPath = path->bindLeftSide(operation, 0);
+
+    EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre(0));
+  }
+
+  {
+    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec,
+        makeIdTableFromVector({
+            {Id::makeUndefined(), 10},
+        }),
+        std::vector<std::optional<Variable>>{Variable{"?start"},
+                                             Variable{"?other"}},
+        false, std::vector<ColumnIndex>{0});
+    auto boundPath = path->bindLeftSide(operation, 0);
+
+    EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
+  }
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
