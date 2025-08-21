@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "TransitivePathBase.h"
 
@@ -165,7 +166,7 @@ TransitivePathBase::decideDirection() {
 }
 
 // _____________________________________________________________________________
-Result::Generator TransitivePathBase::fillTableWithHull(
+Result::LazyResult TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce, size_t inputWidth) const {
   return ad_utility::callFixedSizeVi(
@@ -177,10 +178,10 @@ Result::Generator TransitivePathBase::fillTableWithHull(
 }
 
 // _____________________________________________________________________________
-Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
-                                                        size_t startSideCol,
-                                                        size_t targetSideCol,
-                                                        bool yieldOnce) const {
+Result::LazyResult TransitivePathBase::fillTableWithHull(NodeGenerator hull,
+                                                         size_t startSideCol,
+                                                         size_t targetSideCol,
+                                                         bool yieldOnce) const {
   return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
     return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
                                            targetSideCol, yieldOnce);
@@ -189,54 +190,73 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
 
 // _____________________________________________________________________________
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-Result::Generator TransitivePathBase::fillTableWithHullImpl(
+Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  ad_utility::Timer timer{ad_utility::Timer::Stopped};
-  size_t outputRow = 0;
-  IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-  LocalVocab mergedVocab{};
-  for (auto& [node, linkedNodes, localVocab, idTable, inputRow] : hull) {
-    timer.cont();
-    // As an optimization nodes without any linked nodes should not get yielded
-    // in the first place.
-    AD_CONTRACT_CHECK(!linkedNodes.empty());
-    if (!yieldOnce) {
-      table.reserve(linkedNodes.size());
-    }
-    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable.has_value()) {
-      inputView = idTable->template asStaticView<INPUT_WIDTH>();
-    }
-    for (Id linkedNode : linkedNodes) {
-      table.emplace_back();
-      table(outputRow, startSideCol) = node;
-      table(outputRow, targetSideCol) = linkedNode;
+  auto copyColumnsFor =
+      [this, startSideCol = startSideCol, targetSideCol = targetSideCol](
+          const NodeWithTargets& nodeWithTargets,
+          IdTableStatic<OUTPUT_WIDTH>& table, size_t& outputRow) {
+        const auto& [node, linkedNodes, _, idTable, inputRow] = nodeWithTargets;
+        // As an optimization nodes without any linked nodes should not get
+        // yielded in the first place.
+        AD_CONTRACT_CHECK(!linkedNodes.empty());
 
-      if (inputView.has_value()) {
-        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow);
-      }
+        std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+        if (idTable.has_value()) {
+          inputView = idTable->template asStaticView<INPUT_WIDTH>();
+        }
 
-      outputRow++;
-    }
+        for (Id linkedNode : linkedNodes) {
+          table.emplace_back();
+          table(outputRow, startSideCol) = node;
+          table(outputRow, targetSideCol) = linkedNode;
 
-    if (yieldOnce) {
-      mergedVocab.mergeWith(localVocab);
-    } else {
-      timer.stop();
-      runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-      co_yield {std::move(table).toDynamic(), std::move(localVocab)};
-      table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
-      outputRow = 0;
-    }
-    timer.stop();
-  }
+          if (inputView.has_value()) {
+            this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
+                inputView.value(), table, inputRow, outputRow);
+          }
+
+          outputRow++;
+        }
+      };
+
   if (yieldOnce) {
-    timer.start();
-    runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-    co_yield {std::move(table).toDynamic(), std::move(mergedVocab)};
+    return Result::LazyResult{ad_utility::lazySingleValueRange(
+        [this, copyColumnsFor = std::move(copyColumnsFor),
+         table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()},
+         timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+         hull = std::move(hull)]() mutable {
+          size_t outputRow{0};
+          LocalVocab mergedVocab{};
+          for (auto& nodeWithTargets : hull) {
+            copyColumnsFor(nodeWithTargets, table, outputRow);
+            mergedVocab.mergeWith(nodeWithTargets.localVocab_);
+          }
+
+          runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+          return Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                          std::move(mergedVocab)};
+        })};
   }
+
+  return Result::LazyResult{ad_utility::CachingTransformInputRange(
+      std::move(hull), [this, copyColumnsFor = std::move(copyColumnsFor),
+                        timer = ad_utility::Timer{ad_utility::Timer::Stopped}](
+                           auto& nodeWithTargets) mutable {
+        IdTableStatic<OUTPUT_WIDTH> table{this->getResultWidth(),
+                                          this->allocator()};
+        timer.cont();
+
+        table.reserve(nodeWithTargets.targets_.size());
+        size_t outputRow = 0;
+        copyColumnsFor(nodeWithTargets, table, outputRow);
+
+        timer.stop();
+        runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+        return Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                        std::move(nodeWithTargets.localVocab_)};
+      })};
 }
 
 // _____________________________________________________________________________
