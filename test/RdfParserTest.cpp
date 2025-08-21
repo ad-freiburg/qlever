@@ -236,6 +236,16 @@ TEST(RdfParserTest, rdfLiteral) {
                                                           expected[i]);
   }
 
+  auto nanLiteral = R"("NaN"^^)"s + "<" + XSD_DOUBLE_TYPE + ">";
+  EXPECT_TRUE(
+      std::isnan(checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(nanLiteral)
+                     .getLastParseResult()
+                     .getDouble()));
+  EXPECT_TRUE(std::isnan(
+      checkParseResult<CtreParser, &CtreParser::rdfLiteral>(nanLiteral)
+          .getLastParseResult()
+          .getDouble()));
+
   auto runCommonTests = [](auto p) {
     p.prefixMap_["doof"] = iri("<www.doof.org/>");
 
@@ -257,6 +267,7 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
 
   ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
   ASSERT_EQ(ladttc("+42.2345", fromIri(XSD_DOUBLE_TYPE)), +42.2345);
+  ASSERT_TRUE(std::isnan(ladttc("NaN", fromIri(XSD_DOUBLE_TYPE)).getDouble()));
   ASSERT_EQ(ladttc("-142.321", fromIri(XSD_DECIMAL_TYPE)), -142.321);
   ASSERT_EQ(ladttc("-142321", fromIri(XSD_INT_TYPE)), -142321);
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
