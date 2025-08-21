@@ -566,8 +566,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   std::vector<std::string> prefixes;
 
   // Initializing textIndexIndices_
-  textIndexIndices_.open(onDiskBase_ + TEXT_INDEX_LITERAL_IDS,
-                         ad_utility::CreateTag{});
+  textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+      onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::CreateTag{});
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
@@ -583,7 +583,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                 bool inTextIndex) {
       const auto idx = wordCallback(word, external);
       if (inTextIndex) {
-        textIndexIndices_.push_back(VocabIndex::make(idx));
+        textIndexIndices_.value().push_back(VocabIndex::make(idx));
       }
       return idx;
     };
@@ -597,7 +597,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
 
   // Save textIndexIndices_
-  textIndexIndices_.close();
+  textIndexIndices_.value().close();
 
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;

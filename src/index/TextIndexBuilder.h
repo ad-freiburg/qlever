@@ -15,17 +15,17 @@ class TextIndexBuilder : public IndexImpl {
                             const std::string& onDiskBase)
       : IndexImpl(allocator) {
     setOnDiskBase(onDiskBase);
-    try {
+    std::ifstream checkTextIndexIndicesFile(onDiskBase_ +
+                                            TEXT_INDEX_LITERAL_IDS);
+    if (checkTextIndexIndicesFile.good()) {
       textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
           onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
-      textIndexIndicesExist_ = true;
-    } catch (const std::runtime_error& e) {
-      textIndexIndicesExist_ = false;
-      LOG(INFO)
-          << "Text index literal indices file wasn't found. If "
-             "addWordsFromLiterals is set to true then the whole RDF "
-             "Vocabulary is parsed for literals. The exact exception was: "
-          << e.what() << std::endl;
+    } else {
+      textIndexIndices_ = std::nullopt;
+      LOG(INFO) << "Text index literal indices file wasn't found. If "
+                   "addWordsFromLiterals is set to true then the whole RDF "
+                   "Vocabulary is parsed for literals."
+                << std::endl;
     }
   }
 
@@ -60,7 +60,18 @@ class TextIndexBuilder : public IndexImpl {
   cppcoro::generator<WordsFileLine> wordsInTextRecords(
       std::string contextFile, bool addWordsFromLiterals) const;
 
+  // Retrieves all literals as entity WordsFileLine and all words of the
+  // literals as WordsFileLine. Depending if file with textIndexIndices_ exists
+  // either parses said file and uses the indices to retrieve literals or if
+  // file doesn't exist then just parses the whole RDF vocabulary for its
+  // literals.
   cppcoro::generator<WordsFileLine> wordsInLiterals(
+      TextRecordIndex& contextId, LocaleManager localeManager) const;
+
+  cppcoro::generator<WordsFileLine> wordsInLiteralsFromIndices(
+      TextRecordIndex& contextId, LocaleManager localeManager) const;
+
+  cppcoro::generator<WordsFileLine> wordsInLiteralsFromVocabulary(
       TextRecordIndex& contextId, LocaleManager localeManager) const;
 
   // This is used in wordsInTextRecords to split up a literal given from a
