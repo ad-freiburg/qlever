@@ -1634,9 +1634,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 
+      std::vector<std::vector<Id>> tmps;
       if (useRows) {
         for (size_t j = 0; j < columnIndices.size(); ++j) {
-          std::vector<Id> tmp;
+          tmps.emplace_back();
+          std::vector<Id>& tmp = tmps.back();
           tmp.reserve(currentBlockSize);
           for (size_t k = evaluationContext._beginIndex;
                k < evaluationContext._endIndex; ++k) {

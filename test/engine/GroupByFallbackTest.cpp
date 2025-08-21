@@ -53,6 +53,7 @@ TEST_F(GroupByFallbackTest, AllSameRows) {
   RowData rows(100, 7);
   IdTable table = createIdTable(rows, allocator);
   auto gb = setupGroupBy(table, qec_);
+  qec_->clearCacheUnpinnedOnly();
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
   ASSERT_EQ(out.size(), 1);
