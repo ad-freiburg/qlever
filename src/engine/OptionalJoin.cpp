@@ -525,7 +525,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto rightRes = computeResultSkipChild(_right->getRootOperation());
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+  ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _joinColumns, std::move(leftRes), std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output

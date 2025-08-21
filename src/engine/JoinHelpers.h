@@ -1,6 +1,8 @@
 //   Copyright 2025, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef JOINHELPERS_H
 #define JOINHELPERS_H
@@ -16,12 +18,16 @@
 #include "index/Permutation.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
 namespace qlever::joinHelpers {
 
 static constexpr size_t CHUNK_SIZE = 100'000;
+
+using namespace ad_utility;
 
 using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
@@ -33,27 +39,27 @@ inline void applyPermutation(IdTable& idTable,
   }
 }
 
-using LazyInputView =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>;
+using LazyInputView = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
 
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
 CPP_template(typename Input)(
-    requires ad_utility::SameAsAny<Input, Result::Generator,
-                                   Result::LazyResult>) LazyInputView
+    requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
+    LazyInputView
     convertGenerator(Input gen, OptionalPermutation permutation = {}) {
-  for (auto& [table, localVocab] : gen) {
+  auto transformer = [permutation = std::move(permutation)](auto& element) {
+    auto& [table, localVocab] = element;
     applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables
     // live as long as the wrapper.
-    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
-    co_yield t;
-  }
+    return IdTableAndFirstCol{std::move(table), std::move(localVocab)};
+  };
+  return InputRangeTypeErased{
+      CachingTransformInputRange(std::move(gen), std::move(transformer))};
 }
 
-using MaterializedInputView =
-    std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
+using MaterializedInputView = std::array<IdTableAndFirstCol<IdTableView<0>>, 1>;
 
 // Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
 // then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
@@ -61,9 +67,9 @@ using MaterializedInputView =
 // conceptually does exactly the same for lazy inputs.
 inline MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return std::array{ad_utility::IdTableAndFirstCol{
-      result.idTable().asColumnSubsetView(permutation),
-      result.getCopyOfLocalVocab()}};
+  return std::array{
+      IdTableAndFirstCol{result.idTable().asColumnSubsetView(permutation),
+                         result.getCopyOfLocalVocab()}};
 }
 
 // Wrap a result either in an array with a single element or in a range wrapping
@@ -77,21 +83,30 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
   return convertGenerator(result.idTables(), permutation);
 }
 
+// Type alias for the general InputRangeTypeErasedWithDetails with specific
+// types
 using GeneratorWithDetails =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                       CompressedRelationReader::LazyScanMetadata>;
+    InputRangeTypeErasedWithDetails<IdTableAndFirstCol<IdTable>,
+                                    CompressedRelationReader::LazyScanMetadata>;
 
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
 inline GeneratorWithDetails convertGenerator(
     Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
-  gen.setDetailsPointer(&co_await cppcoro::getDetails);
-  for (auto& table : gen) {
-    // IndexScans don't have a local vocabulary, so we can just use an empty one
-    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
-    co_yield t;
-  }
+  // Store the generator in a wrapper so we can access its details after moving
+  auto generatorStorage =
+      std::make_shared<Permutation::IdTableGenerator>(std::move(gen));
+
+  // Create the range with a pointer to the generator's details
+  auto range = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(
+      CachingTransformInputRange(
+          *generatorStorage, [generatorStorage](auto& table) {
+            (void)generatorStorage;  // Only captured for lifetime reasons.
+            // IndexScans don't have a local vocabulary, so we can just use an
+            return IdTableAndFirstCol{std::move(table), LocalVocab{}};
+          }));
+
+  return GeneratorWithDetails{std::move(range), generatorStorage->details()};
 }
 
 // Part of the implementation of `createResult`. This function is called when
@@ -107,7 +122,7 @@ CPP_template_2(typename ActionT)(
         std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
     runLazyJoinAndConvertToGenerator(ActionT runLazyJoin,
                                      OptionalPermutation permutation) {
-  return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
+  return generatorFromActionWithCallback<Result::IdTableVocabPair>(
       [runLazyJoin = std::move(runLazyJoin),
        permutation = std::move(permutation)](
           std::function<void(Result::IdTableVocabPair)> callback) {
