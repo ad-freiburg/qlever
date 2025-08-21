@@ -377,7 +377,7 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
     }
   }
   return result;
-};
+}
 
 }  // namespace detail
 
@@ -394,12 +394,6 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison,
     bool removeEmptyRanges = true) {
-  // For the evaluation of FILTERs, comparisons that involve undefined values
-  // are always false.
-  if (valueId.getDatatype() == Datatype::Undefined) {
-    return {};
-  }
-  // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
       return detail::simplifyRanges(
@@ -412,6 +406,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
                                              comparison),
           removeEmptyRanges);
     case Datatype::Undefined:
+      // For the evaluation of FILTERs, comparisons that involve undefined
+      // values are always false.
+      return {};
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
