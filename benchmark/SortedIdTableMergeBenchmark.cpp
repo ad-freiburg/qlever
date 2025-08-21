@@ -77,8 +77,8 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
       return idTable;
     };
 
-    auto createVectorOfRandomIdTables = [this, &createRandomIdTable](
-                                            size_t numTables, size_t numRows) {
+    auto createVectorOfRandomIdTables = [&createRandomIdTable](size_t numTables,
+                                                               size_t numRows) {
       std::vector<IdTable> idTables;
       idTables.reserve(numTables);
       for (size_t i = 0; i < numTables; ++i) {
