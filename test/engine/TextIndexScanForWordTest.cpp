@@ -148,11 +148,13 @@ struct TextResult {
 // `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
 // scores can be specified.
 auto getQecWithTextIndex(
-    std::optional<TextScoringMetric> textScoring = std::nullopt) {
+    std::optional<TextScoringMetric> textScoring = std::nullopt,
+    bool removeTextIndexIndicesFile = false) {
   using namespace ad_utility::testing;
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
+  config.removeTextIndexIndicesFile = removeTextIndexIndicesFile;
   if (textScoring.has_value()) {
     config.scoringMetric = textScoring;
   }
@@ -312,6 +314,68 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ(bm25Word2Doc4, tr3.getScore(5));
   ASSERT_EQ(bm25Word1Doc7, tr3.getScore(6));
   ASSERT_EQ(bm25Word1Doc7, tr3.getScore(7));
+}
+
+TEST(TextIndexScanForWord, NoLiteralIndicesFile) {
+  auto qec = getQecWithTextIndex(std::nullopt, true);
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
+  TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
+
+  // Test if size calculations are right
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
+  s2.getExternallyVisibleVariableColumns();
+
+  // Test if all columns are there and correct
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?text2"}, {0, AlwaysDefined}},
+      {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
+      {Variable{"?ql_score_prefix_text2_test"}, {2, AlwaysDefined}}};
+  EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+
+  // Tests if the correct texts are retrieved from a mix of non literal and
+  // literal texts. Literals are empty since indices haven't been loaded
+  TextResult tr{qec, result};
+  ASSERT_EQ(withSecond("tester"), tr.getRow(0));
+  ASSERT_EQ(h::combineToString("", "test"), tr.getRow(1));
+  ASSERT_EQ(h::combineToString("", "testing"), tr.getRow(2));
+  ASSERT_EQ(h::combineToString("", "test"), tr.getRow(3));
+
+  // Tests if the correct texts are retrieved from the non literal texts
+  TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
+  result = t1.computeResultOnlyForTesting();
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(0));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(0));
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(1));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(1));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(2));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(2));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(3));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(3));
+  ASSERT_EQ(TextRecordIndex::make(3), tr.getId(4));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(4));
+  ASSERT_EQ(TextRecordIndex::make(4), tr.getId(5));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(5));
+  ASSERT_EQ(TextRecordIndex::make(5), tr.getId(6));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(6));
+  ASSERT_EQ(TextRecordIndex::make(6), tr.getId(7));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(7));
+
+  // Tests if correct words are deducted from prefix
+  ASSERT_EQ("astronomer", tr.getWord(0));
+  ASSERT_EQ("astronomy", tr.getWord(1));
+  ASSERT_EQ("astronomer", tr.getWord(2));
+  ASSERT_EQ("astronomy", tr.getWord(3));
+  ASSERT_EQ("astronomy", tr.getWord(4));
+  ASSERT_EQ("astronomy", tr.getWord(5));
+  ASSERT_EQ("astronomer", tr.getWord(6));
+  ASSERT_EQ("astronomer", tr.getWord(7));
 }
 
 TEST(TextIndexScanForWord, WordScanShortPrefix) {

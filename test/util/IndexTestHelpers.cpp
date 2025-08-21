@@ -196,6 +196,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                      : VocabularyType::random());
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+      if (c.removeTextIndexIndicesFile && c.addWordsFromLiterals) {
+        remove((indexBasename + TEXT_INDEX_LITERAL_IDS).c_str());
+      }
+
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should

@@ -53,6 +53,9 @@ struct TestIndexConfig {
   ad_utility::MemorySize blocksizePermutations = 16_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
+  // This emulates building the text index with the option
+  // `addWordsFromLiterals` on top of an old computed RDF index
+  bool removeTextIndexIndicesFile = false;
   // The regex used to filter the predicates with object literals to determine
   // whether a literal should appear in the text index or not
   std::optional<std::string> literalRegex = std::nullopt;
@@ -81,9 +84,9 @@ struct TestIndexConfig {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
         c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
-        c.addWordsFromLiterals, c.literalRegex, c.literalRegexIsWhitelist,
-        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
-        c.bAndKParam, c.indexType);
+        c.addWordsFromLiterals, c.removeTextIndexIndicesFile, c.literalRegex,
+        c.literalRegexIsWhitelist, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType);
   }
   bool operator==(const TestIndexConfig&) const = default;
 };
