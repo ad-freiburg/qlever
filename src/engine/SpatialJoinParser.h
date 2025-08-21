@@ -29,10 +29,11 @@ struct SpatialJoinParseJob {
   std::string wkt;
 };
 
+// Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
+// only as an internal buffer during processing and is otherwise empty,
+// therefore it is not compared here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
-  // The member attribute `wkt` is used only as an internal buffer during
-  // processing and is otherwise empty, therefore it is not compared here.
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
 }
 
@@ -69,13 +70,12 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
 
-  // Configure prefiltering geometries by bounding box
+  // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;
   std::optional<util::geo::DBox> _prefilterLatLngBox;
 
-  // A reference to QLever's index is required to access precomputed bounding
-  // boxes of geometries as well as for resolving `ValueId`s to WKT literal
-  // strings.
+  // A reference to QLever's index is needed to access precomputed geometry
+  // bounding boxes and to resolve `ValueId`s into WKT literals.
   const Index& _index;
 };
 

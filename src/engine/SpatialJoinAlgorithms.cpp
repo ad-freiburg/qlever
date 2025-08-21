@@ -23,6 +23,7 @@
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -70,7 +71,6 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
   // Convert prefilter box to lat lng coordinates for comparing against geometry
   // info from vocabulary.
   std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
-  size_t prefilterCounter = 0;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
         prefilterBox.value());
@@ -93,17 +93,21 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 
-  // Iterate over all rows in `idTable` and parse the geometries from `column`.
-  for (size_t row = 0; row < idTable->size(); row++) {
-    throwIfCancelled();
-    parser.addValueIdToQueue(idTable->at(row, column), row, leftOrRightSide);
-  }
+  // Iterate over all rows in `idTable` and add the geometries from `column` to
+  // the parallel WKT parser.
+  const auto& geoms = idTable->getColumn(column);
+  ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
+      0, idTable->size(),
+      [&parser, &geoms, &leftOrRightSide](size_t row) {
+        parser.addValueIdToQueue(geoms[row], row, leftOrRightSide);
+      },
+      [this]() { throwIfCancelled(); });
 
   // Wait for all parser threads to finish, then return the bounding box of all
   // the geometries parsed so far.
   parser.done();
 
-  prefilterCounter = parser.getPrefilterCounter();
+  auto prefilterCounter = parser.getPrefilterCounter();
   if (spatialJoin_.has_value() && prefilterBox.has_value()) {
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", prefilterCounter);
