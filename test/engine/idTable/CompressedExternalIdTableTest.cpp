@@ -141,7 +141,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
         } else {
           return writer.sortedView();
         }
-      }();
+      };
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
             generator(), numDynamicColumns);
