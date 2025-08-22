@@ -68,12 +68,6 @@ class TextIndexBuilder : public IndexImpl {
   cppcoro::generator<WordsFileLine> wordsInLiterals(
       TextRecordIndex& contextId) const;
 
-  cppcoro::generator<WordsFileLine> wordsInLiteralsFromIndices(
-      TextRecordIndex& contextId) const;
-
-  cppcoro::generator<WordsFileLine> wordsInLiteralsFromVocabulary(
-      TextRecordIndex& contextId) const;
-
   // This is used in wordsInTextRecords to split up a literal given from a
   // text into the respective `WordsFileLines`. The first line is the
   // whole literal treated as entity and the following lines are the single

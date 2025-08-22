@@ -50,8 +50,25 @@ void TextIndexBuilder::buildTextIndexFile(
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
                 bAndKParamForTextScoring_};
 
+  // Build the Mmap vector containing `VocabIndex`es of all relevant literals
+  // if it hasn't been build during RDF index building and option to add
+  // literals was set
+  if (!textIndexIndices_.has_value() && addWordsFromLiterals) {
+    textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+        onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::CreateTag{});
+    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
+         index = index.incremented()) {
+      auto text = vocab_[index];
+      if (!isLiteral(text)) {
+        continue;
+      }
+      textIndexIndices_.value().push_back(index);
+    }
+  }
+
   // Build the text vocabulary (first scan over the text records).
   processWordsForVocabulary(wordsFile, addWordsFromLiterals);
+
   // Calculate the score data for the words
   scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
                                 vocab_);
@@ -164,16 +181,6 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiterals(
     TextRecordIndex& contextId) const {
-  if (textIndexIndices_.has_value()) {
-    return wordsInLiteralsFromIndices(contextId);
-  } else {
-    return wordsInLiteralsFromVocabulary(contextId);
-  }
-}
-
-// _____________________________________________________________________________
-cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiteralsFromIndices(
-    TextRecordIndex& contextId) const {
   auto localeManager = textVocab_.getLocaleManager();
   for (const auto& index : textIndexIndices_.value()) {
     // We need the explicit cast to `std::string` because the return type of
@@ -181,23 +188,6 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiteralsFromIndices(
     // uncompressed in memory.
     for (auto line : literalToWordsFileLines(std::string{vocab_[index]},
                                              contextId, localeManager)) {
-      co_yield line;
-    }
-  }
-}
-
-// _____________________________________________________________________________
-cppcoro::generator<WordsFileLine>
-TextIndexBuilder::wordsInLiteralsFromVocabulary(
-    TextRecordIndex& contextId) const {
-  auto localeManager = textVocab_.getLocaleManager();
-  for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-       index = index.incremented()) {
-    auto text = vocab_[index];
-    if (!isLiteral(text)) {
-      continue;
-    }
-    for (auto line : literalToWordsFileLines(text, contextId, localeManager)) {
       co_yield line;
     }
   }

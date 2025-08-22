@@ -340,12 +340,16 @@ TEST(TextIndexScanForWord, NoLiteralIndicesFile) {
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
   // Tests if the correct texts are retrieved from a mix of non literal and
-  // literal texts. Literals are empty since indices haven't been loaded
+  // literal texts. Literals shouldn't be empty since the textIndexIndices_
+  // file should have been built by TextIndexBuilder.
   TextResult tr{qec, result};
   ASSERT_EQ(withSecond("tester"), tr.getRow(0));
-  ASSERT_EQ(h::combineToString("", "test"), tr.getRow(1));
-  ASSERT_EQ(h::combineToString("", "testing"), tr.getRow(2));
-  ASSERT_EQ(h::combineToString("", "test"), tr.getRow(3));
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"), tr.getRow(1));
+  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+            tr.getRow(2));
+  ASSERT_EQ(
+      h::combineToString("\"the test on friday was really hard\"", "test"),
+      tr.getRow(3));
 
   // Tests if the correct texts are retrieved from the non literal texts
   TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
