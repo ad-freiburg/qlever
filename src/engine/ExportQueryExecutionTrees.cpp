@@ -330,8 +330,14 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
           // legal syntax for RDF. Also NaN and INF are only legal for floating
           // point types (float and double), not decimal, so we make a special
           // exception here.
-          return std::pair{std::isnan(d) ? "NaN"s : (d > 0 ? "INF"s : "-INF"s),
-                           XSD_DOUBLE_TYPE};
+          std::string literal = [d]() {
+            if (std::isnan(d)) {
+              return "NaN";
+            }
+            AD_CORRECTNESS_CHECK(std::isinf(d));
+            return d > 0 ? "INF" : "-INF";
+          }();
+          return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
         }
         // Format as integer if fractional part is zero, let C++ decide
         // otherwise.
