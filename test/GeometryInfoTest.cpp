@@ -6,7 +6,6 @@
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -36,8 +35,14 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-constexpr std::string_view litInvalid =
+constexpr std::string_view litInvalidType =
     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidBrackets =
+    "\"POLYGON)2 4, 4 4, 4 2, 2 2(\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidNumCoords =
+    "\"POINT(1)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -101,7 +106,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
   checkGeoInfo(g7, exp7);
 
-  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
   checkGeoInfo(g8, std::nullopt);
 }
 
@@ -220,7 +225,9 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  checkInvalidLiteral(litInvalid);
+  checkInvalidLiteral(litInvalidType);
+  checkInvalidLiteral(litInvalidBrackets, true);
+  checkInvalidLiteral(litInvalidNumCoords, true);
 }
 
 // ____________________________________________________________________________
@@ -230,6 +237,15 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
                     {2});
   checkGeometryType(
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, WebMercProjection) {
+  util::geo::DBox b1{{1, 2}, {3, 4}};
+  auto b1WebMerc = boxToWebMerc(b1);
+  auto result1 =
+      ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+  checkUtilBoundingBox(result1, b1);
 }
 
 }  // namespace

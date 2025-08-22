@@ -218,10 +218,11 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
+    size_t firstBlock = startOfSingleIdTables_.at(index);
     size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size()};
-    auto readBlocks = ql::views::iota(index, lastBlock) |
+    auto readBlocks = ql::views::iota(firstBlock, lastBlock) |
                       ql::views::transform([this](auto blockIdx) {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
@@ -683,6 +684,10 @@ class CompressedExternalIdTableSorter
         AD_CORRECTNESS_CHECK(b.first != b.second);
       }
       ql::ranges::make_heap(priorityQueue_, comp_);
+      // Without that call, `begin() != end()` would always hold (even for empty
+      // sorters), and `*begin()` would always yield an empty block (even for
+      // non-empty sorters).
+      next();
     }
 
     bool isFinished() {
@@ -733,14 +738,18 @@ class CompressedExternalIdTableSorter
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
-        return InputRangeTypeErased{
-            lazySingleValueRange([this]() -> IdTableStatic<N> {
-              if (this->moveResultOnMerge_) {
-                return std::move(this->currentBlock_).template toStatic<N>();
-              } else {
-                return this->currentBlock_.clone().template toStatic<N>();
-              }
-            })};
+        return block.empty()
+                   ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
+                   : InputRangeTypeErased{
+                         lazySingleValueRange([this]() -> IdTableStatic<N> {
+                           if (this->moveResultOnMerge_) {
+                             return std::move(this->currentBlock_)
+                                 .template toStatic<N>();
+                           } else {
+                             return this->currentBlock_.clone()
+                                 .template toStatic<N>();
+                           }
+                         })};
       }
       namespace rv = ::ranges::views;
       auto chunked =

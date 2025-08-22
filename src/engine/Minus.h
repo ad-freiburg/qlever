@@ -54,6 +54,13 @@ class Minus : public Operation {
   // implementation of this function.
   auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
 
+  // Helper function to copy all rows from `left` that have a corresponding
+  // value of `reference` in `keepEntry`.
+  template <typename T>
+  IdTable copyMatchingRows(
+      const IdTable& left, T reference,
+      const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const;
+
  public:
   size_t getCostEstimate() override;
 
@@ -77,9 +84,24 @@ class Minus : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
+
+  // Lazily compute the minus join of two results when at least one of the
+  // results is computed lazily. This currently only works if we have just a
+  // single join column, otherwise this function will throw.
+  Result lazyMinusJoin(std::shared_ptr<const Result> left,
+                       std::shared_ptr<const Result> right,
+                       bool requestLaziness);
+
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MINUS_H

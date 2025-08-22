@@ -56,6 +56,17 @@ struct JoinTestCase {
   bool resultMustBeSortedByJoinColumn;
 };
 
+void removeJoinColFromVarColMap(const Variable& var, VariableToColumnMap& map) {
+  auto colIdx = map.at(var).columnIndex_;
+  map.erase(var);
+  for (auto& [_, info] : map) {
+    auto& [idx, status] = info;
+    if (idx > colIdx) {
+      --idx;
+    }
+  }
+}
+
 /*
  * @brief Goes through the sets of tests, joins them together with the given
  * join function and compares the results with the given expected content.
@@ -300,7 +311,10 @@ auto I = ad_utility::testing::IntId;
 using Var = Variable;
 }  // namespace
 
-TEST(JoinTest, joinWithFullScanPSO) {
+struct JoinTestParametrized : public ::testing::TestWithParam<bool> {};
+
+TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
+  bool keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> <x>. <x> <a> 3.");
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
@@ -309,7 +323,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto valuesTree =
       makeValuesForSingleVariable(qec, "?p", {iri("<o>"), iri("<a>")});
 
-  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
 
@@ -322,9 +336,16 @@ TEST(JoinTest, joinWithFullScanPSO) {
       {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?s"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
+
+  if (!keepJoinCol) {
+    removeJoinColFromVarColMap(Variable{"?p"}, expectedVariables);
+    using C = ColumnIndex;
+    expected.setColumnSubset(std::array{C{1}, C{2}});
+  }
+
   testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0, keepJoinCol};
   testJoinOperation(joinSwitched,
                     makeExpectedColumns(expectedVariables, expected));
 
@@ -343,7 +364,13 @@ TEST(JoinTest, joinWithFullScanPSO) {
         {Variable{"?o"}, makeAlwaysDefinedColumn(2)},
         {Variable{"?p2"}, makeAlwaysDefinedColumn(3)},
         {Variable{"?s2"}, makeAlwaysDefinedColumn(4)}};
-    auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 0};
+    auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 0, keepJoinCol};
+
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      using C = ColumnIndex;
+      expected.setColumnSubset(std::array{C{1}, C{2}, C{3}, C{4}});
+    }
     testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
   }
 }
@@ -351,8 +378,9 @@ TEST(JoinTest, joinWithFullScanPSO) {
 // The following two tests run different code depending on the setting of the
 // maximal size for materialized index scans. That's why they are run twice with
 // different settings.
-TEST(JoinTest, joinWithColumnAndScan) {
-  auto test = [](size_t materializationThreshold) {
+TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
+  bool keepJoinCol = GetParam();
+  auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -362,7 +390,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
         qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto valuesTree = makeValuesForSingleVariable(qec, "?s", {iri("<x>")});
 
-    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     auto getId = ad_utility::testing::makeGetId(qec->getIndex());
@@ -371,9 +399,13 @@ TEST(JoinTest, joinWithColumnAndScan) {
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array{ColumnIndex{1}});
+    }
     testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0, keepJoinCol};
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
   };
@@ -384,8 +416,10 @@ TEST(JoinTest, joinWithColumnAndScan) {
   test(1'000'000);
 }
 
-TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
-  auto test = [](size_t materializationThreshold, bool lazyJoinValues) {
+TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
+  auto keepJoinCol = GetParam();
+  auto test = [keepJoinCol](size_t materializationThreshold,
+                            bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -398,16 +432,21 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
             qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}}, false,
             std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
             !lazyJoinValues);
-    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     auto expected = IdTable{2, qec->getAllocator()};
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
+
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array{ColumnIndex{1}});
+    }
     testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0, keepJoinCol};
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
   };
@@ -420,8 +459,10 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
   }
 }
 
-TEST(JoinTest, joinWithColumnAndScanUndefValues) {
-  auto test = [](size_t materializationThreshold, bool lazyJoinValues) {
+TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
+  auto keepJoinCol = GetParam();
+  auto test = [keepJoinCol](size_t materializationThreshold,
+                            bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -434,7 +475,7 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
         qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}}, false,
         std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
         !lazyJoinValues);
-    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+    auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     auto getId = ad_utility::testing::makeGetId(qec->getIndex());
@@ -444,6 +485,10 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array{ColumnIndex{1}});
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
 
     qec->getQueryTreeCache().clearAll();
@@ -452,7 +497,7 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, false);
 
-    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+    auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0, keepJoinCol};
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, true,
                       materializationThreshold < 3);
@@ -468,8 +513,9 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
   }
 }
 
-TEST(JoinTest, joinTwoScans) {
-  auto test = [](size_t materializationThreshold) {
+TEST_P(JoinTestParametrized, joinTwoScans) {
+  auto keepJoinCol = GetParam();
+  auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec(
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
     auto cleanup =
@@ -479,7 +525,7 @@ TEST(JoinTest, joinTwoScans) {
         qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p2>"), Var{"?q"}});
-    auto join = Join{qec, scanP2, scanP, 0, 0};
+    auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     auto id = ad_utility::testing::makeGetId(qec->getIndex());
@@ -489,6 +535,10 @@ TEST(JoinTest, joinTwoScans) {
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array{ColumnIndex{1}, ColumnIndex{2}});
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
 
     qec->getQueryTreeCache().clearAll();
@@ -497,7 +547,7 @@ TEST(JoinTest, joinTwoScans) {
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, false);
 
-    auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
+    auto joinSwitched = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, true,
                       materializationThreshold <= 3);
@@ -514,7 +564,8 @@ TEST(JoinTest, joinTwoScans) {
 // This is a regression test for an issue that was reported in
 // https://github.com/ad-freiburg/qlever/issues/1893 and heavily simplified so
 // it can be reproduced in a unit test.
-TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
+TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
+  auto keepJoinCol = GetParam();
   ad_utility::testing::TestIndexConfig config{
       "<x> <p1> <1> <g1> . <x> <p1> <2> <g1> . <x> <p2> <1> <g2> ."
       " <x> <p2> <2> <g2> ."};
@@ -533,17 +584,21 @@ TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
       SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<2>")},
       std::optional{
           ad_utility::HashSet<TripleComponent>{Iri::fromIriref("<g2>")}});
-  auto join = Join{qec, scanP2, scanP, 0, 0};
+  auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
 
   VariableToColumnMap expectedVariables{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
-  auto expectedColumns =
-      makeExpectedColumns(expectedVariables, IdTable{1, qec->getAllocator()});
+  if (!keepJoinCol) {
+    removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+  }
+  auto expected = keepJoinCol ? IdTable{1, qec->getAllocator()}
+                              : IdTable{0, qec->getAllocator()};
+  auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
 
   qec->getQueryTreeCache().clearAll();
   testJoinOperation(join, expectedColumns, true, true);
 
-  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
+  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
   qec->getQueryTreeCache().clearAll();
   testJoinOperation(joinSwitched, expectedColumns, true, true);
 }
@@ -552,9 +607,10 @@ TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
 // https://github.com/ad-freiburg/qlever/issues/1893 where the join of two index
 // scans would fail if one element could potentially be found in multiple blocks
 // of the respective other side.
-TEST(JoinTest, joinTwoScansWithSubjectInMultipleBlocks) {
+TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
   // Default block size is 16 bytes for testing, so the triples are spread
   // across 3 blocks in total.
+  auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec(
       "<x> <p1> <1> . <x> <p1> <2> . <x> <p1> <3> . <x> <p1> <4> ."
       " <x> <p2> <5>");
@@ -565,7 +621,7 @@ TEST(JoinTest, joinTwoScansWithSubjectInMultipleBlocks) {
       qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Var{"?o1"}});
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
       qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p2>"), Var{"?o2"}});
-  auto join = Join{qec, scanP2, scanP, 0, 0};
+  auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
   auto expected = makeIdTableFromVector({{id("<x>"), id("<1>"), id("<5>")},
@@ -576,12 +632,16 @@ TEST(JoinTest, joinTwoScansWithSubjectInMultipleBlocks) {
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?o1"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?o2"}, makeAlwaysDefinedColumn(2)}};
+  if (!keepJoinCol) {
+    removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+    expected.setColumnSubset(std::array{ColumnIndex{1}, ColumnIndex{2}});
+  }
   auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
 
   qec->getQueryTreeCache().clearAll();
   testJoinOperation(join, expectedColumns, true, true);
 
-  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
+  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
   qec->getQueryTreeCache().clearAll();
   testJoinOperation(joinSwitched, expectedColumns, true, true);
 }
@@ -597,13 +657,15 @@ TEST(JoinTest, invalidJoinVariable) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
-  auto performJoin = [](std::vector<IdTable> leftTables,
-                        std::vector<IdTable> rightTables,
-                        const IdTable& expected,
-                        bool expectPossiblyUndefinedResult,
-                        ad_utility::source_location loc =
-                            ad_utility::source_location::current()) {
+TEST_P(JoinTestParametrized, joinTwoLazyOperationsWithAndWithoutUndefValues) {
+  auto keepJoinCol = GetParam();
+  auto performJoin = [keepJoinCol](std::vector<IdTable> leftTables,
+                                   std::vector<IdTable> rightTables,
+                                   const IdTable& expectedIn,
+                                   bool expectPossiblyUndefinedResult,
+                                   ad_utility::source_location loc =
+                                       ad_utility::source_location::current()) {
+    IdTable expected = expectedIn.clone();
     auto l = generateLocationTrace(loc);
     auto qec = ad_utility::testing::getQec();
     auto cleanup =
@@ -619,8 +681,12 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
         {Variable{"?s"}, expectPossiblyUndefinedResult
                              ? makePossiblyUndefinedColumn(0)
                              : makeAlwaysDefinedColumn(0)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array<ColumnIndex, 0>{});
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
-    auto join = Join{qec, leftTree, rightTree, 0, 0};
+    auto join = Join{qec, leftTree, rightTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     qec->getQueryTreeCache().clearAll();
@@ -628,7 +694,7 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, false);
 
-    auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
+    auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0, keepJoinCol};
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, true, true);
     qec->getQueryTreeCache().clearAll();
@@ -684,13 +750,17 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
-  auto performJoin = [](IdTable leftTable, std::vector<IdTable> rightTables,
-                        const IdTable& expected,
-                        bool expectPossiblyUndefinedResult,
-                        ad_utility::source_location loc =
-                            ad_utility::source_location::current()) {
+TEST_P(JoinTestParametrized,
+       joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
+  auto keepJoinCol = GetParam();
+  auto performJoin = [keepJoinCol](IdTable leftTable,
+                                   std::vector<IdTable> rightTables,
+                                   const IdTable& expectedIn,
+                                   bool expectPossiblyUndefinedResult,
+                                   ad_utility::source_location loc =
+                                       ad_utility::source_location::current()) {
     auto l = generateLocationTrace(loc);
+    IdTable expected = expectedIn.clone();
     auto qec = ad_utility::testing::getQec();
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -706,8 +776,12 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
         {Variable{"?s"}, expectPossiblyUndefinedResult
                              ? makePossiblyUndefinedColumn(0)
                              : makeAlwaysDefinedColumn(0)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array<ColumnIndex, 0>{});
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
-    auto join = Join{qec, leftTree, rightTree, 0, 0};
+    auto join = Join{qec, leftTree, rightTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     qec->getQueryTreeCache().clearAll();
@@ -715,7 +789,7 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, false);
 
-    auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
+    auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0, keepJoinCol};
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, true);
     qec->getQueryTreeCache().clearAll();
@@ -762,7 +836,8 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
+TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
+  auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec();
   auto cleanup =
       setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(0);
@@ -771,9 +846,7 @@ TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
   auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
       std::vector<ColumnIndex>{0});
-  VariableToColumnMap expectedVariables{
-      {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
-  Join join{qec, leftTree, rightTree, 0, 0};
+  Join join{qec, leftTree, rightTree, 0, 0, keepJoinCol};
 
   auto result = join.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
@@ -785,7 +858,8 @@ TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinTest, verifyColumnPermutationsAreAppliedCorrectly) {
+TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
+  auto keepJoinCol = GetParam();
   auto qec =
       ad_utility::testing::getQec("<x> <p> <g>. <x2> <p> <h>. <x> <a> <i>.");
   auto cleanup =
@@ -807,8 +881,12 @@ TEST(JoinTest, verifyColumnPermutationsAreAppliedCorrectly) {
         {Variable{"?v"}, makePossiblyUndefinedColumn(3)},
         {Variable{"?w"}, makePossiblyUndefinedColumn(4)}};
     auto expected = makeIdTableFromVector({{I(1), U, U, U, I(10)}});
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array<ColumnIndex, 4>{1, 2, 3, 4});
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
-    auto join = Join{qec, leftTree, rightTree, 1, 2};
+    auto join = Join{qec, leftTree, rightTree, 1, 2, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     qec->getQueryTreeCache().clearAll();
@@ -832,8 +910,16 @@ TEST(JoinTest, verifyColumnPermutationsAreAppliedCorrectly) {
     auto expected =
         makeIdTableFromVector({{id("<x>"), I(1), I(2), id("<g>")},
                                {id("<x2>"), I(1), I(2), id("<h>")}});
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);
+      expected.setColumnSubset(std::array<ColumnIndex, 3>{
+          1,
+          2,
+          3,
+      });
+    }
     auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
-    auto join = Join{qec, leftTree, fullScanPSO, 2, 0};
+    auto join = Join{qec, leftTree, fullScanPSO, 2, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
     qec->getQueryTreeCache().clearAll();
@@ -863,7 +949,8 @@ TEST(JoinTest, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(JoinTest, columnOriginatesFromGraphOrUndef) {
+TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
+  auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
@@ -901,15 +988,21 @@ TEST(JoinTest, columnOriginatesFromGraphOrUndef) {
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?b"}}));
 
-  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
-                             std::shared_ptr<QueryExecutionTree> right, bool a,
-                             bool b, bool c,
-                             ad_utility::source_location location =
-                                 ad_utility::source_location::current()) {
+  auto testWithTrees = [qec, keepJoinCol](
+                           std::shared_ptr<QueryExecutionTree> left,
+                           std::shared_ptr<QueryExecutionTree> right, bool a,
+                           bool b, bool c,
+                           ad_utility::source_location location =
+                               ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(location);
 
-    Join join{qec, std::move(left), std::move(right), 0, 0, false};
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+    Join join{qec, std::move(left), std::move(right), 0, 0, keepJoinCol, false};
+    if (keepJoinCol) {
+      EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+    } else {
+      EXPECT_THROW(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}),
+                   ad_utility::Exception);
+    }
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
     EXPECT_THROW(
@@ -934,3 +1027,7 @@ TEST(JoinTest, columnOriginatesFromGraphOrUndef) {
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);
 }
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(JoinTestWithAndWithoutKeptJoinColumn,
+                         JoinTestParametrized, ::testing::Values(true, false));
