@@ -70,6 +70,9 @@ size_t ExistsJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+  if (rightIndexNestedLoopJoinIsPossible()) {
+    return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
+  }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }
@@ -271,16 +274,19 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
-  auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                            right_);
-  };
+bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
+  auto sort = std::dynamic_pointer_cast<Sort>(left_->getRootOperation());
+  return sort && left_->getSizeEstimate() >= right_->getSizeEstimate() &&
+         qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                          right_);
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
   auto sort = std::dynamic_pointer_cast<Sort>(right_->getRootOperation());
-  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate() ||
-      !alwaysDefined()) {
+  if (!sort || left_->getSizeEstimate() > right_->getSizeEstimate()) {
     return std::nullopt;
   }
 
@@ -294,12 +300,56 @@ std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
   result.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(
-          ad_utility::OwningView{nestedLoopJoin.computeExistance()},
+          ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()},
           [](char tracker) { return Id::makeFromBool(tracker != 0); }),
       result.getColumn(result.numColumns() - 1).begin(),
       qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable() {
+  // This algorithm only works well if the right side is smaller and we can
+  // avoid sorting the left side. It currently doesn't support undef.
+  if (!rightIndexNestedLoopJoinIsPossible()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+      std::dynamic_pointer_cast<Sort>(left_->getRootOperation()));
+  auto rightRes = right_->getResult(false);
+
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      joinColumns_, std::move(leftRes), std::move(rightRes)};
+  auto result = nestedLoopJoin.computeRightExistance(
+      [this](auto&& idTable, LocalVocab localVocab,
+             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
+                 matchingTracker) {
+        IdTable resultTable = idTable.moveOrClone();
+        resultTable.addEmptyColumn();
+        ad_utility::chunkedCopy(
+            ql::views::transform(
+                matchingTracker,
+                [](bool tracker) { return Id::makeFromBool(tracker); }),
+            resultTable.getColumn(resultTable.numColumns() - 1).begin(),
+            qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+        return Result::IdTableVocabPair{std::move(resultTable),
+                                        std::move(localVocab)};
+      });
+  return std::optional{Result{std::move(result), resultSortedOn()}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
+                                                        right_)) {
+    return std::nullopt;
+  }
+  if (auto leftResult = tryRightIndexNestedLoopJoinIfSuitable()) {
+    return leftResult;
+  }
+  return tryLeftIndexNestedLoopJoinIfSuitable();
 }
 
 // _____________________________________________________________________________

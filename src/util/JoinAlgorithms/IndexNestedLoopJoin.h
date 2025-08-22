@@ -37,6 +37,22 @@ struct Filler {
   }
 };
 
+// Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
+// rows from the right have found a match so far.
+struct RightFiller {
+  std::vector<bool, ad_utility::AllocatorWithLimit<bool>> matchTracker_;
+
+  explicit RightFiller(size_t size,
+                       const ad_utility::AllocatorWithLimit<bool>& allocator)
+      : matchTracker_(size, false, allocator) {}
+
+  AD_ALWAYS_INLINE void track(size_t, size_t size, size_t offset) {
+    if (size > 0) {
+      matchTracker_.at(offset) = true;
+    }
+  }
+};
+
 // Helper class for `IndexNestedLoopJoin::matchLeft` tracks matches to be used
 // by `OptionalJoin`.
 struct Adder {
@@ -220,9 +236,7 @@ class IndexNestedLoopJoin {
                       std::shared_ptr<const Result> rightResult)
       : joinColumns_{std::move(joinColumns)},
         leftResult_{std::move(leftResult)},
-        rightResult_{std::move(rightResult)} {
-    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
-  }
+        rightResult_{std::move(rightResult)} {}
 
  private:
   // Checks with entries in `rightTable` match entries in `leftTable`, and
@@ -254,8 +268,56 @@ class IndexNestedLoopJoin {
   }
 
  public:
-  // Main function for MINUS and EXISTS operations.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> computeExistance() {
+  // Function for MINUS and EXISTS operations when the right side is fully
+  // materialized.
+  Result::LazyResult computeRightExistance(auto transformationFunc) {
+    std::vector<ColumnIndex> leftColumns;
+    std::vector<ColumnIndex> rightColumns;
+    for (const auto& [leftCol, rightCol] : joinColumns_) {
+      leftColumns.push_back(leftCol);
+      rightColumns.push_back(rightCol);
+    }
+    return ad_utility::callFixedSizeVi(
+        static_cast<int>(joinColumns_.size()),
+        [this, leftColumns = std::move(leftColumns), &rightColumns,
+         transformationFunc = std::move(transformationFunc)](
+            auto JOIN_COLUMNS) -> Result::LazyResult {
+          IdTableView<JOIN_COLUMNS> rightTable =
+              rightResult_->idTable()
+                  .asColumnSubsetView(rightColumns)
+                  .template asStaticView<JOIN_COLUMNS>();
+          auto matchHelper =
+              [rightTable = std::move(rightTable),
+               leftColumns = std::move(leftColumns), JOIN_COLUMNS,
+               transformationFunc = std::move(transformationFunc)](
+                  auto&& idTable,
+                  LocalVocab localVocab) -> Result::IdTableVocabPair {
+            detail::RightFiller matchTracker{
+                idTable.size(), idTable.getAllocator().template as<bool>()};
+            matchLeft(matchTracker, rightTable,
+                      idTable.asColumnSubsetView(leftColumns)
+                          .template asStaticView<JOIN_COLUMNS>());
+            return transformationFunc(AD_FWD(idTable), std::move(localVocab),
+                                      matchTracker.matchTracker_);
+          };
+          if (leftResult_->isFullyMaterialized()) {
+            return Result::LazyResult{std::array{matchHelper(
+                leftResult_->idTable(), leftResult_->getCopyOfLocalVocab())}};
+          }
+          return Result::LazyResult{ad_utility::CachingTransformInputRange{
+              leftResult_->idTables(),
+              [matchHelper = std::move(matchHelper)](auto& pair) {
+                return matchHelper(std::move(pair.idTable_),
+                                   std::move(pair.localVocab_));
+              }}};
+        });
+  }
+
+  // Function for MINUS and EXISTS operations when the left side is fully
+  // materialized.
+  std::vector<char, ad_utility::AllocatorWithLimit<char>>
+  computeLeftExistance() {
+    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Filler matchTracker{
         leftResult_->idTable().size(),
         leftResult_->idTable().getAllocator().as<char>()};
@@ -295,6 +357,7 @@ class IndexNestedLoopJoin {
       bool yieldOnce, size_t resultWidth,
       ad_utility::SharedCancellationHandle cancellationHandle,
       size_t numColsRight, bool keepJoinColumns) && {
+    AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Adder matchTracker{leftResult_->idTable().size(),
                                leftResult_->idTable().getAllocator().as<char>(),
                                std::move(cancellationHandle),

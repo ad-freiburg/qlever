@@ -233,15 +233,14 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
-  auto alwaysDefined = [this]() {
-    return qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
-                                                            _left, _right);
-  };
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
+                                                        _right)) {
+    return std::nullopt;
+  }
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
   auto sort = std::dynamic_pointer_cast<Sort>(_right->getRootOperation());
-  if (!sort || _left->getSizeEstimate() > _right->getSizeEstimate() ||
-      !alwaysDefined()) {
+  if (!sort || _left->getSizeEstimate() > _right->getSizeEstimate()) {
     return std::nullopt;
   }
 
@@ -253,7 +252,7 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};
 
-  auto nonMatchingEntries = nestedLoopJoin.computeExistance();
+  auto nonMatchingEntries = nestedLoopJoin.computeLeftExistance();
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};

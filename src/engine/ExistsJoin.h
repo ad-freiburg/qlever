@@ -82,6 +82,12 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  bool rightIndexNestedLoopJoinIsPossible() const;
+
+  std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
+
+  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable();
+
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
