@@ -611,8 +611,10 @@ class CompressedExternalIdTableSorter
   // will be automatically determined from the given memory limit.
   template <size_t N = NumStaticCols>
   requires(N == NumStaticCols || N == 0)
-  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
+    // TODO<joka921> It is important that we only check this once the iterator
+    // actually starts apparently, otherwise there will be some test failures.
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
@@ -620,13 +622,15 @@ class CompressedExternalIdTableSorter
     // generator, one block is buffered inside the `sortedBlocks` generator, so
     // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
     // stream.
-    for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks<N>(blocksize),
-             std::max(1, numBufferedOutputBlocks_ - 2))) {
-      co_yield block;
-    }
-    this->isFirstIteration_ = false;
-    mergeIsActive_.store(false);
+    using namespace ad_utility;
+    return InputRangeTypeErased{
+        CallbackOnEndView{ad_utility::streams::runStreamAsync(
+                              sortedBlocks<N>(blocksize),
+                              std::max(1, numBufferedOutputBlocks_ - 2)),
+                          [&, this]() {
+                            this->isFirstIteration_ = false;
+                            mergeIsActive_.store(false);
+                          }}};
   }
 
   // The implementation of the type-erased interface. Push a complete block at

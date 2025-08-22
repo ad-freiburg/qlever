@@ -220,32 +220,27 @@ IndexImpl::buildOspWithPatterns(
         queue.finish();
       }};
 
-  auto get{[&queue]() -> std::optional<IdTableStatic<0>> {
-    if (auto block = queue.pop()) {
-      return fixBlockAfterPatternJoin(std::move(block));
-    }
-
-    return std::nullopt;
-  }};
-
   // Set up a generator that yields blocks with the following columns:
   // S P O PatternOfS PatternOfO, sorted by OPS.
   // If an exception occurs in the block that is consuming the blocks yielded
   // from this generator, we have to explicitly finish the `queue`, otherwise
   // there will be a deadlock because the threads involved in the queue can
   // never join.
-  auto generatorViewWithCallback = ad_utility::CallbackOnEndView{
-      ad_utility::OwningView{ad_utility::InputRangeTypeErased{
-          ad_utility::InputRangeFromGetCallable{std::move(get)}}},
-      [&queue]() { queue.finish(); }};
-  auto inputRange =
-      ad_utility::InputRangeTypeErased{std::move(generatorViewWithCallback)};
-
+  auto get{[&queue]() -> std::optional<IdTableStatic<0>> {
+    if (auto block = queue.pop()) {
+      return fixBlockAfterPatternJoin(std::move(block));
+    }
+    return std::nullopt;
+  }};
+  using namespace ad_utility;
+  auto blockGenerator = InputRangeTypeErased{
+      CallbackOnEndView{InputRangeFromGetCallable{std::move(get)},
+                        [&queue]() { queue.finish(); }}};
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2,
-                              std::move(inputRange), *thirdSorter);
+                              std::move(blockGenerator), *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
@@ -276,6 +271,8 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
 
+  // TODO<joka921> As soon as `uniqueBlockView` is no longer a `generator` the
+  // explicit `BlocksOfTriples` constructor can be removed again.
   auto internalTriplesUnique = BlocksOfTriples{ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>())};
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
@@ -397,20 +394,12 @@ void IndexImpl::createFromFiles(
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
 
-    // TODO: once src/engine/idTable/CompressedExternalIdTable.h will be
-    // nocppcoro then InputRangeTypeErase below could be removed
-    auto secondSorterBlocks{
-        ad_utility::InputRangeTypeErased{secondSorter.getSortedBlocks<0>()}};
     createSecondPermutationPair(NumColumnsIndexBuilding,
-                                std::move(secondSorterBlocks), thirdSorter);
+                                secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
 
-    // TODO: once src/engine/idTable/CompressedExternalIdTable.h will be
-    // nocppcoro then InputRangeTypeErase below could be removed
-    auto thirdSorterBlocks{
-        ad_utility::InputRangeTypeErased{thirdSorter.getSortedBlocks<0>()}};
     createThirdPermutationPair(NumColumnsIndexBuilding,
-                               std::move(thirdSorterBlocks));
+                               thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -423,12 +412,8 @@ void IndexImpl::createFromFiles(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-
-    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{
-        thirdSorterPtr->template getSortedBlocks<0>()}};
-
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-                               std::move(thirdSorterBlocks));
+                               thirdSorterPtr->template getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
 
