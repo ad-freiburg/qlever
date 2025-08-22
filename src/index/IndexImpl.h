@@ -91,8 +91,6 @@ class IndexImpl {
  public:
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // Block Id, isEntity, Context Id, Word Id, Score
-  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -124,8 +122,8 @@ class IndexImpl {
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
-  std::vector<WordIndex> blockBoundaries_;
-  off_t currenttOffset_;
+  // A block boundary is always the last WordId in the block.
+  std::vector<WordVocabIndex> blockBoundaries_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
@@ -363,12 +361,12 @@ class IndexImpl {
     // range
     bool computeHasToBeFiltered(
         const IdRange<WordVocabIndex>& includingIdRange) const {
-      return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
-               tbmd_._lastWordId <= includingIdRange.last().get());
+      return !(tbmd_._firstWordId >= includingIdRange.first() &&
+               tbmd_._lastWordId <= includingIdRange.last());
     }
   };
 
-  std::string_view wordIdToString(WordIndex wordIndex) const;
+  std::string_view wordIdToString(WordVocabIndex wordIndex) const;
 
   /**
    *
@@ -645,8 +643,6 @@ class IndexImpl {
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       TextScanMode textScanMode) const;
-
-  TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;

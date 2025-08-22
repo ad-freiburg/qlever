@@ -96,19 +96,18 @@ void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
       logWordNotFound(word, wordNotFoundErrorMsgCount);
       continue;
     }
-    WordIndex currentWordId = wvi.get();
     // Increases the docLength of document with is nofWords of a document
     ++docLengthMap_[docId];
     ++totalDocumentLength_;
     // Increase the TermFrequency for a word in the doc
-    ++invertedIndex_[currentWordId][docId];
+    ++invertedIndex_[wvi][docId];
   }
   ++nofDocuments_;
   docIdSet_.insert(docId);
 }
 
 // ____________________________________________________________________________
-float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
+float ScoreData::getScore(WordVocabIndex wordIndex, TextRecordIndex contextId) {
   AD_CORRECTNESS_CHECK(!(scoringMetric_ == TextScoringMetric::EXPLICIT),
                        "This method shouldn't be called for explicit scores.");
   // Retrieve inner map

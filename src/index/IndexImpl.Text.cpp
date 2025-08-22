@@ -114,21 +114,14 @@ IdTable IndexImpl::mergeTextBlockResults(
 }
 
 // _____________________________________________________________________________
-TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
-  return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
-                          wordIndex) -
-         blockBoundaries_.begin();
-}
-
-// _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
   textIndexFile_.open(std::string(onDiskBase_ + ".text.index").c_str(), "r");
 }
 
 // _____________________________________________________________________________
-std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
-  return textVocab_[WordVocabIndex::make(wordIndex)];
+std::string_view IndexImpl::wordIdToString(WordVocabIndex wordIndex) const {
+  return textVocab_[wordIndex];
 }
 
 // _____________________________________________________________________________
@@ -235,8 +228,8 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     }
     idRange = IdRange{idx, idx};
   }
-  auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
-                                                      idRange.last().get());
+  auto tbmdVector =
+      textMeta_.getBlockInfoByWordRange(idRange.first(), idRange.last());
 
   std::vector<TextBlockMetadataAndWordInfo> result;
   for (auto tbmd : tbmdVector) {
