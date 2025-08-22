@@ -396,11 +396,9 @@ void IndexImpl::createFromFiles(
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-
     createThirdPermutationPair(NumColumnsIndexBuilding,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;

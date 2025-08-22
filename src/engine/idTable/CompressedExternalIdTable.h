@@ -614,15 +614,14 @@ class CompressedExternalIdTableSorter
   requires(N == NumStaticCols || N == 0)
   ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
-    // TODO<joka921> It is important that we only check this once the iterator
-    // actually starts apparently, otherwise there will be some test failures.
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
-    // Explanation for the second argument: One block is buffered by this
-    // generator, one block is buffered inside the `sortedBlocks` generator, so
-    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
-    // stream.
+
+    // Explanation for the second argument of `runStreamAsync`: One block is
+    // buffered by this generator, one block is buffered inside the
+    // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
+    // buffered by the async stream.
     using namespace ad_utility;
     return InputRangeTypeErased{
         CallbackOnEndView{ad_utility::streams::runStreamAsync(
