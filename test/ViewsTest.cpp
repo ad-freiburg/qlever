@@ -10,8 +10,10 @@
 #include <string>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "util/InputRangeUtils.h"
 #include "util/Random.h"
+#include "util/ResetWhenMoved.h"
 #include "util/ValueIdentity.h"
 #include "util/Views.h"
 
@@ -273,34 +275,29 @@ TEST(Views, CallbackOnEndView) {
   // Callback not invoked for the destructor of the moved-from `viewA`.
   EXPECT_EQ(numCalls, 3);
 }
-
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
-  // TODO<joka921> Use `ResetWhenMoved`.
-  // A simple struct that knows if it has been moved from.
-  struct MoveTracker {
-    bool wasMoved_ = false;
-    MoveTracker() = default;
-    MoveTracker(const MoveTracker&) = default;
-    MoveTracker& operator=(const MoveTracker&) = default;
-    MoveTracker(MoveTracker&& rhs)
-        : wasMoved_{std::exchange(rhs.wasMoved_, true)} {}
-    MoveTracker operator=(MoveTracker&& rhs) {
-      wasMoved_ = std::exchange(rhs.wasMoved_, true);
-      return *this;
-    }
-  };
+  // Initial value is `true` and when being moved from it will be `false`.
+  using MoveTracker = ad_utility::ResetWhenMoved<bool, false>;
+  // not moved from.
+  const auto t = MoveTracker{true};
+  // moved from.
+  const auto f = MoveTracker{false};
 
   // This impl tests the different ways an `RvalueView` can be created:
   // Either from a const or mutable input (first argument of type
   // `ValueIdentity<bool>`, And the view is either copied or moved into the
-  // place where its used (second argument).
-  auto testImpl = [](auto isConst, bool doMove) {
-    std::vector<MoveTracker> vec;
-    vec.resize(13);
+  // place where it's used (second argument).
+  auto testImpl = [&t, &f](auto isConst, bool doMove,
+                           ad_utility::source_location loc =
+                               ad_utility::source_location::current()) {
+    auto tr = generateLocationTrace(loc);
+    std::vector<MoveTracker> vec(10, t);
 
     std::vector<MoveTracker> target;
-    // Move the first 5 elements via an `RvalueView` + ql::ranges::copy.
+
+    // Get an `RvalueView` of `vec` which might either be const or not,
+    // depending on the `isConst` parameter.
     auto getView = [&]() {
       if constexpr (isConst) {
         return ad_utility::RvalueView{std::as_const(vec)};
@@ -310,24 +307,24 @@ TEST(Views, RvalueView) {
     };
     static_assert(ql::ranges::random_access_range<
                   std::invoke_result_t<decltype(getView)>>);
+    // Copy or move the first 5 elements of the vector into the `target`
     if (doMove) {
       ql::ranges::copy(getView() | ql::views::take(5),
                        std::back_inserter(target));
     } else {
       auto view = getView();
-      ASSERT_EQ(view.size(), 13);
+      ASSERT_EQ(view.size(), 10);
       ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
     }
     ASSERT_EQ(target.size(), 5);
-    for (size_t i = 0; i < 5; ++i) {
-      ASSERT_NE(vec[i].wasMoved_, isConst);
+    if (isConst) {
+      // Const, no elements were moved.
+      EXPECT_THAT(vec, ::testing::ElementsAre(t, t, t, t, t, t, t, t, t, t));
+    } else {
+      // The first 5 elements were moved
+      EXPECT_THAT(vec, ::testing::ElementsAre(f, f, f, f, f, t, t, t, t, t));
     }
-    for (size_t i = 5; i < vec.size(); ++i) {
-      ASSERT_FALSE(vec[i].wasMoved_);
-    }
-    for (auto& el : target) {
-      ASSERT_FALSE(el.wasMoved_);
-    }
+    EXPECT_THAT(target, ::testing::ElementsAre(t, t, t, t, t));
   };
 
   using namespace ad_utility::use_value_identity;

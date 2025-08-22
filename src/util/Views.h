@@ -13,12 +13,12 @@
 #include "backports/concepts.h"
 #include "backports/iterator.h"
 #include "backports/span.h"
+#include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ResetWhenMoved.h"
-#include "util/SuppressWarnings.h"
 
 namespace ad_utility {
 
@@ -179,7 +179,6 @@ constexpr auto allView(Range&& range) {
         AD_FWD(range)};
   }
 }
-
 template <typename Range>
 using all_t = decltype(allView(std::declval<Range>()));
 
@@ -259,7 +258,8 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // rvalue references via `std::move`. It is implemented via
 // `std::make_move_iterator`.
 CPP_template(typename UnderlyingRange)(
-    requires ql::ranges::view<UnderlyingRange>) class RvalueView
+    requires ql::ranges::view<UnderlyingRange> CPP_and
+        ql::ranges::input_range<UnderlyingRange>) class RvalueView
     : public ql::ranges::view_interface<RvalueView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -293,10 +293,11 @@ CPP_template(typename UnderlyingRange)(
   }
 
   // Begin and end functions implemented using `make_move_iterator`.
+  // Note: We currently don't implement the const `begin` and `end` functions,
+  // but they can be added should they ever become necessary.
   constexpr auto begin() {
     return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
   }
-
   constexpr auto end() {
     if constexpr (ql::ranges::common_range<UnderlyingRange>) {
       return std::move_iterator{ql::ranges::end(underlyingRange_)};
@@ -327,7 +328,8 @@ RvalueView(Range&&) -> RvalueView<all_t<Range>>;
 // and will throw. A possible application is using this wrapper on the result of
 // a `filter_view` where the values are modified in a way that they don't
 // fulfill the predicate anymore. This is technically undefined behavior, but
-// works in practice if the filter_view is treated as an `input_range`
+// works in practice if the filter_view is treated as an `input_range`.
+// In C++26 this will become obsolete by `std::views::to_input`.
 CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
                              ql::ranges::input_range<V>) class ForceInputView
     : public ql::ranges::view_interface<ForceInputView<V>> {
@@ -337,6 +339,9 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
   class Sentinel;
   class Iterator {
+   private:
+    ql::ranges::iterator_t<V> current_;
+
    public:
     using iterator_category = std::input_iterator_tag;
     using value_type = ql::ranges::range_value_t<V>;
@@ -357,25 +362,23 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
     void operator++(int) { ++current_; }
 
     // For GCC-11 the following explicit friend declaration of the
-    // equality (which is defined in the `Sentinel` class below is
-    // required (the much simpler `friend class Sentinel` doesn't work),
-    // but emits a warning which we suppress.
+    // equality (the definition of the operators is in the `Sentinel` class
+    // below) is required. The much simpler `friend class Sentinel` doesn't
+    // work. However, the following friend declaration emits a warning, which we
+    // suppress.
     DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
     friend bool operator==(const Iterator& it, const Sentinel& s);
     friend bool operator!=(const Iterator& it, const Sentinel& s);
-    ENABLE_WARNINGS_GCC_TEMPLATE_FRIEND
-   private:
-    std::ranges::iterator_t<V> current_;
+    GCC_REENABLE_WARNINGS
   };
 
   class Sentinel {
+   private:
+    std::ranges::sentinel_t<V> end_;
+
    public:
     Sentinel() = default;
     explicit Sentinel(ql::ranges::sentinel_t<V> end) : end_(std::move(end)) {}
-
-   private:
-    std::ranges::sentinel_t<V> end_;
-    friend class Iterator;
 
     friend bool operator==(const Iterator& it, const Sentinel& s) {
       return it.current_ == s.end_;
@@ -388,13 +391,16 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
  public:
   ForceInputView() = default;
-  // Input ranges can be moved (if supported by the underlying view)
-  // but not copied.
+
+  // Construct from the underlying view.
+  explicit ForceInputView(V base) : base_(std::move(base)) {}
+
+  // `ForceInputView`s can be moved iff supported by the underlying view
+  // but we currently disallow copies.
   ForceInputView(ForceInputView&&) = default;
   ForceInputView& operator=(ForceInputView&&) = default;
 
-  explicit ForceInputView(V base) : base_(std::move(base)) {}
-
+  // Begin and end functions
   Iterator begin() {
     AD_CONTRACT_CHECK(!std::exchange(beginWasCalled_, true),
                       "Begin was called multiple times on an `input_range`");
@@ -403,6 +409,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
 };
 
+// Deduction guides
 CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
     ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
@@ -570,22 +577,10 @@ CPP_template(typename Range, typename ElementType)(
 }
 }  // namespace ad_utility
 
-// Enabling of "borrowed" ranges for `OwningView` and `RvalueView`.
-// Both are borrowed ranges iff their underlying ranges are borrowed.
-#ifndef QLEVER_CPP_17
-template <typename T>
-inline constexpr bool
-    std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
-        std::ranges::enable_borrowed_range<T>;
-template <typename T>
-inline constexpr bool
-    std::ranges::enable_borrowed_range<ad_utility::RvalueView<T>> =
-        std::ranges::enable_borrowed_range<T>;
-template <typename T>
-inline constexpr bool
-    std::ranges::enable_borrowed_range<ad_utility::ForceInputView<T>> =
-        std::ranges::enable_borrowed_range<T>;
-#endif
+// Enabling of "borrowed" ranges for `OwningView, RvalueView, and
+// ForceInputView`. Note: We always add the definitions for range-v3 (even if
+// our default ranges implementation is `std::ranges)`, s.t. we can still
+// explicitly use `range-v3` in C++20 mode
 template <typename T>
 inline constexpr bool ::ranges::enable_borrowed_range<
     ad_utility::OwningView<T>> = enable_borrowed_range<T>;
@@ -595,6 +590,21 @@ inline constexpr bool ::ranges::enable_borrowed_range<
 template <typename T>
 inline constexpr bool ::ranges::enable_borrowed_range<
     ad_utility::ForceInputView<T>> = enable_borrowed_range<T>;
+
+#ifndef QLEVER_CPP_17
+template <typename T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::RvalueView<T>> =
+        std::ranges::enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::ForceInputView<T>> =
+        std::ranges::enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
+        std::ranges::enable_borrowed_range<T>;
+#endif
 
 // Explicitly make `OwningView` and `RvalueView` fulfill the `view` concept from
 // `range-v3`. Note: this is also done seemingly redundantly via the inheritance

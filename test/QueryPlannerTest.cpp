@@ -7,10 +7,10 @@
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -19,6 +19,7 @@
 #include "range/v3/view/cartesian_product.hpp"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -4321,39 +4322,67 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                                 "?_QLever_internal_variable_qp_0", "<P279>",
                                 "?_QLever_internal_variable_qp_1"))),
       qec, {4, 16, 64'000'000});
+
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?x <P31> ?o ."
+      "{ VALUES ?x { 1 } } UNION { VALUES ?x { 2 } }}",
+      h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (1) }")),
+                       h::IndexScanFromStrings("?x", "<P31>", "?o")),
+               h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (2) }")),
+                       h::IndexScanFromStrings("?x", "<P31>", "?o"))),
+      qec, {4, 16, 64'000'000});
+
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?x <P31> ?o . "
+      "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 2 } } } "
+      "UNION "
+      "{ { VALUES ?x { 3 } } UNION { VALUES ?x { 4 } } } }",
+      h::Union(h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (1) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")),
+                        h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (2) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o"))),
+               h::Union(h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (3) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")),
+                        h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (4) }")),
+                                h::IndexScanFromStrings("?x", "<P31>", "?o")))),
+      qec, {4, 16, 64'000'000});
 }
 
 // _____________________________________________________________________________
-TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
-  auto qp = makeQueryPlanner();
-  {
-    auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o ."
-        "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }}");
-    auto plans = qp.createExecutionTrees(query);
-    ASSERT_EQ(plans.size(), 1);
-    EXPECT_TRUE(
-        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
-  }
-  {
-    auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { ?x <P31> ?o . "
-        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
-        "UNION "
-        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } }");
-    auto plans = qp.createExecutionTrees(query);
-    ASSERT_EQ(plans.size(), 1);
-    EXPECT_TRUE(
-        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
-  }
-}
-
-// _____________________________________________________________________________
-TEST(QueryPlanner, ensurePlanningIsSkippedWhenTransitivePathIsAlreadyBound) {
+TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
+  using namespace ::testing;
   auto qp = makeQueryPlanner();
   auto query = SparqlParser::parseQuery(
       "SELECT * { { VALUES ?x { 1 } } UNION { ?s <P279>+ 1 } . ?s <P31> ?o }");
   auto plans = qp.createExecutionTrees(query);
+
+  EXPECT_THAT(
+      plans,
+      UnorderedElementsAre(
+          Truly([](const auto& plan) {
+            // Case where join is at the top level.
+            return std::dynamic_pointer_cast<Join>(
+                plan._qet->getRootOperation());
+          }),
+          Truly([](const auto& plan) {
+            // Case where join is pushed into the union.
+            auto operation = plan._qet->getRootOperation();
+            return std::dynamic_pointer_cast<Union>(operation) &&
+                   std::dynamic_pointer_cast<Join>(
+                       operation->getChildren().at(1)->getRootOperation());
+          })));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
+  using namespace ::testing;
+  auto qp = makeQueryPlanner();
+
+  auto cleanup = setRuntimeParameterForTest<"enable-distributive-union">(false);
+  auto query = SparqlParser::parseQuery(
+      "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
+  auto plans = qp.createExecutionTrees(query);
+
   ASSERT_EQ(plans.size(), 1);
   EXPECT_TRUE(
       std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
@@ -4792,6 +4821,21 @@ TEST(QueryPlanner, correctFiltersHandling) {
             h::OptionalJoin(scan("?x", "<c>", "?d"),
                             h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
 
+  // A similar test with an OPTIONAL that is unconnected to the query before it.
+  // This is related to the issue
+  // https://github.com/ad-freiburg/qlever/issues/2194. Note: We need to run
+  // this test on an index where the used predicates actually exist, otherwise
+  // we will get a garbage plan.
+  auto qec = ad_utility::testing::getQec(
+      "<a> <b> <c>. <a2> <b> 4. <x> <p> <y>. <x> <c> 43");
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?a <c> ?d } ?x <p> ?a "
+      "}",
+      h::UnorderedJoins(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                        h::NeutralOptional(scan("?a", "<c>", "?d")),
+                        scan("?x", "<p>", "?a")),
+      qec);
+
   // Filter is applied in the correct subtree with MINUS
   h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) MINUS { ?x <c> ?d } }",
             h::Minus(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
@@ -4974,4 +5018,99 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
       "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
       h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
                         scan("?a", "<equal-to>", "?b")));
+}
+
+// Regression test for GitHub issue #2194
+TEST(QueryPlanner, RegressionTest2194) {
+  // Test that the three queries reported in
+  // `https://github.com/ad-freiburg/qlever/issues/2194` don't throw an error.
+
+  h::expect("SELECT * { OPTIONAL {<x> <y> ?z FILTER (?z != <z>)}}",
+            h::NeutralOptional(h::Filter(
+                "?z != <z>", h::IndexScanFromStrings("<x>", "<y>", "?z"))));
+
+  auto q1 = R"(
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+SELECT DISTINCT ?s_wikidata ?place WHERE {
+  VALUES(?s_wikidata) {
+    (<http://www.wikidata.org/entity/Q213322>)
+  }
+  OPTIONAL {
+    OPTIONAL {
+      ?s_wikidata wdt:P131+ ?city .
+      FILTER(EXISTS {
+          ?city wdt:P31/wdt:P279* wd:Q515 .
+        } || (?city = wd:Q23939248))
+    }
+    OPTIONAL {
+      ?s_wikidata wdt:P131 ?region .
+    }
+    BIND(COALESCE(?city, ?region) AS ?place)
+  }
+}
+)";
+  auto q2 = R"(
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?assetGraphIri ?namespace ?hasAdditionalTypes (GROUP_CONCAT(?class; SEPARATOR=", ") AS ?additionalTypes) WHERE {
+  BIND (<http://data.example.org/terms-ext/vocabulary> AS ?vocabulary)
+  GRAPH ?assetGraphIri {
+    ?vocabulary rdf:type skos:ConceptScheme .
+  }
+  OPTIONAL {
+    ?vocabulary <http://www.linkedmodel.org/1.2/schema/vaem#namespace> ?ns .
+  }
+  OPTIONAL {
+    ?vocabulary <http://purl.org/vocab/vann/preferredNamespaceUri> ?ns2 .
+  }
+  BIND (COALESCE(STR(?ns), STR(?ns2), STR(?vocabulary)) AS ?namespaceCandidate)
+  BIND (IF((STRENDS(?namespaceCandidate,"#")) || (STRENDS(?namespaceCandidate,"/")),?namespaceCandidate,CONCAT(?namespaceCandidate, "/")) AS ?namespace)
+  OPTIONAL {
+    <http://data.example.org/terms-ext/vocabulary/3273f45c-9b3e-4ba0-9637-ca04e1c92a20> rdf:type ?class .
+    FILTER (?class != skos:Concept)
+  }
+  BIND (BOUND(?class) AS ?hasAdditionalTypes)
+}
+GROUP BY ?assetGraphIri ?namespace ?hasAdditionalTypes
+LIMIT 1
+)";
+  h::expect(q1, ::testing::_);
+  h::expect(q2, ::testing::_);
+}
+
+// Test that subqueries strip columns correctly and that stripped variables
+// are not even stored as `stripped`.
+TEST(QueryPlanner, SubqueryColumnStripping) {
+  // Save current strip-columns setting and ensure it's enabled for this test
+  auto cleanup = setRuntimeParameterForTest<"strip-columns">(true);
+
+  // Test a subquery that selects only some variables, causing others to be
+  // stripped
+  std::string query = R"(
+    SELECT ?x ?y WHERE {
+      { SELECT ?x ?y WHERE { ?x <p1> ?y . ?x <p2> ?z . ?y <p3> ?w } }
+    }
+  )";
+
+  auto qec = ad_utility::testing::getQec();
+  for (bool doStrip : {true, false}) {
+    qec->clearCacheUnpinnedOnly();
+
+    // The outer cleanup will reset the original status, so we can safely
+    // modify the global parameter here.
+    RuntimeParameters().set<"strip-columns">(doStrip);
+
+    // The inner subquery should have ?z and ?w stripped (as they're not
+    // selected) but since it's a subquery, the stripped variables should not be
+    // stored in the `QueryExecutionTree`. (hideStrippedColumns=true)
+    auto qet = h::parseAndPlan(query, qec);
+
+    // The root should have no stripped variables (it's not created via
+    // makeTreeWithStrippedColumns)
+    EXPECT_THAT(qet, h::HasNoStrippedVariables());
+    EXPECT_THAT(qet, h::hasVariables({"?x", "?y"}));
+    EXPECT_EQ(qet.getResultWidth(), doStrip ? 2 : 4);
+  }
 }

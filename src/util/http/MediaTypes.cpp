@@ -140,6 +140,8 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 // ___________________________________________________________________________
 std::vector<MediaType> getMediaTypesFromAcceptHeader(
     std::string_view acceptHeader) {
+  // TODO: make this function not throwing by changing
+  // `AcceptHeaderQleverVisitor`
   static_assert(!detail::SUPPORTED_MEDIA_TYPES.empty());
 
   // Empty header means the same as no header.

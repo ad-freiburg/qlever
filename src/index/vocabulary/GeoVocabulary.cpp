@@ -9,6 +9,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
@@ -68,6 +69,8 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   auto info = GeometryInfo::fromWktLiteral(word);
   if (info.has_value()) {
     ptr = &info.value();
+  } else {
+    ++numInvalidGeometries_;
   }
   geoInfoFile_.write(ptr, geoInfoOffset);
 
@@ -81,6 +84,12 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   // try to close the file handle twice
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
+
+  if (numInvalidGeometries_ > 0) {
+    LOG(WARN) << "Geometry preprocessing skipped " << numInvalidGeometries_
+              << " invalid WKT literal"
+              << (numInvalidGeometries_ == 1 ? "" : "s") << std::endl;
+  }
 }
 
 // ____________________________________________________________________________

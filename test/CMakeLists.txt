@@ -122,6 +122,7 @@ add_subdirectory(parser)
 add_subdirectory(index)
 add_subdirectory(backports)
 add_subdirectory(rdfTypes)
+add_subdirectory(joinAlgorithms)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -311,7 +312,7 @@ addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 
-addLinkAndDiscoverTest(ResetWhenMovedTest)
+addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest)
 
@@ -383,7 +384,7 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
-addLinkAndDiscoverTest(ThreadSafeQueueTest)
+addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
@@ -453,7 +454,7 @@ addLinkAndDiscoverTest(ValueGetterTest engine)
 
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
-addLinkAndDiscoverTest(SPARQLProtocolTest engine)
+addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
 addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
 
@@ -466,3 +467,5 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 addLinkAndDiscoverTest(GeometryInfoTest util)
 
 addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
+
+addLinkAndDiscoverTestSerial(HttpErrorTest engine)
