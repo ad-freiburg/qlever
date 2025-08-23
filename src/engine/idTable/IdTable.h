@@ -773,6 +773,13 @@ class IdTable {
         });
   }
 
+  template <typename Table>
+  void insertSubsetAtEnd(const Table& table, const std::vector<size_t>& indices) {
+    for (size_t i : indices) {
+      insertAtEnd(table, i, i + 1);
+    }
+  }
+
   // Check whether two `IdTables` have the same content. Mostly used for unit
   // testing.
   CPP_template(typename = void)(requires(!isView)) bool operator==(

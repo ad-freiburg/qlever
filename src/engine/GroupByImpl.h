@@ -319,15 +319,36 @@ class GroupByImpl : public Operation {
   struct HashMapOptimizationData {
     // All aliases and the aggregates they contain.
     std::vector<HashMapAliasInformation> aggregateAliases_;
+    // Grouping columns, if any
+    std::optional<std::vector<size_t>> columnIndices;
+    // Aggregates, if any
+    std::optional<std::vector<Aggregate>> aggregates;
+    // Non-owning reference to the LocalVocab used during hash-map processing.
+    // Initialized in computeGroupByForHashMapOptimization; not copied.
+    std::optional<std::reference_wrapper<LocalVocab>> localVocabRef;
+
+    // Default ctor: no columns or aggregates set
+    HashMapOptimizationData() = default;
+    // Build with just aliases
+    explicit HashMapOptimizationData(
+        std::vector<HashMapAliasInformation> aliases)
+        : aggregateAliases_(std::move(aliases)) {}
+    // Build with aliases, columns, and aggregates
+    HashMapOptimizationData(std::vector<HashMapAliasInformation> aliases,
+                            std::vector<size_t> cols,
+                            std::vector<Aggregate> aggs)
+        : aggregateAliases_(std::move(aliases)),
+          columnIndices(std::move(cols)),
+          aggregates(std::move(aggs)) {}
   };
 
-  // Create result IdTable by using a HashMap mapping groups to aggregation data
-  // and subsequently calling `createResultFromHashMap`.
+  // Compute result using the HashMap optimization.  We pass in all
+  // parameters via an AggregateData wrapper.
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
-  Result computeGroupByForHashMapOptimization(
-      std::vector<HashMapAliasInformation>& aggregateAliases,
-      SubResults subresults, const std::vector<size_t>& columnIndices,
-      const std::vector<Aggregate>& aggregates) const;
+  // Compute result using HashMap optimization. SubResults taken as forwarding
+  // ref.
+  Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
+                                              SubResults&& subresults) const;
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
@@ -387,8 +408,9 @@ class GroupByImpl : public Operation {
 
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
-    std::vector<size_t> getHashEntries(
-        const ArrayOrVector<ql::span<const Id>>& groupByCols);
+    std::pair<std::vector<size_t>, std::vector<size_t>> getHashEntries(
+        const ArrayOrVector<ql::span<const Id>>& groupByCols,
+        bool onlyMatching);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
@@ -599,6 +621,30 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
+
+ private:
+  struct HashMapTimers {
+    ad_utility::Timer lookupTimer;
+    ad_utility::Timer aggregationTimer;
+  };
+
+  // Load entries from the given table into the hash map, optionally only
+  // matching rows
+  template <size_t NUM_GROUP_COLUMNS>
+  std::vector<size_t> updateHashMapWithTable(
+      const IdTable& table, const HashMapOptimizationData& data,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      HashMapTimers& timers, bool onlyMatching = false) const;
+
+  // Helper function to handle the remainder of the input after the hash map
+  // threshold has been exceeded.
+  // It returns the Result consisting of the entries from the hash map and the
+  // sorted entries from the rest of the input.
+  template <size_t NUM_GROUP_COLUMNS, typename SubResults, typename Iterator>
+  Result handleRemainderUsingHybridApproach(
+      HashMapOptimizationData data,
+      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      SubResults&& subresults, Iterator it) const;
 };
 
 // _____________________________________________________________________________
