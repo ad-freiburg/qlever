@@ -412,6 +412,10 @@ class GroupByImpl : public Operation {
         const ArrayOrVector<ql::span<const Id>>& groupByCols,
         bool onlyMatching);
 
+    // Helper to build a single key vector from column-wise spans.
+    ArrayOrVector<Id> makeKeyForHashMap(
+        const ArrayOrVector<ql::span<const Id>>& spans, size_t row) const;
+
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
       return map_.at(ids);
@@ -636,6 +640,14 @@ class GroupByImpl : public Operation {
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       HashMapTimers& timers, bool onlyMatching = false) const;
 
+  // Build spans for the group values in the given columns of the given table,
+  // starting at `beginIdx` and spanning `blockSize` rows.
+  template <size_t NUM_GROUP_COLUMNS>
+  typename HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<
+      ql::span<const Id>>
+  makeGroupValueSpans(const IdTable& table, size_t beginIdx, size_t blockSize,
+                      const std::vector<ColumnIndex>& cols) const;
+
   // Helper function to handle the remainder of the input after the hash map
   // threshold has been exceeded.
   // It returns the Result consisting of the entries from the hash map and the
@@ -644,7 +656,7 @@ class GroupByImpl : public Operation {
   Result handleRemainderUsingHybridApproach(
       HashMapOptimizationData data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      SubResults&& subresults, Iterator it) const;
+      SubResults&& subresults, HashMapTimers& timers, Iterator it) const;
 };
 
 // _____________________________________________________________________________

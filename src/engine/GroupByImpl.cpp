@@ -1262,6 +1262,20 @@ GroupByImpl::substituteAllAggregates(
   return originalChildren;
 }
 
+// Helper to build a single key vector from column-wise spans
+template <size_t NUM_GROUP_COLUMNS>
+typename GroupByImpl::HashMapAggregationData<
+    NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>
+GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::makeKeyForHashMap(
+    const ArrayOrVector<ql::span<const Id>>& spans, size_t row) const {
+  ArrayOrVector<Id> key;
+  resizeIfVector(key, spans.size());
+  for (size_t j = 0; j < spans.size(); ++j) {
+    key[j] = spans[j][row];
+  }
+  return key;
+}
+
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
 std::pair<std::vector<size_t>, std::vector<size_t>>
@@ -1277,22 +1291,13 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   //       them row-wise. Is there any advantage to this, or should we transform
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
-    ArrayOrVector<Id> row;
-    resizeIfVector(row, numOfGroupedColumns_);
-
-    // TODO<C++23> use views::enumerate
-    auto idx = 0;
-    for (const auto& val : groupByCols) {
-      row[idx] = val[i];
-      ++idx;
-    }
-
-    if (onlyMatching && map_.find(row) == map_.end()) {
-      // If the row is not found, we add it to the non-matching list.
+    auto key = makeKeyForHashMap(groupByCols, i);
+    if (onlyMatching && map_.find(key) == map_.end()) {
+      // If the row's key is not found, we add it to the non-matching list.
       nonmatching.push_back(i);
       continue;
     }
-    auto [iterator, wasAdded] = map_.try_emplace(row, getNumberOfGroups());
+    auto [iterator, wasAdded] = map_.try_emplace(key, getNumberOfGroups());
     hashEntries.push_back(iterator->second);
   }
 
@@ -1606,7 +1611,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                    << ") > (thr: " << groupThreshold
                    << "), switching to sort-based aggregation" << std::endl;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
-          data, aggregationData, subresults, it);
+          data, aggregationData, subresults, timers, it);
     }
   }
   runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer.msecs());
@@ -1621,10 +1626,7 @@ template <size_t NUM_GROUP_COLUMNS, typename SubResults, typename Iterator>
 Result GroupByImpl::handleRemainderUsingHybridApproach(
     HashMapOptimizationData data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    SubResults&& subresults, Iterator it) const {
-  // Timers for hash-map lookup and aggregation in hybrid remainder
-  HashMapTimers timers{ad_utility::Timer::Stopped, ad_utility::Timer::Stopped};
-
+    SubResults&& subresults, HashMapTimers& timers, Iterator it) const {
   auto beginIt = ql::ranges::begin(subresults);
   auto endIt = ql::ranges::end(subresults);
 
@@ -1650,7 +1652,6 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
     restTable.insertSubsetAtEnd(inputTable, nonmatching);
   }
   // perform sort-based grouping on buffered new groups
-  // Perform sort-based grouping on buffered new groups
   IdTable restResult = CALL_FIXED_SIZE(
       (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy, this,
       restTable, *data.columnIndices, *data.aggregates, &localVocab);
@@ -1660,14 +1661,32 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
 
   hashResult.reserve(hashResult.numRows() + restResult.numRows());
   runtimeInfo().addDetail(
-      "Hybrid fallback",
+      "hybridFallback",
       "hash groups=" + std::to_string(hashResult.numRows()) +
           ", sorted tail groups=" + std::to_string(restResult.numRows()));
   hashResult.insertAtEnd(restResult);
-  // sort tail rows by grouping columns
+  // sort rows by grouping columns
+  // TODO: Sort on hard drive if too large. This may need a whole another logic.
   Engine::sort(hashResult, *data.columnIndices);
-  // Return a Result to signal early exit
+  // Return a Result and early exit
   return Result{std::move(hashResult), resultSortedOn(), std::move(localVocab)};
+}
+
+// Helper to build column-wise spans of grouping values for a block
+template <size_t NUM_GROUP_COLUMNS>
+typename GroupByImpl::HashMapAggregationData<
+    NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>
+GroupByImpl::makeGroupValueSpans(const IdTable& table, size_t beginIdx,
+                                 size_t blockSize,
+                                 const std::vector<ColumnIndex>& cols) const {
+  using ArrVecOfIdSpans = typename GroupByImpl::HashMapAggregationData<
+      NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+  ArrVecOfIdSpans spans;
+  resizeIfVector(spans, cols.size());
+  for (size_t j = 0; j < cols.size(); ++j) {
+    spans[j] = table.getColumn(cols[j]).subspan(beginIdx, blockSize);
+  }
+  return spans;
 }
 
 // _____________________________________________________________________________
@@ -1698,25 +1717,15 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
     auto currentBlockSize = evaluationContext.size();
 
     // Perform HashMap lookup once for all groups in current block
-    using U = HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<
-        ql::span<const Id>>;
-    U groupValues;
-    // Resize groupValues to number of grouping columns
-    resizeIfVector(groupValues, data.columnIndices->size());
-
-    // TODO<C++23> use views::enumerate
-    // Extract grouping columns into value spans
-    size_t j = 0;
-    for (const auto& idx : *data.columnIndices) {
-      groupValues[j] = table.getColumn(idx).subspan(
-          evaluationContext._beginIndex, currentBlockSize);
-      ++j;
-    }
+    auto groupValues = makeGroupValueSpans<NUM_GROUP_COLUMNS>(
+        table, evaluationContext._beginIndex, currentBlockSize,
+        *data.columnIndices);
 
     timers.lookupTimer.cont();
     auto [hashEntries, nonmatchingBlock] =
         aggregationData.getHashEntries(groupValues, onlyMatching);
     timers.lookupTimer.stop();
+
     if (onlyMatching) {
       nonmatching.insert(nonmatching.end(), nonmatchingBlock.begin(),
                          nonmatchingBlock.end());
