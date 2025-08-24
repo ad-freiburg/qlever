@@ -9,7 +9,7 @@
 #include "engine/idTable/IdTable.h"
 #include "util/HashMap.h"
 
-namespace SortedIdTableMerge {
+namespace sortedIdTableMerge {
 
 using ColumnIterator = decltype(std::declval<const IdTable&>()
                                     .getColumn(std::declval<size_t>())
@@ -29,9 +29,9 @@ using IdTableAndResultRow = std::pair<IdTableIndex, size_t>;
 // first compare the elements of the first column, if there is a tie then
 // compare the elements of the third column and lastly of the second. The
 // `sortPerm` doesn't need to include all column indices.
-IdTable mergeIdTables(std::vector<IdTable> idTablesToMerge,
+IdTable mergeIdTables(const std::vector<IdTable>& idTablesToMerge,
                       const ad_utility::AllocatorWithLimit<Id>& allocator,
-                      std::vector<size_t> sortPerm = {0});
+                      std::vector<size_t> sortPerm);
 
 // For each idTable iterate over each column. For each column iterate over the
 // values and look up where the value belongs in the result table. Write the
@@ -44,8 +44,8 @@ void writeIdTableFromPermutation(
 
 /**
  * @brief This class takes in a vector of pre-sorted `IdTable`s. The `IdTable`s
- *        should be sorted in ascending order. The comparison on rows should
- *        work in the order of the sortPerm, meaning when comparing two rows
+ *        must be sorted according to the `sortPerm`. The comparison on rows
+ * should work in the order of the sortPerm, meaning when comparing two rows
  *        first compare the column given at 0 in the sortPerm then the column
  *        given at 1 in the sortPerm and so on. The sortPerm doesn't need to
  *        include all column indices since some columns don't need to be sorted.
@@ -70,8 +70,7 @@ class MinRowIterator {
   ad_utility::HashMap<IdTableIndex, std::vector<ColumnRange>>
       idTableToColumnRangesMap_;
 
-  // Counts how many rows where returned already to track what rowIndex to map
-  // to
+  // Counts how many rows were already returned.
   size_t rowCounter_;
 
   // Storing pointers here avoids copying the values into the heap
@@ -107,6 +106,6 @@ class MinRowIterator {
   void incrementColumnRangesForIdTable(IdTableIndex idTableIndex);
 };
 
-}  // namespace SortedIdTableMerge
+}  // namespace sortedIdTableMerge
 
 #endif  // QLEVER_SRC_ENGINE_SORTEDIDTABLEMERGE_H

@@ -95,8 +95,8 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
     auto moveIdTables2 = std::move(idTables2);
 
     auto myMerge = [](std::vector<IdTable> idTables) {
-      return SortedIdTableMerge::mergeIdTables(
-          std::move(idTables), ad_utility::makeUnlimitedAllocator<Id>());
+      return sortedIdTableMerge::mergeIdTables(
+          idTables, ad_utility::makeUnlimitedAllocator<Id>(), {0});
     };
 
     auto appendAndSort = [](std::vector<IdTable> idTables) {

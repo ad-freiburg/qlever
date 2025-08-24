@@ -117,15 +117,15 @@ class RandomBoolGenerator {
   explicit RandomBoolGenerator(
       size_t trueWeight, size_t falseWeight,
       RandomSeed seed = RandomSeed::make(std::random_device{}()))
-      : _randomEngine{seed.get()},
-        _distribution{static_cast<double>(trueWeight) /
+      : randomEngine_{seed.get()},
+        distribution_{static_cast<double>(trueWeight) /
                       (trueWeight + falseWeight)} {}
 
-  bool operator()() { return _distribution(_randomEngine); }
+  bool operator()() { return distribution_(randomEngine_); }
 
  private:
-  std::mt19937_64 _randomEngine;
-  std::bernoulli_distribution _distribution;
+  std::mt19937_64 randomEngine_;
+  std::bernoulli_distribution distribution_;
 };
 
 // GENERATE UUID

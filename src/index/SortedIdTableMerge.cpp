@@ -4,9 +4,9 @@
 
 #include "index/SortedIdTableMerge.h"
 
-namespace SortedIdTableMerge {
+namespace sortedIdTableMerge {
 // _____________________________________________________________________________
-IdTable mergeIdTables(std::vector<IdTable> idTablesToMerge,
+IdTable mergeIdTables(const std::vector<IdTable>& idTablesToMerge,
                       const ad_utility::AllocatorWithLimit<Id>& allocator,
                       std::vector<size_t> sortPerm) {
   AD_CONTRACT_CHECK(
@@ -179,4 +179,4 @@ void MinRowIterator::incrementColumnRangesForIdTable(
   }
 }
 
-}  // namespace SortedIdTableMerge
+}  // namespace sortedIdTableMerge
