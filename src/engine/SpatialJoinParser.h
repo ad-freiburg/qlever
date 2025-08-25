@@ -1,7 +1,6 @@
-// Copyright 2024 - 2025, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Patrick Brosi <brosi@informatik.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
 #define QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
@@ -10,8 +9,6 @@
 #include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
-
-#include <atomic>
 
 #include "global/ValueId.h"
 #include "index/Index.h"

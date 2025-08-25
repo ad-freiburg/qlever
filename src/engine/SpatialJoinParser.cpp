@@ -1,12 +1,12 @@
-// Copyright 2024 - 2025, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Patrick Brosi <brosi@informatik.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoinParser.h"
 
+#include <range/v3/numeric/accumulate.hpp>
+
 #include "engine/SpatialJoinAlgorithms.h"
-#include "range/v3/numeric/accumulate.hpp"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
