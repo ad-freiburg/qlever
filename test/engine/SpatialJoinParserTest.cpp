@@ -10,11 +10,9 @@
 #include <util/geo/Geo.h>
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
-#include "SpatialJoinPrefilterTestHelpers.h"
-#include "SpatialJoinTestHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/SpatialJoinParser.h"
-#include "spatialjoin/Sweeper.h"
 
 // _____________________________________________________________________________
 namespace {
