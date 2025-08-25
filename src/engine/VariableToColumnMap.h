@@ -75,11 +75,13 @@ copySortedByColumnIndex(VariableToColumnMap map);
 // columns might contain undefined values. We also need the total width of the
 // left input, because there might be columns that are not represented in the
 // `VariableToColumnMap` (e.g. because they are not visible because of subquery
-// scoping).
+// scoping). If `keepJoinColumns` is `false`, then the join columns will not be
+// included in the result, and all columns that would have a column index `>=`
+// any of the join columns are shifted to the left accordingly.
 enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
-    size_t leftResultWidth);
+    size_t leftResultWidth, bool keepJoinColumns = true);
 
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
