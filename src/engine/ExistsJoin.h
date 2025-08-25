@@ -82,14 +82,28 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // Return true if the size estimate for the right side is smaller or equal
+  // than the estimate of the right side, a sort on the left can be skipped and
+  // all join columns are statically guaranteed to not contain undef values.
   bool rightIndexNestedLoopJoinIsPossible() const;
 
+  // Specialized algorithm that performs a join when the left side is fully
+  // materialized and sorted, and the right side is unsorted. Only returns a
+  // result when the size estimate for the left side is smaller or equal than
+  // the estimate of the right side and a sort on the left can be skipped.
   std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
 
+  // Specialized algorithm that performs a join when the right side is fully
+  // materialized and sorted, and the left side is unsorted. Only returns a
+  // result when `rightIndexNestedLoopJoinIsPossible()` returns true, in this
+  // case the result is also unsorted.
   std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable();
 
   // Nested loop join optimization than can apply when a memory intensive sort
-  // can be avoided this way.
+  // can be avoided this way. This currently only works when we can statically
+  // guarantee that no undef values are found in the join columns. The
+  // implementation first tries `tryRightIndexNestedLoopJoinIfSuitable` and then
+  // `tryLeftIndexNestedLoopJoinIfSuitable`.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
 
   Result computeResult(bool requestLaziness) override;

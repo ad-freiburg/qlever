@@ -88,6 +88,9 @@ size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> Minus::resultSortedOn() const {
+  if (rightIndexNestedLoopJoinIsPossible()) {
+    return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
+  }
   return _left->resultSortedOn();
 }
 
@@ -232,11 +235,15 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
-  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
-                                                        _right)) {
-    return std::nullopt;
-  }
+bool Minus::rightIndexNestedLoopJoinIsPossible() const {
+  auto sort = std::dynamic_pointer_cast<Sort>(_left->getRootOperation());
+  return sort && _left->getSizeEstimate() >= _right->getSizeEstimate() &&
+         qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns,
+                                                          _left, _right);
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   // This algorithm only works well if the left side is smaller and we can avoid
   // sorting the right side. It currently doesn't support undef.
   auto sort = std::dynamic_pointer_cast<Sort>(_right->getRootOperation());
@@ -256,6 +263,43 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
   return std::optional{Result{
       copyMatchingRows(leftTable, static_cast<char>(false), nonMatchingEntries),
       resultSortedOn(), std::move(localVocab)}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable() {
+  // This algorithm only works well if the right side is smaller and we can
+  // avoid sorting the left side. It currently doesn't support undef.
+  if (!rightIndexNestedLoopJoinIsPossible()) {
+    return std::nullopt;
+  }
+
+  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+      std::dynamic_pointer_cast<Sort>(_left->getRootOperation()));
+  auto rightRes = _right->getResult(false);
+
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+  auto result = nestedLoopJoin.computeRightExistance(
+      [this](const IdTable& idTable, LocalVocab localVocab,
+             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
+                 matchingTracker) {
+        return Result::IdTableVocabPair{
+            copyMatchingRows(idTable, false, matchingTracker),
+            std::move(localVocab)};
+      });
+  return std::optional{Result{std::move(result), resultSortedOn()}};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable() {
+  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
+                                                        _right)) {
+    return std::nullopt;
+  }
+  if (auto leftResult = tryRightIndexNestedLoopJoinIfSuitable()) {
+    return leftResult;
+  }
+  return tryLeftIndexNestedLoopJoinIfSuitable();
 }
 
 // _____________________________________________________________________________
