@@ -98,6 +98,12 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   auto actualBox2 = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
       parser3.getBoundingBox());
   checkPrefilterBox(actualBox2, boundingBoxUniAndLondon);
+
+  // The sweeper object is empty and flushing provides no value for this test.
+  // However the object needs to be flushed anyway to prevent a memory leak,
+  // because memory manually allocated in the sweeper's constructor is freed in
+  // this function.
+  sweeper.flush();
 }
 
 // _____________________________________________________________________________
