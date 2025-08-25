@@ -739,7 +739,7 @@ TEST(ExportQueryExecutionTrees, Entities) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
-  std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
+  std::string kg = R"(<s> <p> "Some\"Where	Over,"@en-ca.)";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
