@@ -7,6 +7,7 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
@@ -324,17 +325,28 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       // We use the immediately invoked lambda here because putting this block
       // in braces confuses the test coverage tool.
       return [id] {
+        double d = id.getDouble();
+        if (!std::isfinite(d)) {
+          // The default formatter would output this all lowercase, which is not
+          // legal syntax for RDF. Also NaN and INF are only legal for floating
+          // point types (float and double), not decimal, so we make a special
+          // exception here.
+          std::string literal = [d]() {
+            if (std::isnan(d)) {
+              return "NaN";
+            }
+            AD_CORRECTNESS_CHECK(std::isinf(d));
+            return d > 0 ? "INF" : "-INF";
+          }();
+          return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
+        }
+        double dIntPart;
         // Format as integer if fractional part is zero, let C++ decide
         // otherwise.
-        std::stringstream ss;
-        double d = id.getDouble();
-        double dIntPart;
-        if (std::modf(d, &dIntPart) == 0.0) {
-          ss << std::fixed << std::setprecision(0) << id.getDouble();
-        } else {
-          ss << d;
-        }
-        return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+        std::string out = std::modf(d, &dIntPart) == 0.0
+                              ? absl::StrFormat("%.0f", d)
+                              : absl::StrFormat("%g", d);
+        return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:
       return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
@@ -1218,6 +1230,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const char* i = XSD_INT_TYPE;
     const char* d = XSD_DECIMAL_TYPE;
     const char* b = XSD_BOOLEAN_TYPE;
+    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
+    // "-INF", which doesn't have a short form notation.
     if (type == nullptr || type == i || type == d ||
         (type == b && literal.length() > 1)) {
       return std::move(literal);
