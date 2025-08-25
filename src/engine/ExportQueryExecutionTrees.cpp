@@ -7,6 +7,7 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
@@ -339,16 +340,13 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
           }();
           return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
         }
+        double dIntPart;
         // Format as integer if fractional part is zero, let C++ decide
         // otherwise.
-        std::stringstream ss;
-        double dIntPart;
-        if (std::modf(d, &dIntPart) == 0.0) {
-          ss << std::fixed << std::setprecision(0) << d;
-        } else {
-          ss << d;
-        }
-        return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+        std::string out = std::modf(d, &dIntPart) == 0.0
+                              ? absl::StrFormat("%.0f", d)
+                              : absl::StrFormat("%g", d);
+        return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:
       return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
