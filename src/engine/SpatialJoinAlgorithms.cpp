@@ -94,6 +94,8 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
       ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
   size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
   numThreads = std::min(numThreads, requiredBatches);
+  spatialJoin_.value()->runtimeInfo().addDetail("wkt-parser-num-threads",
+                                                numThreads);
 
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
