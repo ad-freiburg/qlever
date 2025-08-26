@@ -318,6 +318,80 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
+  IdTable left = makeIdTableFromVector({{1}});
+
+  IdTable right = makeIdTableFromVector({{1}, {2}});
+
+  auto* qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(left),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(right),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}),
+      Variable{"?result"}};
+  existsJoin.computeResultOnlyForTesting(true);
+  const auto& runtimeInfo =
+      existsJoin.getChildren().at(0)->getRootOperation()->runtimeInfo();
+  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_GT(runtimeInfo.numRows_, 0);
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin,
+     rightIndexNestedLoopJoinOptimizationisSkippedWhenPotentialUndef) {
+  IdTable left = makeIdTableFromVector({{1}});
+
+  IdTable right = makeIdTableFromVector({{U}});
+
+  auto* qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(left),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(right),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}),
+      Variable{"?result"}};
+  existsJoin.computeResultOnlyForTesting(true);
+  const auto& runtimeInfo =
+      existsJoin.getChildren().at(0)->getRootOperation()->runtimeInfo();
+  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_GT(runtimeInfo.numRows_, 0);
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
+  IdTable left = makeIdTableFromVector({{1}, {2}});
+
+  IdTable right = makeIdTableFromVector({{1}});
+
+  auto* qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(left),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+          std::vector<ColumnIndex>{0}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(right),
+          std::vector<std::optional<Variable>>{Variable{"?a"}}),
+      Variable{"?result"}};
+  existsJoin.computeResultOnlyForTesting(false);
+  const auto& runtimeInfo =
+      existsJoin.getChildren().at(1)->getRootOperation()->runtimeInfo();
+  EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_GT(runtimeInfo.numRows_, 0);
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, clone) {
   auto* qec = getQec();
   ExistsJoin existsJoin{
