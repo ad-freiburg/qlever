@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "backports/algorithm.h"
+#include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
@@ -20,9 +21,14 @@
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
- private:
+ public:
   using Base = ad_utility::triple_component::LiteralOrIri;
 
+  // Note: The values here actually are `Id`s, but we cannot store the `Id` type
+  // directly because of cyclic dependencies.
+  using IdProxy = ad_utility::TypedIndex<uint64_t, "LveIdProxy">;
+
+ private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -30,8 +36,8 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. However, we don't consider this case to be likely.
-  mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
-  mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
@@ -55,8 +61,8 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   struct PositionInVocab {
-    VocabIndex lowerBound_;
-    VocabIndex upperBound_;
+    IdProxy lowerBound_;
+    IdProxy upperBound_;
   };
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the

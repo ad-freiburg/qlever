@@ -189,6 +189,15 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
+    if (c.encodedIriManager.has_value()) {
+      // Extract prefixes without angle brackets from the EncodedIriManager
+      std::vector<std::string> prefixes;
+      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(prefix.starts_with('<') && !prefix.ends_with('>'));
+        prefixes.push_back(prefix.substr(1));
+      }
+      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
@@ -353,7 +362,8 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index.getVocab());
+    static const EncodedIriManager encodedIriManager;
+    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };
