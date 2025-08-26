@@ -144,7 +144,7 @@ class GroupByImpl : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
@@ -165,6 +165,8 @@ class GroupByImpl : public Operation {
   FRIEND_TEST(GroupByTest, doGroupBy);
 
  public:
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
+  friend class LazyGroupByRange;
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
   // of tests to write.
 
