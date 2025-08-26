@@ -25,6 +25,11 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -150,7 +155,9 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -168,7 +175,9 @@ void testLazyScanWithColumnThrows(
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -835,7 +844,8 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab()).value();
+    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
+        .value();
   }
 
   // Create an id table with a single column from a vector of

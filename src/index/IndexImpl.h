@@ -21,6 +21,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
+#include "index/EncodedIriManager.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -120,6 +121,7 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  EncodedIriManager encodedIriManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -265,20 +267,18 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
-  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
-  // details.
+  const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // Set the prefixes of the IRIs that will be encoded directly into
+  // the `Id`; see `EncodedIriManager` for details.
+  void setPrefixesForEncodedValues(
+      std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
   }
-
-  // --------------------------------------------------------------------------
-  //  -- RETRIEVAL ---
-  // --------------------------------------------------------------------------
-
-  // --------------------------------------------------------------------------
-  // RDF RETRIEVAL
-  // --------------------------------------------------------------------------
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
@@ -330,9 +330,6 @@ class IndexImpl {
    */
   size_t getNumDistinctSubjectPredicatePairs() const;
 
-  // --------------------------------------------------------------------------
-  // TEXT RETRIEVAL
-  // --------------------------------------------------------------------------
   // This struct is used to retrieve text blocks.
   struct TextBlockMetadataAndWordInfo {
     TextBlockMetadataAndWordInfo(

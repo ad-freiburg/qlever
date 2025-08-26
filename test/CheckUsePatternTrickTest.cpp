@@ -8,14 +8,20 @@
 #include "parser/SparqlParser.h"
 #include "util/SourceLocation.h"
 
+namespace {
 using namespace checkUsePatternTrick;
 using ad_utility::source_location;
+
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
 
 // Parse the SPARQL query `SELECT * WHERE { <whereClause> }`. Not that the
 // `whereClause` does not need to be enclosed by braces `{}`.
 ParsedQuery parseWhereClause(const std::string& whereClause) {
   std::string query = absl::StrCat("SELECT * WHERE {", whereClause, "}");
-  return SparqlParser::parseQuery(query);
+  return SparqlParser::parseQuery(encodedIriManager(), query);
 }
 
 // Test that `whereClause`, when parsed as the WHERE clause of a SPARQL query,
@@ -108,7 +114,7 @@ auto expectFirstTripleSuitableForPatternTrick =
        source_location l = source_location::current()) {
       auto trace =
           generateLocationTrace(l, "expectFirstTripleSuitableForPatternTrick");
-      auto pq = SparqlParser::parseQuery(query);
+      auto pq = SparqlParser::parseQuery(encodedIriManager(), query);
       const auto& firstTriple = getFirstTriple(pq);
 
       auto tripleSuitable =
@@ -192,7 +198,7 @@ auto expectQuerySuitableForPatternTrick =
        const std::string& predicateVariable, bool shouldBeSuitable = true,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "expectQuerySuitable");
-      auto pq = SparqlParser::parseQuery(query);
+      auto pq = SparqlParser::parseQuery(encodedIriManager(), query);
       auto querySuitable = checkUsePatternTrick::checkUsePatternTrick(&pq);
 
       if (shouldBeSuitable) {
@@ -261,6 +267,7 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
   using namespace ::testing;
   {
     auto pq = SparqlParser::parseQuery(
+        encodedIriManager(),
         "SELECT ?p WHERE {?x ql:has-predicate ?p} GROUP BY ?p");
     auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
     ASSERT_TRUE(patternTrickTuple.has_value());
@@ -278,6 +285,7 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
 
   {
     auto pq = SparqlParser::parseQuery(
+        encodedIriManager(),
         "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
     auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
     ASSERT_TRUE(patternTrickTuple.has_value());
@@ -299,6 +307,7 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
 
   {
     auto pq = SparqlParser::parseQuery(
+        encodedIriManager(),
         "SELECT ?p WHERE {?x ql:has-predicate ?p . ?y <is-a> ?x } GROUP BY ?p");
     auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
     ASSERT_TRUE(patternTrickTuple.has_value());
@@ -318,3 +327,4 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                                       Variable{"?p"}}));
   }
 }
+}  // namespace
