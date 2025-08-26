@@ -87,14 +87,15 @@ IdTable IndexImpl::mergeTextBlockResults(
   }
   // Combine the partial results to one IdTable
   if (textScanMode == TextScanMode::WordScan) {
-    auto result =
-        sortedIdTableMerge::mergeIdTables(partialResults, allocator, {0});
+    auto result = sortedIdTableMerge::mergeIdTables<3, 1>(
+        partialResults, allocator, {0}, sortedIdTableMerge::DirectComparator{});
     // If not entitySearch don't filter duplicates
     return std::move(result).toDynamic<>();
   }
   // Merge and only sort by TextRecordIndex and VocabIndex
-  auto result =
-      sortedIdTableMerge::mergeIdTables(partialResults, allocator, {0, 1});
+  auto result = sortedIdTableMerge::mergeIdTables<3, 2>(
+      partialResults, allocator, {0, 1},
+      sortedIdTableMerge::DirectComparator{});
   auto toSort = std::move(result).toStatic<3>();
   // Filter duplicates (only check first and second col)
   auto newEnd = ::ranges::unique(toSort, [](const auto& a, const auto& b) {

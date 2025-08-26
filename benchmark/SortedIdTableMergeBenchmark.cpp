@@ -35,7 +35,8 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
     }
   }
 
-  static void fillColumnWithGenerator(IdTable& idTable, size_t colIndex,
+  static void fillColumnWithGenerator(IdTableStatic<3>& idTable,
+                                      size_t colIndex,
                                       cppcoro::generator<Id>& generator) {
     constexpr size_t blockWriteSize = 10'000;
     auto col = idTable.getColumn(colIndex);
@@ -57,11 +58,13 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
   std::string name() const final { return "SortedIdTableMergeBenchmark"; }
 
   BenchmarkResults runAllBenchmarks() final {
+    constexpr size_t numTablesToMerge = 100;
+    constexpr size_t numRowsPerTable = 100'000;
     BenchmarkResults results{};
 
     auto createRandomIdTable = [this](size_t numRows) {
       auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
-      IdTable idTable{3, allocator};
+      IdTableStatic<3> idTable{3, allocator};
       idTable.resize(numRows);
 
       // Fill first col
@@ -82,21 +85,16 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
       std::vector<IdTable> idTables;
       idTables.reserve(numTables);
       for (size_t i = 0; i < numTables; ++i) {
-        idTables.emplace_back(createRandomIdTable(numRows));
+        idTables.emplace_back(
+            std::move(createRandomIdTable(numRows)).toDynamic());
       }
       return idTables;
     };
 
-    // Creating 4 Tables to merge
-    auto idTables1 = createVectorOfRandomIdTables(4, 100'000);
-    auto moveIdTables1 = std::move(idTables1);
-
-    auto idTables2 = createVectorOfRandomIdTables(4, 100'000);
-    auto moveIdTables2 = std::move(idTables2);
-
-    auto myMerge = [](std::vector<IdTable> idTables) {
-      return sortedIdTableMerge::mergeIdTables(
-          idTables, ad_utility::makeUnlimitedAllocator<Id>(), {0});
+    auto myMerge = [](const std::vector<IdTable>& idTables) {
+      return sortedIdTableMerge::mergeIdTables<3, 1>(
+          idTables, ad_utility::makeUnlimitedAllocator<Id>(), {0},
+          sortedIdTableMerge::DirectComparator{});
     };
 
     auto appendAndSort = [](std::vector<IdTable> idTables) {
@@ -121,14 +119,21 @@ class SortedIdTableMergeBenchmark : public BenchmarkInterface {
       return std::move(toSort).toDynamic<>();
     };
 
+    auto idTables1 =
+        createVectorOfRandomIdTables(numTablesToMerge, numRowsPerTable);
+    auto moveIdTables1 = std::move(idTables1);
     results.addMeasurement(
-        "Merge 4 tables using SortedIdTableMerge",
-        [&myMerge, &moveIdTables1]() { myMerge(std::move(moveIdTables1)); });
-
-    results.addMeasurement("Merge 4 tables using append and sort",
-                           [&appendAndSort, &moveIdTables2]() {
-                             appendAndSort(std::move(moveIdTables2));
-                           });
+        absl::StrCat("Merge ", numTablesToMerge, " tables with ",
+                     numRowsPerTable, " rows using append and sort"),
+        [&appendAndSort, &moveIdTables1]() {
+          appendAndSort(std::move(moveIdTables1));
+        });
+    auto idTables2 =
+        createVectorOfRandomIdTables(numTablesToMerge, numRowsPerTable);
+    results.addMeasurement(
+        absl::StrCat("Merge ", numTablesToMerge, " tables with ",
+                     numRowsPerTable, " rows using second SortedIdTableMerge"),
+        [&myMerge, &idTables2]() { myMerge(idTables2); });
 
     return results;
   }
