@@ -280,15 +280,14 @@ class IndexNestedLoopJoin {
     return ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
         [this, leftColumns = std::move(leftColumns), &rightColumns,
-         transformationFunc = std::move(transformationFunc)](
-            auto JOIN_COLUMNS) -> Result::LazyResult {
+         transformationFunc =
+             std::move(transformationFunc)](auto JOIN_COLUMNS) {
           IdTableView<JOIN_COLUMNS> rightTable =
               rightResult_->idTable()
                   .asColumnSubsetView(rightColumns)
                   .template asStaticView<JOIN_COLUMNS>();
           auto matchHelper =
-              [rightTable = std::move(rightTable),
-               leftColumns = std::move(leftColumns), JOIN_COLUMNS,
+              [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
                transformationFunc = std::move(transformationFunc)](
                   auto&& idTable,
                   LocalVocab localVocab) -> Result::IdTableVocabPair {
