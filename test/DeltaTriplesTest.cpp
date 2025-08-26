@@ -25,9 +25,9 @@
 namespace {
 using namespace deltaTriplesTestHelpers;
 
-constexpr auto ev = []() -> const EncodedIriManager* {
-  static EncodedIriManager evM;
-  return &evM;
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
 };
 }  // namespace
 
@@ -59,7 +59,7 @@ class DeltaTriplesTest : public ::testing::Test {
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
       const std::vector<std::string>& turtles) {
-    RdfStringParser<TurtleParser<Tokenizer>> parser{ev()};
+    RdfStringParser<TurtleParser<Tokenizer>> parser{encodedIriManager()};
     ql::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
@@ -74,11 +74,14 @@ class DeltaTriplesTest : public ::testing::Test {
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
       std::array<Id, 4> ids{
-          std::move(triple.subject_).toValueId(vocab, localVocab, *ev()),
+          std::move(triple.subject_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
           std::move(TripleComponent(triple.predicate_))
-              .toValueId(vocab, localVocab, *ev()),
-          std::move(triple.object_).toValueId(vocab, localVocab, *ev()),
-          std::move(triple.graphIri_).toValueId(vocab, localVocab, *ev())};
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.object_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.graphIri_)
+              .toValueId(vocab, localVocab, *encodedIriManager())};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(

@@ -17,8 +17,11 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
 
   const auto& vocab = index.getVocab();
 
+  // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
+  // give us a consistent ordering, which is important for determining equality
+  // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
   auto [lower, upper] = [&]() {
-    if (auto opt = index.encodedValueManager().encode(toStringRepresentation());
+    if (auto opt = index.encodedIriManager().encode(toStringRepresentation());
         opt.has_value()) {
       return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }

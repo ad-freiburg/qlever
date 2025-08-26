@@ -35,7 +35,7 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
 }
 
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
-  const auto& mgr = index.getImpl().encodedValueManager();
+  const auto& mgr = index.getImpl().encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 }  // namespace

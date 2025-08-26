@@ -33,7 +33,7 @@ auto Index::getVocab() const -> const Vocab& { return pimpl_->getVocab(); }
 
 // ____________________________________________________________________________
 auto Index::encodedIriManager() const -> const EncodedIriManager& {
-  return pimpl_->encodedValueManager();
+  return pimpl_->encodedIriManager();
 }
 
 // ____________________________________________________________________________

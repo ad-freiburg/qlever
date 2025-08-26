@@ -267,28 +267,18 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
-  const auto& encodedValueManager() const { return encodedIriManager_; }
+  const auto& encodedIriManager() const { return encodedIriManager_; }
 
-  // For the index building, set the prefixes that are to be encoded directly in
-  // an ID if they are followed by a plain number. The prefixes have to be
-  // without the `<>` for IRIs.
+  // Set the prefixes of the IRIs that will be encoded directly into
+  // the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
-  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
-  // details.
+  // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
   }
-
-  // --------------------------------------------------------------------------
-  //  -- RETRIEVAL ---
-  // --------------------------------------------------------------------------
-
-  // --------------------------------------------------------------------------
-  // RDF RETRIEVAL
-  // --------------------------------------------------------------------------
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
@@ -340,9 +330,6 @@ class IndexImpl {
    */
   size_t getNumDistinctSubjectPredicatePairs() const;
 
-  // --------------------------------------------------------------------------
-  // TEXT RETRIEVAL
-  // --------------------------------------------------------------------------
   // This struct is used to retrieve text blocks.
   struct TextBlockMetadataAndWordInfo {
     TextBlockMetadataAndWordInfo(

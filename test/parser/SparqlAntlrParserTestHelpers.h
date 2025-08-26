@@ -1216,13 +1216,10 @@ auto parse =
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
-      static EncodedIriManager ev;
-      ParserAndVisitor p{&blankNodeManager,
-                         &ev,
-                         input,
-                         std::move(prefixes),
-                         std::move(clauses),
-                         disableSomeChecks};
+      static EncodedIriManager encodedIriManager;
+      ParserAndVisitor p{
+          &blankNodeManager,   &encodedIriManager, input,
+          std::move(prefixes), std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

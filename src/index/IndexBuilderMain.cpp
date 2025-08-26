@@ -224,10 +224,12 @@ int main(int argc, char** argv) {
 
   add("encode-as-id",
       po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
-      ""
-      "Encoded IRIs that start with this prefix, followed by a sequence of "
-      "digits, directly within the ID. Note: The result of `ORDER BY` between "
-      "encoded and non-encoded IRIs currently violates the SPARQL standard.");
+      "Space-separated list of IRI prefixes (without angle brackets). "
+      "IRIs that start with one of these prefixes, followed by a sequence of "
+      "digits, do not require a vocabulary entry, but are directly encoded "
+      "in the ID. NOTE: When using ORDER BY, the order among encoded IRIs and "
+      "among non-encoded IRIs is correct, but the order between encoded "
+      "and non-encoded IRIs is not");
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&indexMemoryLimit),

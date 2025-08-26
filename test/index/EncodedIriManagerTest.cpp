@@ -27,11 +27,11 @@ std::vector<size_t> getRandomIndices(size_t min, size_t max, size_t num) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, SimpleExample) {
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  EncodedIriManager ev{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   std::string Q42{"<http://www.wikidata.org/entity/Q423>"};
-  auto id = ev.encode(Q42);
+  auto id = encodedIriManager.encode(Q42);
   ASSERT_TRUE(id.has_value());
-  EXPECT_EQ(ev.toString(id.value()), Q42);
+  EXPECT_EQ(encodedIriManager.toString(id.value()), Q42);
 }
 
 // _____________________________________________________________________________
@@ -40,13 +40,14 @@ TEST(EncodedIriManger, EncodingAndDecoding) {
       getRandomIndices(0, (1ull << EncodedIriManager::NumDigits) - 1, 10'000);
   std::vector<std::pair<std::string, uint64_t>> stringsAndEncodings;
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  EncodedIriManager ev{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   for (auto index : indices) {
     std::string wdq =
         absl::StrCat("<http://www.wikidata.org/entity/Q", index, ">");
-    auto id = ev.encode(wdq);
+    auto id = encodedIriManager.encode(wdq);
     ASSERT_TRUE(id.has_value()) << index;
-    EXPECT_EQ(ev.toString(id.value()), wdq) << std::hex << id.value().getBits();
+    EXPECT_EQ(encodedIriManager.toString(id.value()), wdq)
+        << std::hex << id.value().getBits();
     stringsAndEncodings.push_back(
         std::pair{std::move(wdq), id.value().getBits()});
   }
@@ -65,23 +66,23 @@ TEST(EncodedIriManger, EncodingAndDecoding) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, DifferentPrefixes) {
   std::vector<std::string> prefixes = {"a", "b"};
-  EncodedIriManager ev{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   auto s1 = "<a123>";
   auto s2 = "<b123>";
 
-  auto i1 = ev.encode(s1);
-  auto i2 = ev.encode(s2);
+  auto i1 = encodedIriManager.encode(s1);
+  auto i2 = encodedIriManager.encode(s2);
   ASSERT_TRUE(i1.has_value());
   ASSERT_TRUE(i2.has_value());
   EXPECT_NE(i1.value().getBits(), i2.value().getBits());
-  EXPECT_EQ(ev.toString(i1.value()), s1);
-  EXPECT_EQ(ev.toString(i2.value()), s2);
+  EXPECT_EQ(encodedIriManager.toString(i1.value()), s1);
+  EXPECT_EQ(encodedIriManager.toString(i2.value()), s2);
 }
 
 // _____________________________________________________________________________
 TEST(EncodedIriManger, Unencodable) {
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  EncodedIriManager ev{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   std::vector<std::string> unencodable = {
       "<http://www.wikidata.org/entity/Q42a3>",
       "<http://www.wikidata.org/entity/Q4233333333333333333333333333333333333>",
@@ -89,7 +90,7 @@ TEST(EncodedIriManger, Unencodable) {
       "<http://www.wikidata.org/entity/Q42a3",  // missing trailing '>'
   };
   for (const auto& s : unencodable) {
-    EXPECT_FALSE(ev.encode(s).has_value());
+    EXPECT_FALSE(encodedIriManager.encode(s).has_value());
   }
 }
 
@@ -98,7 +99,7 @@ TEST(EncodedIriManger, illegalPrefixes) {
   using V = std::vector<std::string>;
   using namespace ::testing;
   AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"<blubb>"}),
-                               HasSubstr("enclosed in angle brackets <>"));
+                               HasSubstr("enclosed in angle brackets"));
   AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"blubb", "blubbi"}),
                                HasSubstr("may be a prefix"));
   EXPECT_NO_THROW(EncodedIriManager(V{"blubb", "blubb"}));
@@ -108,7 +109,7 @@ TEST(EncodedIriManger, illegalPrefixes) {
     v.push_back(absl::StrCat("prefix", s, "bla"));
   }
   AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager{v},
-                               HasSubstr("Too many prefixes"));
+                               HasSubstr("which is too many"));
 }
 
 // _____________________________________________________________________________

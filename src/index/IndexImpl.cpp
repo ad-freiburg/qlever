@@ -67,7 +67,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  return std::make_unique<RdfMultifileParser>(files, &encodedValueManager(),
+  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
                                               parserBufferSize());
 }
 
@@ -339,7 +339,7 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
-  configurationJson_["encoded-iri-prefixes"] = encodedValueManager();
+  configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1219,7 +1219,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
     std::optional<Id> idIfNotString =
-        el.toValueIdIfNotString(&encodedValueManager());
+        el.toValueIdIfNotString(&encodedIriManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1567,7 +1567,7 @@ size_t IndexImpl::getCardinality(
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId =
-          comp.toValueId(getVocab(), encodedValueManager())) {
+          comp.toValueId(getVocab(), encodedIriManager())) {
     return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
@@ -1595,7 +1595,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (auto keyId = key.toValueId(getVocab(), encodedValueManager())) {
+  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = getPermutation(permutation)
                     .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {

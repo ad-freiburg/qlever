@@ -666,12 +666,12 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   // Blank Nodes.
   EXPECT_EQ(blankNodeMap.size(), 0);
 
-  const EncodedIriManager ev;
+  const EncodedIriManager encodedIriManager;
   Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
-             .toValueIdIfNotString(&ev)
+             .toValueIdIfNotString(&encodedIriManager)
              .value();
   Id b = bTTC({{"type", "bnode"}, {"value", "B"}})
-             .toValueIdIfNotString(&ev)
+             .toValueIdIfNotString(&encodedIriManager)
              .value();
   EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
@@ -681,7 +681,7 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
 
   // This BlankNode exists already, known Id will be used.
   Id a2 = bTTC({{"type", "bnode"}, {"value", "A"}})
-              .toValueIdIfNotString(&ev)
+              .toValueIdIfNotString(&encodedIriManager)
               .value();
   EXPECT_EQ(a, a2);
 

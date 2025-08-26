@@ -25,9 +25,9 @@ ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
 
-auto ev = []() -> const EncodedIriManager* {
-  static EncodedIriManager evM;
-  return &evM;
+auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
 };
 }  // namespace
 
@@ -306,7 +306,7 @@ auto testDatetimeImpl(F parseFunction, std::string_view input, const char* type,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString(ev());
+  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);
@@ -426,7 +426,7 @@ auto testLargeYearImpl(F parseFunction, std::string_view input,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString(ev());
+  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);

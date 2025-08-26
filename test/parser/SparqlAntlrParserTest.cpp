@@ -38,9 +38,9 @@ PropertyPath PathIri(std::string_view iri) {
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
 
-const EncodedIriManager* evm() {
-  static EncodedIriManager ev;
-  return &ev;
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
 }
 }  // namespace
 
@@ -73,7 +73,7 @@ TEST(SparqlParser, Prefix) {
 
   {
     static ad_utility::BlankNodeManager blankNodeManager;
-    ParserAndVisitor p{&blankNodeManager, evm(),
+    ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
@@ -1199,7 +1199,8 @@ TEST(SparqlParser, ConstructQuery) {
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   static ad_utility::BlankNodeManager blankNodeManager;
-  SparqlQleverVisitor visitor{&blankNodeManager, evm(), {}, std::nullopt};
+  SparqlQleverVisitor visitor{
+      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
 
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),

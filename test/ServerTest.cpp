@@ -23,13 +23,14 @@ using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
-constexpr auto ev = []() -> const EncodedIriManager* {
-  static EncodedIriManager evM;
-  return &evM;
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
 };
 auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(ev(), std::move(query), datasets);
+  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
+                                  datasets);
 }
 
 }  // namespace
@@ -226,7 +227,7 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
-  auto pqs = SparqlParser::parseUpdate(&bnm, ev(), update);
+  auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);

@@ -21,9 +21,9 @@ using TC = TripleComponent;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-const EncodedIriManager* evm() {
-  static EncodedIriManager ev;
-  return &ev;
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
 }
 
 // _____________________________________________________________________________________________
@@ -95,7 +95,9 @@ TEST(GraphStoreProtocolTest, transformGet) {
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(GraphStoreProtocol::transformGet(graph, evm()), matcher);
+        EXPECT_THAT(
+            GraphStoreProtocol::transformGet(graph, encodedIriManager()),
+            matcher);
       };
   expectTransformGet(
       DEFAULT{},
@@ -344,7 +346,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
           m::GraphPattern()));
 
   // Test transformGet functionality
-  auto getQuery = GraphStoreProtocol::transformGet(DEFAULT{}, evm());
+  auto getQuery =
+      GraphStoreProtocol::transformGet(DEFAULT{}, encodedIriManager());
   EXPECT_EQ(getQuery._originalString,
             "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
   EXPECT_TRUE(
@@ -353,7 +356,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
   // Test transformGet with specific graph IRI
   auto graphIri =
       ad_utility::triple_component::Iri::fromIriref("<http://example.org/123>");
-  auto graphQuery = GraphStoreProtocol::transformGet(graphIri, evm());
+  auto graphQuery =
+      GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
   EXPECT_THAT(
       graphQuery._originalString,
       testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
