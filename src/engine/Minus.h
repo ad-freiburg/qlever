@@ -99,14 +99,15 @@ class Minus : public Operation {
   // materialized and sorted, and the left side is unsorted. Only returns a
   // result when `rightIndexNestedLoopJoinIsPossible()` returns true, in this
   // case the result is also unsorted.
-  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable();
+  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable(
+      bool requestLaziness);
 
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way. This currently only works when we can statically
   // guarantee that no undef values are found in the join columns. The
   // implementation first tries `tryRightIndexNestedLoopJoinIfSuitable` and then
   // `tryLeftIndexNestedLoopJoinIfSuitable`.
-  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
 
   // Lazily compute the minus join of two results when at least one of the
   // results is computed lazily. This currently only works if we have just a

@@ -157,7 +157,7 @@ void testExistsJoin(std::vector<IdTable> leftTables,
 
 }  // namespace
 
-TEST(Exists, computeResult) {
+TEST(ExistsJoin, computeResult) {
   auto alloc = ad_utility::testing::makeAllocator();
   // Single join column.
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
@@ -197,7 +197,7 @@ TEST(Exists, computeResult) {
 }
 
 // _____________________________________________________________________________
-TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
+TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
 
@@ -205,6 +205,7 @@ TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
   leftVocab.getIndexAndAddIfNotContained(entryA);
   LocalVocab rightVocab;
   rightVocab.getIndexAndAddIfNotContained(entryB);
+
   // From this table columns 1 and 2 will be used for the join.
   IdTable a = makeIdTableFromVector(
       {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
@@ -223,6 +224,7 @@ TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
 
   auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
+    qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{
         qec,
         ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -250,7 +252,73 @@ TEST(ExistsJoin, computeExistsJoinIndexNestedLoopJoinOptimization) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, clone) {
+TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable a = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable b = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+  IdTable expected = makeIdTableFromVector({{7, 2, 1, 5, T},
+                                            {1, 3, 3, 5, F},
+                                            {1, 8, 1, 5, F},
+                                            {7, 2, 8, 14, T},
+                                            {10, 11, 12, 13, F},
+                                            {14, 15, 16, 17, F}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool requestLaziness : {false, true}) {
+    qec->getQueryTreeCache().clearAll();
+    ExistsJoin existsJoin{
+        qec,
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, a.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
+                                                 Variable{"?a"}, std::nullopt},
+            false, std::vector<ColumnIndex>{}, leftVocab.clone()),
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, b.clone(),
+            std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
+                                                 Variable{"?b"}},
+            false, std::vector<ColumnIndex>{1, 2}, rightVocab.clone()),
+        Variable{"?result"}};
+    auto result = existsJoin.computeResultOnlyForTesting(requestLaziness);
+    ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
+    if (result.isFullyMaterialized()) {
+      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                  ::testing::UnorderedElementsAre(entryA));
+    } else {
+      auto [idTable, localVocab] =
+          ad_utility::getSingleElement(result.idTables());
+      EXPECT_EQ(idTable, expected);
+      EXPECT_THAT(localVocab.getAllWordsForTesting(),
+                  ::testing::UnorderedElementsAre(entryA));
+    }
+    const auto& runtimeInfo =
+        existsJoin.getChildren().at(0)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, clone) {
   auto* qec = getQec();
   ExistsJoin existsJoin{
       qec,
@@ -269,7 +337,7 @@ TEST(Exists, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
+TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
   auto* qec = getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
@@ -295,7 +363,7 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
+TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
   auto* qec = getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
@@ -607,7 +675,7 @@ TEST(ExistsJoin, repeatingMatchesDontProduceDuplicates) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, columnOriginatesFromGraphOrUndef) {
+TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -658,7 +726,7 @@ TEST(Exists, columnOriginatesFromGraphOrUndef) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
+TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   auto* qec = getQec();
 
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -690,7 +758,7 @@ TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, cacheKeyDiffersForDifferentJoinColumns) {
+TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
   auto* qec = getQec();
 
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -723,4 +791,73 @@ TEST(Exists, cacheKeyDiffersForDifferentJoinColumns) {
                                                    qec, std::move(handle));
 
   EXPECT_NE(tree1->getCacheKey(), tree2->getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, resultSortedOn) {
+  IdTable bigger = makeIdTableFromVector({
+      {1, 10, 100},
+      {2, 20, 200},
+      {3, 30, 300},
+  });
+  IdTable biggerWithUndef = makeIdTableFromVector({
+      {U, U, U},
+      {1, 10, 100},
+      {2, 20, 200},
+      {3, 30, 300},
+  });
+
+  IdTable smaller = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+
+  auto getSortOrder = [&smaller](const IdTable& reference,
+                                 std::vector<ColumnIndex> sortOrder) {
+    auto* qec = ad_utility::testing::getQec();
+    ExistsJoin existsJoin{
+        qec,
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, reference.clone(),
+            std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"},
+                                                 std::nullopt},
+            false, std::move(sortOrder)),
+        ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, smaller.clone(),
+            std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"},
+                                                 std::nullopt}),
+        Variable{"?result"}};
+    return existsJoin.resultSortedOn();
+  };
+
+  using namespace ::testing;
+
+  // No sort is added so it is propagated directly.
+  EXPECT_THAT(getSortOrder(bigger, {0, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(bigger, {1, 0}), ElementsAre(1, 0));
+  EXPECT_THAT(getSortOrder(bigger, {0, 1, 2}), ElementsAre(0, 1, 2));
+  EXPECT_THAT(getSortOrder(bigger, {1, 0, 2}), ElementsAre(1, 0, 2));
+  // Sort is added but optimized away.
+  EXPECT_THAT(getSortOrder(bigger, {0}), ElementsAre(0));
+  EXPECT_THAT(getSortOrder(bigger, {0, 2}), ElementsAre(0, 2));
+  EXPECT_THAT(getSortOrder(bigger, {1}), ElementsAre(1));
+  EXPECT_THAT(getSortOrder(bigger, {1, 2}), ElementsAre(1, 2));
+  EXPECT_THAT(getSortOrder(bigger, {2}), ElementsAre(2));
+  EXPECT_THAT(getSortOrder(bigger, {2, 0}), ElementsAre(2, 0));
+  EXPECT_THAT(getSortOrder(bigger, {2, 1}), ElementsAre(2, 1));
+  EXPECT_THAT(getSortOrder(bigger, {2, 0, 1}), ElementsAre(2, 0, 1));
+  EXPECT_THAT(getSortOrder(bigger, {2, 1, 0}), ElementsAre(2, 1, 0));
+  // Sort is added but not optimized away.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 0, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 1, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 0, 2}), ElementsAre(0, 1));
+  // Already sorted case.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1}), ElementsAre(0, 1));
+  // Sort would be added if it's not already sorted enough.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1, 2}), ElementsAre(0, 1, 2));
 }

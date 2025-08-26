@@ -171,7 +171,7 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
 }
 
 // _____________________________________________________________________________
-TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
+TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
 
@@ -197,6 +197,7 @@ TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
 
   auto* qec = ad_utility::testing::getQec();
   for (bool forceFullyMaterialized : {false, true}) {
+    qec->getQueryTreeCache().clearAll();
     Minus m{qec,
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, a.clone(),
@@ -216,6 +217,66 @@ TEST(Minus, computeMinusIndexNestedLoopJoinOptimization) {
                 ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
         m.getChildren().at(1)->getRootOperation()->runtimeInfo();
+    EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
+    EXPECT_EQ(runtimeInfo.numRows_, 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
+  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation("\"a\"");
+  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation("\"b\"");
+
+  LocalVocab leftVocab;
+  leftVocab.getIndexAndAddIfNotContained(entryA);
+  LocalVocab rightVocab;
+  rightVocab.getIndexAndAddIfNotContained(entryB);
+
+  // From this table columns 2 and 1 will be used for the join.
+  // This is deliberately not sorted to check the optimization that avoids
+  // sorting on the right if bigger
+  IdTable a = makeIdTableFromVector({{7, 2, 1, 5},
+                                     {1, 3, 3, 5},
+                                     {1, 8, 1, 5},
+                                     {7, 2, 8, 14},
+                                     {10, 11, 12, 13},
+                                     {14, 15, 16, 17}});
+
+  // From this table columns 1 and 2 will be used for the join.
+  IdTable b = makeIdTableFromVector(
+      {{1, 1, 2}, {4, 2, 1}, {2, 8, 1}, {3, 8, 2}, {4, 8, 2}});
+  IdTable expected = makeIdTableFromVector(
+      {{1, 3, 3, 5}, {1, 8, 1, 5}, {10, 11, 12, 13}, {14, 15, 16, 17}});
+
+  auto* qec = ad_utility::testing::getQec();
+  for (bool requestLaziness : {false, true}) {
+    qec->getQueryTreeCache().clearAll();
+    Minus m{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, a.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?b"}, Variable{"?a"}, std::nullopt},
+                false, std::vector<ColumnIndex>{}, leftVocab.clone()),
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, b.clone(),
+                std::vector<std::optional<Variable>>{
+                    std::nullopt, Variable{"?a"}, Variable{"?b"}},
+                false, std::vector<ColumnIndex>{1, 2}, rightVocab.clone())};
+    auto result = m.computeResultOnlyForTesting(requestLaziness);
+    ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
+    if (result.isFullyMaterialized()) {
+      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
+                  ::testing::UnorderedElementsAre(entryA));
+    } else {
+      auto [idTable, localVocab] =
+          ad_utility::getSingleElement(result.idTables());
+      EXPECT_EQ(idTable, expected);
+      EXPECT_THAT(localVocab.getAllWordsForTesting(),
+                  ::testing::UnorderedElementsAre(entryA));
+    }
+    const auto& runtimeInfo =
+        m.getChildren().at(0)->getRootOperation()->runtimeInfo();
     EXPECT_EQ(runtimeInfo.status_, RuntimeInformation::Status::optimizedOut);
     EXPECT_EQ(runtimeInfo.numRows_, 0);
   }
@@ -650,4 +711,71 @@ TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   EXPECT_THAT(handler.localVocab().getAllWordsForTesting(),
               ::testing::ElementsAre(testLiteral));
   EXPECT_TRUE(std::move(handler).resultTable().empty());
+}
+
+// _____________________________________________________________________________
+TEST(Minus, resultSortedOn) {
+  IdTable bigger = makeIdTableFromVector({
+      {1, 10, 100},
+      {2, 20, 200},
+      {3, 30, 300},
+  });
+  IdTable biggerWithUndef = makeIdTableFromVector({
+      {U, U, U},
+      {1, 10, 100},
+      {2, 20, 200},
+      {3, 30, 300},
+  });
+
+  IdTable smaller = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+
+  auto getSortOrder = [&smaller](const IdTable& reference,
+                                 std::vector<ColumnIndex> sortOrder) {
+    auto* qec = ad_utility::testing::getQec();
+    Minus m{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, reference.clone(),
+                std::vector<std::optional<Variable>>{
+                    Variable{"?a"}, Variable{"?b"}, std::nullopt},
+                false, std::move(sortOrder)),
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, smaller.clone(),
+                std::vector<std::optional<Variable>>{
+                    Variable{"?a"}, Variable{"?b"}, std::nullopt})};
+    return m.resultSortedOn();
+  };
+
+  using namespace ::testing;
+
+  // No sort is added so it is propagated directly.
+  EXPECT_THAT(getSortOrder(bigger, {0, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(bigger, {1, 0}), ElementsAre(1, 0));
+  EXPECT_THAT(getSortOrder(bigger, {0, 1, 2}), ElementsAre(0, 1, 2));
+  EXPECT_THAT(getSortOrder(bigger, {1, 0, 2}), ElementsAre(1, 0, 2));
+  // Sort is added but optimized away.
+  EXPECT_THAT(getSortOrder(bigger, {0}), ElementsAre(0));
+  EXPECT_THAT(getSortOrder(bigger, {0, 2}), ElementsAre(0, 2));
+  EXPECT_THAT(getSortOrder(bigger, {1}), ElementsAre(1));
+  EXPECT_THAT(getSortOrder(bigger, {1, 2}), ElementsAre(1, 2));
+  EXPECT_THAT(getSortOrder(bigger, {2}), ElementsAre(2));
+  EXPECT_THAT(getSortOrder(bigger, {2, 0}), ElementsAre(2, 0));
+  EXPECT_THAT(getSortOrder(bigger, {2, 1}), ElementsAre(2, 1));
+  EXPECT_THAT(getSortOrder(bigger, {2, 0, 1}), ElementsAre(2, 0, 1));
+  EXPECT_THAT(getSortOrder(bigger, {2, 1, 0}), ElementsAre(2, 1, 0));
+  // Sort is added but not optimized away.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 0, 1}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {2, 1, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 0}), ElementsAre(0, 1));
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {1, 0, 2}), ElementsAre(0, 1));
+  // Already sorted case.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1}), ElementsAre(0, 1));
+  // Sort would be added if it's not already sorted enough.
+  EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1, 2}), ElementsAre(0, 1, 2));
 }

@@ -522,7 +522,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
   auto leftRes = _left->getResult(false);
-  auto rightRes = computeResultSkipChild(_right->getRootOperation());
+  auto rightRes = computeResultSkipChild(_right->getRootOperation(), true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{

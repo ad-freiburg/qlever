@@ -177,14 +177,14 @@ inline bool joinColumnsAreAlwaysDefined(
 // Helper function that is commonly used to skip sort operations and use an
 // alternative algorithm that doesn't require sorting instead.
 inline std::shared_ptr<const Result> computeResultSkipChild(
-    const std::shared_ptr<Operation>& operation) {
+    const std::shared_ptr<Operation>& operation, bool requestLaziness) {
   auto children = operation->getChildren();
   AD_CONTRACT_CHECK(children.size() == 1);
   auto child = children.at(0);
   auto runtimeInfoChildren = child->getRootOperation()->getRuntimeInfoPointer();
   operation->updateRuntimeInformationWhenOptimizedOut({runtimeInfoChildren});
 
-  return child->getResult(true);
+  return child->getResult(requestLaziness);
 }
 }  // namespace qlever::joinHelpers
 

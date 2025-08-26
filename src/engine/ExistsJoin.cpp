@@ -107,7 +107,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
 
   if (!noJoinNecessary) {
-    if (auto res = tryIndexNestedLoopJoinIfSuitable()) {
+    if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
       return std::move(res).value();
     }
   }
@@ -291,7 +291,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
   }
 
   auto leftRes = left_->getResult(false);
-  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort);
+  auto rightRes = qlever::joinHelpers::computeResultSkipChild(sort, true);
 
   IdTable result = leftRes->idTable().clone();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
@@ -309,7 +309,8 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable() {
+std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
   // This algorithm only works well if the right side is smaller and we can
   // avoid sorting the left side. It currently doesn't support undef.
   if (!rightIndexNestedLoopJoinIsPossible()) {
@@ -317,7 +318,9 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable() {
   }
 
   auto leftRes = qlever::joinHelpers::computeResultSkipChild(
-      std::dynamic_pointer_cast<Sort>(left_->getRootOperation()));
+      std::dynamic_pointer_cast<Sort>(left_->getRootOperation()),
+      requestLaziness);
+  bool isLazy = !leftRes->isFullyMaterialized();
   auto rightRes = right_->getResult(false);
 
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
@@ -337,16 +340,21 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable() {
         return Result::IdTableVocabPair{std::move(resultTable),
                                         std::move(localVocab)};
       });
-  return std::optional{Result{std::move(result), resultSortedOn()}};
+  return std::optional{
+      isLazy ? Result{std::move(result), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(result)),
+                      resultSortedOn()}};
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable() {
+std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
+    bool requestLaziness) {
   if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
                                                         right_)) {
     return std::nullopt;
   }
-  if (auto leftResult = tryRightIndexNestedLoopJoinIfSuitable()) {
+  if (auto leftResult =
+          tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
     return leftResult;
   }
   return tryLeftIndexNestedLoopJoinIfSuitable();
