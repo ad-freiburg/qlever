@@ -67,7 +67,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
+                                              parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -337,6 +338,8 @@ void IndexImpl::createFromFiles(
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
+
+  configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1181,6 +1184,9 @@ void IndexImpl::readConfiguration() {
   blankNodeManager_ =
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
+  loadDataMember("encoded-iri-prefixes", encodedIriManager_,
+                 EncodedIriManager{});
+
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
@@ -1195,8 +1201,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
-  resultTriple[0] = std::move(triple.subject_);
-  resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
@@ -1209,11 +1213,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // directly. These currently are the object and the graph ID of the triple.
   // The `index` is the index of the element within the triple. For example if
   // the `getter` is `subject_` then the index has to be `0`.
-  auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
+  auto handleStringOrId = [this, &triple, &resultTriple](auto getter,
+                                                         size_t index) {
     // If the object of the triple can be directly folded into an ID, do so.
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
-    std::optional<Id> idIfNotString = el.toValueIdIfNotString();
+    std::optional<Id> idIfNotString =
+        el.toValueIdIfNotString(&encodedIriManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1224,6 +1230,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       resultTriple[index] = std::move(el);
     }
   };
+  handleStringOrId(&TurtleTriple::subject_, 0);
+  handleStringOrId(&TurtleTriple::predicate_, 1);
   handleStringOrId(&TurtleTriple::object_, 2);
   handleStringOrId(&TurtleTriple::graphIri_, 3);
   // If we ever add additional elements to the triples then we have to change
@@ -1558,7 +1566,8 @@ size_t IndexImpl::getCardinality(
   if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
+  if (std::optional<Id> relId =
+          comp.toValueId(getVocab(), encodedIriManager())) {
     return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
@@ -1586,7 +1595,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
+  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = getPermutation(permutation)
                     .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
@@ -1817,4 +1826,11 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValues(
+    std::vector<std::string> prefixesWithoutAngleBrackets) {
+  encodedIriManager_ =
+      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }

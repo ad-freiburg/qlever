@@ -8,6 +8,7 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
+#include "index/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
@@ -19,6 +20,10 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
@@ -136,35 +141,59 @@ TEST(TripleComponent, toRdfLiteral) {
   object = DateYearOrDuration{123456, DateYearOrDuration::Type::Year};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
+
+  // Test encoded IRI - covers the "else" branch in toRdfLiteral
+  // Create an EncodedIriManager with a test prefix
+  EncodedIriManager encodedIriManager{
+      std::vector<std::string>{"http://example.org/"}};
+  std::string encodableIri = "<http://example.org/123>";
+  auto encodedIdOpt = encodedIriManager.encode(encodableIri);
+
+  // Create a TripleComponent with the encoded ID
+  TripleComponent encodedIriComponent{encodedIdOpt.value()};
+  std::string result = encodedIriComponent.toRdfLiteral();
+
+  // This function is just used for cache keys etc, so it is not an issue that
+  // the result is not human readable
+  EXPECT_THAT(result, ::testing::HasSubstr("encodedId: "));
 }
 
 TEST(TripleComponent, toValueIdIfNotString) {
   TripleComponent tc{42};
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
   tc = 131.4;
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
+  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), D(131.4));
 
   tc = TripleComponent{GeoPoint(47.9, 7.8)};
-  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value().getDatatype(),
             Datatype::GeoPoint);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(encodedIriManager())
+                      .value()
+                      .getGeoPoint()
+                      .getLat(),
                   47.9);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLng(),
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(encodedIriManager())
+                      .value()
+                      .getGeoPoint()
+                      .getLng(),
                   7.8);
 
   DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), Id::makeFromDate(date));
+  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(),
+            Id::makeFromDate(date));
   tc = "<x>";
-  ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
+  ASSERT_FALSE(tc.toValueIdIfNotString(encodedIriManager()).has_value());
   tc = lit("\"a\"");
-  ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
+  ASSERT_FALSE(tc.toValueIdIfNotString(encodedIriManager()).has_value());
 
   tc = Variable{"?x"};
   // Note: we cannot simply write `ASSERT_THROW(tc.toValueIdIfNotString(),
   // Exception)` because `toValueIdIfNotString` is marked `nodiscard` and we
   // would get a compiler warning.
-  auto f = [&]() { [[maybe_unused]] auto x = tc.toValueIdIfNotString(); };
+  auto f = [&]() {
+    [[maybe_unused]] auto x = tc.toValueIdIfNotString(encodedIriManager());
+  };
   ASSERT_THROW(f(), ad_utility::Exception);
 }
 
@@ -175,20 +204,20 @@ TEST(TripleComponent, toValueId) {
   TripleComponent tc = iri("<x>");
   auto getId = makeGetId(qec->getIndex());
   Id id = getId("<x>");
-  ASSERT_EQ(tc.toValueId(vocab).value(), id);
+  ASSERT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(), id);
 
   tc = lit("\"alpha\"");
   id = getId("\"alpha\"");
-  EXPECT_EQ(tc.toValueId(vocab).value(), id);
+  EXPECT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(), id);
 
   tc = iri("<notexisting>");
-  ASSERT_FALSE(tc.toValueId(vocab).has_value());
+  ASSERT_FALSE(tc.toValueId(vocab, *encodedIriManager()).has_value());
   tc = 42;
 
-  ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
 
   tc = iri(HAS_PATTERN_PREDICATE);
-  ASSERT_EQ(tc.toValueId(vocab).value(),
+  ASSERT_EQ(tc.toValueId(vocab, *encodedIriManager()).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 }
 
