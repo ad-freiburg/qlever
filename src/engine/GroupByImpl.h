@@ -652,11 +652,11 @@ class GroupByImpl : public Operation {
   // threshold has been exceeded.
   // It returns the Result consisting of the entries from the hash map and the
   // sorted entries from the rest of the input.
-  template <size_t NUM_GROUP_COLUMNS, typename SubResults, typename Iterator>
+  template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
   Result handleRemainderUsingHybridApproach(
       HashMapOptimizationData data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      SubResults&& subresults, HashMapTimers& timers, Iterator it) const;
+      HashMapTimers& timers, Iterator it, Iterator beginIt, Sentinel endIt) const;
 };
 
 // _____________________________________________________________________________

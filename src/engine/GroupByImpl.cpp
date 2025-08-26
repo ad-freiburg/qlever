@@ -1611,7 +1611,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                    << ") > (thr: " << groupThreshold
                    << "), switching to sort-based aggregation" << std::endl;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
-          data, aggregationData, subresults, timers, it);
+          data, aggregationData, timers, it, beginIt, endIt);
     }
   }
   runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer.msecs());
@@ -1622,14 +1622,11 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS, typename SubResults, typename Iterator>
+template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
 Result GroupByImpl::handleRemainderUsingHybridApproach(
     HashMapOptimizationData data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    SubResults&& subresults, HashMapTimers& timers, Iterator it) const {
-  auto beginIt = ql::ranges::begin(subresults);
-  auto endIt = ql::ranges::end(subresults);
-
+    HashMapTimers& timers, Iterator it, Iterator beginIt, Sentinel endIt) const {
   const auto& [beginIdTableRef, _] = *beginIt;
   const IdTable& beginIdTable = beginIdTableRef;
   const size_t inWidth = beginIdTable.numColumns();
@@ -1664,12 +1661,10 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
       "hybridFallback",
       "hash groups=" + std::to_string(hashResult.numRows()) +
           ", sorted tail groups=" + std::to_string(restResult.numRows()));
+  // Build final hybrid result: append fallback rows and sort on grouping columns
   hashResult.insertAtEnd(restResult);
-  // sort rows by grouping columns
-  // TODO: Sort on hard drive if too large. This may need a whole another logic.
   Engine::sort(hashResult, *data.columnIndices);
-  // Return a Result and early exit
-  return Result{std::move(hashResult), resultSortedOn(), std::move(localVocab)};
+  return Result{std::move(hashResult), *data.columnIndices, std::move(localVocab)};
 }
 
 // Helper to build column-wise spans of grouping values for a block

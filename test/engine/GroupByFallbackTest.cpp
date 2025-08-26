@@ -228,11 +228,12 @@ TEST_F(GroupByFallbackTest, ImplicitGroupOnly) {
   RowData rows(5);
   for (size_t i = 0; i < rows.size(); ++i) rows[i] = i + 1;
   IdTable table = createIdTable(rows, allocator);
-  // Build a GroupByImpl with no grouping variables and no aliases
-  auto mockOp = std::make_shared<MockOperation>(qec_, table);
-  auto tree = std::make_shared<QueryExecutionTree>(qec_, mockOp);
-  auto gb = std::make_unique<GroupByImpl>(qec_, std::vector<Variable>{},
-                                          std::vector<Alias>{}, tree);
+  // Build a GroupByImpl with no aliases using ValuesForTesting.
+  // ValuesForTesting requires one optional<Variable> per input column.
+  std::vector<std::optional<Variable>> varOpts = {Variable{"?x"}};
+  auto valuesOp = std::make_shared<ValuesForTesting>(qec_, std::move(table), varOpts);
+  auto tree = std::make_shared<QueryExecutionTree>(qec_, valuesOp);
+  auto gb = std::make_unique<GroupByImpl>(qec_, std::vector<Variable>{}, std::vector<Alias>{}, tree);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
   // Expect one row and zero columns
