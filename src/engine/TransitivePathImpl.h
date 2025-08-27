@@ -205,6 +205,123 @@ class TransitivePathImpl : public TransitivePathBase {
     return connectedNodes;
   }
 
+  CPP_template(typename Node)(
+      requires ql::ranges::range<Node>) class TransitiveHullLazyRange
+      : public ad_utility::InputRangeMixin<TransitiveHullLazyRange<Node>> {
+   private:
+    using NodeWithTargetRange =
+        ad_utility::InputRangeTypeErased<NodeWithTargets>;
+    // input arguments
+    const TransitivePathImpl<T>* parent_{nullptr};
+    T edges_;
+    LocalVocab edgesVocab_;
+    Node startNodes_;
+    TripleComponent target_;
+    bool yieldOnce_;
+    // runtime state
+    ad_utility::Timer timer{ad_utility::Timer::Stopped};
+    LocalVocab targetHelper_;
+    std::optional<Id> targetId_;
+    bool sameVariableOnBothSides_;
+    // range state
+    bool isFinished_{false};
+    std::optional<NodeWithTargetRange> currentNodeWithTargetRange_;
+    NodeWithTargetRange::iterator currentNodeWithTargetRangeIt_{};
+    ql::ranges::iterator_t<Node> startNodesIt_{};
+
+   public:
+    TransitiveHullLazyRange(const TransitivePathImpl<T>* parent, const T edges,
+                            LocalVocab edgesVocab, Node startNodes,
+                            TripleComponent target, bool yieldOnce)
+        : parent_(parent),
+          edges_(std::move(edges)),
+          edgesVocab_(std::move(edgesVocab)),
+          startNodes_(std::move(startNodes)),
+          target_(std::move(target)),
+          yieldOnce_(yieldOnce) {
+      // `targetId` is only ever used for comparisons, and never stored in the
+      // result, so we use a separate local vocabulary - targetHelper_.
+      targetId_ = target_.isVariable()
+                      ? std::nullopt
+                      : std::optional{std::move(target_).toValueId(
+                            parent_->_executionContext->getIndex().getVocab(),
+                            targetHelper_)};
+      sameVariableOnBothSides_ = !targetId_.has_value() &&
+                                 parent_->lhs_.value_ == parent_->rhs_.value_;
+    }
+
+    NodeWithTargetRange buildRange(auto& tableColumn) {
+      using namespace ad_utility;
+      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
+      mergedVocab.mergeWith(edgesVocab_);
+      return InputRangeTypeErased(CachingContinuableTransformInputRange(
+          std::move(tableColumn.startNodes_),
+          [this, payload = std::move(tableColumn.payload_),
+           mergedVocab = std::move(mergedVocab),
+           currentRow = size_t(0)](Id startNode) mutable {
+            timer.cont();
+            if (sameVariableOnBothSides_) {
+              targetId_ = startNode;
+            }
+            Set connectedNodes =
+                parent_->findConnectedNodes(edges_, startNode, targetId_);
+            if (!connectedNodes.empty()) {
+              parent_->runtimeInfo().addDetail("Hull time", timer.msecs());
+              NodeWithTargets result{startNode, std::move(connectedNodes),
+                                     mergedVocab.clone(), payload, currentRow};
+              // Reset vocab to prevent merging the same vocab over and over
+              // again.
+              if (yieldOnce_) {
+                mergedVocab = LocalVocab{};
+              }
+              currentRow++;
+              timer.stop();
+              return LoopControl<NodeWithTargets>::yieldValue(
+                  std::move(result));
+            }
+            currentRow++;
+            timer.stop();
+            return LoopControl<NodeWithTargets>::makeContinue();
+          }));
+    }
+
+    void getNextNodeRange() {
+      if (startNodesIt_ == ql::ranges::end(startNodes_)) {
+        isFinished_ = true;
+        return;
+      }
+
+      currentNodeWithTargetRange_ = buildRange(*startNodesIt_);
+      // calling begin on the iterator readies the first element
+      currentNodeWithTargetRangeIt_ = currentNodeWithTargetRange_->begin();
+      if (currentNodeWithTargetRangeIt_ == currentNodeWithTargetRange_->end()) {
+        startNodesIt_++;
+        getNextNodeRange();
+      }
+    }
+
+    void start() {
+      startNodesIt_ = ql::ranges::begin(startNodes_);
+      getNextNodeRange();
+    }
+
+    void next() {
+      if (isFinished_) {
+        return;
+      }
+
+      ++currentNodeWithTargetRangeIt_;
+      if (currentNodeWithTargetRangeIt_ == currentNodeWithTargetRange_->end()) {
+        startNodesIt_++;
+        getNextNodeRange();
+      }
+    }
+
+    bool isFinished() { return isFinished_; }
+    auto& get() { return *currentNodeWithTargetRangeIt_; }
+    const auto& get() const { return *currentNodeWithTargetRangeIt_; }
+  };
+
   /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
@@ -225,44 +342,9 @@ class TransitivePathImpl : public TransitivePathBase {
   CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
       transitiveHull(const T& edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent target, bool yieldOnce) const {
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
-    // `targetId` is only ever used for comparisons, and never stored in the
-    // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
-    const auto& index = getIndex();
-    std::optional<Id> targetId =
-        target.isVariable()
-            ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
-    bool sameVariableOnBothSides =
-        !targetId.has_value() && lhs_.value_ == rhs_.value_;
-    for (auto&& tableColumn : startNodes) {
-      timer.cont();
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab);
-      size_t currentRow = 0;
-      for (Id startNode : tableColumn.startNodes_) {
-        if (sameVariableOnBothSides) {
-          targetId = startNode;
-        }
-        Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-        if (!connectedNodes.empty()) {
-          runtimeInfo().addDetail("Hull time", timer.msecs());
-          timer.stop();
-          co_yield NodeWithTargets{startNode, std::move(connectedNodes),
-                                   mergedVocab.clone(), tableColumn.payload_,
-                                   currentRow};
-          timer.cont();
-          // Reset vocab to prevent merging the same vocab over and over again.
-          if (yieldOnce) {
-            mergedVocab = LocalVocab{};
-          }
-        }
-        currentRow++;
-      }
-      timer.stop();
-    }
+    return NodeGenerator(TransitiveHullLazyRange(
+        this, edges, std::move(edgesVocab), std::move(startNodes),
+        std::move(target), yieldOnce));
   }
 
   /**
