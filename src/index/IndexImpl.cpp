@@ -11,6 +11,7 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <utility>
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
@@ -22,11 +23,13 @@
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -67,7 +70,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
+  return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
+                                              parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -222,18 +226,20 @@ IndexImpl::buildOspWithPatterns(
 
   // Set up a generator that yields blocks with the following columns:
   // S P O PatternOfS PatternOfO, sorted by OPS.
-  auto blockGenerator =
-      [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-    // If an exception occurs in the block that is consuming the blocks yielded
-    // from this generator, we have to explicitly finish the `queue`, otherwise
-    // there will be a deadlock because the threads involved in the queue can
-    // never join.
-    absl::Cleanup cl{[&queue]() { queue.finish(); }};
-    while (auto block = queue.pop()) {
-      co_yield fixBlockAfterPatternJoin(std::move(block));
+  // If an exception occurs in the block that is consuming the blocks yielded
+  // from this generator, we have to explicitly finish the `queue`, otherwise
+  // there will be a deadlock because the threads involved in the queue can
+  // never join.
+  auto get{[&queue]() -> std::optional<IdTableStatic<0>> {
+    if (auto block = queue.pop()) {
+      return fixBlockAfterPatternJoin(std::move(block));
     }
-  }(queue);
-
+    return std::nullopt;
+  }};
+  using namespace ad_utility;
+  auto blockGenerator = InputRangeTypeErased{
+      CallbackOnEndView{InputRangeFromGetCallable{std::move(get)},
+                        [&queue]() { queue.finish(); }}};
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
@@ -268,8 +274,11 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
-  auto internalTriplesUnique = ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>());
+
+  // TODO<joka921> As soon as `uniqueBlockView` is no longer a `generator` the
+  // explicit `BlocksOfTriples` constructor can be removed again.
+  auto internalTriplesUnique = BlocksOfTriples{ad_utility::uniqueBlockView(
+      internalTriplesPsoSorter.template getSortedBlocks<0>())};
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
                       false);
   onDiskBase_ = std::move(onDiskBaseBackup);
@@ -338,6 +347,8 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
+  configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
@@ -365,9 +376,11 @@ void IndexImpl::createFromFiles(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
+  // TODO: this will become ad_utility::InputRangeErased so no conversion
+  // will be needed after https://github.com/ad-freiburg/qlever/pull/2208
   // For the first permutation, perform a unique.
-  auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
+  auto firstSorterWithUnique{ad_utility::InputRangeTypeErased{
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput())}};
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -404,7 +417,6 @@ void IndexImpl::createFromFiles(
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-
                                thirdSorterPtr->template getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
@@ -818,10 +830,14 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
+  // TODO: remove this conversion once CompressedRelationWriter will be
+  // migrated to non coroutines
+  auto sortedTriplesGenerator{
+      cppcoro::fromInputRange(std::forward<T>(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+          std::move(sortedTriplesGenerator), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -1181,6 +1197,9 @@ void IndexImpl::readConfiguration() {
   blankNodeManager_ =
       std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
+  loadDataMember("encoded-iri-prefixes", encodedIriManager_,
+                 EncodedIriManager{});
+
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
@@ -1195,8 +1214,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
-  resultTriple[0] = std::move(triple.subject_);
-  resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
@@ -1209,11 +1226,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // directly. These currently are the object and the graph ID of the triple.
   // The `index` is the index of the element within the triple. For example if
   // the `getter` is `subject_` then the index has to be `0`.
-  auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
+  auto handleStringOrId = [this, &triple, &resultTriple](auto getter,
+                                                         size_t index) {
     // If the object of the triple can be directly folded into an ID, do so.
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
-    std::optional<Id> idIfNotString = el.toValueIdIfNotString();
+    std::optional<Id> idIfNotString =
+        el.toValueIdIfNotString(&encodedIriManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1224,6 +1243,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       resultTriple[index] = std::move(el);
     }
   };
+  handleStringOrId(&TurtleTriple::subject_, 0);
+  handleStringOrId(&TurtleTriple::predicate_, 1);
   handleStringOrId(&TurtleTriple::object_, 2);
   handleStringOrId(&TurtleTriple::graphIri_, 3);
   // If we ever add additional elements to the triples then we have to change
@@ -1558,7 +1579,8 @@ size_t IndexImpl::getCardinality(
   if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
+  if (std::optional<Id> relId =
+          comp.toValueId(getVocab(), encodedIriManager())) {
     return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
@@ -1586,7 +1608,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
+  if (auto keyId = key.toValueId(getVocab(), encodedIriManager())) {
     auto meta = getPermutation(permutation)
                     .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
@@ -1817,4 +1839,11 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValues(
+    std::vector<std::string> prefixesWithoutAngleBrackets) {
+  encodedIriManager_ =
+      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
