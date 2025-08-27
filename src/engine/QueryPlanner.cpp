@@ -2405,36 +2405,40 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
 std::optional<std::tuple<size_t, size_t>>
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
+  // If there are more than two pairs of join columns, we have a graph
+  // variable. In that case, we compute the full transitive hull.
   if (jcs.size() > 2) {
     return std::nullopt;
   }
+
+  // The index in `jcs` of the transitive path side and the other side.
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
-  // Since this function is only called for unbound transitive paths, we know
-  // that any extra variables have to be the graph var.
+
+  // If there is one pair of join columns, then either exactly one side of the
+  // transitive path can be bound (and we return that pair), or the graph
+  // variable is bound (in which case we return `std::nullopt`).
   auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
   if (jcs.size() == 1) {
     size_t transitiveCol = jcs[0][transitivePathIndex];
     size_t otherCol = jcs[0][otherIndex];
-    // We can't bind if the only matching column is the graph col. The
-    // `TransitivePathImpl` doesn't support this.
     if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
-    // Bind on non-graph column.
     return std::tuple{transitiveCol, otherCol};
   }
-  // Bind on two columns, one graph column and one other column.
+
+  // Otherwise, we have two pairs of join columns. Then one pertains to the
+  // graph variable and the other to one side of the transitive path. Return
+  // the pair that pertains to the transitive path.
   size_t transitiveColA = jcs[0][transitivePathIndex];
   size_t otherColA = jcs[0][otherIndex];
   size_t transitiveColB = jcs[1][transitivePathIndex];
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
-    // The "A" columns are non-graph columns.
     AD_CORRECTNESS_CHECK(transitiveColB == graphColIndex);
     return std::tuple{transitiveColA, otherColA};
   }
-  // The "B" columns are the non-graph columns.
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
   return std::tuple{transitiveColB, otherColB};
@@ -2461,16 +2465,18 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
     return std::nullopt;
   }
 
+  // Do not bind the side of a path twice and don't bind on graph variable.
   auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  // Do not bind the side of a path twice and don't bind on graph variable
   if (!joinCols.has_value()) {
     return std::nullopt;
   }
-  const auto& [thisCol, otherCol] = joinCols.value();
+
   // An unbound transitive path has at most two columns we can bind to.
+  const auto& [thisCol, otherCol] = joinCols.value();
   AD_CONTRACT_CHECK(thisCol <= 1);
-  // The left or right side is a TRANSITIVE_PATH and its join column
-  // corresponds to the left side of its input.
+
+  // The left or right side is a transitive path and its join column corresponds
+  // to the left side of its input.
   SubtreePlan plan = [&]() {
     if (thisCol == 0) {
       return makeSubtreePlan(
