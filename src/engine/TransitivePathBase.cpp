@@ -602,6 +602,14 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() -
                      numJoinColumnsWith(leftOrRightOp, inputCol);
+  // Make sure mapping actually points to the last column if it's not one of the
+  // regular variables.
+  if (graphVariable_.has_value()) {
+    auto& graphIndex = p->variableColumns_[graphVariable_.value()].columnIndex_;
+    if (graphIndex == 2) {
+      graphIndex = p->resultWidth_ - 1;
+    }
+  }
   return std::move(p);
 }
 
