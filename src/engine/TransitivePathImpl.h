@@ -241,11 +241,12 @@ class TransitivePathImpl : public TransitivePathBase {
           yieldOnce_(yieldOnce) {
       // `targetId` is only ever used for comparisons, and never stored in the
       // result, so we use a separate local vocabulary - targetHelper_.
+      const auto& index = parent_->getIndex();
       targetId_ = target_.isVariable()
                       ? std::nullopt
                       : std::optional{std::move(target_).toValueId(
-                            parent_->_executionContext->getIndex().getVocab(),
-                            targetHelper_)};
+                            index.getVocab(), targetHelper_,
+                            index.encodedIriManager())};
       sameVariableOnBothSides_ = !targetId_.has_value() &&
                                  parent_->lhs_.value_ == parent_->rhs_.value_;
     }
