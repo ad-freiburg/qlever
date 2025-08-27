@@ -187,13 +187,17 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
+  size_t rowOffset = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
+      ConstructQueryExportContext context{i,
+                                          idTable,
+                                          pair.localVocab_,
                                           qet.getVariableColumns(),
-                                          qet.getQec()->getIndex()};
+                                          qet.getQec()->getIndex(),
+                                          rowOffset};
       using enum PositionInTriple;
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
@@ -208,6 +212,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
         cancellationHandle->throwIfCancelled();
       }
     }
+    rowOffset += idTable.size();
   }
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
