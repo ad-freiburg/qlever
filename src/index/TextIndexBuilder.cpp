@@ -136,75 +136,68 @@ void TextIndexBuilder::processWordsForInvertedLists(
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
-    std::string contextFile, bool addWordsFromLiterals) const {
-
+ad_utility::InputRangeTypeErased<WordsFileLine>
+TextIndexBuilder::wordsInTextRecords(std::string contextFile,
+                                     bool addWordsFromLiterals) const {
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
-  std::shared_ptr<LocaleManager> localeManager = std::make_shared<LocaleManager>(textVocab_.getLocaleManager());
-  std::shared_ptr<TextRecordIndex> contextId = std::make_shared<TextRecordIndex>(TextRecordIndex::make(0));
+  std::shared_ptr<LocaleManager> localeManager =
+      std::make_shared<LocaleManager>(textVocab_.getLocaleManager());
+  std::shared_ptr<TextRecordIndex> nextContextId =
+      std::make_shared<TextRecordIndex>(TextRecordIndex::make(0));
 
-  auto round_one = [localeManager, contextId, this, contextFile]() {
-    using L = ad_utility::LoopControl<WordsFileLine>;
-    if(contextFile.empty()) {
-      return ad_utility::InputRangeTypeErased<WordsFileLine>(ql::ranges::empty_view<WordsFileLine>{});
+  auto round_one = [localeManager, nextContextId, contextFile]() {
+    if (contextFile.empty()) {
+      return ad_utility::InputRangeTypeErased<WordsFileLine>(
+          ql::ranges::empty_view<WordsFileLine>{});
     }
 
-    return ad_utility::InputRangeTypeErased<WordsFileLine>(ad_utility::CachingContinuableTransformInputRange(
-      WordsFileParser(contextFile, *localeManager),
-      [contextId](WordsFileLine& line) {
-        *contextId = line.contextId_;
+    return ad_utility::InputRangeTypeErased<WordsFileLine>(
+        ad_utility::CachingTransformInputRange(
+            WordsFileParser(contextFile, *localeManager),
+            [nextContextId](WordsFileLine& line) {
+              *nextContextId = line.contextId_.incremented();
 
-        if(*contextId > TextRecordIndex::make(0)) {
-          *contextId = contextId->incremented();
-        }
-        
-        return L::yieldValue(line);
-      }
-    ));
+              return std::move(line);
+            }));
   };
 
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
-  auto round_two = [localeManager, contextId, this]() {
+  auto round_two = [localeManager, nextContextId, this]() {
     using L = ad_utility::LoopControl<WordsFileLine>;
-    return ad_utility::InputRangeTypeErased<WordsFileLine>(
-      ad_utility::CachingContinuableTransformInputRange(
+    return ad_utility::CachingContinuableTransformInputRange(
         ad_utility::integerRange(vocab_.size()),
-        [localeManager, contextId, this](size_t i) {
+        [localeManager, nextContextId, this](size_t i) {
           VocabIndex index = VocabIndex::make(i);
           auto text = vocab_[index];
-          if(!isLiteral(text)) {
+          if (!isLiteral(text)) {
             return L::makeContinue();
           }
 
-          // We need the explicit cast to `std::string` because the return type of
-          // `indexToString` might be `string_view` if the vocabulary is stored
-          // uncompressed in memory.
-          WordsFileLine entityLine{std::string{text}, true, *contextId, 1, true};
+          // We need the explicit cast to `std::string` because the return type
+          // of `indexToString` might be `string_view` if the vocabulary is
+          // stored uncompressed in memory.
+          WordsFileLine entityLine{std::string{text}, true, *nextContextId, 1,
+                                   true};
 
           std::string_view textView = text;
           textView = textView.substr(0, textView.rfind('"'));
           textView.remove_prefix(1);
           std::vector<WordsFileLine> result;
           result.emplace_back(std::move(entityLine));
-          for(auto word : tokenizeAndNormalizeText(textView, *localeManager)) {
-            result.emplace_back(std::move(word), false, *contextId, 1);
+          for (auto word : tokenizeAndNormalizeText(textView, *localeManager)) {
+            result.emplace_back(std::move(word), false, *nextContextId, 1);
           }
-          *contextId = contextId->incremented();
+          *nextContextId = nextContextId->incremented();
           return L::yieldAll(std::move(result));
-        }
-      )
-    );
+        });
   };
 
-  if(addWordsFromLiterals) {
-    return ad_utility::InputRangeTypeErased<WordsFileLine>{::ranges::concat_view(
-      round_one(),
-      round_two())
-    };
-  }
-  else {
+  if (addWordsFromLiterals) {
+    return ad_utility::InputRangeTypeErased<WordsFileLine>{
+        ::ranges::concat_view(round_one(), round_two())};
+  } else {
     return ad_utility::InputRangeTypeErased<WordsFileLine>(round_one());
   }
 }
