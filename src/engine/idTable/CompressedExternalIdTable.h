@@ -218,10 +218,11 @@ class CompressedExternalIdTableWriter {
   template <size_t NumCols = 0>
   InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
       size_t index) {
+    size_t firstBlock = startOfSingleIdTables_.at(index);
     size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
                          : blocksPerColumn_.at(0).size()};
-    auto readBlocks = ql::views::iota(index, lastBlock) |
+    auto readBlocks = ql::views::iota(firstBlock, lastBlock) |
                       ql::views::transform([this](auto blockIdx) {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
@@ -611,22 +612,25 @@ class CompressedExternalIdTableSorter
   // will be automatically determined from the given memory limit.
   template <size_t N = NumStaticCols>
   requires(N == NumStaticCols || N == 0)
-  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
-    // Explanation for the second argument: One block is buffered by this
-    // generator, one block is buffered inside the `sortedBlocks` generator, so
-    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
-    // stream.
-    for (auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks<N>(blocksize),
-             std::max(1, numBufferedOutputBlocks_ - 2))) {
-      co_yield block;
-    }
-    this->isFirstIteration_ = false;
-    mergeIsActive_.store(false);
+
+    // Explanation for the second argument of `runStreamAsync`: One block is
+    // buffered by this generator, one block is buffered inside the
+    // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
+    // buffered by the async stream.
+    using namespace ad_utility;
+    return InputRangeTypeErased{
+        CallbackOnEndView{ad_utility::streams::runStreamAsync(
+                              sortedBlocks<N>(blocksize),
+                              std::max(1, numBufferedOutputBlocks_ - 2)),
+                          [&, this]() {
+                            this->isFirstIteration_ = false;
+                            mergeIsActive_.store(false);
+                          }}};
   }
 
   // The implementation of the type-erased interface. Push a complete block at
@@ -679,6 +683,10 @@ class CompressedExternalIdTableSorter
         AD_CORRECTNESS_CHECK(b.first != b.second);
       }
       ql::ranges::make_heap(priorityQueue_, comp_);
+      // Without that call, `begin() != end()` would always hold (even for empty
+      // sorters), and `*begin()` would always yield an empty block (even for
+      // non-empty sorters).
+      next();
     }
 
     bool isFinished() {
@@ -729,14 +737,18 @@ class CompressedExternalIdTableSorter
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
-        return InputRangeTypeErased{
-            lazySingleValueRange([this]() -> IdTableStatic<N> {
-              if (this->moveResultOnMerge_) {
-                return std::move(this->currentBlock_).template toStatic<N>();
-              } else {
-                return this->currentBlock_.clone().template toStatic<N>();
-              }
-            })};
+        return block.empty()
+                   ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
+                   : InputRangeTypeErased{
+                         lazySingleValueRange([this]() -> IdTableStatic<N> {
+                           if (this->moveResultOnMerge_) {
+                             return std::move(this->currentBlock_)
+                                 .template toStatic<N>();
+                           } else {
+                             return this->currentBlock_.clone()
+                                 .template toStatic<N>();
+                           }
+                         })};
       }
       namespace rv = ::ranges::views;
       auto chunked =

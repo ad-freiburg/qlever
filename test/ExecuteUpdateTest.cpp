@@ -14,11 +14,17 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -31,6 +37,7 @@ MATCHER_P(AlwaysFalse, msg, "") {
   *result_listener << msg;
   return false;
 }
+}  // namespace
 
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
@@ -42,7 +49,7 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         for (auto& pq : pqs) {
           QueryPlanner qp{&qec, sharedHandle};
           const auto qet = qp.createExecutionTree(pq);
@@ -216,7 +223,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -441,7 +448,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
           const std::vector<std::array<TripleComponentT, 4>>&
               expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
+            ExecuteUpdate::transformTriplesTemplate(*encodedIriManager(), vocab,
+                                                    variableColumns,
                                                     std::move(triples));
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
@@ -459,10 +467,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       [&vocab](const VariableToColumnMap& variableColumns,
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
                const Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples)),
-            messageMatcher);
+        AD_EXPECT_THROW_WITH_MESSAGE(ExecuteUpdate::transformTriplesTemplate(
+                                         *encodedIriManager(), vocab,
+                                         variableColumns, std::move(triples)),
+                                     messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.

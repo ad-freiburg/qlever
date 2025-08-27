@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace geoInfoTestHelpers {
@@ -129,6 +130,28 @@ inline void checkInvalidLiteral(std::string_view wkt,
             expectValidGeometryType);
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
+}
+
+// ____________________________________________________________________________
+inline void checkUtilBoundingBox(util::geo::DBox a, util::geo::DBox b,
+                                 Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  ASSERT_NEAR(a.getLowerLeft().getX(), b.getLowerLeft().getX(), 0.001);
+  ASSERT_NEAR(a.getLowerLeft().getY(), b.getLowerLeft().getY(), 0.001);
+  ASSERT_NEAR(a.getUpperRight().getX(), b.getUpperRight().getX(), 0.001);
+  ASSERT_NEAR(a.getUpperRight().getY(), b.getUpperRight().getY(), 0.001);
+}
+
+// Helpers to convert points and bounding boxes from double lat/lng to web
+// mercator int32 representation used by libspatialjoin
+inline util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
+  auto projPoint = latLngToWebMerc(p);
+  return {static_cast<int>(projPoint.getX() * PREC),
+          static_cast<int>(projPoint.getY() * PREC)};
+}
+inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
+  return {webMercProjFunc(b.getLowerLeft()),
+          webMercProjFunc(b.getUpperRight())};
 }
 
 };  // namespace geoInfoTestHelpers
