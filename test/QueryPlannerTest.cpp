@@ -5137,7 +5137,7 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
 }
 
 // _____________________________________________________________________________
-TEST(QueryPlanner, joinTransitivePathOnGraphAfterBind) {
+TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
   auto* qec = ad_utility::testing::getQec(
       "<1> <a> <2> . <1> <b> <1> .  <1> <b> <2> .  <1> <b> <3> .  <1> <b> <4>");
   TransitivePathSide left{std::nullopt, 0, Variable{"?s"}, 0};
@@ -5153,6 +5153,19 @@ TEST(QueryPlanner, joinTransitivePathOnGraphAfterBind) {
                       "?_QLever_internal_variable_qp_1", {}, {},
                       {Variable{"?g"}}, {3})))),
               h::IndexScanFromStrings("?g", "<b>", "?g2")),
+      qec, {16, 64'000'000});
+  // Double bind is currently not supported
+  h::expectWithGivenBudgets(
+      "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
+      h::MultiColumnJoin(
+          h::Sort(h::transitivePath(
+              left, right1, 1, std::numeric_limits<size_t>::max(),
+              // The sort is because of missing graph permutations.
+              h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
+                                              "<a>",
+                                              "?_QLever_internal_variable_qp_1",
+                                              {}, {}, {Variable{"?g"}}, {3})))),
+          h::IndexScanFromStrings("?s", "<b>", "?o")),
       qec, {16, 64'000'000});
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};

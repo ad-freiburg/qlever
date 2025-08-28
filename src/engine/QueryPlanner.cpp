@@ -2438,8 +2438,11 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t transitiveColB = jcs[1][transitivePathIndex];
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
-    AD_CORRECTNESS_CHECK(transitiveColB == graphColIndex);
-    return std::tuple{transitiveColA, otherColA};
+    if (transitiveColB == graphColIndex) {
+      return std::tuple{transitiveColA, otherColA};
+    }
+    // We currently don't support binding two regular columns at once
+    return std::nullopt;
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
