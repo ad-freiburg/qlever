@@ -70,10 +70,9 @@ inline std::unique_ptr<GroupByImpl> setupGroupBy(IdTable& table,
   // Build ValuesForTesting op (eager). Don't claim sortedness here.
   std::vector<std::optional<Variable>> varOpts;
   for (auto& var : groupVars) varOpts.emplace_back(var);
-  auto valuesOp =
-      std::make_shared<ValuesForTesting>(qec, std::move(table), std::move(varOpts),
-                                         /*supportsLimit=*/false,
-                                         /*sortedColumns=*/std::vector<ColumnIndex>{});
+  auto valuesOp = std::make_shared<ValuesForTesting>(
+      qec, std::move(table), std::move(varOpts), false,
+      std::vector<ColumnIndex>{});
   auto subtree = std::make_shared<QueryExecutionTree>(qec, valuesOp);
   if (!sortCols.empty()) {
     subtree = std::make_shared<QueryExecutionTree>(
@@ -124,9 +123,8 @@ inline std::unique_ptr<GroupByImpl> setupLazyGroupBy(
   std::vector<std::optional<Variable>> varOpts;
   for (auto& var : groupVars) varOpts.emplace_back(var);
   auto valuesOp = std::make_shared<ValuesForTesting>(
-      qec, std::move(tables), std::move(varOpts),
-      /*unlikelyToFitInCache=*/false,
-      /*sortedColumns=*/std::vector<ColumnIndex>{});
+      qec, std::move(tables), std::move(varOpts), false,
+      std::vector<ColumnIndex>{});
   auto subtree = std::make_shared<QueryExecutionTree>(qec, valuesOp);
   if (!sortCols.empty()) {
     subtree = std::make_shared<QueryExecutionTree>(

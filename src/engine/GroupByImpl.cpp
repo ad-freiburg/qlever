@@ -1535,24 +1535,41 @@ IdTable GroupByImpl::createResultFromHashMap(
 static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
-       const std::vector<size_t>& hashEntries) {
-      return CPP_template_lambda(blockSize, evaluationContext, &hashEntries)(
+       const std::vector<size_t>& hashEntries,
+       const std::vector<size_t>& nonmatching, bool onlyMatching) {
+      return CPP_template_lambda(blockSize, evaluationContext, &hashEntries,
+                                 &nonmatching, onlyMatching)(
           typename T, typename A)(T && singleResult, A & aggregationDataVector)(
           requires sparqlExpression::SingleExpressionResult<T> &&
           VectorOfAggregationData<A>) {
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
-        auto hashEntryIndex = 0;
+        size_t hashEntryIndex = 0;
+        size_t rowInBlock = 0;
+        size_t nonmatchIndex = 0;
 
         for (const auto& val : generator) {
+          // If we are only processing matching rows, skip nonmatching
+          // positions.
+          if (onlyMatching && nonmatchIndex < nonmatching.size() &&
+              nonmatching[nonmatchIndex] == rowInBlock) {
+            ++nonmatchIndex;
+            ++rowInBlock;
+            continue;
+          }
+          // For matching rows (or when processing all rows), consume next hash
+          // entry.
+          AD_CORRECTNESS_CHECK(hashEntryIndex < hashEntries.size());
           auto vectorOffset = hashEntries[hashEntryIndex];
           auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
           aggregateData.addValue(val, evaluationContext);
 
           ++hashEntryIndex;
+          ++rowInBlock;
         }
+        AD_CORRECTNESS_CHECK(hashEntryIndex == hashEntries.size());
       };
     };
 
@@ -1610,8 +1627,10 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                    << aggregationData.getNumberOfGroups()
                    << ") > (thr: " << groupThreshold
                    << "), switching to sort-based aggregation" << std::endl;
+      // Skip current block because we just processed it.
+      if (it != endIt) ++it;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
-          data, aggregationData, timers, it, beginIt, endIt);
+          data, aggregationData, timers, it, endIt);
     }
   }
   runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer.msecs());
@@ -1626,10 +1645,8 @@ template <size_t NUM_GROUP_COLUMNS, typename Iterator, typename Sentinel>
 Result GroupByImpl::handleRemainderUsingHybridApproach(
     HashMapOptimizationData data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    HashMapTimers& timers, Iterator it, Iterator beginIt, Sentinel endIt) const {
-  const auto& [beginIdTableRef, _] = *beginIt;
-  const IdTable& beginIdTable = beginIdTableRef;
-  const size_t inWidth = beginIdTable.numColumns();
+    HashMapTimers& timers, Iterator it, Sentinel endIt) const {
+  const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef->get();
 
   IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
@@ -1643,8 +1660,8 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
     localVocab.mergeWith(inputLocalVocab);
 
     // Process only existing groups and collect non-matching rows
-    auto nonmatching = updateHashMapWithTable(inputTable, data, aggregationData,
-                                              timers, /*onlyMatching=*/true);
+    auto nonmatching =
+        updateHashMapWithTable(inputTable, data, aggregationData, timers, true);
     // Copy the non-matching rows to the restTable
     restTable.insertSubsetAtEnd(inputTable, nonmatching);
   }
@@ -1661,10 +1678,12 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
       "hybridFallback",
       "hash groups=" + std::to_string(hashResult.numRows()) +
           ", sorted tail groups=" + std::to_string(restResult.numRows()));
-  // Build final hybrid result: append fallback rows and sort on grouping columns
+  // Build final hybrid result: append fallback rows and sort on grouping
+  // columns
   hashResult.insertAtEnd(restResult);
   Engine::sort(hashResult, *data.columnIndices);
-  return Result{std::move(hashResult), *data.columnIndices, std::move(localVocab)};
+  return Result{std::move(hashResult), *data.columnIndices,
+                std::move(localVocab)};
 }
 
 // Helper to build column-wise spans of grouping values for a block
@@ -1738,7 +1757,8 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
                 aggregate.aggregateDataIndex_);
 
         std::visit(makeProcessGroupsVisitor(currentBlockSize,
-                                            &evaluationContext, hashEntries),
+                                            &evaluationContext, hashEntries,
+                                            nonmatchingBlock, onlyMatching),
                    std::move(expressionResult), aggregationDataVariant);
       }
     }

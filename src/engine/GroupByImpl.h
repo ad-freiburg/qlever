@@ -342,11 +342,7 @@ class GroupByImpl : public Operation {
           aggregates(std::move(aggs)) {}
   };
 
-  // Compute result using the HashMap optimization.  We pass in all
-  // parameters via an AggregateData wrapper.
   template <size_t NUM_GROUP_COLUMNS, typename SubResults>
-  // Compute result using HashMap optimization. SubResults taken as forwarding
-  // ref.
   Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
                                               SubResults&& subresults) const;
 
@@ -656,7 +652,7 @@ class GroupByImpl : public Operation {
   Result handleRemainderUsingHybridApproach(
       HashMapOptimizationData data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      HashMapTimers& timers, Iterator it, Iterator beginIt, Sentinel endIt) const;
+      HashMapTimers& timers, Iterator it, Sentinel endIt) const;
 };
 
 // _____________________________________________________________________________
