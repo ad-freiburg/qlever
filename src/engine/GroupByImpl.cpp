@@ -37,7 +37,7 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
  private:
   // input arguments
   const GroupByImpl* parent_{nullptr};
-  Result::LazyResult idTablesAndVocabs_;
+  std::shared_ptr<const Result> subresult_;
   std::vector<GroupByImpl::Aggregate> aggregates_;
   std::vector<size_t> groupByCols_;
   bool singleIdTable_{false};
@@ -51,19 +51,19 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
   bool groupSplitAcrossTables_{false};
   // range state
   bool isFinished_{false};
-  std::optional<Result::LazyResult> mainLoop_;
+  std::optional<Result::LazyResult> range_;
   std::optional<Result::LazyResult> finalValue_;
   Result::LazyResult::iterator it_;
 
  public:
   LazyGroupByRange(
-      const GroupByImpl* parent, Result::LazyResult range,
+      const GroupByImpl* parent, std::shared_ptr<const Result> subresult,
       std::vector<GroupByImpl::Aggregate> aggregates,
       std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases,
       std::vector<size_t> groupByCols, bool singleIdTable,
       size_t subTreeResultWidth)
       : parent_(parent),
-        idTablesAndVocabs_{std::move(range)},
+        subresult_(std::move(subresult)),
         aggregates_(std::move(aggregates)),
         groupByCols_(std::move(groupByCols)),
         singleIdTable_(singleIdTable),
@@ -164,52 +164,7 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
   }
 
   void start() {
-    using namespace ad_utility;
-    using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
-    mainLoop_ = Result::LazyResult(CachingContinuableTransformInputRange(
-        std::move(idTablesAndVocabs_),
-        [this](Result::IdTableVocabPair& idTableAndVocab) {
-          auto& [idTable, localVocab] = idTableAndVocab;
-
-          if (idTable.empty()) {
-            return LoopControl::makeContinue();
-          }
-
-          AD_CORRECTNESS_CHECK(idTable.numColumns() == inWidth_);
-          parent_->checkCancellation();
-          storedLocalVocabs_.emplace_back(std::move(localVocab));
-
-          if (currentGroupBlock_.empty()) {
-            for (size_t col : groupByCols_) {
-              currentGroupBlock_.emplace_back(col, idTable(0, col));
-            }
-          }
-
-          sparqlExpression::EvaluationContext evaluationContext =
-              parent_->createEvaluationContext(currentLocalVocab_, idTable);
-
-          size_t lastBlockStart = parent_->searchBlockBoundaries(
-              [this, &evaluationContext](size_t a, size_t b) {
-                onBlockChange(a, b, evaluationContext);
-              },
-              idTable.asStaticView<IN_WIDTH>(), currentGroupBlock_);
-          groupSplitAcrossTables_ = true;
-          lazyGroupBy_->processBlock(evaluationContext, lastBlockStart,
-                                     idTable.size());
-          if (!singleIdTable_ && !resultTable_.empty()) {
-            currentLocalVocab_.mergeWith(storedLocalVocabs_);
-            Result::IdTableVocabPair result = Result::IdTableVocabPair{
-                std::move(resultTable_), std::move(currentLocalVocab_)};
-            // Keep last local vocab for next commit.
-            currentLocalVocab_ = std::move(storedLocalVocabs_.back());
-            storedLocalVocabs_.clear();
-
-            return LoopControl::yieldValue(std::move(result));
-          }
-
-          return LoopControl::makeContinue();
-        }));
-
+    mainLoop_ = buildMainRange();
     // calling begin ensures that the first value is ready
     it_ = ql::ranges::begin(mainLoop_.value());
     if (isMainLoopFinished()) {
@@ -745,7 +700,7 @@ Result::LazyResult GroupByImpl::computeResultLazily(
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, bool singleIdTable) const {
   return Result::LazyResult(LazyGroupByRange<IN_WIDTH, OUT_WIDTH>(
-      this, subresult->idTables(), std::move(aggregates),
+      this, std::move(subresult), std::move(aggregates),
       std::move(aggregateAliases), std::move(groupByCols), singleIdTable,
       _subtree->getResultWidth()));
 }
