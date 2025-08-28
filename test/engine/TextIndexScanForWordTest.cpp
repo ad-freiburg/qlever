@@ -128,7 +128,10 @@ struct TextResult {
   }
 
   // Collect all words of rows [start, end) and compare them in unordered
-  // fashion to expectedWords
+  // fashion to expectedWords.
+  // This function is necessary since the results of a TextIndexScanForWord is
+  // only sorted by `TextRecordIndex`. This leads to the words not being in
+  // order and an unpredictability in which row they appear in.
   void checkUnorderedListOfWordsInRange(
       const std::vector<std::string>& expectedWords, size_t start,
       size_t end) const {
@@ -324,16 +327,12 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
   // no certain order in the idTable other than the first row.
 
   // Check if word and text are correctly retrieved
-  ASSERT_EQ(withFirst("astronomer"), tr.getRow(0));
-  ASSERT_EQ(withFirst("astronomy"), tr.getRow(1));
-  ASSERT_EQ(withFirst("astronomer"), tr.getRow(2));
-  ASSERT_EQ(withFirst("astronomy"), tr.getRow(3));
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 0, 2);
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 2, 4);
   ASSERT_EQ(withFirst("astronomy"), tr.getRow(4));
   ASSERT_EQ(withFirst("astronomy"), tr.getRow(5));
-  ASSERT_EQ(withSecond("although"), tr.getRow(6));
-  ASSERT_EQ(withSecond("astronomer"), tr.getRow(7));
-  ASSERT_EQ(withSecond("although"), tr.getRow(8));
-  ASSERT_EQ(withSecond("astronomer"), tr.getRow(9));
+  tr.checkUnorderedListOfWordsInRange({"although", "astronomer"}, 6, 8);
+  tr.checkUnorderedListOfWordsInRange({"although", "astronomer"}, 8, 10);
 }
 
 TEST(TextIndexScanForWord, WordScanStarPrefix) {
