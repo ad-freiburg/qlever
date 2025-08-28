@@ -75,8 +75,9 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
       if (node.isUndefined()) {
         auto transformedRange =
             ql::ranges::subrange{lowerIdBound, upperIdBound} |
-            ql::views::transform(
-                [graphId](Id id) { return std::pair{id, graphId}; });
+            ql::views::transform([graphId](Id id) {
+              return std::pair{id, graphId};
+            });
         ql::ranges::unique_copy(transformedRange, std::back_inserter(result),
                                 {}, ad_utility::first);
       } else {
