@@ -155,24 +155,20 @@ void TreeNode::penaltize() {
 
 // ______________________________________________________________________________________
 std::vector<string> calculatePrefixes(const std::vector<string>& vocabulary,
-                                      size_t numPrefixes, size_t codelength,
-                                      bool alwaysAddCode) {
-  // same function, just for vector of strings
-  size_t minPrefixLength = alwaysAddCode ? 1 : codelength + 1;
-  size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
+                                      size_t numPrefixes) {
   if (vocabulary.empty()) {
     return {};
   }
   ad_utility::Tree t;
-  ad_utility::TreeNode* lastPos(nullptr);
+  ad_utility::TreeNode* lastPos = nullptr;
 
+  size_t minPrefixLength = 1;
   const string* lastWord = &(vocabulary[0]);
   for (size_t i = 1; i < vocabulary.size(); ++i) {
     auto pref = ad_utility::commonPrefix(*lastWord, vocabulary[i]);
     if (pref.size() >= minPrefixLength) {
       lastPos = t.insert(pref, lastPos);
     } else {
-      // lastPos.reset(nullptr);
       lastPos = nullptr;
     }
     lastWord = &(vocabulary[i]);
@@ -180,7 +176,7 @@ std::vector<string> calculatePrefixes(const std::vector<string>& vocabulary,
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
-    res.push_back(t.getAndDeleteMaximum(actualCodeLength).second);
+    res.push_back(t.getAndDeleteMaximum(0).second);
   }
   return res;
 }

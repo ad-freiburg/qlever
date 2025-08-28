@@ -33,6 +33,8 @@ struct TableColumnWithVocab {
 };
 };  // namespace detail
 
+using IdWithGraphs = absl::InlinedVector<std::pair<Id, Id>, 1>;
+
 /**
  * @class TransitivePathImpl
  * @brief This class implements common functions for the concrete TransitivePath
@@ -227,11 +229,12 @@ class TransitivePathImpl : public TransitivePathBase {
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
+    const auto& index = getIndex();
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
             : std::optional{std::move(target).toValueId(
-                  _executionContext->getIndex().getVocab(), targetHelper)};
+                  index.getVocab(), targetHelper, index.encodedIriManager())};
     bool sameVariableOnBothSides =
         !targetId.has_value() && lhs_.value_ == rhs_.value_;
     for (auto&& tableColumn : startNodes) {
@@ -286,12 +289,16 @@ class TransitivePathImpl : public TransitivePathBase {
     // id -> var|id
     LocalVocab helperVocab;
     Id startId = TripleComponent{startSide.value_}.toValueId(
-        _executionContext->getIndex().getVocab(), helperVocab);
+        getIndex().getVocab(), helperVocab, getIndex().encodedIriManager());
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways.
-    if (const Id* id = edges.getEquivalentId(startId)) {
-      result.insert(*id);
+    const auto& idsWithGraph = edges.getEquivalentIdAndMatchingGraphs(startId);
+    // For now we don't support GRAPH yet, but only have it for a faster review
+    // cycle.
+    AD_CORRECTNESS_CHECK(idsWithGraph.size() <= 1);
+    for (const auto& [id, graphId] : idsWithGraph) {
+      result.insert(id);
     }
     return result;
   }
