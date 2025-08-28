@@ -341,7 +341,7 @@ CPP_template(typename T, typename F)(
         F, std::optional<T>>) struct InputRangeFromGetCallable
     : public InputRangeFromGet<T> {
  private:
-  F function_;
+  ::ranges::semiregular_box_t<F> function_;
 
  public:
   std::optional<T> get() override { return function_(); }

@@ -571,7 +571,8 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 template <typename QueryPlannerClass = QueryPlanner>
 inline QueryExecutionTree parseAndPlan(std::string query,
                                        QueryExecutionContext* qec) {
-  ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
+  static EncodedIriManager ev;
+  ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
   return QueryPlannerClass{qec,

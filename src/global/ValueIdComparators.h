@@ -377,7 +377,7 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
     }
   }
   return result;
-};
+}
 
 }  // namespace detail
 
@@ -394,12 +394,6 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison,
     bool removeEmptyRanges = true) {
-  // For the evaluation of FILTERs, comparisons that involve undefined values
-  // are always false.
-  if (valueId.getDatatype() == Datatype::Undefined) {
-    return {};
-  }
-  // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
       return detail::simplifyRanges(
@@ -412,10 +406,18 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
                                              comparison),
           removeEmptyRanges);
     case Datatype::Undefined:
+      // For the evaluation of FILTERs, comparisons that involve undefined
+      // values are always false.
+      return {};
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
+      // TODO<joka921> for the `EncodedVal` type, the behavior is only correct
+      // for equality, because there also might be regular IRIs (of type
+      // `[Local]VocabIndex` that are greater than or less than the encoded IRI.
+      // (This also goes for the other way round).
+    case Datatype::EncodedVal:
     case Datatype::Bool:
     case Datatype::Date:
     case Datatype::GeoPoint:
@@ -456,6 +458,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
       AD_FAIL();
+    // TODO<joka921> check what the correct behavior is here.
+    case Datatype::EncodedVal:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
@@ -510,6 +514,12 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
       b.getDatatype() == Datatype::LocalVocabIndex) {
     return fromBool(std::invoke(comparator, a, b));
   }
+
+  // TODO<joka921> We currently don't perform correct comparisons (other than
+  // equality) for the `EncodedVal` datatype. This will be added in a future
+  // PR. This is okay for now, as 1. the maintainer of an inex has to explicitly
+  // activate the encoding and 2. there are only few queries where the semantic
+  // ordering of IRIs is actually important.
 
   // If both are geo points, compare the raw IDs.
   if (a.getDatatype() == Datatype::GeoPoint &&

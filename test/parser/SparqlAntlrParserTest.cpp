@@ -37,6 +37,11 @@ PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -68,7 +73,8 @@ TEST(SparqlParser, Prefix) {
 
   {
     static ad_utility::BlankNodeManager blankNodeManager;
-    ParserAndVisitor p{&blankNodeManager, "PREFIX wd: <www.wikidata.org/>"};
+    ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
+                       "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -1192,12 +1198,16 @@ TEST(SparqlParser, ConstructQuery) {
 
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
-               ad_utility::Exception);
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
-               ad_utility::Exception);
+  static ad_utility::BlankNodeManager blankNodeManager;
+  SparqlQleverVisitor visitor{
+      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
+
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
+      ad_utility::Exception);
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
+      ad_utility::Exception);
 }
 
 // Test that ASK queries are parsed as they should.
@@ -1597,8 +1607,9 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
@@ -1671,4 +1682,61 @@ TEST(SparqlParser, Datasets) {
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
                                      filterGraphPattern)),
           datasets, noGraphs));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, EncodedIriManagerUsage) {
+  using namespace sparqlParserTestHelpers;
+
+  // Create a parse function that uses an `EncodedIriManager`.
+  auto encodedIriManager = std::make_shared<EncodedIriManager>(
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
+
+  auto parseWithEncoding = [&](const std::string& input) {
+    static ad_utility::BlankNodeManager blankNodeManager;
+    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
+        .parseTypesafe(&SparqlAutomaticParser::query);
+  };
+
+  auto encoded123 = TripleComponent{
+      encodedIriManager->encode("<http://example.org/123>").value()};
+  auto unencoded456 = PropertyPath::fromIri(
+      TripleComponent::Iri::fromIriref("<http://example.org/456>"));
+  auto encoded789 = TripleComponent{
+      encodedIriManager->encode("<http://test.com/id/789>").value()};
+
+  // Test that IRIs in SPARQL queries get encoded when they match prefixes. Note
+  // that we currently only encode the subjects and predicates of triples
+  // directly in the parser, as encoding predicates would require massive
+  // changes to the `PropertyPath` and therefore the `QueryPlanner` class.
+  {
+    auto result = parseWithEncoding(
+        "SELECT ?x WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }");
+    EXPECT_THAT(
+        result.resultOfParse_,
+        m::SelectQuery(m::VariablesSelect({"?x"}),
+                       m::GraphPattern(m::OrderedTriples(
+                           {{{encoded123, unencoded456, encoded789}}}))));
+  }
+
+  {
+    // CONSTRUCT WHERE syntax uses the same pattern for both template and WHERE
+    // clause. Test that the encoding also works properly in these cases.
+    std::string constructWhereQuery =
+        "CONSTRUCT WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }";
+
+    auto result = parseWithEncoding(constructWhereQuery);
+    EXPECT_TRUE(result.remainingText_.empty())
+        << "CONSTRUCT WHERE query should parse completely";
+
+    EXPECT_THAT(
+        result.resultOfParse_,
+        m::ConstructQuery(
+            {{Iri{"<http://example.org/123>"}, Iri{"<http://example.org/456>"},
+              Iri{"<http://test.com/id/789>"}}},
+            m::GraphPattern(m::OrderedTriples(
+                {{{encoded123, unencoded456, encoded789}}}))));
+  }
 }

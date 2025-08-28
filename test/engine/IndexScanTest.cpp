@@ -25,6 +25,11 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -150,7 +155,9 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -168,7 +175,9 @@ void testLazyScanWithColumnThrows(
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -835,7 +844,8 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab()).value();
+    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
+        .value();
   }
 
   // Create an id table with a single column from a vector of
@@ -1008,6 +1018,75 @@ TEST_P(IndexScanWithLazyJoin,
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
+  IndexScan scan = makeScan();
+
+  // This is a regression test for an issue introduced in
+  // https://github.com/ad-freiburg/qlever/pull/2252
+  using P = Result::IdTableVocabPair;
+  std::array pairs{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<b>")}), LocalVocab{}},
+                   P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+
+  auto [joinSideResults, scanResults] =
+      consumeGenerators(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
+
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesSkipsRemainingTablesIfIndexIsExhausted) {
+  TestIndexConfig config;
+  // a and b are supposed to share one block and c and d.
+  config.turtleInput =
+      "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
+  config.blocksizePermutations = 16_B;
+  qec_ = getQec(std::move(config));
+  IndexScan scan = makeScan();
+  LocalVocab extraVocab;
+  auto indexE =
+      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<e>")});
+  auto indexG =
+      extraVocab.getIndexAndAddIfNotContained(LocalVocabEntry{iri("<g>")});
+
+  using P = Result::IdTableVocabPair;
+  std::array pairs{
+      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+      P{makeIdTable({Id::makeFromLocalVocabIndex(indexE)}), extraVocab.clone()},
+      P{makeIdTable({Id::makeFromLocalVocabIndex(indexG)}),
+        extraVocab.clone()}};
+
+  size_t counter = 0;
+
+  auto [joinSideResults, scanResults] = consumeGenerators(
+      scan.prefilterTables(LazyResult{ad_utility::CachingTransformInputRange{
+                               std::move(pairs),
+                               [&counter, &indexG](auto& pair) mutable {
+                                 counter++;
+                                 // No need to consume the last table.
+                                 EXPECT_NE(pair.idTable_.at(0, 0),
+                                           Id::makeFromLocalVocabIndex(indexG));
+                                 return std::move(pair);
+                               }}},
+                           0));
+
+  EXPECT_EQ(counter, 3) << "Exactly 3 elements should be consumed from the "
+                           "range. No need to evaluate the rest when it is "
+                           "known that any future elements won't match.";
+  ASSERT_EQ(scanResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 2);
 }
 
 // _____________________________________________________________________________
