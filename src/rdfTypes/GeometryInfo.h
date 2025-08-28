@@ -80,7 +80,9 @@ struct GeometryType {
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
 
-  bool operator==(GeometryType& other) { return type_ == other.type_; }
+  bool operator==(const GeometryType& other) const {
+    return type_ == other.type_;
+  }
 };
 
 // Forward declaration for concept
