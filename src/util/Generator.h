@@ -315,6 +315,9 @@ generator<T, NoDetails> fromInputRange(
 // cppcoro::generator<T,D>, details type is copied
 template <typename T, typename D>
 generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
+  auto& detailsRef = co_await cppcoro::getDetails;
+  range.setDetailsPointer(&detailsRef);
+
   for (auto& value : range) {
     co_yield value;
   }
