@@ -61,12 +61,33 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
       }
     }
   } else {
-    for (auto [id, graphId] : ::ranges::views::zip(startIds_, graphIds_)) {
-      bool isNewEntry = result.empty() || result.back().first != id ||
-                        result.back().second != graphId;
-      if ((id == node || node.isUndefined()) && isNewEntry) {
-        result.emplace_back(id, graphId);
+    auto lowerBound = graphIds_.begin();
+    while (lowerBound != graphIds_.end()) {
+      Id graphId = *lowerBound;
+      auto upperBound =
+          ql::ranges::upper_bound(lowerBound, graphIds_.end(), graphId);
+
+      auto lowerIdBound = startIds_.begin() +
+                          ql::ranges::distance(graphIds_.begin(), lowerBound);
+      auto upperIdBound = startIds_.begin() +
+                          ql::ranges::distance(graphIds_.begin(), upperBound);
+
+      if (node.isUndefined()) {
+        auto transformedRange =
+            ql::ranges::subrange{lowerIdBound, upperIdBound} |
+            ql::views::transform(
+                [graphId](Id id) { return std::pair{id, graphId}; });
+        ql::ranges::unique_copy(transformedRange, std::back_inserter(result),
+                                {}, ad_utility::first);
+      } else {
+        auto matchingElem =
+            ql::ranges::lower_bound(lowerIdBound, upperIdBound, node);
+        if (matchingElem != upperIdBound && *matchingElem == node) {
+          result.emplace_back(*matchingElem, graphId);
+        }
       }
+
+      lowerBound = upperBound;
     }
   }
   return result;
