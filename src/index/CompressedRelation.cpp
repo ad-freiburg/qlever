@@ -450,8 +450,7 @@ CompressedRelationReader::lazyScan(
       }
 
       // Some sanity checks.
-      // TODO @ccoecontrol sanity checks disabled until inputrange can share
-      // details
+
       const auto& limit = originalLimit._limit;
 
       LazyScanMetadata& d{details()};
@@ -491,10 +490,9 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
     return triple.col0Id_;
   }
 
-  // Compute the following range: If the `scanSpec` specifies both `col0Id`
-  // and `col1Id`, the first and last `col2Id` of the blocks. If the
-  // `scanSpec` specifies only `col0Id`, the first and last `col1Id` of the
-  // blocks.
+  // Compute the following range: If the `scanSpec` specifies both `col0Id` and
+  // `col1Id`, the first and last `col2Id` of the blocks. If the `scanSpec`
+  // specifies only `col0Id`, the first and last `col1Id` of the blocks.
   auto [minId, maxId] = [&]() {
     const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
@@ -532,8 +530,8 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
   }
 
   // If the `col1Id` of the triple matches that of the `scanSpec`, return the
-  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or
-  // `maxId` (if it is larger).
+  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or `maxId`
+  // (if it is larger).
   return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(), minId,
                                maxId)
       .value_or(triple.col2Id_);
@@ -821,8 +819,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
                                       locatedTriplesPerBlock)
               .numRows();
     } else {
-      // If the first and last triple of the block match, then we know that
-      // the whole block belongs to the result.
+      // If the first and last triple of the block match, then we know that the
+      // whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
@@ -1233,9 +1231,9 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
   };
 
   // TODO:
-  // Optionally implement a free function like `equal_range(YourRangeType,
-  // key, comp)` that implements the equal range correctly. (1) Perform binary
-  // search on the inner blocks with respect to the first and
+  // Optionally implement a free function like `equal_range(YourRangeType, key,
+  // comp)` that implements the equal range correctly.
+  // (1) Perform binary search on the inner blocks with respect to the first and
   //     last triple.
   // (2) Perform binary search regarding the outer blocks.
   BlockMetadataRanges resultBlocks;
