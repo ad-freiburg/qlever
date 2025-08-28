@@ -104,6 +104,7 @@ class Index {
 
   using Vocab = RdfsVocabulary;
   const Vocab& getVocab() const;
+  const EncodedIriManager& encodedIriManager() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
