@@ -343,7 +343,7 @@ class TransitivePathImpl : public TransitivePathBase {
   CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
       transitiveHull(const T& edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent target, bool yieldOnce) const {
-    return NodeGenerator(TransitiveHullLazyRange(
+    return NodeGenerator(TransitiveHullLazyRange<Node>(
         this, edges, std::move(edgesVocab), std::move(startNodes),
         std::move(target), yieldOnce));
   }
