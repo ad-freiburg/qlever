@@ -597,6 +597,17 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
+    // When we have a graph variable, we write it last, so we have to account
+    // for that.
+    if (graphVariable_.has_value()) {
+      auto optGraphIndex =
+          leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value());
+      if (columnIndex >
+          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
+        columnIndexWithType.columnIndex_ -= 1;
+      }
+    }
+
     AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
     p->variableColumns_[variable] = columnIndexWithType;
   }
