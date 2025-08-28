@@ -69,21 +69,18 @@ MemorySize MemorySize::parse(std::string_view str) {
   constexpr ctll::fixed_string regex =
       "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
   if (auto matcher = ctre::match<regex>(str)) {
-    auto amountString = matcher.get<"amount">().to_view();
-    // Versions after CTRE v3.8.1 should support to_number()
-    // with double values if the compilers support it.
-    double amount;
-    absl::from_chars(amountString.begin(), amountString.end(), amount);
+    auto amountGroup = matcher.get<"amount">();
+    double amount = amountGroup.to_number<double>();
     auto unitString = matcher.get<"unit">().to_view();
     switch (std::tolower(unitString.at(0))) {
       case 'b':
-        if (ad_utility::contains(amountString, '.')) {
+        if (ad_utility::contains(amountGroup.to_view(), '.')) {
           throw std::runtime_error(absl::StrCat(
               "'", str,
               "' could not be parsed as a memory size. When using bytes as "
               "units only unsigned integers are allowed."));
         }
-        return MemorySize::bytes(static_cast<size_t>(amount));
+        return MemorySize::bytes(amount);
       case 'k':
         return MemorySize::kilobytes(amount);
       case 'm':
