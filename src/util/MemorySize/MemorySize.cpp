@@ -80,7 +80,7 @@ MemorySize MemorySize::parse(std::string_view str) {
               "' could not be parsed as a memory size. When using bytes as "
               "units only unsigned integers are allowed."));
         }
-        return MemorySize::bytes(amount);
+        return MemorySize::bytes(static_cast<size_t>(amount));
       case 'k':
         return MemorySize::kilobytes(amount);
       case 'm':
