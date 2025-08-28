@@ -65,9 +65,7 @@ struct GeometryType {
 struct NumGeometries {
   uint32_t numGeometries_;
 
-  bool operator==(const NumGeometries& other) const {
-    return numGeometries_ == other.numGeometries_;
-  }
+  constexpr bool operator==(const NumGeometries& other) const = default;
 };
 
 // Forward declaration for concept
