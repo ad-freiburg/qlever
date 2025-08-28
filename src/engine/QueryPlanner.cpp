@@ -2406,7 +2406,8 @@ std::optional<std::tuple<size_t, size_t>>
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
   // If there are more than two pairs of join columns, we have a graph
-  // variable. In that case, we compute the full transitive hull.
+  // variable. In that case, we compute the full transitive hull (followed by a
+  // multi-column join).
   if (jcs.size() > 2) {
     return std::nullopt;
   }
@@ -2428,9 +2429,10 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     return std::tuple{transitiveCol, otherCol};
   }
 
-  // Otherwise, we have two pairs of join columns. Then one pertains to the
-  // graph variable and the other to one side of the transitive path. Return
-  // the pair that pertains to the transitive path.
+  // At this point, we know that we have exactly two pairs of join columns,
+  // where one pertains to the graph variable and the other to one side of the
+  // transitive path operation. Return the pair that does not pertain to the
+  // graph variable.
   size_t transitiveColA = jcs[0][transitivePathIndex];
   size_t otherColA = jcs[0][otherIndex];
   size_t transitiveColB = jcs[1][transitivePathIndex];
