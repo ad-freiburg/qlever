@@ -46,49 +46,65 @@ ql::span<const Id> BinSearchMap::successors(Id node) const {
 IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
   IdWithGraphs result;
   if (graphIds_.empty()) {
-    // We fill the graph id with undefined here, because it's supposed to be
-    // unused, and `setGraphId` is no-op in this case using this value.
+    // CASE 1: No GRAPH clause.
     if (node.isUndefined()) {
+      // CASE 1.1: The node is UNDEF, in which the case the `result` consists
+      // of all distinct Ids in `startIds_`.
       for (Id id : startIds_) {
         if (result.empty() || result.back().first != id) {
           result.emplace_back(id, Id::makeUndefined());
         }
       }
     } else {
+      // CASE 1.2: Otherwise, the `result` consists of all Ids in `startIds_`
+      // that are equal to `node`.
       auto range = ql::ranges::equal_range(startIds_, node);
       if (!range.empty()) {
         result.emplace_back(range.front(), Id::makeUndefined());
       }
     }
   } else {
-    auto lowerBound = graphIds_.begin();
-    while (lowerBound != graphIds_.end()) {
-      Id graphId = *lowerBound;
-      auto upperBound =
-          ql::ranges::upper_bound(lowerBound, graphIds_.end(), graphId);
-
-      auto lowerIdBound = startIds_.begin() +
-                          ql::ranges::distance(graphIds_.begin(), lowerBound);
-      auto upperIdBound = startIds_.begin() +
-                          ql::ranges::distance(graphIds_.begin(), upperBound);
+    // CASE 2: With GRAPH clause. The iterater over the graphs and do a binary
+    // search for each graph.
+    //
+    // NOTE: The graph boundaries are recomputed for each call to
+    // `getEquivalentIdAndMatchingGraphs`. The could also be stored when they
+    // are computed the first time, and then reused. However, we consider the
+    // performance gain insiginificant for typical use cases.
+    auto graphIdsIt = graphIds_.begin();
+    while (graphIdsIt != graphIds_.end()) {
+      Id graphId = *graphIdsIt;
+      // Find the range of edges for the current `graphId`.
+      auto graphIdsUpper =
+          ql::ranges::upper_bound(graphIdsIt, graphIds_.end(), graphId);
+      auto startIdsLower = startIds_.begin() +
+                           ql::ranges::distance(graphIds_.begin(), graphIdsIt);
+      auto startIdsUpper =
+          startIds_.begin() +
+          ql::ranges::distance(graphIds_.begin(), graphIdsUpper);
 
       if (node.isUndefined()) {
+        // CASE 2.1: The node is UNDEF, in which the case the `result` consists
+        // of all distinct Ids in the current graph.
         auto transformedRange =
-            ql::ranges::subrange{lowerIdBound, upperIdBound} |
+            ql::ranges::subrange{startIdsLower, startIdsUpper} |
             ql::views::transform([graphId](Id id) {
               return std::pair{id, graphId};
             });
         ql::ranges::unique_copy(transformedRange, std::back_inserter(result),
                                 {}, ad_utility::first);
       } else {
+        // CASE 2.2: Otherwise, the `result` consists of all matching Ids in
+        // the current graph.
         auto matchingElem =
-            ql::ranges::lower_bound(lowerIdBound, upperIdBound, node);
-        if (matchingElem != upperIdBound && *matchingElem == node) {
+            ql::ranges::lower_bound(startIdsLower, startIdsUpper, node);
+        if (matchingElem != startIdsUpper && *matchingElem == node) {
           result.emplace_back(*matchingElem, graphId);
         }
       }
 
-      lowerBound = upperBound;
+      // Move to the next graph.
+      graphIdsIt = graphIdsUpper;
     }
   }
   return result;
