@@ -256,7 +256,7 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab_);
       return InputRangeTypeErased(CachingContinuableTransformInputRange(
-          std::move(tableColumn.startNodes_),
+          allView(tableColumn.startNodes_),
           [this, payload = std::move(tableColumn.payload_),
            mergedVocab = std::move(mergedVocab),
            currentRow = size_t(0)](Id startNode) mutable {
