@@ -251,9 +251,8 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
                     {2});
   checkGeometryType(
       GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
-  checkNumGeometries(
-      GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
-      NumGeometries{1});
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
+            NumGeometries{1});
 }
 
 // _____________________________________________________________________________
@@ -274,11 +273,11 @@ TEST(GeometryInfoTest, NumGeometries) {
     const auto& lit = testLiterals[i];
     NumGeometries expected{allTestLiteralNumGeometries[i]};
 
-    checkNumGeometries(GeometryInfo::getNumGeometries(lit), expected);
+    EXPECT_EQ(GeometryInfo::getNumGeometries(lit), expected);
 
     auto gi = GeometryInfo::fromWktLiteral(lit);
     ASSERT_TRUE(gi.has_value());
-    checkNumGeometries(gi.value().getNumGeometries(), expected);
+    EXPECT_EQ(gi.value().getNumGeometries(), expected);
   }
 }
 

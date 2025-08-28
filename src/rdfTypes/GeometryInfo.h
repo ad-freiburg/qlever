@@ -64,6 +64,10 @@ struct GeometryType {
 // Represents the number of child geometries inside a collection geometry type.
 struct NumGeometries {
   uint32_t numGeometries_;
+
+  bool operator==(const NumGeometries& other) const {
+    return numGeometries_ == other.numGeometries_;
+  }
 };
 
 // Forward declaration for concept

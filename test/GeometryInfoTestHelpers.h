@@ -32,18 +32,6 @@ inline void checkGeometryType(std::optional<GeometryType> a,
 }
 
 // ____________________________________________________________________________
-inline void checkNumGeometries(std::optional<NumGeometries> a,
-                               std::optional<NumGeometries> b,
-                               Loc sourceLocation = Loc::current()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  ASSERT_EQ(a.value().numGeometries_, b.value().numGeometries_);
-}
-
-// ____________________________________________________________________________
 inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -93,7 +81,7 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
 
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
 
-  checkNumGeometries(a.getNumGeometries(), b.getNumGeometries());
+  EXPECT_EQ(a.getNumGeometries(), b.getNumGeometries());
 }
 
 // ____________________________________________________________________________
@@ -112,8 +100,7 @@ inline void checkRequestedInfoForInstance(
 
   checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>());
 
-  checkNumGeometries(gi.getNumGeometries(),
-                     gi.getRequestedInfo<NumGeometries>());
+  EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
 }
 
 // ____________________________________________________________________________
@@ -130,8 +117,8 @@ inline void checkRequestedInfoForWktLiteral(
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
   checkGeometryType(gi.getWktType(),
                     GeometryInfo::getRequestedInfo<GeometryType>(wkt));
-  checkNumGeometries(gi.getNumGeometries(),
-                     GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
+  EXPECT_EQ(gi.getNumGeometries(),
+            GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
 }
 
 // ____________________________________________________________________________
