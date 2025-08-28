@@ -64,7 +64,7 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
       }
     }
   } else {
-    // CASE 2: With GRAPH clause. The iterater over the graphs and do a binary
+    // CASE 2: With GRAPH clause. Then iterate over the graphs and do a binary
     // search for each graph.
     //
     // NOTE: The graph boundaries are recomputed for each call to
