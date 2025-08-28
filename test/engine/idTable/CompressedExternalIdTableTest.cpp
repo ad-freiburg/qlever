@@ -47,7 +47,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // The number of static and dynamic columns has to be specified (see `IdTable.h`
 // for details).
 template <size_t NumStaticColumns>
-auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
+auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
   CopyableIdTable<NumStaticColumns> result(
       numColumns, ad_utility::testing::makeAllocator());
   for (const auto& row : generator) {
@@ -141,15 +141,15 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
         } else {
           return writer.sortedView();
         }
-      }();
+      };
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
-            generator, numDynamicColumns);
+            generator(), numDynamicColumns);
         ASSERT_THAT(result, ::testing::ElementsAreArray(randomTable))
             << "k = " << k;
       } else {
         EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
-            generator, numDynamicColumns)));
+            generator(), numDynamicColumns)));
       }
       // We cannot access or change this value after the first merge.
       EXPECT_ANY_THROW(writer.moveResultOnMerge());
@@ -199,9 +199,9 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
     writer.push(row);
   }
 
-  auto generator = writer.sortedView();
+  auto generator = [&writer]() { return writer.sortedView(); };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (idTableFromRowGenerator<0>(generator, NUM_COLS)),
+      (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
       ::testing::ContainsRegex("Insufficient memory"));
 }
 

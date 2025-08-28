@@ -161,6 +161,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
 
