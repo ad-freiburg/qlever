@@ -69,12 +69,16 @@ MemorySize MemorySize::parse(std::string_view str) {
   constexpr ctll::fixed_string regex =
       "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
   if (auto matcher = ctre::match<regex>(str)) {
-    auto amountGroup = matcher.get<"amount">();
-    double amount = amountGroup.to_number<double>();
+    auto amountString = matcher.get<"amount">().to_view();
+    // Even though CTRE supports to_number() with double values, this relies on
+    // `std::from_chars` which is currently not supported by the standard
+    // library used by our macOS build.
+    double amount;
+    absl::from_chars(amountString.begin(), amountString.end(), amount);
     auto unitString = matcher.get<"unit">().to_view();
     switch (std::tolower(unitString.at(0))) {
       case 'b':
-        if (ad_utility::contains(amountGroup.to_view(), '.')) {
+        if (ad_utility::contains(amountString, '.')) {
           throw std::runtime_error(absl::StrCat(
               "'", str,
               "' could not be parsed as a memory size. When using bytes as "
