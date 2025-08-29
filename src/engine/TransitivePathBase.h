@@ -222,9 +222,9 @@ class TransitivePathBase : public Operation {
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
-  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, bool yieldOnce,
-                                      size_t inputWidth) const;
+  Result::LazyResult fillTableWithHull(NodeGenerator hull, size_t startSideCol,
+                                       size_t targetSideCol, bool yieldOnce,
+                                       size_t inputWidth) const;
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
@@ -260,10 +260,10 @@ class TransitivePathBase : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
 
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  Result::Generator fillTableWithHullImpl(NodeGenerator hull,
-                                          size_t startSideCol,
-                                          size_t targetSideCol,
-                                          bool yieldOnce) const;
+  Result::LazyResult fillTableWithHullImpl(NodeGenerator hull,
+                                           size_t startSideCol,
+                                           size_t targetSideCol,
+                                           bool yieldOnce) const;
 
   // Create two instances of `IndexScan` that perform full scans using the
   // pattern `?variable ?a ?b` and `?c ?d ?variable`, respectively and properly
