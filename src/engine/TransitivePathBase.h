@@ -57,8 +57,12 @@ struct TransitivePathSide {
     auto [tree, col] = treeAndCol_.value();
     const std::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
-    // TODO<C++23> use ql::ranges::starts_with
-    return (!sortedOn.empty() && sortedOn[0] == col);
+
+    // If the column contains undef values, we can't guarantee the output order.
+    return !sortedOn.empty() && sortedOn[0] == col &&
+           tree->getVariableAndInfoByColumnIndex(col)
+                   .second.mightContainUndef_ ==
+               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   }
 
   TransitivePathSide clone() const {
@@ -74,6 +78,10 @@ struct TransitivePathSide {
 // are not exception safe.
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
+using SetWithGraph =
+    std::unordered_set<std::pair<Id, Id>, absl::Hash<std::pair<Id, Id>>,
+                       std::equal_to<std::pair<Id, Id>>,
+                       ad_utility::AllocatorWithLimit<std::pair<Id, Id>>>;
 
 // Alias for common type
 using PayloadTable = std::optional<IdTableView<0>>;
@@ -85,16 +93,21 @@ using PayloadTable = std::optional<IdTableView<0>>;
 // not represent anything meaningful and should not be used.
 struct NodeWithTargets {
   Id node_;
+  // Graph id, undefined if no graph is set.
+  Id graph_;
+  // Set of target ids.
   Set targets_;
   LocalVocab localVocab_;
   PayloadTable idTable_;
+  // Corresponding row in `idTable_`.
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
+  NodeWithTargets(Id node, Id graph, Set targets, LocalVocab localVocab,
                   PayloadTable idTable, size_t row)
       : node_{node},
+        graph_{graph},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
         idTable_{std::move(idTable)},
@@ -131,6 +144,12 @@ class TransitivePathBase : public Operation {
   // correctly match against the proper graph when the minimum distance is 0.
   Graphs activeGraphs_;
   std::optional<Variable> graphVariable_;
+
+  // Helper variable to allow joining a graph column without name clashes in
+  // case the graph variable is the same as the join variable when the graph is
+  // bound in `minDist_ == 0` scenarios. This is necessary for queries of the
+  // form `?x wdt:P31 ?g . GRAPH ?g { ?g wdt:P279* ?y }`.
+  static const Variable internalGraphHelper_;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
@@ -192,7 +211,6 @@ class TransitivePathBase : public Operation {
   /**
    * @brief Fill the given table with the transitive hull and use the
    * startSideTable to fill in the rest of the columns.
-   * This function is called if the start side is bound and a variable.
    *
    * @param hull The transitive hull, represented by a generator that yields
    * sets of connected nodes with some metadata.
@@ -208,26 +226,24 @@ class TransitivePathBase : public Operation {
                                       size_t targetSideCol, bool yieldOnce,
                                       size_t inputWidth) const;
 
-  /**
-   * @brief Fill the given table with the transitive hull.
-   * This function is called if the sides are unbound or ids.
-   *
-   * @param hull The transitive hull.
-   * @param startSideCol The column of the result table for the startSide of the
-   * hull
-   * @param targetSideCol The column of the result table for the targetSide of
-   * the hull
-   * @param yieldOnce If true, the generator will yield only a single time.
-   */
-  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol,
-                                      bool yieldOnce) const;
-
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow);
+  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
+                   size_t outputRow) const;
+
+  // Return the actual index of the graph column in `tree`. If
+  // `internalGraphHelper_` is present it takes precedence over
+  // `graphVariable_`. If this instance does not use graph variables, or none of
+  // the variables is present in the `tree`, return `std::nullopt`;
+  std::optional<ColumnIndex> getActualGraphColumnIndex(
+      const std::shared_ptr<QueryExecutionTree>& tree) const;
+
+  // Return how many columns would be joined given the passed `tree`. Return 1
+  // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
+  // index is equal to `joinColumn`. Return 2 otherwise.
+  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
+                            ColumnIndex joinColumn) const;
 
  public:
   std::string getDescriptor() const override;
@@ -249,11 +265,19 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
+  // Create two instances of `IndexScan` that perform full scans using the
+  // pattern `?variable ?a ?b` and `?c ?d ?variable`, respectively and properly
+  // use `activeGraphs` and the optional `graphVariable`.
+  static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
+      QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
+      const std::optional<Variable>& graphVariable);
+
   // Return an execution tree, that "joins" the given `tripleComponent` with all
-  // of the subjects or objects in the knowledge graph, so if the graph does not
+  // the subjects or objects in the knowledge graph, so if the graph does not
   // contain this value it is filtered out.
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
@@ -264,6 +288,7 @@ class TransitivePathBase : public Operation {
   // subsequent joins), by default it is `?internal_property_path_variable_x`.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       std::optional<Variable> variable = std::nullopt);
 
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
@@ -294,6 +319,7 @@ class TransitivePathBase : public Operation {
    * TransitivePathBinSearch. Else it will be a TransitivePathFallback
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
@@ -345,6 +371,12 @@ class TransitivePathBase : public Operation {
   alternativeSubtrees() const {
     return {};
   }
+
+  // For an unbound transitive path with a graph variable, return the column
+  // index of the graph variable. For a bound transitive path the return value
+  // represents the first column of the payload. The graph follows after that
+  // (if present).
+  static size_t firstGraphOrPayloadColumnIndex() { return 2; }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
