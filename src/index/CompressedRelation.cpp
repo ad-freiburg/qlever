@@ -234,6 +234,13 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 }
 
 // _____________________________________________________________________________
+auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
+    const {
+  AD_CORRECTNESS_CHECK(desiredGraphs_.has_value());
+  return [this](Id graph) { return desiredGraphs_.value().contains(graph); };
+}
+
+// _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
   if (!desiredGraphs_.has_value()) {
@@ -243,10 +250,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     return true;
   }
   const auto& graphInfo = metadata.graphInfo_.value();
-  return !ql::ranges::all_of(
-      graphInfo, [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
-        return wantedGraphs.contains(containedGraph);
-      });
+  return !ql::ranges::all_of(graphInfo, isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________
@@ -257,14 +261,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   auto graphIdFromRow = [graphColumn = graphColumn_](const auto& row) {
     return row[graphColumn];
   };
-  auto isDesiredGraphId = [this]() {
-    return [&wantedGraphs = desiredGraphs_.value()](Id id) {
-      return wantedGraphs.contains(id);
-    };
-  };
   if (needsFilteringByGraph) {
     auto removedRange = ql::ranges::remove_if(
-        block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
+        block, std::not_fn(isGraphAllowedLambda()), graphIdFromRow);
 #ifdef QLEVER_CPP_17
     block.erase(removedRange, block.end());
 #else
@@ -273,7 +272,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   } else {
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
-        ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        ql::ranges::all_of(block, isGraphAllowedLambda(), graphIdFromRow));
   }
   return needsFilteringByGraph;
 }
@@ -312,11 +311,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
   if (!block.graphInfo_.has_value()) {
     return false;
   }
-  const auto& containedGraphs = block.graphInfo_.value();
-  return ql::ranges::none_of(
-      desiredGraphs_.value(), [&containedGraphs](const auto& desiredGraph) {
-        return ad_utility::contains(containedGraphs, desiredGraph);
-      });
+  return ql::ranges::none_of(block.graphInfo_.value(), isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________

@@ -485,6 +485,10 @@ class CompressedRelationReader {
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
    private:
+    // Return a lambda that returns true if `desiredGraphs_` allows the given
+    // `graph` and it is not the default graph.
+    auto isGraphAllowedLambda() const;
+
     // Return true iff all triples from the block belong to the
     // `desiredGraphs_`, and if this fact can be determined by looking at the
     // metadata alone.
