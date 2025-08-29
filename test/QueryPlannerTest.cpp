@@ -1846,10 +1846,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:within ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
