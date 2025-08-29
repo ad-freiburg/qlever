@@ -833,7 +833,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          std::move(sortedTriples), permutation, perBlockCallbacks);
+          std::forward<T>(sortedTriples), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
