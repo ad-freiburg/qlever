@@ -223,21 +223,17 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
         if (idTable.has_value()) {
           inputView = idTable->template asStaticView<INPUT_WIDTH>();
         }
-
         for (Id linkedNode : linkedNodes) {
           table.emplace_back();
           table(outputRow, startSideCol) = node;
           table(outputRow, targetSideCol) = linkedNode;
-
           if (inputView.has_value()) {
             this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
                 inputView.value(), table, inputRow, outputRow);
           }
-
           if (this->graphVariable_.has_value()) {
             table(outputRow, table.numColumns() - 1) = graph;
           }
-
           outputRow++;
         }
       };
