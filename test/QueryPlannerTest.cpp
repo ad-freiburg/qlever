@@ -1831,13 +1831,12 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-      "spatialSearch:joinType spatialSearch:within ;"
+      "spatialSearch:joinType spatialSearch:equals ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b  . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
+      h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::EQUALS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   h::expect(
@@ -1846,12 +1845,13 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-      "spatialSearch:joinType spatialSearch:equals ;"
+      "spatialSearch:joinType spatialSearch:within ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b  . "
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::EQUALS, scan("?x", "<p>", "?y"),
+      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   h::expect(
