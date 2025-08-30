@@ -1666,6 +1666,7 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
     restTable.insertSubsetAtEnd(inputTable, nonmatching);
   }
   // perform sort-based grouping on buffered new groups
+  Engine::sort(restTable, *data.columnIndices);
   IdTable restResult = CALL_FIXED_SIZE(
       (std::array{inWidth, getResultWidth()}), &GroupByImpl::doGroupBy, this,
       restTable, *data.columnIndices, *data.aggregates, &localVocab);
@@ -1673,11 +1674,11 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
   IdTable hashResult = createResultFromHashMap(
       aggregationData, data.aggregateAliases_, &localVocab);
 
-  hashResult.reserve(hashResult.numRows() + restResult.numRows());
   runtimeInfo().addDetail(
       "hybridFallback",
       "hash groups=" + std::to_string(hashResult.numRows()) +
           ", sorted tail groups=" + std::to_string(restResult.numRows()));
+  hashResult.reserve(hashResult.numRows() + restResult.numRows());
   // Build final hybrid result: append fallback rows and sort on grouping
   // columns
   hashResult.insertAtEnd(restResult);

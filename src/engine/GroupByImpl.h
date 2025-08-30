@@ -163,6 +163,15 @@ class GroupByImpl : public Operation {
                     LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
+  // Friend tests for internals used in hash-map optimization.
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              MakeGroupValueSpans_SelectColumns);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_CountSingleBlock);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_CountTwoBlocksOverlap);
+  FRIEND_TEST(GroupByHashMapOptimizationTest,
+              UpdateHashMapWithTable_OnlyMatchingNonmatchingList);
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set

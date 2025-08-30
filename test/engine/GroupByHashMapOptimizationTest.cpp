@@ -9,7 +9,12 @@
 #include "../util/IndexTestHelpers.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/GroupByImpl.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+// For building subtree ops in tests
+#include "./ValuesForTesting.h"
+// For CountExpression and VariableExpression helpers
+#include "engine/sparqlExpressions/AggregateExpression.h"
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -68,13 +73,13 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 // Small helper to build a two-column IdTable from pairs.
 static IdTable make2(const std::vector<std::pair<int64_t, int64_t>>& rows,
                      AllocatorWithLimit<Id> alloc) {
-  IdTable t{2, alloc};
-  t.resize(rows.size());
+  IdTable table{2, alloc};
+  table.resize(rows.size());
   for (size_t i = 0; i < rows.size(); ++i) {
-    t(i, 0) = IntId(rows[i].first);
-    t(i, 1) = IntId(rows[i].second);
+    table(i, 0) = IntId(rows[i].first);
+    table(i, 1) = IntId(rows[i].second);
   }
-  return t;
+  return table;
 }
 
 // _____________________________________________________________________________
@@ -395,4 +400,194 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   EXPECT_EQ(sortedCols[1][1], IntId(2));
   EXPECT_EQ(sortedCols[0][2], IntId(2));
   EXPECT_EQ(sortedCols[1][2], IntId(2));
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest, MakeGroupValueSpans_SelectColumns) {
+  // Build a 4x4 table with known values.
+  IdTable inputTable{4, alloc_};
+  inputTable.resize(4);
+  // Rows: (10,11,12,13), (20,21,22,23), (30,31,32,33), (40,41,42,43)
+  for (size_t rowIndex = 0; rowIndex < 4; ++rowIndex) {
+    inputTable(rowIndex, 0) = IntId((rowIndex + 1) * 10);
+    inputTable(rowIndex, 1) = IntId((rowIndex + 1) * 10 + 1);
+    inputTable(rowIndex, 2) = IntId((rowIndex + 1) * 10 + 2);
+    inputTable(rowIndex, 3) = IntId((rowIndex + 1) * 10 + 3);
+  }
+
+  // Build a trivial subtree for GroupByImpl. Provide variable metadata that
+  // matches the table width (4 columns), but content is irrelevant here.
+  std::vector<std::optional<Variable>> vars{Variable{"?a"}, Variable{"?b"},
+                                            Variable{"?c"}, Variable{"?d"}};
+  auto values = std::make_shared<ValuesForTesting>(
+      qec_, inputTable.clone(), vars, false, std::vector<ColumnIndex>{});
+  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
+  GroupByImpl gb{qec_, {}, {}, subtree};
+
+  // Request spans for columns [1, 3].
+  std::vector<ColumnIndex> cols{1, 3};
+  auto spans =
+      gb.makeGroupValueSpans<2>(inputTable, 0, inputTable.size(), cols);
+
+  // Assertions: two spans, each of size 4, matching columns 1 and 3.
+  ASSERT_EQ(spans.size(), 2u);
+  ASSERT_EQ(spans[0].size(), inputTable.size());
+  ASSERT_EQ(spans[1].size(), inputTable.size());
+  for (size_t rowIndex = 0; rowIndex < inputTable.size(); ++rowIndex) {
+    EXPECT_EQ(spans[0][rowIndex], inputTable(rowIndex, 1));
+    EXPECT_EQ(spans[1][rowIndex], inputTable(rowIndex, 3));
+  }
+}
+
+// Helper: Build HashMapOptimizationData with one COUNT aggregate over column 1
+static GroupByImpl::HashMapOptimizationData makeCountOptData(
+    size_t groupCol, size_t /*valueCol*/) {
+  using namespace sparqlExpression;
+  // Build COUNT(?v) alias and aggregate information.
+  Variable v{"?v"};
+  SparqlExpressionPimpl pimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(v)),
+      "COUNT(?v)"};
+  // One COUNT aggregate stored at aggregation data index 0.
+  GroupByImpl::HashMapAggregateInformation aggInfo{
+      pimpl.getPimpl(), 0,
+      GroupByImpl::HashMapAggregateTypeWithData{
+          GroupByImpl::HashMapAggregateType::COUNT}};
+  GroupByImpl::HashMapAliasInformation alias{
+      std::move(pimpl),
+      1,
+      std::vector<GroupByImpl::HashMapAggregateInformation>{std::move(aggInfo)},
+      {}};
+
+  GroupByImpl::HashMapOptimizationData data{
+      std::vector<GroupByImpl::HashMapAliasInformation>{std::move(alias)}};
+  data.columnIndices = std::vector<size_t>{groupCol};
+  return data;
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest,
+       UpdateHashMapWithTable_CountSingleBlock) {
+  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
+  auto inputTable =
+      make2({{1, 100}, {1, 200}, {2, 300}, {2, 400}, {2, 500}}, alloc_);
+
+  // Build a minimal GroupByImpl and optimization data: group on col0, COUNT
+  // over col1.
+  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
+  auto values = std::make_shared<ValuesForTesting>(
+      qec_, inputTable.clone(), vars, false, std::vector<ColumnIndex>{});
+  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
+  using namespace sparqlExpression;
+  // Ensure result width accounts for one alias column (COUNT)
+  auto pimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(Variable{"?v"})),
+      "COUNT(?v)"};
+  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
+  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
+  auto data = makeCountOptData(0, 1);
+  // Provide a LocalVocab for the hash-map path.
+  LocalVocab localVocab;
+  data.localVocabRef = std::ref(localVocab);
+
+  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
+                                    ad_utility::Timer::Stopped};
+
+  // Update the map with the single block.
+  auto nonmatching =
+      gb.updateHashMapWithTable<1>(inputTable, data, aggr, timers, false);
+  ASSERT_TRUE(nonmatching.empty());
+  // Now finalize: create result sorted by group and check counts.
+  auto result =
+      gb.createResultFromHashMap<1>(aggr, data.aggregateAliases_, &localVocab);
+  ASSERT_EQ(result.numColumns(), 2u);  // group + COUNT
+  ASSERT_EQ(result.size(), 2u);
+  // Expected: (1,2), (2,3)
+  EXPECT_EQ(result(0, 0), IntId(1));
+  EXPECT_EQ(result(0, 1).getInt(), 2);
+  EXPECT_EQ(result(1, 0), IntId(2));
+  EXPECT_EQ(result(1, 1).getInt(), 3);
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest,
+       UpdateHashMapWithTable_CountTwoBlocksOverlap) {
+  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
+  auto firstBlockTable = make2({{1, 100}, {1, 200}, {2, 300}}, alloc_);
+  auto secondBlockTable = make2({{2, 400}, {3, 500}}, alloc_);
+
+  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
+  auto values = std::make_shared<ValuesForTesting>(
+      qec_, firstBlockTable.clone(), vars, false, std::vector<ColumnIndex>{});
+  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
+  using namespace sparqlExpression;
+  auto pimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(Variable{"?v"})),
+      "COUNT(?v)"};
+  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
+  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
+  auto data = makeCountOptData(0, 1);
+  LocalVocab localVocab;
+  data.localVocabRef = std::ref(localVocab);
+  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
+                                    ad_utility::Timer::Stopped};
+
+  // First block
+  auto nonmatchingIndicesFirstBlock =
+      gb.updateHashMapWithTable<1>(firstBlockTable, data, aggr, timers, false);
+  ASSERT_TRUE(nonmatchingIndicesFirstBlock.empty());
+  // Second block
+  auto nonmatchingIndicesSecondBlock =
+      gb.updateHashMapWithTable<1>(secondBlockTable, data, aggr, timers, false);
+  ASSERT_TRUE(nonmatchingIndicesSecondBlock.empty());
+
+  auto result =
+      gb.createResultFromHashMap<1>(aggr, data.aggregateAliases_, &localVocab);
+  ASSERT_EQ(result.size(), 3u);
+  // Expected groups: 1->2, 2->2, 3->1
+  EXPECT_EQ(result(0, 0), IntId(1));
+  EXPECT_EQ(result(0, 1).getInt(), 2);
+  EXPECT_EQ(result(1, 0), IntId(2));
+  EXPECT_EQ(result(1, 1).getInt(), 2);
+  EXPECT_EQ(result(2, 0), IntId(3));
+  EXPECT_EQ(result(2, 1).getInt(), 1);
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest,
+       UpdateHashMapWithTable_OnlyMatchingNonmatchingList) {
+  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
+  auto firstBlockTable = make2({{1, 10}, {2, 20}}, alloc_);
+  auto secondBlockTable = make2({{1, 11}, {3, 30}, {2, 21}, {4, 40}}, alloc_);
+
+  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
+  auto values = std::make_shared<ValuesForTesting>(
+      qec_, firstBlockTable.clone(), vars, false, std::vector<ColumnIndex>{});
+  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
+  using namespace sparqlExpression;
+  auto pimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(Variable{"?v"})),
+      "COUNT(?v)"};
+  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
+  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
+  auto data = makeCountOptData(0, 1);
+  LocalVocab localVocab;
+  data.localVocabRef = std::ref(localVocab);
+  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
+                                    ad_utility::Timer::Stopped};
+
+  // Seed map with first block.
+  gb.updateHashMapWithTable<1>(firstBlockTable, data, aggr, timers, false);
+  // Only match existing keys for second block.
+  auto nonmatchingIndicesSecondBlock =
+      gb.updateHashMapWithTable<1>(secondBlockTable, data, aggr, timers, true);
+  std::vector<size_t> expected{1, 3};
+  ASSERT_EQ(nonmatchingIndicesSecondBlock, expected);
 }
