@@ -284,11 +284,10 @@ int main(int argc, char** argv) {
           "a regex that evaluates predicates of triples"
           "with literals as object.");
     }
-    if (optionsMap.count("text-index-regex") &&
-        optionsMap.count("add-text-index")) {
+    if (optionsMap.contains("text-index-regex") && onlyAddTextIndex) {
       throw std::invalid_argument(
-          "The regex to filter literals with a regex on predicates only works"
-          "when building the normal index.");
+          "The regex to filter literals with a regex on predicates only works "
+          "when building the RDF and text index not only the text index.");
     }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
