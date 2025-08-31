@@ -68,6 +68,50 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     return Id::makeFromLocalVocabIndex(
         localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
   };
+
+  // Helper: Build a minimal GroupByImpl and related optimization data for
+  // grouping on column 0 and COUNT over column 1. The `exampleTable` is only
+  // used to construct a subtree with the correct schema; the actual
+  // aggregation uses the tables passed to updateHashMapWithTable.
+  auto getGroupByCountSetup(const IdTable& exampleTable)
+      -> std::tuple<GroupByImpl, GroupByImpl::HashMapOptimizationData,
+                    GroupByImpl::HashMapAggregationData<1>, LocalVocab> {
+    // Build a trivial subtree for GroupByImpl using the provided schema.
+    std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
+    auto values = std::make_shared<ValuesForTesting>(
+        qec_, exampleTable.clone(), vars, false, std::vector<ColumnIndex>{});
+    auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
+    using namespace sparqlExpression;
+    SparqlExpressionPimpl pimpl{
+        std::make_unique<CountExpression>(
+            false, std::make_unique<VariableExpression>(Variable{"?v"})),
+        "COUNT(?v)"};
+    std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
+    auto gb = GroupByImpl(qec_, std::vector<Variable>{Variable{"?g"}},
+                          std::move(ctorAliases), subtree);
+    // Build optimization data equivalent to COUNT(?v) over grouped ?g
+    SparqlExpressionPimpl pimpl2{
+        std::make_unique<CountExpression>(
+            false, std::make_unique<VariableExpression>(Variable{"?v"})),
+        "COUNT(?v)"};
+    using OptData = GroupByImpl::HashMapOptimizationData;
+    using AggInfo = GroupByImpl::HashMapAggregateInformation;
+    using AliasInfo = GroupByImpl::HashMapAliasInformation;
+    using enum GroupByImpl::HashMapAggregateType;
+    AggInfo aggInfo{pimpl2.getPimpl(), 0,
+                    GroupByImpl::HashMapAggregateTypeWithData{COUNT}};
+    AliasInfo alias{
+        std::move(pimpl2), 1, std::vector<AggInfo>{std::move(aggInfo)}, {}};
+    OptData data{std::vector<AliasInfo>{std::move(alias)}};
+    data.columnIndices = std::vector<size_t>{0};
+
+    LocalVocab localVocab;
+    data.localVocabRef = std::ref(localVocab);
+    GroupByImpl::HashMapAggregationData<1> aggr{alloc_, data.aggregateAliases_,
+                                                1};
+    return {std::move(gb), std::move(data), std::move(aggr),
+            std::move(localVocab)};
+  }
 };
 
 // Small helper to build a two-column IdTable from pairs.
@@ -408,12 +452,9 @@ TEST_F(GroupByHashMapOptimizationTest, MakeGroupValueSpans_SelectColumns) {
   IdTable inputTable{4, alloc_};
   inputTable.resize(4);
   // Rows: (10,11,12,13), (20,21,22,23), (30,31,32,33), (40,41,42,43)
-  for (size_t rowIndex = 0; rowIndex < 4; ++rowIndex) {
-    inputTable(rowIndex, 0) = IntId((rowIndex + 1) * 10);
-    inputTable(rowIndex, 1) = IntId((rowIndex + 1) * 10 + 1);
-    inputTable(rowIndex, 2) = IntId((rowIndex + 1) * 10 + 2);
-    inputTable(rowIndex, 3) = IntId((rowIndex + 1) * 10 + 3);
-  }
+  for (size_t rowIndex = 0; rowIndex < 4; ++rowIndex)
+    for (size_t colIndex = 0; colIndex < 4; ++colIndex)
+      inputTable(rowIndex, colIndex) = IntId((rowIndex + 1) * 10 + colIndex);
 
   // Build a trivial subtree for GroupByImpl. Provide variable metadata that
   // matches the table width (4 columns), but content is irrelevant here.
@@ -440,59 +481,15 @@ TEST_F(GroupByHashMapOptimizationTest, MakeGroupValueSpans_SelectColumns) {
 }
 
 // Helper: Build HashMapOptimizationData with one COUNT aggregate over column 1
-static GroupByImpl::HashMapOptimizationData makeCountOptData(
-    size_t groupCol, size_t /*valueCol*/) {
-  using namespace sparqlExpression;
-  // Build COUNT(?v) alias and aggregate information.
-  Variable v{"?v"};
-  SparqlExpressionPimpl pimpl{
-      std::make_unique<CountExpression>(
-          false, std::make_unique<VariableExpression>(v)),
-      "COUNT(?v)"};
-  // One COUNT aggregate stored at aggregation data index 0.
-  GroupByImpl::HashMapAggregateInformation aggInfo{
-      pimpl.getPimpl(), 0,
-      GroupByImpl::HashMapAggregateTypeWithData{
-          GroupByImpl::HashMapAggregateType::COUNT}};
-  GroupByImpl::HashMapAliasInformation alias{
-      std::move(pimpl),
-      1,
-      std::vector<GroupByImpl::HashMapAggregateInformation>{std::move(aggInfo)},
-      {}};
-
-  GroupByImpl::HashMapOptimizationData data{
-      std::vector<GroupByImpl::HashMapAliasInformation>{std::move(alias)}};
-  data.columnIndices = std::vector<size_t>{groupCol};
-  return data;
-}
-
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest,
        UpdateHashMapWithTable_CountSingleBlock) {
-  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
   auto inputTable =
       make2({{1, 100}, {1, 200}, {2, 300}, {2, 400}, {2, 500}}, alloc_);
 
   // Build a minimal GroupByImpl and optimization data: group on col0, COUNT
   // over col1.
-  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
-  auto values = std::make_shared<ValuesForTesting>(
-      qec_, inputTable.clone(), vars, false, std::vector<ColumnIndex>{});
-  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
-  using namespace sparqlExpression;
-  // Ensure result width accounts for one alias column (COUNT)
-  auto pimpl = SparqlExpressionPimpl{
-      std::make_unique<CountExpression>(
-          false, std::make_unique<VariableExpression>(Variable{"?v"})),
-      "COUNT(?v)"};
-  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
-  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
-  auto data = makeCountOptData(0, 1);
-  // Provide a LocalVocab for the hash-map path.
-  LocalVocab localVocab;
-  data.localVocabRef = std::ref(localVocab);
-
-  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  auto [gb, data, aggr, localVocab] = getGroupByCountSetup(inputTable);
   GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
                                     ad_utility::Timer::Stopped};
 
@@ -515,25 +512,9 @@ TEST_F(GroupByHashMapOptimizationTest,
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest,
        UpdateHashMapWithTable_CountTwoBlocksOverlap) {
-  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
   auto firstBlockTable = make2({{1, 100}, {1, 200}, {2, 300}}, alloc_);
   auto secondBlockTable = make2({{2, 400}, {3, 500}}, alloc_);
-
-  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
-  auto values = std::make_shared<ValuesForTesting>(
-      qec_, firstBlockTable.clone(), vars, false, std::vector<ColumnIndex>{});
-  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
-  using namespace sparqlExpression;
-  auto pimpl = SparqlExpressionPimpl{
-      std::make_unique<CountExpression>(
-          false, std::make_unique<VariableExpression>(Variable{"?v"})),
-      "COUNT(?v)"};
-  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
-  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
-  auto data = makeCountOptData(0, 1);
-  LocalVocab localVocab;
-  data.localVocabRef = std::ref(localVocab);
-  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  auto [gb, data, aggr, localVocab] = getGroupByCountSetup(firstBlockTable);
   GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
                                     ad_utility::Timer::Stopped};
 
@@ -561,25 +542,9 @@ TEST_F(GroupByHashMapOptimizationTest,
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest,
        UpdateHashMapWithTable_OnlyMatchingNonmatchingList) {
-  using AggrData1 = GroupByImpl::HashMapAggregationData<1>;
   auto firstBlockTable = make2({{1, 10}, {2, 20}}, alloc_);
   auto secondBlockTable = make2({{1, 11}, {3, 30}, {2, 21}, {4, 40}}, alloc_);
-
-  std::vector<std::optional<Variable>> vars{Variable{"?g"}, Variable{"?v"}};
-  auto values = std::make_shared<ValuesForTesting>(
-      qec_, firstBlockTable.clone(), vars, false, std::vector<ColumnIndex>{});
-  auto subtree = std::make_shared<QueryExecutionTree>(qec_, values);
-  using namespace sparqlExpression;
-  auto pimpl = SparqlExpressionPimpl{
-      std::make_unique<CountExpression>(
-          false, std::make_unique<VariableExpression>(Variable{"?v"})),
-      "COUNT(?v)"};
-  std::vector<Alias> ctorAliases{Alias{std::move(pimpl), Variable{"?cnt"}}};
-  GroupByImpl gb{qec_, {Variable{"?g"}}, std::move(ctorAliases), subtree};
-  auto data = makeCountOptData(0, 1);
-  LocalVocab localVocab;
-  data.localVocabRef = std::ref(localVocab);
-  AggrData1 aggr{alloc_, data.aggregateAliases_, 1};
+  auto [gb, data, aggr, localVocab] = getGroupByCountSetup(firstBlockTable);
   GroupByImpl::HashMapTimers timers{ad_utility::Timer::Stopped,
                                     ad_utility::Timer::Stopped};
 
