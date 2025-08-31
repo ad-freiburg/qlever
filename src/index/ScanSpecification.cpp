@@ -30,6 +30,10 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
   std::optional<Id> col0Id = getId(col0_);
   std::optional<Id> col1Id = getId(col1_);
   std::optional<Id> col2Id = getId(col2_);
+  Id defaultGraph =
+      getId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI)})
+          .value();
 
   ScanSpecification::Graphs graphsToFilter = std::nullopt;
   if (graphsToFilter_.has_value()) {
@@ -38,7 +42,11 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
       graphsToFilter->insert(getId(graph).value());
     }
   }
-  return {col0Id, col1Id, col2Id, std::move(localVocab),
+  return {col0Id,
+          col1Id,
+          col2Id,
+          defaultGraph,
+          std::move(localVocab),
           std::move(graphsToFilter)};
 }
 

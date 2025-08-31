@@ -45,18 +45,26 @@ class ScanSpecification {
   // If specified (i.e. not `nullopt`) then the result of the scan only consists
   // of triples that belong to the union of these graphs.
   Graphs graphsToFilter_{};
+
+  // Id representing the default graph, which is never considered when emitting
+  // values within a GRAPH clause, so it is filtered out. Note: In almost all
+  // cases this will be of type `VocabIndex`, but we cannot guarantee that the
+  // default graph is present in the vocabulary.
+  Id defaultGraph_;
   friend class ScanSpecificationAsTripleComponent;
 
   void validate() const;
 
  public:
-  ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab = {},
+  ScanSpecification(T col0Id, T col1Id, T col2Id, Id defaultGraph,
+                    LocalVocab localVocab = {},
                     Graphs graphsToFilter = std::nullopt)
       : col0Id_{col0Id},
         col1Id_{col1Id},
         col2Id_{col2Id},
         localVocab_{std::make_shared<LocalVocab>(std::move(localVocab))},
-        graphsToFilter_(std::move(graphsToFilter)) {
+        graphsToFilter_{std::move(graphsToFilter)},
+        defaultGraph_{defaultGraph} {
     validate();
   }
   const T& col0Id() const { return col0Id_; }
@@ -72,6 +80,8 @@ class ScanSpecification {
   }
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
+
+  Id getDefaultGraph() const { return defaultGraph_; }
 
   // Only used in tests.
   void setCol1Id(T col1Id) {

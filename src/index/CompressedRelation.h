@@ -471,6 +471,7 @@ class CompressedRelationReader {
     ScanSpecification::Graphs desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
+    Id defaultGraph_;
     // Filter `block` such that it contains only the specified graphs and no
     // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
     // (for example, if we know that there are no duplicates, we do not have to
