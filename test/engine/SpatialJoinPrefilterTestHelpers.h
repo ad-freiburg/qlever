@@ -202,12 +202,12 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.useBoxIds = true;
   cfg.useArea = true;
   cfg.useOBB = false;
-  cfg.useCutouts = true;
   cfg.useDiagBox = true;
   cfg.useFastSweepSkip = true;
   cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
   cfg.withinDist = withinDist;
+  cfg.computeDE9IM = false;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                        size_t t, const char* a, const char* b,
