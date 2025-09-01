@@ -17,4 +17,4 @@ add_library(engine
         Describe.cpp GraphStoreProtocol.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util_geo)
+qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util pb_util_geo)
