@@ -111,9 +111,13 @@ FetchContent_Declare(
 #################################
 # Range v3 (for C++-17 backwards compatibility)
 ################################
+
 FetchContent_Declare(
         range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
         GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
 )
 

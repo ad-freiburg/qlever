@@ -4,9 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "backports/concepts.h"
-// TODO<joka921> proper test file.
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 
 template <typename... T>
 CPP_concept Something = (... && (sizeof(T) <= 4));
