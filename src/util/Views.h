@@ -117,9 +117,8 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
-ad_utility::InputRangeTypeErased<BlockType> uniqueBlockView(
-    SortedBlockView view) {
-  struct uniqueBlockViewFromGet : ad_utility::InputRangeFromGet<BlockType> {
+InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
+  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
     SortedBlockView view_;
 
     decltype(ql::views::filter(view_,
@@ -130,7 +129,7 @@ ad_utility::InputRangeTypeErased<BlockType> uniqueBlockView(
     size_t numInputs_{0};
     size_t numUnique_{0};
 
-    uniqueBlockViewFromGet(SortedBlockView view)
+    explicit UniqueBlockViewFromGet(SortedBlockView view)
         : view_{std::move(view)},
           nonEmptyView_(
               ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
@@ -159,8 +158,8 @@ ad_utility::InputRangeTypeErased<BlockType> uniqueBlockView(
       return block;
     }
   };
-  return ad_utility::InputRangeTypeErased{
-      std::make_unique<uniqueBlockViewFromGet>(std::move(view))};
+  return InputRangeTypeErased{
+      std::make_unique<UniqueBlockViewFromGet>(std::move(view))};
 }
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
@@ -507,44 +506,6 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 CPP_template(typename Int)(
     requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
-}
-
-/// Create a generator the consumes the input generator until it finds the given
-/// separator and the yields spans of the chunks of data received inbetween.
-CPP_template(typename Range, typename ElementType)(
-    requires ql::ranges::input_range<
-        Range>) inline auto reChunkAtSeparator(Range generator,
-                                               ElementType separator) {
-  // Flattens double container and splits it at separator
-  struct ReChunkAtSeparatorFromGet
-      : ad_utility::InputRangeFromGet<ql::span<ElementType>> {
-    Range generator_;
-    ElementType separator_;
-    std::vector<ElementType> buffer_;
-    decltype(ranges::views::split(
-        ranges::views::common(ql::views::join(generator_)),
-        separator_)) splitView_;
-    decltype(splitView_.begin()) splitIter_;
-
-    ReChunkAtSeparatorFromGet(Range generator, ElementType separator)
-        : generator_{generator},
-          separator_{separator},
-          splitView_{ranges::views::split(
-              ranges::views::common(ql::views::join(generator_)), separator)},
-          splitIter_{ql::ranges::begin(splitView_)} {}
-
-    std::optional<ql::span<ElementType>> get() override {
-      if (splitIter_ != ql::ranges::end(splitView_)) {
-        buffer_ = ::ranges::to<std::vector<ElementType>>(*splitIter_);
-        ++splitIter_;
-        return ql::span(buffer_.begin(), buffer_.size());
-      }
-
-      return std::nullopt;
-    }
-  };
-
-  return ReChunkAtSeparatorFromGet{generator, separator};
 }
 }  // namespace ad_utility
 
