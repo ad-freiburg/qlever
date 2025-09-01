@@ -39,6 +39,7 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
   const GroupByImpl* parent_{nullptr};
   std::shared_ptr<const Result> subresult_;
   std::vector<GroupByImpl::Aggregate> aggregates_;
+  std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases_;
   std::vector<size_t> groupByCols_;
   bool singleIdTable_{false};
   // runtime state
@@ -65,15 +66,12 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
       : parent_(parent),
         subresult_(std::move(subresult)),
         aggregates_(std::move(aggregates)),
+        aggregateAliases_(std::move(aggregateAliases)),
         groupByCols_(std::move(groupByCols)),
         singleIdTable_(singleIdTable),
         inWidth_(subTreeResultWidth),
         resultTable_(parent->getResultWidth(),
-                     parent->getExecutionContext()->getAllocator()),
-        lazyGroupBy_(std::make_unique<LazyGroupBy>(
-            currentLocalVocab_, std::move(aggregateAliases),
-            parent_->getExecutionContext()->getAllocator(),
-            groupByCols_.size())) {
+                     parent->getExecutionContext()->getAllocator()) {
     AD_CONTRACT_CHECK(inWidth_ == IN_WIDTH || IN_WIDTH == 0);
     AD_CONTRACT_CHECK(parent_ != nullptr);
   }
@@ -91,7 +89,7 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
           std::move(resultTable_).toStatic<OUT_WIDTH>();
       parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
                                        blockStart, blockEnd,
-                                       &(currentLocalVocab_), groupByCols_);
+                                       &currentLocalVocab_, groupByCols_);
       resultTable_ = std::move(table).toDynamic();
     }
   }
@@ -211,6 +209,9 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
   }
 
   void start() {
+    lazyGroupBy_ = std::make_unique<LazyGroupBy>(
+        currentLocalVocab_, std::move(aggregateAliases_),
+        parent_->getExecutionContext()->getAllocator(), groupByCols_.size());
     range_ = buildMainRange();
     // calling begin ensures that the first value is ready
     it_ = ql::ranges::begin(range_.value());
