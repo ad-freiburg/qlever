@@ -1,6 +1,9 @@
 //
 // Created by kalmbacj on 9/2/25.
 //
+
+#include <gmock/gmock.h>
+
 #include "global/Constants.h"
 #include "global/TypedIndex.h"
 #include "util/Algorithm.h"
@@ -23,3 +26,5 @@
 #include "util/BatchedPipeline.h"
 #include "util/BitUtils.h"
 // #include "util/BlankNodeManager.h"
+
+TEST(HeaderCompilation, Dummy) {}
