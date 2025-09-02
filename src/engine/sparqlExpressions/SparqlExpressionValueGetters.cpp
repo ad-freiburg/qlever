@@ -31,6 +31,7 @@ NumericValue NumericValueGetter::operator()(
       // functions.
       return static_cast<int64_t>(id.getBool());
     case Datatype::Undefined:
+    case Datatype::EncodedVal:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
@@ -59,6 +60,9 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
+    case Datatype::EncodedVal:
+      // This assumes that we never use this for empty IRIs.
+      return True;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
@@ -195,6 +199,9 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
       return Id::makeFromBool(word.has_value() &&
                               word.value().first.starts_with(prefix));
     }
+    case Datatype::EncodedVal:
+      // We currently only encode IRIs.
+      return Id::makeFromBool(prefix == isIriPrefix);
     case Datatype::Bool:
     case Datatype::Int:
     case Datatype::Double:
@@ -258,6 +265,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
+    case Datatype::EncodedVal:
       auto optString = LiteralFromIdGetter{}(id, context);
       if (optString.has_value()) {
         return std::move(optString.value());
@@ -295,6 +303,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       AD_CORRECTNESS_CHECK(dateType != nullptr);
       return Iri::fromIrirefWithoutBrackets(dateType);
     }
+    case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
       return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -386,6 +395,7 @@ CPP_template(typename T, typename ValueGetter)(
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
+    case EncodedVal:
     case VocabIndex:
       return valueGetter(
           ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -429,6 +439,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
       // standard.
       return {""};
     case Undefined:
+    case EncodedVal:
     case VocabIndex:
     case LocalVocabIndex:
     case TextRecordIndex:
@@ -471,6 +482,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
+    case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex: {
       auto precomputed = getPrecomputedGeometryInfo(id, context);

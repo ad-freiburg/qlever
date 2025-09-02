@@ -71,6 +71,13 @@ class SparqlQleverVisitor {
   // UPDATE requests.
   ad_utility::BlankNodeManager* blankNodeManager_;
 
+  // Needed to efficiently encode common IRIs directly into the ID.
+  const EncodedIriManager* encodedIriManager_;
+
+  // Convert a GraphTerm to TripleComponent with IRI encoding support
+  TripleComponent graphTermToTripleComponentWithEncoding(
+      const GraphTerm& graphTerm) const;
+
   size_t _blankNodeCounter = 0;
   // Counter that increments for every variable generated using
   // `getNewInternalVariable` to ensure distinctness.
@@ -149,11 +156,13 @@ class SparqlQleverVisitor {
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      ad_utility::BlankNodeManager* bnodeManager, PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager,
+      const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : blankNodeManager_{bnodeManager},
+        encodedIriManager_{encodedIriManager},
         prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
@@ -673,8 +682,8 @@ class SparqlQleverVisitor {
   // stays semantically the same, but for blank nodes, this step converts them
   // into internal variables so they are interpreted correctly by the query
   // planner.
-  static parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples);
+  parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from

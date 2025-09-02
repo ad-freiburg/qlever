@@ -70,8 +70,9 @@ MemorySize MemorySize::parse(std::string_view str) {
       "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
   if (auto matcher = ctre::match<regex>(str)) {
     auto amountString = matcher.get<"amount">().to_view();
-    // Versions after CTRE v3.8.1 should support to_number()
-    // with double values if the compilers support it.
+    // Even though CTRE supports to_number() with double values, this relies on
+    // `std::from_chars` which is currently not supported by the standard
+    // library used by our macOS build.
     double amount;
     absl::from_chars(amountString.begin(), amountString.end(), amount);
     auto unitString = matcher.get<"unit">().to_view();

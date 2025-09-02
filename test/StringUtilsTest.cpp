@@ -29,18 +29,22 @@ using ad_utility::strIsLangTag;
 using ad_utility::utf8ToLower;
 using ad_utility::utf8ToUpper;
 
-TEST(StringUtilsTest, utf8ToLower) {
+// _____________________________________________________________________________
+TEST(StringUtils, utf8ToLower) {
   EXPECT_EQ("schindler's list", utf8ToLower("Schindler's List"));
   EXPECT_EQ("#+-_foo__bar++", utf8ToLower("#+-_foo__Bar++"));
   EXPECT_EQ("fôéßaéé", utf8ToLower("FÔÉßaéÉ"));
 }
-TEST(StringUtilsTest, utf8ToUpper) {
+
+// _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpper) {
   EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper("Schindler's List"));
   EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper("#+-_bImM__baMm++"));
   EXPECT_EQ("FÔÉSSAÉÉ", utf8ToUpper("FôéßaÉé"));
 }
 
-TEST(StringUtilsTest, getUTF8Substring) {
+// _____________________________________________________________________________
+TEST(StringUtils, getUTF8Substring) {
   // Works normally for strings with only single byte characters.
   ASSERT_EQ("fel", getUTF8Substring("Apfelsaft", 2, 3));
   ASSERT_EQ("saft", getUTF8Substring("Apfelsaft", 5, 4));
@@ -74,7 +78,7 @@ TEST(StringUtilsTest, getUTF8Substring) {
 
 // It should just work like the == operator for strings, just without
 // the typical short circuit optimization
-TEST(StringUtilsTest, constantTimeEquals) {
+TEST(StringUtils, constantTimeEquals) {
   EXPECT_TRUE(constantTimeEquals("", ""));
   EXPECT_TRUE(constantTimeEquals("Abcdefg", "Abcdefg"));
   EXPECT_FALSE(constantTimeEquals("Abcdefg", "abcdefg"));
@@ -83,7 +87,8 @@ TEST(StringUtilsTest, constantTimeEquals) {
   EXPECT_FALSE(constantTimeEquals("Abc", "defg"));
 }
 
-TEST(StringUtilsTest, listToString) {
+// _____________________________________________________________________________
+TEST(StringUtils, listToString) {
   /*
   Do the test for all overloads of `lazyStrJoin`.
   Every overload needs it's own `range`, because ranges like, for example,
@@ -148,7 +153,8 @@ TEST(StringUtilsTest, listToString) {
                         goThroughVectorGenerator(multiValueVector), ",");
 }
 
-TEST(StringUtilsTest, addIndentation) {
+// _____________________________________________________________________________
+TEST(StringUtils, addIndentation) {
   // The input strings for testing.
   static constexpr std::string_view withoutLineBreaks = "Hello\tworld!";
   static constexpr std::string_view withLineBreaks = "\nHello\nworld\n!";
@@ -172,7 +178,8 @@ TEST(StringUtilsTest, addIndentation) {
             ad_utility::addIndentation(withLineBreaks, "Not "));
 }
 
-TEST(StringUtilsTest, insertThousandSeparator) {
+// _____________________________________________________________________________
+TEST(StringUtils, insertThousandSeparator) {
   /*
   Do the tests, that are not exception tests, with the given arguments for
   `insertThousandSeparator`.
@@ -324,7 +331,8 @@ TEST(StringUtilsTest, insertThousandSeparator) {
                       vi<'6'>, vi<'7'>, vi<'8'>, vi<'9'>);
 }
 
-TEST(StringUtilsTest, findLiteralEnd) {
+// _____________________________________________________________________________
+TEST(StringUtils, findLiteralEnd) {
   using namespace ad_utility;
   EXPECT_EQ(findLiteralEnd("nothing", "\""), std::string_view::npos);
   EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
@@ -332,7 +340,8 @@ TEST(StringUtilsTest, findLiteralEnd) {
   EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
 }
 
-TEST(StringUtilsTest, strLangTag) {
+// _____________________________________________________________________________
+TEST(StringUtils, strLangTag) {
   // INVALID TAGS
   ASSERT_FALSE(strIsLangTag(""));
   ASSERT_FALSE(strIsLangTag("de-@"));
@@ -355,7 +364,7 @@ TEST(StringUtilsTest, strLangTag) {
 }
 
 // _____________________________________________________________________________
-TEST(StringUtilsTest, constexprStrCat) {
+TEST(StringUtils, constexprStrCat) {
   using namespace std::string_view_literals;
   ASSERT_EQ((constexprStrCat<>()), ""sv);
   ASSERT_EQ((constexprStrCat<"">()), ""sv);
@@ -366,7 +375,7 @@ TEST(StringUtilsTest, constexprStrCat) {
 }
 
 // _____________________________________________________________________________
-TEST(StringUtilsTest, constexprStrCatImpl) {
+TEST(StringUtils, constexprStrCatImpl) {
   // The coverage tools don't track the compile time usages of these internal
   // helper functions, so we test them manually.
   using namespace ad_utility::detail::constexpr_str_cat_impl;
@@ -378,7 +387,8 @@ TEST(StringUtilsTest, constexprStrCatImpl) {
             (std::array{'h', 'i', '\0'}));
 }
 
-TEST(StringUtilsTest, truncateOperationString) {
+// _____________________________________________________________________________
+TEST(StringUtils, truncateOperationString) {
   auto expectTruncate = [](std::string_view test, bool willTruncate,
                            ad_utility::source_location l =
                                ad_utility::source_location::current()) {
@@ -402,4 +412,15 @@ TEST(StringUtilsTest, truncateOperationString) {
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
+}
+
+// _____________________________________________________________________________
+TEST(StringUtils, commonPrefix) {
+  EXPECT_EQ(ad_utility::commonPrefix("", ""), "");
+  EXPECT_EQ(ad_utility::commonPrefix("a", ""), "");
+  EXPECT_EQ(ad_utility::commonPrefix("", "a"), "");
+  EXPECT_EQ(ad_utility::commonPrefix("ab", "a"), "a");
+  EXPECT_EQ(ad_utility::commonPrefix("a", "ab"), "a");
+  EXPECT_EQ(ad_utility::commonPrefix("ab", "b"), "");
+  EXPECT_EQ(ad_utility::commonPrefix("b", "ab"), "");
 }
