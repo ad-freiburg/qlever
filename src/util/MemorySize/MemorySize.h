@@ -11,7 +11,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <cassert>
-#include <concepts>
 #include <cstddef>
 #include <functional>
 #include <limits>
