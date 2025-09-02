@@ -173,8 +173,10 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   }
 
   // F1 can only be called with 0 and 1 as template arguments.
-  static_assert(std::invocable<decltype(ConstexprSwitch<0, 1>{}), F1, int>);
-  static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
+  static_assert(
+      ql::concepts::invocable<decltype(ConstexprSwitch<0, 1>{}), F1, int>);
+  static_assert(
+      !ql::concepts::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
 struct PushToVector {

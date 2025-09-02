@@ -160,9 +160,10 @@ std::string concatMessages(Args&&... messages) {
 // For  details on the usage see the documentation of `AD_CONTRACT_CHECK` above
 // as well as the examples in `ExceptionTest.cpp`
 namespace ad_utility::detail {
+template <typename... AdditionalMessages>
 inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
                                    ad_utility::source_location location,
-                                   auto&&... additionalMessages) {
+                                   AdditionalMessages&&... additionalMessages) {
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail

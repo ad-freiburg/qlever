@@ -8,3 +8,7 @@ addLinkAndDiscoverTestNoLibs(ConceptsTest)
 addLinkAndDiscoverTestNoLibs(ShiftTest)
 addLinkAndDiscoverTestNoLibs(ValueIdentityTest)
 addLinkAndDiscoverTestNoLibs(BackportIteratorTest)
+
+add_executable(UtilCompilationTests UtilCompilationTests.cpp)
+target_link_libraries(UtilCompilationTests GTest::gtest GTest::gmock_main absl::strings)
+gtest_discover_tests(UtilCompilationTests AlgorithmBackportTests)

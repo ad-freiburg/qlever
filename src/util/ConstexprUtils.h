@@ -86,8 +86,8 @@ struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
       requires((sizeof...(Cases) == 0) ||
                ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>)
-          CPP_and std::equality_comparable_with<decltype(FirstCase),
-                                                decltype(FirstCase)>
+          CPP_and ql::concepts::equality_comparable_with<decltype(FirstCase),
+                                                         decltype(FirstCase)>
               CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
                   CPP_and(InvocableWithCase<FuncType, Cases,
                                             Args...>&&...)) constexpr auto
@@ -175,9 +175,9 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
 
 // An `ad_utility::ValueSequence<T, values...>` has the same functionality as
 // `std::integer_sequence`. This replacement is needed to compile QLever with
-// libc++, because libc++ strictly enforces the `std::integral` constraint for
-// `std::integer_sequence`, and we also need non-integral types as values, for
-// example `std::array<...>`.
+// libc++, because libc++ strictly enforces the `ql::concepts::integral`
+// constraint for `std::integer_sequence`, and we also need non-integral types
+// as values, for example `std::array<...>`.
 namespace detail {
 template <typename T, T... values>
 struct ValueSequenceImpl {};
@@ -212,8 +212,8 @@ auto toIntegerSequence() {
 // NumIntegers - 1 to an array of `NumIntegers` many integers that are each in
 // the range
 // `[0, ..., (maxValue)]`
-CPP_template(typename Int,
-             size_t NumIntegers)(requires std::integral<Int>) constexpr std::
+CPP_template(typename Int, size_t NumIntegers)(
+    requires ql::concepts::integral<Int>) constexpr std::
     array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
   std::array<Int, NumIntegers> res;
   for (auto& el : res | ql::views::reverse) {
@@ -228,7 +228,7 @@ CPP_template(typename Int,
 // value from `[0, ..., Upper - 1] ^ Num` exactly once. `^` denotes the
 // cartesian power.
 CPP_template(auto Upper, size_t Num)(
-    requires std::integral<
+    requires ql::concepts::integral<
         decltype(Upper)>) constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
@@ -244,7 +244,7 @@ CPP_template(auto Upper, size_t Num)(
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
 CPP_template(auto Upper,
-             size_t Num)(requires std::integral<
+             size_t Num)(requires ql::concepts::integral<
                          decltype(Upper)>) auto cartesianPowerAsIntegerArray() {
   return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
 }
@@ -259,9 +259,9 @@ constexpr void forEachTypeInParameterPack(const F& lambda) {
 }
 
 // Same as the function above, but the types are passed to the lambda as a first
-// argument `std::type_identity<T>{}`.
-template <typename... Ts>
-constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
+// argument `ql::type_identity<T>{}`.
+template <typename... Ts, typename F>
+constexpr void forEachTypeInParameterPackWithTI(const F& lambda) {
   (lambda(use_type_identity::ti<Ts>), ...);
 }
 
@@ -288,7 +288,8 @@ struct forEachTypeInTemplateTypeWithTIImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
-  constexpr void operator()(const auto& lambda) const {
+  template <typename F>
+  constexpr void operator()(const F& lambda) const {
     forEachTypeInParameterPackWithTI<Ts...>(lambda);
   }
 };
@@ -304,10 +305,10 @@ constexpr void forEachTypeInTemplateType(const F& lambda) {
 }
 
 // Same as the function above, but the template type is passed in as a
-// `std::type_identity<TemplateType>`.
-template <typename TemplateType>
+// `ql::type_identity<TemplateType>`.
+template <typename TemplateType, typename F>
 constexpr void forEachTypeInTemplateTypeWithTI(
-    use_type_identity::TI<TemplateType>, const auto& lambda) {
+    use_type_identity::TI<TemplateType>, const F& lambda) {
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 

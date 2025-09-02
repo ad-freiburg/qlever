@@ -131,8 +131,8 @@ class TransitivePathTest
   // scenarios where the same input table is delivered in different splits
   // either wrapped within a generator or as a single table.
   static void runTestWithForcedSideTableScenarios(
-      const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
-                           bool> auto& testCase,
+      const ql::concepts::invocable<std::variant<IdTable, std::vector<IdTable>>,
+                                    bool> auto& testCase,
       IdTable idTable,
       ad_utility::source_location loc =
           ad_utility::source_location::current()) {

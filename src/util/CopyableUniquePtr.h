@@ -6,9 +6,9 @@
 #define QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H
 
 #include <memory>
-#include <type_traits>
 #include <utility>
 
+#include "backports/type_traits.h"
 #include "util/Forward.h"
 #include "util/json.h"
 

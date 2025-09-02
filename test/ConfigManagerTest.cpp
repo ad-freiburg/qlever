@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <functional>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -23,6 +22,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
+#include "backports/type_traits.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -1234,7 +1234,7 @@ struct TestGeneratedValidatorsOfConfigManager {
   template <typename... Ts>
   void operator()(size_t variantStart, size_t variantEnd, ConfigManager& m,
                   const nlohmann::json& defaultValues,
-                  const std::same_as<
+                  const ql::concepts::same_as<
                       nlohmann::json::json_pointer> auto&... configOptionPaths)
       requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
     // Using the invariant of our function generator, to create valid

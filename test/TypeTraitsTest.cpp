@@ -7,9 +7,9 @@
 
 #include <concepts>
 #include <functional>
-#include <type_traits>
 
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/TypeTraits.h"
 
@@ -97,7 +97,7 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
         using CorrectT = typename std::decay_t<decltype(t2)>::type;
         using T = typename decltype(t3)::type;
         (void)t2;
-        if constexpr (!std::same_as<CorrectT, T>) {
+        if constexpr (!ql::concepts::same_as<CorrectT, T>) {
           static_assert(!SameAsAnyTypeIn<T, tup>);
         }
       });
@@ -205,8 +205,8 @@ struct BothInvocableWithSimilarReturnType {
 // There is a lot of overlap between the concepts.
 TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   /*
-  Currently, `std::invocable` and `std::regular_invocable` are the same.
-  Therefore, having separate tests would be an unnecessary code increase.
+  Currently, `ql::concepts::invocable` and `std::regular_invocable` are the
+  same. Therefore, having separate tests would be an unnecessary code increase.
   */
   constexpr auto bothInvocableWithExactReturnType =
       BothInvocableWithExactReturnType{};
@@ -280,7 +280,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
         using ReturnType = typename decltype(t)::type;
-        if constexpr (std::same_as<ReturnType, int>) {
+        if constexpr (ql::concepts::same_as<ReturnType, int>) {
           static_assert(bothInvocableWithExactReturnType.template
                         operator()<SingleParameter, ReturnType, int&>());
         }
@@ -291,7 +291,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
                                         &bothInvocableWithExactReturnType](
                                            auto t) {
     using ReturnType = typename decltype(t)::type;
-    if constexpr (std::same_as<ReturnType, bool>) {
+    if constexpr (ql::concepts::same_as<ReturnType, bool>) {
       static_assert(bothInvocableWithExactReturnType.template
                     operator()<DoubleParameter, ReturnType, bool&, bool&>());
     }
@@ -316,7 +316,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
         using ParameterType = typename decltype(t)::type;
-        if constexpr (!std::same_as<ParameterType, int&>) {
+        if constexpr (!ql::concepts::same_as<ParameterType, int&>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, int, ParameterType>());
           static_assert(!bothInvocableWithSimilarReturnType.template
@@ -328,8 +328,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
                  &bothInvocableWithSimilarReturnType](auto t1, auto t2) {
         using FirstParameterType = typename decltype(t1)::type;
         using SecondParameterType = typename decltype(t2)::type;
-        if constexpr (!std::same_as<FirstParameterType, bool&> ||
-                      !std::same_as<SecondParameterType, bool&>) {
+        if constexpr (!ql::concepts::same_as<FirstParameterType, bool&> ||
+                      !ql::concepts::same_as<SecondParameterType, bool&>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<DoubleParameter, bool, FirstParameterType,
                                     SecondParameterType>());
@@ -343,7 +343,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType](auto t) {
         using ReturnType = typename decltype(t)::type;
-        if constexpr (!std::same_as<ReturnType, int>) {
+        if constexpr (!ql::concepts::same_as<ReturnType, int>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, ReturnType, int&>());
         }
@@ -351,7 +351,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(ti<bool>, [&bothInvocableWithExactReturnType](
                                            auto t) {
     using ReturnType = typename decltype(t)::type;
-    if constexpr (!std::same_as<ReturnType, bool>) {
+    if constexpr (!ql::concepts::same_as<ReturnType, bool>) {
       static_assert(!bothInvocableWithExactReturnType.template
                      operator()<DoubleParameter, ReturnType, bool&, bool&>());
     }
@@ -363,8 +363,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       ti<int>, [&bothInvocableWithExactReturnType](auto t1, auto t2) {
         using ReturnType = typename decltype(t1)::type;
         using ParameterType = typename decltype(t2)::type;
-        if constexpr (!std::same_as<ReturnType, int> &&
-                      !std::same_as<ParameterType, int&>) {
+        if constexpr (!ql::concepts::same_as<ReturnType, int> &&
+                      !ql::concepts::same_as<ParameterType, int&>) {
           static_assert(
               !bothInvocableWithExactReturnType.template
                operator()<SingleParameter, ReturnType, ParameterType>());
@@ -379,9 +379,11 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
         callWithEveryVariantOfType(
             ti<bool>, [&bothInvocableWithExactReturnType](auto t) {
               using ReturnType = typename decltype(t)::type;
-              if constexpr ((!std::same_as<FirstParameterType, bool&> ||
-                             !std::same_as<SecondParameterType, bool&>)&&!std::
-                                same_as<ReturnType, bool>) {
+              if constexpr ((!ql::concepts::same_as<FirstParameterType,
+                                                    bool&> ||
+                             !ql::concepts::same_as<
+                                 SecondParameterType,
+                                 bool&>)&&!std::same_as<ReturnType, bool>) {
                 static_assert(
                     !bothInvocableWithExactReturnType.template
                      operator()<DoubleParameter, ReturnType, FirstParameterType,

@@ -8,9 +8,9 @@
 #define QLEVER_SRC_BACKPORTS_ITERATOR_H
 
 #include <iterator>
-#include <type_traits>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 
 namespace ql {
 // A backport of `std::move_sentinel` for C++17. It wraps an iterator or

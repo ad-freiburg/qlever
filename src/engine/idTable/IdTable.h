@@ -465,8 +465,9 @@ class IdTable {
   // stores the right type and has the right size.
   CPP_template(typename RowLike)(
       requires CPP_NOT(isView) CPP_and ql::ranges::random_access_range<RowLike>
-          CPP_and std::same_as<ql::ranges::range_value_t<RowLike>,
-                               T>) void push_back(const RowLike& newRow) {
+          CPP_and
+              ql::concepts::same_as<ql::ranges::range_value_t<RowLike>,
+                                    T>) void push_back(const RowLike& newRow) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     ql::ranges::for_each(ad_utility::integerRange(numColumns()),

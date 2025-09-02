@@ -7,9 +7,10 @@
 
 #include <cstdint>
 #include <iterator>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
+#include "backports/type_traits.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/LambdaHelpers.h"
@@ -68,7 +69,7 @@ class IteratorForAccessOperator {
                          RandomAccessContainer&>,
       index_type>;
   using value_type = std::conditional_t<!std::is_void_v<ValueType>, ValueType,
-                                        std::remove_cvref_t<AccessorResult>>;
+                                        ql::remove_cvref_t<AccessorResult>>;
   using reference =
       std::conditional_t<!std::is_void_v<Reference>, Reference, AccessorResult>;
   using pointer = value_type*;
@@ -94,12 +95,12 @@ class IteratorForAccessOperator {
   IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
       default;
 
-  auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (index_ <=> rhs.index_);
-  }
-  bool operator==(const IteratorForAccessOperator& rhs) const {
-    return index_ == rhs.index_;
-  }
+  auto tieForComparison() const { return index_; }
+
+  // TODO<joka921> The names are not well-chosen, because this is NOT the
+  // default equalitiy comparison.
+  QL_DEFINE_DEFAULT_THREEWAY_COMPARISON(IteratorForAccessOperator);
+  QL_DEFINE_DEFAULT_EQUALITY_COMPARISON(IteratorForAccessOperator);
 
   IteratorForAccessOperator& operator+=(difference_type n) {
     index_ += n;
@@ -429,7 +430,7 @@ class InputRangeTypeErased {
   CPP_template(typename Range)(
       requires CPP_NOT(std::is_base_of_v<InputRangeFromGet<ValueType>, Range>)
           CPP_and ql::ranges::range<Range>
-              CPP_and std::same_as<
+              CPP_and ql::concepts::same_as<
                   ql::ranges::range_value_t<Range>,
                   ValueType>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
