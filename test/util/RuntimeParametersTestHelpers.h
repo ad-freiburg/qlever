@@ -20,4 +20,15 @@ template <ad_utility::ParameterName Name, typename Value>
   }};
 }
 
+template <auto ParameterPtr, typename Value>
+[[nodiscard]] auto setNewRuntimeParameterForTest(Value&& value) {
+  auto originalValue =
+      std::invoke(ParameterPtr, *runtimeParametersNew().rlock()).get();
+  std::invoke(ParameterPtr, *runtimeParametersNew().wlock()).set(AD_FWD(value));
+  return absl::Cleanup{[originalValue = std::move(originalValue)]() {
+    std::invoke(ParameterPtr, *runtimeParametersNew().wlock())
+        .set(std::move(originalValue));
+  }};
+}
+
 #endif  // QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H

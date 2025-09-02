@@ -51,7 +51,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
-  if (RuntimeParameters().get<"strip-columns">()) {
+  if (runtimeParametersNew().rlock()->stripColumns_.get()) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
