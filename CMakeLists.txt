@@ -264,7 +264,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
 )
 
 ################################
