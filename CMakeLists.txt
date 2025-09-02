@@ -111,11 +111,17 @@ FetchContent_Declare(
 #################################
 # Range v3 (for C++-17 backwards compatibility)
 ################################
+
 FetchContent_Declare(
         range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 34f2567718ce085193750b543b5fe654ed4160a6  # branch fork-for-qlever
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
+        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
 )
+
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
 # libspatialjoin
@@ -258,7 +264,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
 )
 
 ################################

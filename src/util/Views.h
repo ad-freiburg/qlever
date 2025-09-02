@@ -605,18 +605,4 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
 #endif
-
-// Explicitly make `OwningView` and `RvalueView` fulfill the `view` concept from
-// `range-v3`. Note: this is also done seemingly redundantly via the inheritance
-// from `ql::ranges::view_interface`, but by explicitly enabling this, we can
-// also use these views in combination with views from `range-v3` in C++20 mode,
-// where `ql::ranges` is `std::ranges`.
-template <typename T>
-inline constexpr bool ::ranges::enable_view<ad_utility::OwningView<T>> = true;
-template <typename T>
-inline constexpr bool ::ranges::enable_view<ad_utility::RvalueView<T>> = true;
-template <typename T>
-inline constexpr bool ::ranges::enable_view<ad_utility::ForceInputView<T>> =
-    true;
-
 #endif  // QLEVER_SRC_UTIL_VIEWS_H
