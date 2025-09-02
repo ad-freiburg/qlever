@@ -272,8 +272,8 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+    filterDuplicatesIfNecessary(IdTable& block,
+                                const CompressedBlockMetadata& blockMetadata) {
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
     return false;
@@ -1345,18 +1345,18 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::addBlockForLargeRelation(
-    Id col0Id, std::shared_ptr<IdTable> relation) {
-  AD_CORRECTNESS_CHECK(!relation->empty());
+void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
+                                                        IdTable relation) {
+  AD_CORRECTNESS_CHECK(!relation.empty());
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
-  currentRelationPreviousSize_ += relation->numRows();
+  currentRelationPreviousSize_ += relation.numRows();
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
-  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
-                        false);
+  compressAndWriteBlock(currentCol0Id_, currentCol0Id_,
+                        std::make_shared<IdTable>(std::move(relation)), false);
 }
 
 namespace {
@@ -1489,15 +1489,13 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 
     // Current block has remaining rows, write buffered block and use current as
     // new buffer
-    addBlockForLargeRelation(
-        col0Id, std::make_shared<IdTable>(std::move(*bufferedBlock)));
+    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
     bufferedBlock = std::move(block).toDynamic();
   }
 
   // Write the final buffered block if it exists
   if (bufferedBlock.has_value() && !bufferedBlock->empty()) {
-    addBlockForLargeRelation(
-        col0Id, std::make_shared<IdTable>(std::move(*bufferedBlock)));
+    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
@@ -1568,9 +1566,8 @@ auto CompressedRelationWriter::createPermutationPair(
     for (const auto& row : twinRelation) {
       twinRelationSorter.push(row);
     }
-    writer1.addBlockForLargeRelation(
-        col0IdCurrentRelation.value(),
-        std::make_shared<IdTable>(std::move(relation).toDynamic()));
+    writer1.addBlockForLargeRelation(col0IdCurrentRelation.value(),
+                                     IdTable(std::move(relation).toDynamic()));
     relation.clear();
     relation.reserve(blocksize);
     ++numBlocksCurrentRel;
@@ -1790,15 +1787,6 @@ auto CompressedRelationReader::getScanConfig(
   // will throw an assertion.
   auto [graphColumnIndex,
         deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
-    // TODO<joka921> figure out whether this is the correct fix.
-    /*
-if (!scanSpec.graphsToFilter().has_value()) {
-// No filtering required, these are dummy values that are ignored by the
-// filtering logic.
-// TODO<joka921> Those are not at all dummies...
-return {0, false};
-}
-*/
     auto idx = static_cast<size_t>(
         ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
         columnIndices.begin());

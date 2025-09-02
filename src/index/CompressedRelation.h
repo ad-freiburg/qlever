@@ -412,7 +412,7 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, std::shared_ptr<IdTable> relation);
+  void addBlockForLargeRelation(Id col0Id, IdTable relation);
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
@@ -486,8 +486,8 @@ class CompressedRelationReader {
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
-    bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
+    static bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a
