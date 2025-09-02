@@ -38,8 +38,9 @@ CPP_template(bool moveElements, typename T, typename SizeGetter)(
 // This concept is fulfilled if `Range` is a range that stores values of type
 // `T`.
 template <typename Range, typename T>
-CPP_concept RangeWithValue = ql::ranges::range<Range> &&
-                             std::same_as<ql::ranges::range_value_t<Range>, T>;
+CPP_concept RangeWithValue =
+    ql::ranges::range<Range> &&
+    ql::concepts::same_as<ql::ranges::range_value_t<Range>, T>;
 
 // Fulfilled if `Range` is a random access range the elements of which are
 // ranges of elements of type `T`, e.g. `std::vector<std::generator<T>>`.

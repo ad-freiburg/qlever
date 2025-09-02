@@ -17,11 +17,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
@@ -93,12 +93,12 @@ class ConfigManager {
 
     // Wrapper for calling `std::visit` on the saved `Data`.
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis);
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis) const;
 
    private:
@@ -131,10 +131,10 @@ class ConfigManager {
     CPP_template(typename Visitor, typename PointerType)(
         requires ad_utility::SimilarTo<
             std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-            CPP_and std::invocable<
+            CPP_and ql::concepts::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigOption&, ConfigOption&>>
-                CPP_and std::invocable<
+                CPP_and ql::concepts::invocable<
                     Visitor,
                     std::conditional_t<std::is_const_v<PointerType>,
                                        const ConfigManager&,
@@ -212,7 +212,7 @@ class ConfigManager {
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
       requires SupportedConfigOptionType<OptionType> CPP_and
-          std::same_as<OptionType, DefaultValueType>)
+          ql::concepts::same_as<OptionType, DefaultValueType>)
       ConstConfigOptionProxy<OptionType> addOption(
           const std::vector<std::string>& pathToOption,
           std::string_view optionDescription,
@@ -251,7 +251,7 @@ class ConfigManager {
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
       requires SupportedConfigOptionType<OptionType> CPP_and
-          std::same_as<OptionType, DefaultValueType>)
+          ql::concepts::same_as<OptionType, DefaultValueType>)
       ConstConfigOptionProxy<OptionType> addOption(
           std::string optionName, std::string_view optionDescription,
           OptionType* variableToPutValueOfTheOptionIn,
@@ -761,18 +761,18 @@ class ConfigManager {
     // Return either `configOption_` or `configManager_`, based on type.
     CPP_template(typename T)(requires ConfigOptionOrManager<T>) constexpr const
         MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
-      if constexpr (std::same_as<T, ConfigOption>) {
+      if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
-      } else if constexpr (std::same_as<T, ConfigManager>) {
+      } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {
         return configManager_;
       }
     }
     CPP_template(typename T)(
         requires ConfigOptionOrManager<
             T>) constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
-      if constexpr (std::same_as<T, ConfigOption>) {
+      if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
-      } else if constexpr (std::same_as<T, ConfigManager>) {
+      } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {
         return configManager_;
       }
     }

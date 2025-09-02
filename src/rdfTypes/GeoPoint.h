@@ -42,7 +42,7 @@ class GeoPoint {
   using T = uint64_t;
 
   CPP_template(typename H,
-               typename G)(requires std::same_as<G, GeoPoint>) friend H
+               typename G)(requires ql::concepts::same_as<G, GeoPoint>) friend H
       AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }

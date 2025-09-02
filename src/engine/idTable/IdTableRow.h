@@ -7,10 +7,10 @@
 
 #include <array>
 #include <iostream>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "global/Id.h"
 #include "util/Enums.h"
 #include "util/Exception.h"

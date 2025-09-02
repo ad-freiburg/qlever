@@ -233,7 +233,7 @@ class Server {
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
-  template <std::invocable Function,
+  template <ql::concepts::invocable Function,
             typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
                                   Function function,

@@ -358,11 +358,17 @@ TEST(StringUtilsTest, strLangTag) {
 TEST(StringUtilsTest, constexprStrCat) {
   using namespace std::string_view_literals;
   ASSERT_EQ((constexprStrCat<>()), ""sv);
-  ASSERT_EQ((constexprStrCat<"">()), ""sv);
-  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
-  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+  static constexpr std::string_view empty = "";
+  ASSERT_EQ((constexprStrCat<empty>()), ""sv);
+  static constexpr std::string_view single = "single";
+  ASSERT_EQ((constexprStrCat<single>()), "single"sv);
+  ASSERT_EQ((constexprStrCat<empty, single, empty>()), "single"sv);
+  static constexpr std::array<std::string_view, 3> input{"hello", " ",
+                                                         "World!"};
+  ASSERT_EQ((constexprStrCat<input[0], input[1], input[2]>()),
+            "hello World!"sv);
+  static_assert(constexprStrCat<input[0], input[1], input[2]>() ==
+                "hello World!"sv);
 }
 
 // _____________________________________________________________________________
@@ -370,12 +376,11 @@ TEST(StringUtilsTest, constexprStrCatImpl) {
   // The coverage tools don't track the compile time usages of these internal
   // helper functions, so we test them manually.
   using namespace ad_utility::detail::constexpr_str_cat_impl;
-  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
-            (std::array{'h', 'i', '\0'}));
+  static constexpr std::string_view h = "h";
+  static constexpr std::string_view i = "i";
+  ASSERT_EQ((constexprStrCatBufferImpl<h, i>()), (std::array{'h', 'i', '\0'}));
 
-  using C = ConstexprString;
-  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((catImpl<2>(std::array{&h, &i})), (std::array{'h', 'i', '\0'}));
 }
 
 TEST(StringUtilsTest, truncateOperationString) {

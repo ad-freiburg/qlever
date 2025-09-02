@@ -507,7 +507,7 @@ std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
   using enum CompOp;
   using namespace ad_utility;
-  using P = std::pair<CompOp, CompOp>;
+  using P = boost::hana::pair<CompOp, CompOp>;
   // The complementation logic implemented with the following mapping
   // procedure:
   // (1) ?var < referenceValue -> ?var >= referenceValue
@@ -1026,7 +1026,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
   using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
-    using P = std::pair<CompOp, CompOp>;
+    using P = boost::hana::pair<CompOp, CompOp>;
     // Retrieve by map the corresponding mirrored `CompOp` value for
     // the given `CompOp comparison` template argument. E.g., this
     // procedure will transform the relational expression

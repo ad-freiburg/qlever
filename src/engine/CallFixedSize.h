@@ -56,7 +56,7 @@ namespace detail {
 
 // Call the `lambda` when the correct compile-time `Int`s are given as a
 // `std::integer_sequence`.
-template <std::integral Int, Int... Is, typename F, typename... Args>
+template <ql::concepts::integral Int, Int... Is, typename F, typename... Args>
 auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
                             Args&&... args) {
   return lambda.template operator()<Is...>(AD_FWD(args)...);
@@ -65,8 +65,8 @@ auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
-template <int maxValue, size_t NumValues, std::integral Int, typename F,
-          typename... Args>
+template <int maxValue, size_t NumValues, ql::concepts::integral Int,
+          typename F, typename... Args>
 auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
                            Args&&... args) {
   AD_CONTRACT_CHECK(
@@ -119,7 +119,8 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
 }
 
 // Overload for a single int.
-template <int maxValue, std::integral Int, typename F, typename... Args>
+template <int maxValue, ql::concepts::integral Int, typename F,
+          typename... Args>
 auto callLambdaForIntArray(Int i, F&& lambda, Args&&... args) {
   return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda),
                                          AD_FWD(args)...);
