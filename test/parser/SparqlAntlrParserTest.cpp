@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <type_traits>
 #include <typeindex>
 #include <utility>
 
@@ -17,7 +18,6 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "backports/type_traits.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"

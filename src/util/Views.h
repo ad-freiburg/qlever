@@ -186,8 +186,8 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
-        ql::concepts::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> CPP_and
+        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;

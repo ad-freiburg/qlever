@@ -70,8 +70,7 @@ const auto equalityCheckPrefilterVectors =
 // the `SparqlExpression` is an empty vector.
 const auto evalAndEqualityCheck =
     [](std::unique_ptr<SparqlExpression> sparqlExpr,
-       ql::concepts::convertible_to<
-           PrefilterExprVariablePair> auto&&... prefilterArgs) {
+       std::convertible_to<PrefilterExprVariablePair> auto&&... prefilterArgs) {
       std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
       if constexpr (sizeof...(prefilterArgs) > 0) {
         (prefilterVarPair.emplace_back(

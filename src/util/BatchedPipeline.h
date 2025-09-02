@@ -35,9 +35,6 @@ struct Batch {
       content_;  // the actual payload
 };
 
-template <typename T>
-CPP_requires(HasGetBatch, requires(T producer)(producer.getBatch()));
-
 /*
  * The Batcher class takes a Creator (A Functor that returns a std::optional<T>
  * and will call the creator and store the results. A call to pickupBatch will
@@ -124,7 +121,7 @@ class Batcher {
     detail::Batch<ValueT> res;
     // If the Creator type has a method `getBatch`, use this method to produce
     // the batch in one step, otherwise produce the batch value by value.
-    if constexpr (CPP_requires_ref(detail::HasGetBatch, Creator)) {
+    if constexpr (requires { creator->getBatch(); }) {
       auto opt = creator->getBatch();
       if (!opt) {
         res.isPipelineGood_ = false;

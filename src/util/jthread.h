@@ -9,7 +9,7 @@
 
 // While libc++ has no std::jthread (threads that automatically join on
 // destruction), we ship our own.
-#if defined(_LIBCPP_VERSION) || defined(QLEVER_CPP_17)
+#ifdef _LIBCPP_VERSION
 namespace ad_utility {
 struct JThread : public std::thread {
 #ifdef __cpp_lib_jthread

@@ -16,7 +16,6 @@
 #include <sstream>
 #include <string>
 
-#include "backports/keywords.h"
 #include "util/ConstexprMap.h"
 #include "util/TypeTraits.h"
 
@@ -58,16 +57,6 @@ enum class LogLevel {
   TRACE = 6
 };
 
-// TODO<joka921> derive a macro-based solution to make `using enum` backportable
-// to C++17
-static constexpr auto FATAL = LogLevel::FATAL;
-static constexpr auto ERROR = LogLevel::ERROR;
-static constexpr auto WARN = LogLevel::WARN;
-static constexpr auto INFO = LogLevel::INFO;
-static constexpr auto DEBUG = LogLevel::DEBUG;
-static constexpr auto TIMING = LogLevel::TIMING;
-static constexpr auto TRACE = LogLevel::TRACE;
-
 // Macros for the different log levels. Always use these instead of the old
 // `LOG(...)` macro to avoid conflicts with `abseil`.
 #define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
@@ -77,6 +66,8 @@ static constexpr auto TRACE = LogLevel::TRACE;
 #define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
+
+using enum LogLevel;
 
 namespace ad_utility {
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
@@ -134,17 +125,16 @@ class Log {
   }
 
   template <LogLevel LEVEL>
-  static QL_CONSTEVAL std::string_view getLevel() {
-    using M = ad_utility::ConstexprMap<LogLevel, std::string_view, 7>;
-    using P = M::Pair;
+  static consteval std::string_view getLevel() {
+    using std::pair;
     constexpr ad_utility::ConstexprMap map{std::array{
-        P(TRACE, "TRACE: "),
-        P(TIMING, "TIMING: "),
-        P(DEBUG, "DEBUG: "),
-        P(INFO, "INFO: "),
-        P(WARN, "WARN: "),
-        P(ERROR, "ERROR: "),
-        P(FATAL, "FATAL: "),
+        pair(TRACE, "TRACE: "),
+        pair(TIMING, "TIMING: "),
+        pair(DEBUG, "DEBUG: "),
+        pair(INFO, "INFO: "),
+        pair(WARN, "WARN: "),
+        pair(ERROR, "ERROR: "),
+        pair(FATAL, "FATAL: "),
     }};
     return map.at(LEVEL);
   }

@@ -6,8 +6,7 @@
 #define QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H
 
 #include <functional>
-
-#include "backports/type_traits.h"
+#include <type_traits>
 
 // This file contains helper functions and macros to suppress false-positive
 // warnings on certain compilers. These should be used rarely and only if it is

@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "backports/algorithm.h"
-#include "backports/type_traits.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 
@@ -103,7 +102,7 @@ of the range elements.
 */
 CPP_template(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
+        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
                                        std::string_view separator);
 
@@ -111,7 +110,7 @@ CPP_template(typename Range)(
 // a string.
 CPP_template(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
@@ -189,7 +188,7 @@ constexpr bool constantTimeEquals(std::string_view view1,
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and_def
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
+        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
                                        std::string_view separator) {
   auto begin = std::begin(r);
@@ -215,7 +214,7 @@ CPP_template_def(typename Range)(
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
@@ -224,18 +223,23 @@ CPP_template_def(typename Range)(
 
 // The implementation of `constexprStrCat` below.
 namespace detail::constexpr_str_cat_impl {
+// We currently have a fixed upper bound of 100 characters on the inputs.
+// This can be changed once it becomes a problem. It would also be possible
+// to have flexible upper bounds, but this would make the implementation much
+// more complicated.
+using ConstexprString = ad_utility::ConstexprSmallString<100>;
 
 // Concatenate the elements of `arr` into a single array with an additional
 // zero byte at the end. `sz` must be the sum of the sizes in `arr`, else the
 // behavior is undefined.
 template <size_t sz, size_t numStrings>
 constexpr std::array<char, sz + 1> catImpl(
-    const std::array<const std::string_view*, numStrings>& arr) {
+    const std::array<ConstexprString, numStrings>& arr) {
   std::array<char, sz + 1> buf{};
   auto it = buf.begin();
   for (const auto& str : arr) {
-    for (size_t i = 0; i < str->size(); ++i) {
-      *it = (*str)[i];
+    for (size_t i = 0; i < str.size(); ++i) {
+      *it = str[i];
       ++it;
     }
   }
@@ -245,18 +249,18 @@ constexpr std::array<char, sz + 1> catImpl(
 // additional zero byte at the end.
 // TODO<joka921>: C++17 doesn't support template values. This needs some
 // refactoring
-template <const std::string_view&... strings>
+template <ConstexprString... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
-  constexpr auto innerResult = catImpl<sz>(
-      std::array<const std::string_view*, sizeof...(strings)>{&strings...});
+  constexpr auto innerResult =
+      catImpl<sz>(std::array<ConstexprString, sizeof...(strings)>{strings...});
   return innerResult;
 }
 
 // A constexpr variable that stores the concatenation of the `strings`.
 // TODO<C++26> This can be a `static constexpr` variable inside the
 // `constexprStrCatBufferImpl()` function above.
-template <const std::string_view&... strings>
+template <ConstexprString... strings>
 constexpr inline auto constexprStrCatBufferVar =
     constexprStrCatBufferImpl<strings...>();
 }  // namespace detail::constexpr_str_cat_impl
@@ -265,7 +269,7 @@ constexpr inline auto constexprStrCatBufferVar =
 // evaluated at compile time. The buffer that backs the returned `string_view`
 // will be zero-terminated, so it is safe to pass pointers into the result
 // into legacy C-APIs.
-template <const std::string_view&... strings>
+template <detail::constexpr_str_cat_impl::ConstexprString... strings>
 constexpr std::string_view constexprStrCat() {
   const auto& b =
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;

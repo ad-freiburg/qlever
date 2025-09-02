@@ -11,8 +11,8 @@
 #include <concepts>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
-#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprSmallString.h"
 #include "util/HashMap.h"
@@ -40,12 +40,12 @@ struct ParameterBase {
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
 CPP_concept ParameterFromStringType =
-    ql::concepts::default_initializable<FunctionType> &&
+    std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
 CPP_concept ParameterToStringType =
-    ql::concepts::default_initializable<FunctionType> &&
+    std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
@@ -266,11 +266,11 @@ class Parameters {
   static constexpr auto _nameToIndex = []() {
     size_t i = 0;
     // {firstName, 0}, {secondName, 1}, {thirdName, 2}...
-    auto arr = std::array{boost::hana::pair{ParameterTypes::name, i++}...};
+    auto arr = std::array{std::pair{ParameterTypes::name, i++}...};
 
     // Assert that the indices are in fact correct.
     for (size_t k = 0; k < arr.size(); ++k) {
-      if (boost::hana::second(arr[k]) != k) {
+      if (arr[k].second != k) {
         throw std::runtime_error{
             "Wrong order in parameter array, this should never happen."};
       }

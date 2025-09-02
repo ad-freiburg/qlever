@@ -34,12 +34,12 @@ class VectorWithMemoryLimit
   // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
   // Unfortunately, the support for such allocators is not really great in the
   // standard library. In particular, the type trait
-  // `ql::concepts::default_initializable<std::vector<T, Alloc>>` will be true,
-  // even if the `Alloc` is not default-initializable, which leads to hard
-  // compile errors with the ranges library. For this reason we cannot simply
-  // inherit all the constructors from `Base`, but explicitly have to forward
-  // all but the default constructor. In particular, we only forward
-  // constructors that have
+  // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
+  // the `Alloc` is not default-initializable, which leads to hard compile
+  // errors with the ranges library. For this reason we cannot simply inherit
+  // all the constructors from `Base`, but explicitly have to forward all but
+  // the default constructor. In particular, we only forward constructors that
+  // have
   // * at least one argument
   // * the first argument must not be similar to `std::vector` or
   // `VectorWithMemoryLimit` to not hide copy or move constructors
@@ -48,8 +48,8 @@ class VectorWithMemoryLimit
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
       requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
-                                 Base>)
+          concepts::derived_from<
+              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
               CPP_and concepts::constructible_from<
                   Base, Args&&...>) explicit(sizeof...(Args) == 1)
@@ -81,7 +81,7 @@ class VectorWithMemoryLimit
     return VectorWithMemoryLimit(*this);
   }
 };
-static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions

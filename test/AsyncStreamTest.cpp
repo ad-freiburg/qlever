@@ -9,9 +9,8 @@
 #include <chrono>
 #include <semaphore>
 
-#include "util/AsyncStream.h"
+#include "../src/util/AsyncStream.h"
 #include "util/GTestHelpers.h"
-#include "util/Generator.h"
 
 namespace {
 using ad_utility::streams::runStreamAsync;

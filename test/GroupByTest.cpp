@@ -2304,7 +2304,7 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
 
   // ___________________________________________________________________________
   static std::vector<std::optional<Variable>> vars(
-      ql::concepts::convertible_to<std::string> auto&&... strings) {
+      std::convertible_to<std::string> auto&&... strings) {
     std::vector<std::optional<Variable>> result;
     result.reserve(sizeof...(strings));
     (result.emplace_back(V{AD_FWD(strings)}), ...);

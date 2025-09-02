@@ -13,19 +13,7 @@
 
 #include <source_location>
 namespace ad_utility {
-#ifdef QLEVER_CPP_17
-struct source_location {
-  size_t line() const { return 0; }
-  size_t column() const { return 0; }
-  const char* file_name() const { return "unknown file"; }
-
-  const char* function_name() const { return "unknown function"; }
-
-  static source_location current() { return {}; }
-};
-#else
 using source_location = std::source_location;
-#endif
-}  // namespace ad_utility
+}
 
 #endif  // QLEVER_SRC_UTIL_SOURCELOCATION_H

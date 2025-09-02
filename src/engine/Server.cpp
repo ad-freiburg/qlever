@@ -1117,7 +1117,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
 }
 
 // _____________________________________________________________________________
-template <ql::concepts::invocable Function, typename T>
+template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
                                         Function function,
                                         SharedCancellationHandle handle) {

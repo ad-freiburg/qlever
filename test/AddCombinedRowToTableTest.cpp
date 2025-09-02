@@ -4,9 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <type_traits>
+
 #include "./util/IdTableHelpers.h"
 #include "backports/concepts.h"
-#include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 
 namespace {

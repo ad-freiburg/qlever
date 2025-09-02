@@ -135,8 +135,8 @@ class ConfigOptionValidatorManager {
                typename... ExceptionValidatorParameterTypes)(
       requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
                                      ConstConfigOptionProxy>)
-          CPP_and(...&& ql::concepts::invocable<
-                  TranslationFunction, const ExceptionValidatorParameterTypes>)
+          CPP_and(...&& std::invocable<TranslationFunction,
+                                       const ExceptionValidatorParameterTypes>)
               CPP_and ExceptionValidatorFunction<
                   ExceptionValidatorFunc,
                   std::invoke_result_t<
@@ -201,9 +201,8 @@ class ConfigOptionValidatorManager {
                typename... ValidatorParameterTypes)(
       requires(...&& isInstantiation<ValidatorParameterTypes,
                                      ConstConfigOptionProxy>)
-          CPP_and(... &&
-                  (ql::concepts::invocable<TranslationFunction,
-                                           const ValidatorParameterTypes>))
+          CPP_and(... && (std::invocable<TranslationFunction,
+                                         const ValidatorParameterTypes>))
               CPP_and(ValidatorFunction<
                       ValidatorFunc,
                       std::invoke_result_t<TranslationFunction,

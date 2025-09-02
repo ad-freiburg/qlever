@@ -20,13 +20,13 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <variant>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "backports/type_traits.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -113,14 +113,14 @@ std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
 
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
+    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
+        std::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) {
   return visitImpl(AD_FWD(vis), data_);
 }
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
+    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
+        std::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
   return visitImpl(AD_FWD(vis), data_);
 }
@@ -129,10 +129,10 @@ CPP_template_def(typename Visitor)(
 CPP_template_def(typename Visitor, typename PointerType)(
     requires ad_utility::SimilarTo<
         std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-        CPP_and_def ql::concepts::invocable<
+        CPP_and_def std::invocable<
             Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                         const ConfigOption&, ConfigOption&>>
-            CPP_and_def ql::concepts::invocable<
+            CPP_and_def std::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigManager&,
                                             ConfigManager&>>) decltype(auto)

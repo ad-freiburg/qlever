@@ -255,8 +255,8 @@ which manages a validator, that implements the logical `and` on the transformed
 `ConstConfigOptionProxy<bool>`, whose error message is the given error message
 and whose description is the given description. The function signature should
 look like this: `void func(std::string errorMessage, std::string descriptor,
-auto translationFunction, ql::concepts::same_as<ConstConfigOptionProxy<bool>>
-auto... args)`.
+auto translationFunction, std::same_as<ConstConfigOptionProxy<bool>> auto...
+args)`.
 */
 template <typename F>
 void doConstructorTest(
@@ -408,10 +408,10 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         ql::concepts::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
-            [errorMessage = std::move(errorMessage)](
-                const ql::concepts::same_as<bool> auto... b)
+            [errorMessage =
+                 std::move(errorMessage)](const std::same_as<bool> auto... b)
                 -> std::optional<ErrorMessage> {
               if ((b && ...)) {
                 return std::nullopt;
@@ -427,11 +427,9 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         ql::concepts::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
-            [](const ql::concepts::same_as<bool> auto... b) {
-              return (b && ...);
-            },
+            [](const std::same_as<bool> auto... b) { return (b && ...); },
             std::move(errorMessage), std::move(descriptor), translationFunction,
             args...);
       });

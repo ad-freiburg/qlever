@@ -31,14 +31,14 @@ namespace ad_utility {
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept UnaryIteratorFunction =
-    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>>;
+    std::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
 // two arguments of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept BinaryIteratorFunction =
-    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>,
-                            ql::ranges::iterator_t<Range>>;
+    std::invocable<F, ql::ranges::iterator_t<Range>,
+                   ql::ranges::iterator_t<Range>>;
 
 // Note: In the following functions, two rows of IDs are called `compatible` if
 // for each position they are equal, or at least one of them is UNDEF. This is
@@ -477,7 +477,7 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
     requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
         NotFoundActionT, IdTableView<0>>
-        CPP_and ql::concepts::invocable<
+        CPP_and std::invocable<
             CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
                                                              left,
                                                          const IdTableView<0>&
@@ -845,8 +845,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
   using ProjectedEl = LeftSide::ProjectedEl;
-  static_assert(
-      ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
+  static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
       !std::is_same_v<IsUndef, AlwaysFalse>;
 

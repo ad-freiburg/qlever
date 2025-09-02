@@ -7,18 +7,16 @@
 
 #include <ostream>
 
-#include "backports/three_way_comparison.h"
 #include "util/ConstexprSmallString.h"
 
 namespace ad_utility {
+using IndexTag = ConstexprSmallString<30>;
 // A strong Index type that internally stores a value of `Type` but can only be
 // explicitly converted to and from the underlying `Value`
-template <typename Type, const std::string_view& tag>
+template <typename Type, IndexTag tag>
 struct TypedIndex {
  private:
   Type _value;
-
-  Type tieForComparison() const { return _value; }
 
  public:
   static constexpr TypedIndex make(Type id) noexcept { return {id}; }
@@ -27,8 +25,8 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  QL_DEFINE_DEFAULT_THREEWAY_COMPARISON(TypedIndex);
-  QL_DEFINE_DEFAULT_EQUALITY_COMPARISON(TypedIndex);
+  constexpr bool operator==(const TypedIndex&) const = default;
+  constexpr auto operator<=>(const TypedIndex&) const = default;
 
   static constexpr TypedIndex max() {
     return {std::numeric_limits<Type>::max()};

@@ -106,7 +106,7 @@ template <typename T>
 concept VectorOrExpressionResult =
     SingleExpressionResult<T> ||
     (ad_utility::isVector<T> && isConstantResult<typename T::value_type>) ||
-    ql::concepts::convertible_to<T, std::string_view>;
+    std::convertible_to<T, std::string_view>;
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.

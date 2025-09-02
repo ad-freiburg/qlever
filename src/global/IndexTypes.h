@@ -13,21 +13,10 @@
 
 // Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
 // a cyclic dependency (it is needed by `LocalVocabEntry.h`).
-
-namespace detail::indexTypes {
-constexpr inline std::string_view textRecordTag = "TextRecordIndex";
-constexpr inline std::string_view wordVocabIndexTag = "WordVocabIndex";
-constexpr inline std::string_view blankNodeIndexTag = "BlankNodeIndex";
-constexpr inline std::string_view documentIndexTag = "DocumentIndex";
-}  // namespace detail::indexTypes
 using LocalVocabIndex = const LocalVocabEntry*;
-using TextRecordIndex =
-    ad_utility::TypedIndex<uint64_t, detail::indexTypes::textRecordTag>;
-using WordVocabIndex =
-    ad_utility::TypedIndex<uint64_t, detail::indexTypes::wordVocabIndexTag>;
-using BlankNodeIndex =
-    ad_utility::TypedIndex<uint64_t, detail::indexTypes::blankNodeIndexTag>;
-using DocumentIndex =
-    ad_utility::TypedIndex<uint64_t, detail::indexTypes::documentIndexTag>;
+using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
+using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
+using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, "BlankNodeIndex">;
+using DocumentIndex = ad_utility::TypedIndex<uint64_t, "DocumentIndex">;
 
 #endif  // QLEVER_SRC_GLOBAL_INDEXTYPES_H

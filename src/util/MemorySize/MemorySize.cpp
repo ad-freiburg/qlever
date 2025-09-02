@@ -26,10 +26,10 @@ std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
   auto toString = [](const auto number, std::string_view unitName) {
     using T = std::decay_t<decltype(number)>;
-    if constexpr (ql::concepts::integral<T>) {
+    if constexpr (std::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
-      static_assert(ql::concepts::floating_point<T>);
+      static_assert(std::floating_point<T>);
       return number * 10 == std::floor(number * 10)
                  ? absl::StrCat(number, " ", unitName)
                  : absl::StrCat(std::round(number * 10) / 10, " ", unitName);
@@ -43,10 +43,10 @@ std::string MemorySize::asString() const {
   // want exact values below `100'000` bytes (for example, block or page sizes
   // are often larger than 1'000 bytes but below 100'000 bytes).
   constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
-      {boost::hana::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
-       boost::hana::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
-       boost::hana::pair<char, size_t>{'G', detail::numBytesPerUnit.at("GB")},
-       boost::hana::pair<char, size_t>{'T', detail::numBytesPerUnit.at("TB")}});
+      {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
+       std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
+       std::pair<char, size_t>{'G', detail::numBytesPerUnit.at("GB")},
+       std::pair<char, size_t>{'T', detail::numBytesPerUnit.at("TB")}});
 
   // Go through the units from top to bottom, in terms of size, and choose the
   // first one, that is smaller/equal to `memoryInBytes_`.

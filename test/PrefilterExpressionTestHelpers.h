@@ -122,8 +122,7 @@ constexpr inline auto pr =
 // pairs.
 struct MakePrefilterVec {
   template <QL_CONCEPT_OR_TYPENAME(
-      ql::concepts::convertible_to<
-          sparqlExpression::PrefilterExprVariablePair>)... Args>
+      std::convertible_to<sparqlExpression::PrefilterExprVariablePair>)... Args>
   constexpr auto operator()(Args&&... prefilterArgs) const {
     std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
         {};
@@ -238,7 +237,7 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
 
 //______________________________________________________________________________
 CPP_template(typename... Args)(
-    requires(ql::concepts::convertible_to<Args, VariantArgs>&&...))
+    requires(std::convertible_to<Args, VariantArgs>&&...))
     std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
                                                   Args&&... argList) {
   std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
