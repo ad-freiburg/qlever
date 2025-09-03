@@ -341,10 +341,10 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       return [id] {
         double d = id.getDouble();
         if (!std::isfinite(d)) {
-          // The default formatter would output this all lowercase, which is not
-          // legal syntax for RDF. Also NaN and INF are only legal for floating
-          // point types (float and double), not decimal, so we make a special
-          // exception here.
+          // NOTE: We used `std::stringstream` before which is bad for two
+          // reasons. First, it would ouput "nan" or "inf" in lowercase, which
+          // is not legal RDF syntax. Second, creating a `std::stringstream`
+          // object is unnecessarily expensive.
           std::string literal = [d]() {
             if (std::isnan(d)) {
               return "NaN";
@@ -355,8 +355,9 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
           return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
         }
         double dIntPart;
-        // Format as integer if fractional part is zero, let C++ decide
-        // otherwise.
+        // If the fractional part is zero, write number without decimal point.
+        // Otherwise, use `%g`, which uses fixed-size or exponential notation,
+        // whichever is more compact.
         std::string out = std::modf(d, &dIntPart) == 0.0
                               ? absl::StrFormat("%.0f", d)
                               : absl::StrFormat("%g", d);
