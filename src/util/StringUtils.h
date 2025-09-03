@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 
