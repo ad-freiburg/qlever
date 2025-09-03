@@ -7,7 +7,6 @@
 #ifndef QLEVER_SRC_BACKPORTS_TYPE_TRAITS_H
 #define QLEVER_SRC_BACKPORTS_TYPE_TRAITS_H
 
-#include <range/v3/all.hpp>
 #include <type_traits>
 
 // This defines several traits from the `<type_traits>` header from C++20 inside

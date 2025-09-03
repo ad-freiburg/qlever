@@ -417,3 +417,17 @@ TEST(TypeTraits, InvokeResultSfinaeFriendly) {
   EXPECT_TRUE((std::is_same_v<typename decltype(tp2)::type,
                               InvalidInvokeResult<decltype(x), const char*>>));
 }
+
+// This function is never called, because only its return type is used.
+// We still test it here, to make the coverage tool happy.
+TEST(TypeTraits, getInvokeResultImpl) {
+  auto lambda = [](int) -> bool { return false; };
+  using namespace ad_utility::invokeResultSfinaeFriendly::detail;
+  auto tp = getInvokeResultImpl<decltype(lambda), int>();
+  EXPECT_TRUE((std::is_same_v<typename decltype(tp)::type, bool>));
+
+  auto tp2 = getInvokeResultImpl<decltype(lambda), const char*>();
+  EXPECT_TRUE(
+      (std::is_same_v<typename decltype(tp2)::type,
+                      InvalidInvokeResult<decltype(lambda), const char*>>));
+}
