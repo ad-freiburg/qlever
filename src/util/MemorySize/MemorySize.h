@@ -201,14 +201,13 @@ constexpr static double sizeTDivision(const size_t dividend,
 static constexpr size_t size_t_max = std::numeric_limits<size_t>::max();
 
 // The maximal amount of a memory unit, that a `MemorySize` can remember.
-constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
-    // TODO<joka921> There currently is an overflow in the division (which is
-    // performed using doubles). Mitigate this properly.
-    {MapPair{"B", size_t_max},
-     MapPair{"kB", sizeTDivision(size_t_max, numBytesPerUnit.at("kB"))},
-     MapPair{"MB", sizeTDivision(size_t_max, numBytesPerUnit.at("MB"))},
-     MapPair{"GB", sizeTDivision(size_t_max, numBytesPerUnit.at("GB"))},
-     MapPair{"TB", sizeTDivision(size_t_max, numBytesPerUnit.at("TB"))}});
+static constexpr auto maxAmountOfUnit = []() {
+  auto p = [](std::string_view unitName) {
+    return ConstexprMapPair<std::string_view, double>{
+        unitName, sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))};
+  };
+  return ConstexprMap{std::array{p("B"), p("kB"), p("MB"), p("GB"), p("TB")}};
+}();
 
 // Converts a given number to `size_t`. Rounds up, if needed.
 CPP_template(typename T)(requires Arithmetic<T>) constexpr size_t

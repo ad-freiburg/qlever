@@ -32,9 +32,8 @@ class ConstexprMap {
   // Create from an Array of key-value pairs. The keys have to be unique.
   explicit constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
     ql::ranges::sort(_values, compare);
-    if (::ranges::unique(_values, [](const Pair& a, const Pair& b) {
-          return boost::hana::first(a) == boost::hana::first(b);
-        }) != _values.end()) {
+    if (::ranges::adjacent_find(_values, std::equal_to<>{},
+                                boost::hana::first) != _values.end()) {
       throw std::runtime_error{
           "ConstexprMap requires that all the keys are unique"};
     }
@@ -43,9 +42,8 @@ class ConstexprMap {
   // If `key` is in the map, return an iterator to the corresponding `(Key,
   // Value)` pair. Else return `end()`.
   constexpr typename Arr::const_iterator find(const Key& key) const {
-    auto lb = ql::ranges::lower_bound(
-        _values, key, [](const Key& a, const Key& b) { return a < b; },
-        [](const Pair& p) -> decltype(auto) { return boost::hana::first(p); });
+    auto lb = ql::ranges::lower_bound(_values, key, std::less<>{},
+                                      boost::hana::first);
     if (lb == _values.end() || boost::hana::first(*lb) != key) {
       return _values.end();
     }
