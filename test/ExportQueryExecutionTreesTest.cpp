@@ -131,6 +131,8 @@ struct TestCaseConstructQuery {
                                     // Note: this member only contains the inner
                                     // result array with the bindings and NOT
                                     // the metadata.
+  // How many triples the construct query contains.
+  size_t numTriples = 1;
 };
 
 // Run a single test case for a SELECT query.
@@ -201,7 +203,8 @@ void runConstructQueryTestCase(
         testCase.kg, testCase.query, qleverJson, false, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
     ASSERT_EQ(resultJson["resultSizeExported"],
-              std::min(exportLimit, testCase.resultSizeExported));
+              std::min(exportLimit * testCase.numTriples,
+                       testCase.resultSizeExported));
   }
 }
 
@@ -1121,7 +1124,7 @@ TEST(ExportQueryExecutionTrees, EmptyLines) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
@@ -1187,6 +1190,51 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
       }(),
       expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
+
+  TestCaseConstructQuery testCaseConstruct{
+      "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>",
+      "CONSTRUCT { [] <p> _:a . [] <p> _:a } WHERE { ?s ?p ?o }", 8, 8,
+      // TSV
+      "_:g0_0\t<p>\t_:u0_a\n"
+      "_:g0_1\t<p>\t_:u0_a\n"
+      "_:g1_0\t<p>\t_:u1_a\n"
+      "_:g1_1\t<p>\t_:u1_a\n"
+      "_:g2_0\t<p>\t_:u2_a\n"
+      "_:g2_1\t<p>\t_:u2_a\n"
+      "_:g3_0\t<p>\t_:u3_a\n"
+      "_:g3_1\t<p>\t_:u3_a\n",
+      // CSV
+      "_:g0_0,<p>,_:u0_a\n"
+      "_:g0_1,<p>,_:u0_a\n"
+      "_:g1_0,<p>,_:u1_a\n"
+      "_:g1_1,<p>,_:u1_a\n"
+      "_:g2_0,<p>,_:u2_a\n"
+      "_:g2_1,<p>,_:u2_a\n"
+      "_:g3_0,<p>,_:u3_a\n"
+      "_:g3_1,<p>,_:u3_a\n",
+      // Turtle
+      "_:g0_0 <p> _:u0_a .\n"
+      "_:g0_1 <p> _:u0_a .\n"
+      "_:g1_0 <p> _:u1_a .\n"
+      "_:g1_1 <p> _:u1_a .\n"
+      "_:g2_0 <p> _:u2_a .\n"
+      "_:g2_1 <p> _:u2_a .\n"
+      "_:g3_0 <p> _:u3_a .\n"
+      "_:g3_1 <p> _:u3_a .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"_:g0_0"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g0_1"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g1_0"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g1_1"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g2_0"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g2_1"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g3_0"s, "<p>"s, "_:u3_a"s});
+        j.push_back(std::vector{"_:g3_1"s, "<p>"s, "_:u3_a"s});
+        return j;
+      }(),
+      2};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 // ____________________________________________________________________________
