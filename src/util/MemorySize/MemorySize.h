@@ -17,9 +17,9 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"

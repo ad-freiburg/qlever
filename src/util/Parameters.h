@@ -11,8 +11,8 @@
 #include <concepts>
 #include <optional>
 #include <tuple>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprSmallString.h"
 #include "util/HashMap.h"

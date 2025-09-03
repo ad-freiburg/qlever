@@ -5,8 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 
-#include <type_traits>
-
+#include "backports/type_traits.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
