@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/LambdaHelpers.h"
@@ -94,12 +95,10 @@ class IteratorForAccessOperator {
   IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
       default;
 
-  auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (index_ <=> rhs.index_);
-  }
-  bool operator==(const IteratorForAccessOperator& rhs) const {
-    return index_ == rhs.index_;
-  }
+  // The comparison operators only compare the `index_`.
+  constexpr auto tieForComparison() const { return index_; }
+  QL_DEFINE_EQUALITY_COMPARISON(IteratorForAccessOperator);
+  QL_DEFINE_THREEWAY_COMPARISON(IteratorForAccessOperator);
 
   IteratorForAccessOperator& operator+=(difference_type n) {
     index_ += n;
