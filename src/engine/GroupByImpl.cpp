@@ -10,7 +10,9 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -335,6 +337,33 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
   evaluationContext._isPartOfGroupBy = true;
   return evaluationContext;
 }
+// _____________________________________________________________________________
+std::vector<size_t> GroupByImpl::getGroupByCols() const {
+  const auto& subtreeVarCols = _subtree->getVariableColumns();
+  std::vector<size_t> cols;
+  cols.reserve(_groupByVariables.size());
+  for (const auto& var : _groupByVariables) {
+    cols.push_back(subtreeVarCols.at(var).columnIndex_);
+  }
+  return cols;
+}
+
+// _____________________________________________________________________________
+Result GroupByImpl::doSortBasedGroupng(std::shared_ptr<const Result> rawResult,
+                                    const std::vector<Aggregate>& aggregates) const {
+  // The child subtree is already sorted on the GROUP BY columns,
+  // so we can directly group without re-sorting or copying.
+  const auto& table = rawResult->idTable();
+  auto groupByCols = getGroupByCols();
+  auto localVocab = rawResult->getCopyOfLocalVocab();
+  size_t inWidth = table.numColumns();
+  size_t outWidth = getResultWidth();
+  // Call existing doGroupBy on the sorted table
+  IdTable resultTable = CALL_FIXED_SIZE(
+      (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
+      table, groupByCols, aggregates, &localVocab);
+  return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
+}
 
 // _____________________________________________________________________________
 Result GroupByImpl::computeResult(bool requestLaziness) {
@@ -365,41 +394,36 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subresult;
   if (useHashMapOptimization) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
-    // Skip sorting
     subresult = child->getResult(true);
-    // Update runtime information
-    auto runTimeInfoChildren =
-        child->getRootOperation()->getRuntimeInfoPointer();
-    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
-  } else {
-    // Always request child operation to provide a lazy result if the aggregate
-    // expressions allow to compute the full result in chunks
-    metadataForUnsequentialData =
-        computeUnsequentialProcessingMetadata(aggregates, _groupByVariables);
-    subresult = _subtree->getResult(metadataForUnsequentialData.has_value());
+    // Sampling-based guard: decide whether to skip hash-map grouping based on
+    // estimated number of groups
+    if (subresult->isFullyMaterialized() &&
+        GroupByStrategyChooser::shouldSkipHashMapGrouping(
+            *this, subresult->idTable())) {
+      // You will see this if you use qlever with --verbose-runtime-info
+      runtimeInfo().addDetail("hashMapOptimization",
+                              "Skipped due to high estimated group count, "
+                              "falling back to sort-based grouping.");
+      useHashMapOptimization = false;
+    } else {
+      // Update runtime information
+      auto runTimeInfoChildren =
+          child->getRootOperation()->getRuntimeInfoPointer();
+      _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+          {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
+    }
+  }
+  if (!useHashMapOptimization) {
+    // If we do not use the hash map optimization, we have to materialize the
+    // result of the subtree, which is sorted.
+    const auto* child = _subtree->getRootOperation()->getChildren().at(0);
+    auto rawResult = child->getResult(true);
+    return doSortBasedGroupng(rawResult, aggregates);
   }
 
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
-
-  std::vector<size_t> groupByColumns;
-
-  // parse the group by columns
-  const auto& subtreeVarCols = _subtree->getVariableColumns();
-  for (const auto& var : _groupByVariables) {
-    auto it = subtreeVarCols.find(var);
-    if (it == subtreeVarCols.end()) {
-      AD_THROW("Groupby variable " + var.name() + " is not groupable");
-    }
-
-    groupByColumns.push_back(it->second.columnIndex_);
-  }
-
-  std::vector<size_t> groupByCols;
-  groupByCols.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
-  }
+  // Build the group-by column indices once
+  auto groupByCols = getGroupByCols();
 
   if (useHashMapOptimization) {
     // Helper lambda that calls `computeGroupByForHashMapOptimization` for the
@@ -523,6 +547,70 @@ void GroupByImpl::processEmptyImplicitGroup(
   }
   resultTable = std::move(table).toDynamic();
 }
+
+// _____________________________________________________________________________
+// template <size_t IN_WIDTH, size_t OUT_WIDTH>
+// IdTable GroupByImpl::doGroupByWithOrder(const IdTable& inTable,
+//                                         const std::vector<size_t>& groupByCols,
+//                                         const std::vector<Aggregate>& aggregates,
+//                                         LocalVocab* outLocalVocab,
+//                                         const std::vector<size_t>& rowOrder) const {
+//   LOG(DEBUG) << "Group by (ordered) input size " << rowOrder.size() << std::endl;
+//   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
+//   if (rowOrder.empty() && !groupByCols.empty()) {
+//     return dynResult;
+//   }
+//   IdTableStatic<IN_WIDTH> emptyStatic{};
+//   // Build a virtual view where access uses rowOrder
+//   auto getValue = [&](size_t idx, size_t col) -> Id {
+//     return inTable(rowOrder[idx], col);
+//   };
+//   sparqlExpression::EvaluationContext evalCtx = createEvaluationContext(*outLocalVocab, inTable);
+//   // Helper to process a group block defined by sorted order
+//   auto processBlockOrdered = [&](size_t start, size_t end) {
+//     // Build a temporary IdTableStatic<IN_WIDTH> view for this block
+//     // and call existing processBlock logic
+//     // Note: we can bypass static view since processBlock uses evalCtx._inputTable
+//     // Set evalCtx inputTable to a custom view? Simplest: extract block to small dynamic table.
+//     IdTable blockTable{inTable.numColumns(), getExecutionContext()->getAllocator()};
+//     for (size_t i = start; i < end; ++i) {
+//       blockTable.emplace_back();
+//       for (size_t c = 0; c < inTable.numColumns(); ++c) {
+//         blockTable.at(i - start, c) = getValue(i, c);
+//       }
+//     }
+//     IdTableStatic<OUT_WIDTH> resultStatic = std::move(dynResult).toStatic<OUT_WIDTH>();
+//     sparqlExpression::EvaluationContext blockCtx = createEvaluationContext(*outLocalVocab, blockTable);
+//     for (size_t r = 0; r < blockTable.size(); ++r) {
+//       // ...existing grouping logic per row... // delegate to processBlock
+//     }
+//     dynResult = std::move(resultStatic).toDynamic();
+//   };
+//   // Now run grouping based on changes in sorted keys
+//   std::vector<Id> currentValues;
+//   for (size_t col : groupByCols) {
+//     currentValues.push_back(getValue(0, col));
+//   }
+//   size_t blockStart = 0;
+//   for (size_t pos = 1; pos < rowOrder.size(); ++pos) {
+//     bool same = true;
+//     for (size_t i = 0; i < groupByCols.size(); ++i) {
+//       if (getValue(pos, groupByCols[i]) != currentValues[i]) {
+//         same = false;
+//         break;
+//       }
+//     }
+//     if (!same) {
+//       processBlockOrdered(blockStart, pos);
+//       blockStart = pos;
+//       for (size_t i = 0; i < groupByCols.size(); ++i) {
+//         currentValues[i] = getValue(pos, groupByCols[i]);
+//       }
+//     }
+//   }
+//   processBlockOrdered(blockStart, rowOrder.size());
+//   return dynResult;
+// }
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>

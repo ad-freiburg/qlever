@@ -17,6 +17,7 @@
 
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/GroupByStrategyChooser.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -104,6 +105,15 @@ class GroupByImpl : public Operation {
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
       LocalVocab& localVocab, const IdTable& idTable) const;
+  
+  // Build the vector of column indices corresponding to the GROUP BY variables.
+  std::vector<size_t> getGroupByCols() const;
+  
+  // When we do a sample and the result is that there are too many groups, we
+  // switch to a sort-based grouping. This function does the actual grouping
+  // by sorting the input and then calling `doGroupBy`.
+  Result doSortBasedGroupng(std::shared_ptr<const Result> rawResult,
+                        const std::vector<Aggregate>& aggregates) const;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -161,6 +171,14 @@ class GroupByImpl : public Operation {
   IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
+
+  // Fallback: group-by by first ordering rows via row indices to avoid deep copy
+  // template <size_t IN_WIDTH, size_t OUT_WIDTH>
+  // IdTable doGroupByWithOrder(const IdTable& inTable,
+  //                             const std::vector<size_t>& groupByCols,
+  //                             const std::vector<Aggregate>& aggregates,
+  //                             LocalVocab* outLocalVocab,
+  //                             const std::vector<size_t>& rowOrder) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
@@ -595,9 +613,13 @@ class GroupByImpl : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-};
 
-// _____________________________________________________________________________
+  friend bool GroupByStrategyChooser::shouldSkipHashMapGrouping(
+      const GroupByImpl&, const IdTable&, LogLevel);
+
+};  // class GroupByImpl
+
+// Concept to identify aggregation data vectors
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =
