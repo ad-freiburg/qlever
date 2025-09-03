@@ -253,6 +253,8 @@ class TransitivePathImpl : public TransitivePathBase {
     LocalVocab targetHelper_;
     std::optional<Id> targetId_;
     bool sameVariableOnBothSides_;
+    bool endsWithGraphVariable_;
+    bool startsWithGraphVariable_;
     // range state
     bool isFinished_{false};
     std::optional<NodeWithTargetRange> currentNodeWithTargetRange_;
@@ -262,7 +264,8 @@ class TransitivePathImpl : public TransitivePathBase {
    public:
     TransitiveHullLazyRange(const TransitivePathImpl<T>* parent, const T edges,
                             LocalVocab edgesVocab, Node startNodes,
-                            TripleComponent target, bool yieldOnce)
+                            TripleComponent start, TripleComponent target,
+                            bool yieldOnce)
         : parent_(parent),
           edges_(std::move(edges)),
           edgesVocab_(std::move(edgesVocab)),
@@ -279,6 +282,10 @@ class TransitivePathImpl : public TransitivePathBase {
                             index.encodedIriManager())};
       sameVariableOnBothSides_ = !targetId_.has_value() &&
                                  parent_->lhs_.value_ == parent_->rhs_.value_;
+      endsWithGraphVariable_ = !targetId_.has_value() &&
+                               parent_->graphVariable_ == target_.getVariable();
+      startsWithGraphVariable_ =
+          start.isVariable() && parent_->graphVariable_ == start.getVariable();
     }
 
     NodeWithTargetRange buildRange(auto& tableColumn) {
@@ -377,62 +384,9 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
-    // `targetId` is only ever used for comparisons, and never stored in the
-    // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
-    const auto& index = getIndex();
-    std::optional<Id> targetId =
-        target.isVariable()
-            ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
-    bool sameVariableOnBothSides =
-        !targetId.has_value() && lhs_.value_ == rhs_.value_;
-    bool endsWithGraphVariable =
-        !targetId.has_value() && graphVariable_ == target.getVariable();
-    bool startsWithGraphVariable =
-        start.isVariable() && graphVariable_ == start.getVariable();
-    for (auto&& tableColumn : startNodes) {
-      timer.cont();
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab);
-      for (const auto& [currentRow, pair] :
-           ::ranges::views::enumerate(tableColumn.startNodes_)) {
-        for (const auto& [startNode, graphId] :
-             tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
-          // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
-          // where both `?g` variables are not the same.
-          if (startsWithGraphVariable && startNode != graphId) {
-            continue;
-          }
-          if (sameVariableOnBothSides) {
-            targetId = startNode;
-          } else if (endsWithGraphVariable) {
-            targetId = graphId;
-          }
-          edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-          if (!connectedNodes.empty()) {
-            runtimeInfo().addDetail("Hull time", timer.msecs());
-            timer.stop();
-            co_yield NodeWithTargets{startNode,
-                                     graphId,
-                                     std::move(connectedNodes),
-                                     mergedVocab.clone(),
-                                     tableColumn.payload_,
-                                     static_cast<size_t>(currentRow)};
-            timer.cont();
-            // Reset vocab to prevent merging the same vocab over and over
-            // again.
-            if (yieldOnce) {
-              mergedVocab = LocalVocab{};
-            }
-          }
-        }
-      }
-      timer.stop();
-    }
+    return NodeGenerator(TransitiveHullLazyRange<Node>(
+        this, std::move(edges), std::move(edgesVocab), std::move(startNodes),
+        std::move(start), std::move(target), yieldOnce));
   }
 
   /**
