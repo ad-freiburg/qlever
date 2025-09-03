@@ -15,12 +15,10 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AllocatorWithLimit.h"
 
-/**
- * @class HashMapWrapper
- * @brief A wrapper for the Map class from TransitivePathBase. This wrapper
- * implements the successors function, which is used in transitiveHull function.
- *
- */
+// A set of edges of the implicit graph of a transitive path operation together
+// with the graph IRI of the source node of each edge. This is analogous to
+// `BinSearchMap` (see there for more details), but uses a map of maps (with
+// graph IRI as the outer key and source node as the inner key).
 class HashMapWrapper {
  public:
   // We deliberately use the `std::` variants of a hash map because `absl`s
@@ -33,51 +31,31 @@ class HashMapWrapper {
       ad_utility::AllocatorWithLimit<std::pair<const Id, Map>>>;
 
  private:
-  // Maps graph id -> (id -> set(id)), where the value type `Map` represents an
-  // adjacency list mapping.
+  // The map of maps mentioned above.
   MapOfMaps graphMap_;
-  // Pointer to the map selected by the currently active graph.
+  // The map of the currently active graph.
   Map* map_;
   // Placeholders to return a reference in case no match was found.
   Set emptySet_;
   Map emptyMap_;
 
  public:
-  // Constructor with no graph column.
+  // Construct when there is no GRAPH clause.
   HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator);
 
-  // Constructor with graph column.
+  // Construct when there is a GRAPH clause.
   HashMapWrapper(MapOfMaps graphMap,
                  const ad_utility::AllocatorWithLimit<Id>& allocator);
 
-  /**
-   * @brief Return the successors for the given Id. The successors are all ids,
-   * which are stored under the key 'node'. Only values matching the active
-   * graph (set via `setGraphId`) will be returned.
-   *
-   * @param node The input id
-   * @return A const Set&, consisting of all target ids which have an ingoing
-   * edge from 'node'
-   */
+  // Return all target nodes for the given source node in the currently
+  // active graph.
   const Set& successors(Id node) const;
 
-  // Return a pair of matching ids + graph ids. If `node` originates from a
-  // `LocalVocab` an equivalent entry from the graph is used instead,
-  // eliminating the need to keep the `LocalVocab` around any longer. If no
-  // entry matches an empty vector is returned. The first id of the pair is
-  // always the same element. It is flattened out because all callers of this
-  // function need it in this format for convenience. The most common case is
-  // that there's a single matching entry, (especially when using this without
-  // an active graph,) which is why `absl::InlinedVector` is used with size 1.
-  //  If `node` is undefined, it
-  // will return all elements in the currently active graph, or all elements if
-  // no graph is set. Active graphs set via `setGraphId` are ignored. Entries
-  // are deduplicated.
+  // This does the same as `BinSearchMap::getEquivalentIdAndMatchingGraphs`
+  // (see there for details), but uses a hash map instead of binary search.
   IdWithGraphs getEquivalentIdAndMatchingGraphs(Id node) const;
 
-  // Prefilter the map for values of a certain graph. If graphs are active, i.e.
-  // `graphMap_` doesn't contain the UNDEF key, this has to be set before
-  // calling `successors`.
+  // Set `map_` to the map corresponding to the given graph id.
   void setGraphId(Id graphId);
 };
 

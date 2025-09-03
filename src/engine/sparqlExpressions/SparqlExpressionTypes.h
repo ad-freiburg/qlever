@@ -298,7 +298,7 @@ template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
                                                 const Operands&... operands) {
   auto onPack = [&](auto&&... fs) constexpr {
-    return (... || fs.template areAllOperandsValid(operands...));
+    return (... || fs.areAllOperandsValid(operands...));
   };
 
   return std::apply(onPack, tup);
