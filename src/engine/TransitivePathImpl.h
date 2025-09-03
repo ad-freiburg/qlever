@@ -241,6 +241,9 @@ class TransitivePathImpl : public TransitivePathBase {
    private:
     using NodeWithTargetRange =
         ad_utility::InputRangeTypeErased<NodeWithTargets>;
+    using ZippedTypeRange =
+        ad_utility::InputRangeTypeErased<std::pair<long int, ZippedType>>;
+
     // input arguments
     const TransitivePathImpl<T>* parent_{nullptr};
     T edges_;
@@ -251,15 +254,18 @@ class TransitivePathImpl : public TransitivePathBase {
     // runtime state
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     LocalVocab targetHelper_;
+    LocalVocab mergedVocab_;
     std::optional<Id> targetId_;
     bool sameVariableOnBothSides_;
     bool endsWithGraphVariable_;
     bool startsWithGraphVariable_;
     // range state
-    bool isFinished_{false};
-    std::optional<NodeWithTargetRange> currentNodeWithTargetRange_;
-    NodeWithTargetRange::iterator currentNodeWithTargetRangeIt_{};
-    ql::ranges::iterator_t<Node> startNodesIt_{};
+    bool finished_{false};
+    ql::ranges::iterator_t<Node> tableColumnIt_{};
+    std::optional<ZippedTypeRange> zippedTypeRange_;
+    ql::ranges::iterator_t<ZippedTypeRange> zippedTypeIt_{};
+    std::optional<NodeWithTargetRange> resultRange_;
+    NodeWithTargetRange::iterator result_{};
 
    public:
     TransitiveHullLazyRange(const TransitivePathImpl<T>* parent, const T edges,
@@ -288,76 +294,113 @@ class TransitivePathImpl : public TransitivePathBase {
           start.isVariable() && parent_->graphVariable_ == start.getVariable();
     }
 
-    NodeWithTargetRange buildRange(auto& tableColumn) {
+    NodeWithTargetRange buildResultRange() {
       using namespace ad_utility;
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab_);
-      return InputRangeTypeErased(CachingContinuableTransformInputRange(
-          allView(tableColumn.startNodes_),
-          [this, payload = std::move(tableColumn.payload_),
-           mergedVocab = std::move(mergedVocab),
-           currentRow = size_t(0)](Id startNode) mutable {
+      auto& tableColumn = *tableColumnIt_;
+      const auto& [currentRow, zippedType] = *zippedTypeIt_;
+      return NodeWithTargetRange(CachingContinuableTransformInputRange(
+          tableColumn.expandUndef(zippedType, edges_,
+                                  parent_->graphVariable_.has_value()),
+          [this, currentRow = currentRow,
+           payload = tableColumn.payload_](auto& idPair) mutable {
+            const auto& [startNode, graphId] = idPair;
             timer.cont();
+            // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
+            // where both `?g` variables are not the same.
+            if (startsWithGraphVariable_ && startNode != graphId) {
+              return LoopControl<NodeWithTargets>::makeContinue();
+            }
             if (sameVariableOnBothSides_) {
               targetId_ = startNode;
+            } else if (endsWithGraphVariable_) {
+              targetId_ = graphId;
             }
+            edges_.setGraphId(graphId);
             Set connectedNodes =
                 parent_->findConnectedNodes(edges_, startNode, targetId_);
             if (!connectedNodes.empty()) {
               parent_->runtimeInfo().addDetail("Hull time", timer.msecs());
-              NodeWithTargets result{startNode, std::move(connectedNodes),
-                                     mergedVocab.clone(), payload, currentRow};
+              NodeWithTargets result{startNode,
+                                     graphId,
+                                     std::move(connectedNodes),
+                                     mergedVocab_.clone(),
+                                     payload,
+                                     static_cast<size_t>(currentRow)};
               // Reset vocab to prevent merging the same vocab over and over
               // again.
               if (yieldOnce_) {
-                mergedVocab = LocalVocab{};
+                mergedVocab_ = LocalVocab{};
               }
-              currentRow++;
               timer.stop();
               return LoopControl<NodeWithTargets>::yieldValue(
                   std::move(result));
             }
-            currentRow++;
             timer.stop();
             return LoopControl<NodeWithTargets>::makeContinue();
           }));
     }
 
-    void getNextNodeRange() {
-      if (startNodesIt_ == ql::ranges::end(startNodes_)) {
-        isFinished_ = true;
+    void setRuntimeState() {
+      if (tableColumnIt_ == ql::ranges::end(startNodes_)) {
+        finished_ = true;
+        return;
+      }
+      auto& tableColumn = *tableColumnIt_;
+      mergedVocab_ = std::move(tableColumn.vocab_);
+      mergedVocab_.mergeWith(edgesVocab_);
+
+      zippedTypeRange_ =
+          ZippedTypeRange(::ranges::views::enumerate(tableColumn.startNodes_));
+      zippedTypeIt_ = zippedTypeRange_->begin();
+
+      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+        ++tableColumnIt_;
+        return setRuntimeState();
+      }
+    }
+
+    void getNextResultRange() {
+      ++zippedTypeIt_;
+      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+        ++tableColumnIt_;
+        setRuntimeState();
+      }
+
+      if (finished_) {
         return;
       }
 
-      currentNodeWithTargetRange_ = buildRange(*startNodesIt_);
-      // calling begin on the iterator readies the first element
-      currentNodeWithTargetRangeIt_ = currentNodeWithTargetRange_->begin();
-      if (currentNodeWithTargetRangeIt_ == currentNodeWithTargetRange_->end()) {
-        startNodesIt_++;
-        getNextNodeRange();
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
       }
     }
 
     void start() {
-      startNodesIt_ = ql::ranges::begin(startNodes_);
-      getNextNodeRange();
-    }
-
-    void next() {
-      if (isFinished_) {
+      tableColumnIt_ = ql::ranges::begin(startNodes_);
+      setRuntimeState();
+      if (finished_) {
         return;
       }
 
-      ++currentNodeWithTargetRangeIt_;
-      if (currentNodeWithTargetRangeIt_ == currentNodeWithTargetRange_->end()) {
-        startNodesIt_++;
-        getNextNodeRange();
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
       }
     }
 
-    bool isFinished() { return isFinished_; }
-    auto& get() { return *currentNodeWithTargetRangeIt_; }
-    const auto& get() const { return *currentNodeWithTargetRangeIt_; }
+    void next() {
+      ++result_;
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    bool isFinished() { return finished_; }
+    auto& get() { return *result_; }
+    const auto& get() const { return *result_; }
   };
 
   /**
