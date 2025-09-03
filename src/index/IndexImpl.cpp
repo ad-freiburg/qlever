@@ -1158,7 +1158,7 @@ void IndexImpl::readConfiguration() {
   }
 
   auto loadDataMember = [this](std::string_view key, auto& target,
-                               std::optional<std::type_identity_t<
+                               std::optional<ql::type_identity_t<
                                    std::decay_t<decltype(target)>>>
                                    defaultValue = std::nullopt) {
     using Target = std::decay_t<decltype(target)>;

@@ -12,10 +12,10 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 #include <random>
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "global/TypedIndex.h"
 
 namespace ad_utility {
