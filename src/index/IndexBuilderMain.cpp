@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
   bool addWordsFromAllLiterals = false;
-  bool tripleInTextIndexRegexIsWhitelist = true;
+  bool tripleInTextIndexRegexIsBlacklist = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
@@ -194,13 +194,14 @@ int main(int argc, char** argv) {
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
   add("text-index-regex,r", po::value(&tripleInTextIndexRegex),
-      "Regex which is used to match predicates. If the predicate matches and"
-      "`text-index-regex-is-whitelist` is set to true (default), the object (if"
+      "Regex which is used to match predicates. If the predicate matches and "
+      "`text-index-regex-is-blacklist` is set to false (default), the object "
+      "(if "
       "it is a literal) is added to the text index.");
-  add("text-index-regex-is-whitelist,R",
-      po::bool_switch(&tripleInTextIndexRegexIsWhitelist),
-      "If set to true (default) the object literals of predicates matching "
-      "`text-index-regex` will be added to the text index. If set to false the "
+  add("text-index-regex-is-blacklist,R",
+      po::bool_switch(&tripleInTextIndexRegexIsBlacklist),
+      "If not set the object literals of predicates matching "
+      "`text-index-regex` will be added to the text index. If set the "
       "object literals for every non-matching predicate will be added. If a "
       "literal appears together with multiple predicates, then it is added if "
       "at least one of the predicates indicates that it should be added to the "
@@ -278,10 +279,10 @@ int main(int argc, char** argv) {
     }
     if (addWordsFromAllLiterals && optionsMap.count("text-index-regex")) {
       throw std::invalid_argument(
-          "The option to add all literals to text index"
-          "shouldn't be used with a filter for literals."
-          "Either choose to add all literals or choose"
-          "a regex that evaluates predicates of triples"
+          "The option to add all literals to text index "
+          "shouldn't be used with a filter for literals. "
+          "Either choose to add all literals or choose "
+          "a regex that evaluates predicates of triples "
           "with literals as object.");
     }
     if (optionsMap.contains("text-index-regex") && onlyAddTextIndex) {
@@ -341,9 +342,9 @@ int main(int argc, char** argv) {
     index.loadAllPermutations() = !onlyPsoAndPos;
     index.getImpl().setPrefixesForEncodedValues(prefixesForIdEncodedIris);
     index.setTextIndexLiteralFilter({tripleInTextIndexRegex,
-                                     tripleInTextIndexRegexIsWhitelist
-                                         ? LiteralFilterType::AcceptMatching
-                                         : LiteralFilterType::DeclineMatching,
+                                     tripleInTextIndexRegexIsBlacklist
+                                         ? LiteralFilterType::DeclineMatching
+                                         : LiteralFilterType::AcceptMatching,
                                      addWordsFromAllLiterals});
 
     // Convert the parameters for the filenames, file types, and default graphs
