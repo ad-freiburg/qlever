@@ -1,12 +1,19 @@
+// Copyright 2025 The QLever Authors, in particular:
 //
-// Created by kalmbacj on 9/2/25.
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR/QL
 //
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// QL =  QLeverize AG
 
-// TODO<joka921> header guard.
-#ifndef KEYWORDS_H
-#define KEYWORDS_H
+#ifndef QLEVER_SRC_BACKPORTS_KEYWORDS_H
+#define QLEVER_SRC_BACKPORTS_KEYWORDS_H
 
-// TODO<joka921> Comments.
+// Add C++17 replacements for C++20 keywords like `consteval` and
+// `explicit(condition)`
+// 1. `QL_CONSTEVAL` is `consteval` in C++20 mode, and `constexpr` in C++17
+// mode.
+// 2. `QL_EXPLICIT(trueOrFalse)` is `explicit(trueOrFalse)`in C++20 mode and the
+// empty string (not explicit) in C++17 mode.
 #ifdef QLEVER_CPP_17
 #define QL_CONSTEVAL constexpr
 #define QL_EXPLICIT(...)
@@ -16,4 +23,4 @@
 #define QL_EXPLICIT(...) explicit(__VA_ARGS__)
 #endif
 
-#endif  // KEYWORDS_H
+#endif  // QLEVER_SRC_BACKPORTS_KEYWORDS_H
