@@ -69,8 +69,11 @@ const auto equalityCheckPrefilterVectors =
 // `<PrefilterExpression, Variable>` pair is provided, the expected value for
 // the `SparqlExpression` is an empty vector.
 const auto evalAndEqualityCheck =
-    [](std::unique_ptr<SparqlExpression> sparqlExpr,
-       std::convertible_to<PrefilterExprVariablePair> auto&&... prefilterArgs) {
+    [](std::unique_ptr<SparqlExpression> sparqlExpr, auto&&... prefilterArgs) {
+      static_assert(
+          (... &&
+           ql::concepts::convertible_to<std::decay_t<decltype(prefilterArgs)>,
+                                        PrefilterExprVariablePair>));
       std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
       if constexpr (sizeof...(prefilterArgs) > 0) {
         (prefilterVarPair.emplace_back(

@@ -2304,8 +2304,9 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
   void SetUp() override { qec_->getQueryTreeCache().clearAll(); }
 
   // ___________________________________________________________________________
-  static std::vector<std::optional<Variable>> vars(
-      std::convertible_to<std::string> auto&&... strings) {
+  CPP_variadic_template(typename... Strings)(requires(
+      ...&& ql::concepts::convertible_to<Strings, std::string>)) static std::
+      vector<std::optional<Variable>> vars(Strings&&... strings) {
     std::vector<std::optional<Variable>> result;
     result.reserve(sizeof...(strings));
     (result.emplace_back(V{AD_FWD(strings)}), ...);

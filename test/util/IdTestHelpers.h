@@ -30,7 +30,8 @@ inline auto BlankNodeId = [](const auto& v) {
   return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(v));
 };
 
-inline auto LocalVocabId = [](std::integral auto v) {
+inline auto LocalVocabId = [](auto v) {
+  static_assert(ql::concepts::integral<decltype(v)>);
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;
   return Id::makeFromLocalVocabIndex(

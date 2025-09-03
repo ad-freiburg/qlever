@@ -455,7 +455,7 @@ TEST(Serializer, CopyAndMove) {
     static_assert(!requires(Writer w1, Writer w2) {
       { w1 = w2 };
     });
-    static_assert(!std::constructible_from<Writer, const Writer&>);
+    static_assert(!ql::concepts::constructible_from<Writer, const Writer&>);
 
     // Assert that moving writers consistently writes to the same resource.
     writer | 1;
@@ -470,7 +470,7 @@ TEST(Serializer, CopyAndMove) {
     static_assert(!requires(Reader r1, Reader r2) {
       { r1 = r2 };
     });
-    static_assert(!std::constructible_from<Reader, const Reader&>);
+    static_assert(!ql::concepts::constructible_from<Reader, const Reader&>);
     // Assert that moving writers consistently reads from the same resource.
     int i;
     reader | i;

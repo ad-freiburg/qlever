@@ -26,10 +26,10 @@ std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
   auto toString = [](const auto number, std::string_view unitName) {
     using T = std::decay_t<decltype(number)>;
-    if constexpr (std::integral<T>) {
+    if constexpr (ql::concepts::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
-      static_assert(std::floating_point<T>);
+      static_assert(ql::concepts::floating_point<T>);
       return number * 10 == std::floor(number * 10)
                  ? absl::StrCat(number, " ", unitName)
                  : absl::StrCat(std::round(number * 10) / 10, " ", unitName);

@@ -130,12 +130,17 @@ class TransitivePathTest
   // Call testCase three times with differing arguments. This is used to test
   // scenarios where the same input table is delivered in different splits
   // either wrapped within a generator or as a single table.
-  static void runTestWithForcedSideTableScenarios(
-      const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
-                           bool> auto& testCase,
-      IdTable idTable,
-      ad_utility::source_location loc =
-          ad_utility::source_location::current()) {
+  CPP_template(typename TestCase)(
+      requires ql::concepts::invocable<
+          TestCase, std::variant<IdTable, std::vector<IdTable>>,
+          bool>) static void runTestWithForcedSideTableScenarios(const TestCase&
+                                                                     testCase,
+                                                                 IdTable
+                                                                     idTable,
+                                                                 ad_utility::source_location
+                                                                     loc = ad_utility::
+                                                                         source_location::
+                                                                             current()) {
     auto trace = generateLocationTrace(loc);
     testCase(idTable.clone(), false);
     testCase(split(idTable), false);

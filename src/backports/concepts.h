@@ -111,12 +111,27 @@ namespace ql::concepts {
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
 using ::ranges::bidirectional_iterator;
+using ::ranges::constructible_from;
 using ::ranges::contiguous_iterator;
+using ::ranges::convertible_to;
+using ::ranges::equality_comparable_with;
 using ::ranges::forward_iterator;
 using ::ranges::input_iterator;
+using ::ranges::invocable;
 using ::ranges::random_access_iterator;
+using ::ranges::regular_invocable;
 using ::ranges::sentinel_for;
 using ::ranges::sized_sentinel_for;
+
+template <typename T>
+CPP_concept floating_point = std::is_floating_point_v<T>;
+template <typename T>
+CPP_concept integral = std::is_integral_v<T>;
+
+// TODO<joka921> There is another par that requires T{} to be valid, rewrite
+// this using the more complex range-v3 macros.
+template <typename T>
+CPP_concept default_initializable = ql::concepts::constructible_from<T>;
 #else
 using namespace std;
 #endif

@@ -34,12 +34,12 @@ class VectorWithMemoryLimit
   // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
   // Unfortunately, the support for such allocators is not really great in the
   // standard library. In particular, the type trait
-  // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
-  // the `Alloc` is not default-initializable, which leads to hard compile
-  // errors with the ranges library. For this reason we cannot simply inherit
-  // all the constructors from `Base`, but explicitly have to forward all but
-  // the default constructor. In particular, we only forward constructors that
-  // have
+  // `ql::concepts::default_initializable<std::vector<T, Alloc>>` will be true,
+  // even if the `Alloc` is not default-initializable, which leads to hard
+  // compile errors with the ranges library. For this reason we cannot simply
+  // inherit all the constructors from `Base`, but explicitly have to forward
+  // all but the default constructor. In particular, we only forward
+  // constructors that have
   // * at least one argument
   // * the first argument must not be similar to `std::vector` or
   // `VectorWithMemoryLimit` to not hide copy or move constructors
@@ -81,7 +81,7 @@ class VectorWithMemoryLimit
     return VectorWithMemoryLimit(*this);
   }
 };
-static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions

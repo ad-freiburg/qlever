@@ -205,8 +205,9 @@ struct BothInvocableWithSimilarReturnType {
 // There is a lot of overlap between the concepts.
 TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   /*
-  Currently, `std::invocable` and `std::regular_invocable` are the same.
-  Therefore, having separate tests would be an unnecessary code increase.
+  Currently, `ql::concepts::invocable` and `ql::concepts::regular_invocable` are
+  the same. Therefore, having separate tests would be an unnecessary code
+  increase.
   */
   constexpr auto bothInvocableWithExactReturnType =
       BothInvocableWithExactReturnType{};

@@ -29,9 +29,12 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
-    T randomNumberGeneratorFactory,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+CPP_template(typename T)(
+    requires ql::concepts::invocable<
+        T,
+        RandomSeed>) void testSeed(T randomNumberGeneratorFactory,
+                                   ad_utility::source_location l =
+                                       ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 
@@ -105,7 +108,7 @@ should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
 @param ranges The ranges, that should be used.
 */
 CPP_template(typename RangeNumberType, typename GeneratorFactory)(
-    requires std::invocable<
+    requires ql::concepts::invocable<
         GeneratorFactory, RangeNumberType, RangeNumberType,
         RandomSeed>) void testSeedWithRange(GeneratorFactory
                                                 randomNumberGeneratorFactory,
@@ -136,8 +139,9 @@ of the range.
 @param ranges The ranges, for which should be tested for.
 */
 template <typename Generator, typename RangeNumberType>
-requires std::constructible_from<Generator, RangeNumberType, RangeNumberType> &&
-         std::invocable<Generator> &&
+requires ql::concepts::constructible_from<Generator, RangeNumberType,
+                                          RangeNumberType> &&
+         ql::concepts::invocable<Generator> &&
          ad_utility::isSimilar<std::invoke_result_t<Generator>, RangeNumberType>
 void testRange(
     const std::vector<NumericalRange<RangeNumberType>>& ranges,
