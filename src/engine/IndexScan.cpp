@@ -247,6 +247,41 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
+// Helper function to apply column subset to a generator while preserving
+// details. Returns the modified generator or the original if no subset is
+// needed.
+Permutation::IdTableGenerator IndexScan::applyColumnSubsetToGenerator(
+    Permutation::IdTableGenerator generator,
+    std::optional<std::vector<ColumnIndex>> columnSubset) {
+  if (!columnSubset.has_value()) {
+    return generator;
+  }
+
+  // Extract details from the original generator
+  auto originalDetails = generator.details();
+
+  // Create a transformer that applies the column subset
+  auto transformer = [permutation =
+                          std::move(columnSubset.value())](auto& table) {
+    table.setColumnSubset(permutation);
+    return std::move(table);
+  };
+
+  // Apply transformation using CachingTransformInputRange and preserve details
+  auto transformedRange = ad_utility::CachingTransformInputRange(
+      std::move(generator), std::move(transformer));
+
+  // Create InputRangeTypeErasedWithDetails to preserve the details
+  auto rangeWithDetails =
+      ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
+          ad_utility::InputRangeTypeErased<IdTable>(
+              std::move(transformedRange)),
+          std::move(originalDetails));
+
+  // Convert back to generator while preserving details
+  return cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
+}
+
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::chunkedIndexScan() const {
   // Convert the underlying block generator into a type-erased input range of
@@ -459,59 +494,10 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
 
   // Apply column subsets if either scan is configured to strip columns.
-  // Use InputRangeTypeErasedWithDetails to apply transformations while
-  // preserving details.
-  if (auto perm = s1.getColumnSubsetIfAny()) {
-    // Extract details from the original generator
-    auto originalDetails = result[0].details();
-
-    // Create a transformer that applies the column subset
-    auto transformer = [permutation = std::move(perm.value())](auto& table) {
-      table.setColumnSubset(permutation);
-      return std::move(table);
-    };
-
-    // Apply transformation using CachingTransformInputRange and preserve
-    // details
-    auto transformedRange = ad_utility::CachingTransformInputRange(
-        std::move(result[0]), std::move(transformer));
-
-    // Create InputRangeTypeErasedWithDetails to preserve the details
-    auto rangeWithDetails =
-        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
-            ad_utility::InputRangeTypeErased<IdTable>(
-                std::move(transformedRange)),
-            std::move(originalDetails));
-
-    // Convert back to generator while preserving details
-    result[0] = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
-  }
-
-  if (auto perm = s2.getColumnSubsetIfAny()) {
-    // Extract details from the original generator
-    auto originalDetails = result[1].details();
-
-    // Create a transformer that applies the column subset
-    auto transformer = [permutation = std::move(perm.value())](auto& table) {
-      table.setColumnSubset(permutation);
-      return std::move(table);
-    };
-
-    // Apply transformation using CachingTransformInputRange and preserve
-    // details
-    auto transformedRange = ad_utility::CachingTransformInputRange(
-        std::move(result[1]), std::move(transformer));
-
-    // Create InputRangeTypeErasedWithDetails to preserve the details
-    auto rangeWithDetails =
-        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
-            ad_utility::InputRangeTypeErased<IdTable>(
-                std::move(transformedRange)),
-            std::move(originalDetails));
-
-    // Convert back to generator while preserving details
-    result[1] = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
-  }
+  result[0] = applyColumnSubsetToGenerator(std::move(result[0]),
+                                           s1.getColumnSubsetIfAny());
+  result[1] = applyColumnSubsetToGenerator(std::move(result[1]),
+                                           s2.getColumnSubsetIfAny());
 
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
   result[1].details().numBlocksAll_ = metaBlocks2.value().sizeBlockMetadata_;
@@ -534,33 +520,8 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto result = getLazyScan(std::move(blocks.matchingBlocks_));
 
   // Apply column subset if this scan strips columns.
-  // Use InputRangeTypeErasedWithDetails to apply transformations while
-  // preserving details.
-  if (auto perm = getColumnSubsetIfAny()) {
-    // Extract details from the original generator
-    auto originalDetails = result.details();
-
-    // Create a transformer that applies the column subset
-    auto transformer = [permutation = std::move(perm.value())](auto& table) {
-      table.setColumnSubset(permutation);
-      return std::move(table);
-    };
-
-    // Apply transformation using CachingTransformInputRange and preserve
-    // details
-    auto transformedRange = ad_utility::CachingTransformInputRange(
-        std::move(result), std::move(transformer));
-
-    // Create InputRangeTypeErasedWithDetails to preserve the details
-    auto rangeWithDetails =
-        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
-            ad_utility::InputRangeTypeErased<IdTable>(
-                std::move(transformedRange)),
-            std::move(originalDetails));
-
-    // Convert back to generator while preserving details
-    result = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
-  }
+  result =
+      applyColumnSubsetToGenerator(std::move(result), getColumnSubsetIfAny());
 
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
