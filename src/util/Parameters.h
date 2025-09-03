@@ -375,6 +375,109 @@ class Parameters {
     return value;
   }
 };
+
+// Version of the `Parameter` class above that doesn't store its own name.
+CPP_template(typename Type, typename FromString, typename ToString)(
+    requires std::semiregular<Type> CPP_and
+        ParameterFromStringType<FromString, Type>
+            CPP_and ParameterToStringType<ToString,
+                                          Type>) struct ParameterWithoutName
+    : public ParameterBase {
+ private:
+  Type value_{};
+  std::string name_;
+
+  // This function is called each time the value is changed.
+  using OnUpdateAction = std::function<void(Type)>;
+  std::optional<OnUpdateAction> onUpdateAction_ = std::nullopt;
+  using ParameterConstraint = std::function<void(Type, std::string_view)>;
+  std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
+
+ public:
+  /// Construction is only allowed using an initial parameter value
+  ParameterWithoutName() = delete;
+  explicit ParameterWithoutName(Type initialValue, std::string name)
+      : value_{std::move(initialValue)}, name_{std::move(name)} {};
+
+  /// Copying is disabled, but moving is ok
+  ParameterWithoutName(const ParameterWithoutName& rhs) = delete;
+  ParameterWithoutName& operator=(const ParameterWithoutName& rhs) = delete;
+
+  ParameterWithoutName(ParameterWithoutName&&) noexcept = default;
+  ParameterWithoutName& operator=(ParameterWithoutName&&) noexcept = default;
+
+  /// Set the value by using the `FromString` conversion.
+  void setFromString(const std::string& stringInput) override {
+    set(FromString{}(stringInput));
+  }
+
+  /// Set the value.
+  void set(Type newValue) {
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), newValue, name_);
+    }
+    value_ = std::move(newValue);
+    triggerOnUpdateAction();
+  }
+
+  const Type& get() const { return value_; }
+
+  /// Specify the onUpdateAction and directly trigger it.
+  /// Note that this useful when the initial value of the parameter
+  /// is known before the `onUpdateAction`.
+  void setOnUpdateAction(OnUpdateAction onUpdateAction) {
+    onUpdateAction_ = std::move(onUpdateAction);
+    triggerOnUpdateAction();
+  }
+
+  /// Set an constraint that will be executed every time the value changes
+  /// and once initially when setting it. It is intended to throw an exception
+  /// if the value is invalid.
+  void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
+    std::invoke(parameterConstraint, value_, name_);
+    parameterConstraint_ = std::move(parameterConstraint);
+  }
+
+  // ___________________________________________________________________
+  [[nodiscard]] std::string toString() const override {
+    return ToString{}(value_);
+  }
+
+  // ___________________________________________________________________
+  const std::string& name() const { return name_; }
+
+ private:
+  // Manually trigger the `_onUpdateAction` if it exists
+  void triggerOnUpdateAction() {
+    if (onUpdateAction_.has_value()) {
+      onUpdateAction_.value()(value_);
+    }
+  }
+};
+
+namespace detail::parameterRuntimeName {
+namespace n = detail::parameterShortNames;
+/// Partial template specialization for Parameters with common types (numeric
+/// types and strings)
+using Float = ParameterWithoutName<float, n::fl, n::toString>;
+using Double = ParameterWithoutName<double, n::dbl, n::toString>;
+
+using SizeT = ParameterWithoutName<size_t, n::szt, n::toString>;
+
+using String = ParameterWithoutName<std::string, std::identity, std::identity>;
+
+using Bool = ParameterWithoutName<bool, n::bl, n::boolToString>;
+
+using MemorySizeParameter =
+    ParameterWithoutName<MemorySize, n::MemorySizeFromString,
+                         n::MemorySizeToString>;
+
+template <typename DurationType>
+using DurationParameter =
+    ParameterWithoutName<ad_utility::ParseableDuration<DurationType>,
+                         n::durationFromString<DurationType>,
+                         n::durationToString<DurationType>>;
+}  // namespace detail::parameterRuntimeName
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_PARAMETERS_H

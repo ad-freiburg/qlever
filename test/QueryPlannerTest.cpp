@@ -5316,7 +5316,8 @@ LIMIT 1
 // are not even stored as `stripped`.
 TEST(QueryPlanner, SubqueryColumnStripping) {
   // Save current strip-columns setting and ensure it's enabled for this test
-  auto cleanup = setRuntimeParameterForTest<"strip-columns">(true);
+  auto cleanup =
+      setNewRuntimeParameterForTest<&RuntimeParametersNew::stripColumns_>(true);
 
   // Test a subquery that selects only some variables, causing others to be
   // stripped
@@ -5332,7 +5333,7 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
 
     // The outer cleanup will reset the original status, so we can safely
     // modify the global parameter here.
-    RuntimeParameters().set<"strip-columns">(doStrip);
+    runtimeParametersNew().wlock()->stripColumns_.set(doStrip);
 
     // The inner subquery should have ?z and ?w stripped (as they're not
     // selected) but since it's a subquery, the stripped variables should not be
