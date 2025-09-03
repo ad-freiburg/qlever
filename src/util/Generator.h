@@ -306,6 +306,20 @@ generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
     co_yield value;
   }
 }
+
+// helper function to convert ad_utility::InputRangeTypeErasedWithDetails<T,
+// Details> to cppcoro::generator<T, Details> with preserved details
+template <typename T, typename Details>
+generator<T, Details> fromInputRangeWithDetails(
+    ad_utility::InputRangeTypeErasedWithDetails<T, Details> rangeWithDetails) {
+  Details& outerDetails = co_await getDetails;
+  // Copy the details from the input range to the generator's details
+  outerDetails = rangeWithDetails.details();
+
+  for (auto& value : rangeWithDetails) {
+    co_yield std::move(value);
+  }
+}
 }  // namespace cppcoro
 
 #endif

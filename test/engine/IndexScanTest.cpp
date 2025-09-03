@@ -880,11 +880,11 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return IndexScan{qec_, Permutation::PSO, xpy};
   }
 
-  // Consume generator `first` first and store it in a vector, then do the same
+  // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeSequentially(Result::Generator first, Result::Generator second) {
+  consumeSequentially(Result::LazyResult first, Result::LazyResult second) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 
@@ -897,12 +897,12 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return {std::move(firstResult), std::move(secondResult)};
   }
 
-  // Consume the generators and store the results in vectors using the
+  // Consume the ranges and store the results in vectors using the
   // parameterized strategy.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
   consumeGenerators(
-      std::pair<Result::Generator, Result::Generator> generatorPair) {
+      std::pair<Result::LazyResult, Result::LazyResult> generatorPair) {
     std::vector<Result::IdTableVocabPair> joinSideResults;
     std::vector<Result::IdTableVocabPair> scanResults;
 

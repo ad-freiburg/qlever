@@ -13,6 +13,9 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Generator.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
@@ -244,10 +247,29 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::chunkedIndexScan() const {
-  for (IdTable& idTable : getLazyScan()) {
-    co_yield {std::move(idTable), LocalVocab{}};
-  }
+// _____________________________________________________________________________
+Result::LazyResult IndexScan::chunkedIndexScan() const {
+  // Convert the underlying block generator into a type-erased input range of
+  // IdTableVocabPair without using coroutines in this translation unit.
+  auto applySubset = makeApplyColumnSubset();
+  auto range = ad_utility::InputRangeFromGetCallable{
+      [gen = getLazyScan(), applySubset,
+       it = std::optional<Permutation::IdTableGenerator::iterator>{}]() mutable
+      -> std::optional<Result::IdTableVocabPair> {
+        // Initialize or advance iterator.
+        if (!it.has_value()) {
+          it.emplace(gen.begin());
+        } else if (*it != gen.end()) {
+          ++(*it);
+        }
+        if (*it == gen.end()) {
+          return std::nullopt;
+        }
+        IdTable t = std::move(**it);
+        t = applySubset(std::move(t));
+        return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
+      }};
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
@@ -378,16 +400,11 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  auto lazyScanAllCols = getScanPermutation().lazyScan(
+  // Directly return the underlying lazy scan; column-subset application is
+  // performed at the consumption sites to keep this TU coroutine-free.
+  return getScanPermutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
-  auto& detailsRef = co_await cppcoro::getDetails;
-  lazyScanAllCols.setDetailsPointer(&detailsRef);
-  auto applySubset = makeApplyColumnSubset();
-
-  for (auto& table : lazyScanAllCols) {
-    co_yield applySubset(std::move(table));
-  }
 };
 
 // _____________________________________________________________________________
@@ -440,6 +457,62 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
       metaBlocks1.value(), metaBlocks2.value());
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
+
+  // Apply column subsets if either scan is configured to strip columns.
+  // Use InputRangeTypeErasedWithDetails to apply transformations while
+  // preserving details.
+  if (auto perm = s1.getColumnSubsetIfAny()) {
+    // Extract details from the original generator
+    auto originalDetails = result[0].details();
+
+    // Create a transformer that applies the column subset
+    auto transformer = [permutation = std::move(perm.value())](auto& table) {
+      table.setColumnSubset(permutation);
+      return std::move(table);
+    };
+
+    // Apply transformation using CachingTransformInputRange and preserve
+    // details
+    auto transformedRange = ad_utility::CachingTransformInputRange(
+        std::move(result[0]), std::move(transformer));
+
+    // Create InputRangeTypeErasedWithDetails to preserve the details
+    auto rangeWithDetails =
+        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
+            ad_utility::InputRangeTypeErased<IdTable>(
+                std::move(transformedRange)),
+            std::move(originalDetails));
+
+    // Convert back to generator while preserving details
+    result[0] = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
+  }
+
+  if (auto perm = s2.getColumnSubsetIfAny()) {
+    // Extract details from the original generator
+    auto originalDetails = result[1].details();
+
+    // Create a transformer that applies the column subset
+    auto transformer = [permutation = std::move(perm.value())](auto& table) {
+      table.setColumnSubset(permutation);
+      return std::move(table);
+    };
+
+    // Apply transformation using CachingTransformInputRange and preserve
+    // details
+    auto transformedRange = ad_utility::CachingTransformInputRange(
+        std::move(result[1]), std::move(transformer));
+
+    // Create InputRangeTypeErasedWithDetails to preserve the details
+    auto rangeWithDetails =
+        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
+            ad_utility::InputRangeTypeErased<IdTable>(
+                std::move(transformedRange)),
+            std::move(originalDetails));
+
+    // Convert back to generator while preserving details
+    result[1] = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
+  }
+
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
   result[1].details().numBlocksAll_ = metaBlocks2.value().sizeBlockMetadata_;
   return result;
@@ -459,6 +532,36 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks.value());
   auto result = getLazyScan(std::move(blocks.matchingBlocks_));
+
+  // Apply column subset if this scan strips columns.
+  // Use InputRangeTypeErasedWithDetails to apply transformations while
+  // preserving details.
+  if (auto perm = getColumnSubsetIfAny()) {
+    // Extract details from the original generator
+    auto originalDetails = result.details();
+
+    // Create a transformer that applies the column subset
+    auto transformer = [permutation = std::move(perm.value())](auto& table) {
+      table.setColumnSubset(permutation);
+      return std::move(table);
+    };
+
+    // Apply transformation using CachingTransformInputRange and preserve
+    // details
+    auto transformedRange = ad_utility::CachingTransformInputRange(
+        std::move(result), std::move(transformer));
+
+    // Create InputRangeTypeErasedWithDetails to preserve the details
+    auto rangeWithDetails =
+        ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
+            ad_utility::InputRangeTypeErased<IdTable>(
+                std::move(transformedRange)),
+            std::move(originalDetails));
+
+    // Convert back to generator while preserving details
+    result = cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
+  }
+
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
@@ -516,21 +619,20 @@ struct IndexScan::SharedGeneratorState {
   // if the first table is undefined. Also set `doneFetching_` if the generator
   // has been fully consumed.
   void advanceInputToNextNonEmptyTable() {
-    bool firstStep = !iterator_.has_value();
+    const bool firstStep = !iterator_.has_value();
+    // Initialize or advance the iterator.
     if (iterator_.has_value()) {
       ++iterator_.value();
     } else {
       iterator_ = generator_.begin();
     }
     auto& iterator = iterator_.value();
-    while (iterator != generator_.end()) {
-      if (!iterator->idTable_.empty()) {
-        break;
-      }
+    // Skip empty tables.
+    while (iterator != generator_.end() && iterator->idTable_.empty()) {
       ++iterator;
     }
     doneFetching_ = iterator_ == generator_.end();
-    // Set the undef flag if the first table is undefined.
+    // Set the undef flag if the very first non-empty table starts with UNDEF.
     if (firstStep) {
       hasUndef_ =
           !doneFetching_ && iterator->idTable_.at(0, joinColumn_).isUndefined();
@@ -562,22 +664,21 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
-      if (!newBlocks.empty()) {
+      // If we didn't get new blocks, check if future values might still match.
+      if (newBlocks.empty()) {
+        const auto lastSeen = lastEntryInBlocks_.value_or(Id::makeUndefined());
+        if (joinColumn[0] > lastSeen) {
+          if (metaBlocks_.blockMetadata_.empty()) {
+            // No more blocks in the index can match any future input.
+            doneFetching_ = true;
+            return;
+          }
+          // No matching block for current input, try the next input table.
+          continue;
+        }
+      } else {
         lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
-      } else if (joinColumn[0] >
-                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
-        if (metaBlocks_.blockMetadata_.empty()) {
-          // We have seen entries in the join column that are larger than the
-          // largest block in the index scan, which means that there will be no
-          // more matches.
-          doneFetching_ = true;
-          return;
-        }
-        // The current `joinColumn` has no matching block in the index, we can
-        // safely skip appending it to `prefetchedValues_`, but future values
-        // might require later blocks from the index.
-        continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
@@ -595,74 +696,136 @@ struct IndexScan::SharedGeneratorState {
 };
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::createPrefilteredJoinSide(
+Result::LazyResult IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
-  if (innerState->hasUndef()) {
-    AD_CORRECTNESS_CHECK(innerState->prefetchedValues_.empty());
-    for (auto& value : ql::ranges::subrange{innerState->iterator_.value(),
-                                            innerState->generator_.end()}) {
-      co_yield value;
-    }
-    co_return;
-  }
-  auto& prefetchedValues = innerState->prefetchedValues_;
-  while (true) {
-    if (prefetchedValues.empty()) {
-      if (innerState->doneFetching_) {
-        co_return;
-      }
-      innerState->fetch();
-      AD_CORRECTNESS_CHECK(!prefetchedValues.empty() ||
-                           innerState->doneFetching_);
-    }
-    // Make a defensive copy of the values to avoid modification during
-    // iteration when yielding.
-    auto copy = std::move(prefetchedValues);
-    // Moving out does not necessarily clear the values, so we do it explicitly.
-    prefetchedValues.clear();
-    for (auto& value : copy) {
-      co_yield value;
-    }
-  }
+  using Pair = Result::IdTableVocabPair;
+  auto range = ad_utility::InputRangeFromGetCallable{
+      [state = std::move(innerState),
+       buffer = SharedGeneratorState::PrefetchStorage{}]() mutable
+      -> std::optional<Pair> {
+        // If there are UNDEFs, just pass through the remaining input.
+        if (state->hasUndef()) {
+          if (!state->iterator_.has_value()) {
+            state->iterator_ = state->generator_.begin();
+          }
+          auto& it = state->iterator_.value();
+          if (it == state->generator_.end()) {
+            return std::nullopt;
+          }
+          Pair p = std::move(*it);
+          ++it;
+          return p;
+        }
+
+        auto& prefetched = state->prefetchedValues_;
+        // Fill local buffer from prefetched values, fetching if necessary.
+        auto fillBuffer = [&]() -> bool {
+          while (buffer.empty()) {
+            if (prefetched.empty()) {
+              if (state->doneFetching_) {
+                return false;
+              }
+              state->fetch();
+              AD_CORRECTNESS_CHECK(!prefetched.empty() || state->doneFetching_);
+              if (prefetched.empty()) {
+                return false;
+              }
+            }
+            buffer = std::move(prefetched);
+            prefetched.clear();
+          }
+          return true;
+        };
+
+        if (!fillBuffer()) {
+          return std::nullopt;
+        }
+        Pair p = std::move(buffer.front());
+        buffer.erase(buffer.begin());
+        return p;
+      }};
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::createPrefilteredIndexScanSide(
+Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   if (innerState->hasUndef()) {
-    for (auto& pair : chunkedIndexScan()) {
-      co_yield pair;
-    }
-    co_return;
+    return chunkedIndexScan();
   }
-  LazyScanMetadata metadata;
-  auto& pendingBlocks = innerState->pendingBlocks_;
-  while (true) {
-    if (pendingBlocks.empty()) {
-      if (innerState->doneFetching_) {
-        metadata.numBlocksAll_ = innerState->metaBlocks_.sizeBlockMetadata_;
-        updateRuntimeInfoForLazyScan(metadata);
-        co_return;
-      }
-      innerState->fetch();
-    }
-    auto scan = getLazyScan(std::move(pendingBlocks));
-    AD_CORRECTNESS_CHECK(pendingBlocks.empty());
-    for (IdTable& idTable : scan) {
-      co_yield {std::move(idTable), LocalVocab{}};
-    }
-    metadata.aggregate(scan.details());
-  }
+  using Pair = Result::IdTableVocabPair;
+  auto applySubset = makeApplyColumnSubset();
+  auto range = ad_utility::InputRangeFromGetCallable{
+      [this, state = std::move(innerState), metadata = LazyScanMetadata{},
+       curScan = std::optional<Permutation::IdTableGenerator>{},
+       it = std::optional<Permutation::IdTableGenerator::iterator>{},
+       applySubset, active = false]() mutable -> std::optional<Pair> {
+        auto& pendingBlocks = state->pendingBlocks_;
+
+        // Ensure there is an active scan over matching blocks, starting a new
+        // one if necessary, or fetch more input if we currently have none.
+        auto ensureActiveScan = [&]() -> bool {
+          while (!active) {
+            if (pendingBlocks.empty()) {
+              if (state->doneFetching_) {
+                metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+                updateRuntimeInfoForLazyScan(metadata);
+                return false;
+              }
+              state->fetch();
+              if (pendingBlocks.empty() && state->doneFetching_) {
+                metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+                updateRuntimeInfoForLazyScan(metadata);
+                return false;
+              }
+              continue;
+            }
+            auto scan = getLazyScan(std::move(pendingBlocks));
+            AD_CORRECTNESS_CHECK(pendingBlocks.empty());
+            curScan.emplace(std::move(scan));
+            it.emplace(curScan->begin());
+            active = true;
+          }
+          return true;
+        };
+
+        while (true) {
+          if (!ensureActiveScan()) {
+            return std::nullopt;
+          }
+          // If the current scan is exhausted, aggregate metadata and prepare
+          // the next one.
+          if (*it == curScan->end()) {
+            metadata.aggregate(curScan->details());
+            curScan.reset();
+            it.reset();
+            active = false;
+            continue;
+          }
+
+          IdTable t = std::move(**it);
+          ++(*it);
+          t = applySubset(std::move(t));
+          return Pair{std::move(t), LocalVocab{}};
+        }
+      }};
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
-std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
+std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     Result::LazyResult input, ColumnIndex joinColumn) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
-    return {Result::Generator{}, Result::Generator{}};
+    using Pair = Result::IdTableVocabPair;
+    auto empty1 = ad_utility::InputRangeFromGetCallable{
+        []() -> std::optional<Pair> { return std::nullopt; }};
+    auto empty2 = ad_utility::InputRangeFromGetCallable{
+        []() -> std::optional<Pair> { return std::nullopt; }};
+    return {Result::LazyResult{std::move(empty1)},
+            Result::LazyResult{std::move(empty2)}};
   }
   auto state = std::make_shared<SharedGeneratorState>(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
