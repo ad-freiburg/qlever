@@ -12,15 +12,16 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 #include <random>
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "global/TypedIndex.h"
 
 namespace ad_utility {
 // The seed type for random number generators.
-using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
+constexpr inline std::string_view indexTagForRandomSeed = "Seed";
+using RandomSeed = ad_utility::TypedIndex<unsigned int, indexTagForRandomSeed>;
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+,

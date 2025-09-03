@@ -27,8 +27,10 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
 }
 
 TEST(Constants, makeQleverInternalIri) {
+  static constexpr std::string_view hi = "hi";
+  static constexpr std::string_view bye = "-bye";
   EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
-            (makeQleverInternalIriConst<"hi", "-bye">()));
+            (makeQleverInternalIriConst<hi, bye>()));
   EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
             "<http://qlever.cs.uni-freiburg.de/builtin-functions/hi-bye>");
 }

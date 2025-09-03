@@ -14,10 +14,10 @@
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
-#include <type_traits>
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
@@ -3187,7 +3187,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
-    if (RuntimeParameters().get<"strip-columns">()) {
+    if (runtimeParametersNew().rlock()->stripColumns_.get()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
           std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {

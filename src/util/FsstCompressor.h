@@ -27,7 +27,7 @@ struct CastToUnsignedPtr {
   CPP_template(typename T)(
       requires ad_utility::SameAsAny<T, char*, const char*>) auto
   operator()(T ptr) const {
-    using Res = std::conditional_t<std::same_as<T, const char*>,
+    using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
   };
@@ -107,8 +107,8 @@ class FsstRepeatedDecoder {
     return result;
   }
   // Allow this type to be trivially serializable,
-  CPP_template_2(typename T,
-                 typename U)(requires std::same_as<T, FsstRepeatedDecoder>)
+  CPP_template_2(typename T, typename U)(
+      requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
       [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }

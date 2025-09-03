@@ -51,7 +51,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
-  if (RuntimeParameters().get<"strip-columns">()) {
+  if (runtimeParametersNew().rlock()->stripColumns_.get()) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
@@ -1294,8 +1294,8 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
       T & arg, size_t numberOfGroups,
       [[maybe_unused]] const HashMapAggregateTypeWithData& info)(
       requires true) {
-    if constexpr (std::same_as<typename T::value_type,
-                               GroupConcatAggregationData>) {
+    if constexpr (ql::concepts::same_as<typename T::value_type,
+                                        GroupConcatAggregationData>) {
       arg.resize(numberOfGroups,
                  GroupConcatAggregationData{info.separator_.value()});
     } else {
