@@ -16,81 +16,60 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
-/**
- * @class BinSearchMap
- * @brief This struct represents a simple Binary Search Map. Given an Id, the
- * BinSearchMap can return a list (i.e. span) of successor Ids.
- *
- * It is expected that the two input spans startIds_ and targetIds_ are sorted
- * first by start id and then by target id.
- * Example:
- *
- * startId | targetId
- * ------------------
- *       1 |        1
- *       1 |        2
- *       2 |        4
- *       3 |        2
- *       3 |        4
- *       3 |        6
- *       5 |        2
- *       5 |        6
- *
- */
+// A set of edges of the implicit graph of a transitive path operation together
+// with the graph IRI of the source node of each edge. The edges are sorted by
+// graph and then by source node. That way, we can efficiently find a given
+// source node in a given graph using binary search.
+//
+// NOTE: In the comments and variable names below, "node" and "id" are used
+// interchangeably.
 class BinSearchMap {
-  // All of these have the same size, for convenience the code represents "no
-  // graph" as an empty span for `graphIds_`, regardless of the amount of
-  // elements of the other ranges.
+  // The edges with their source and target nodes and the graph IRI of the
+  // source node. The first two ranges have the same size. The third one either
+  // has the same size (for a transitive path operation inside a GRAPH clause)
+  // or otherwise is empty.
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
   ql::span<const Id> graphIds_;
-  // Set the bounds of the currently active graph.
+
+  // The index of the first edge of the currently active graph and the number
+  // of edges in that graph.
   size_t offsetOfActiveGraph_ = 0;
   size_t sizeOfActiveGraph_;
 
  public:
+  // Construct with the given edges. The `sizeOfActiveGraph_` is set to the
+  // total number of edges if no graphs are given, or to zero otherwise. In the
+  // latter case, the correct size has to be set via `setGraphId`.
   BinSearchMap(
       ql::span<const Id> startIds, ql::span<const Id> targetIds,
       const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
-  /**
-   * @brief Return the successors for the given id.
-   * The successors are all target ids, where the corresponding start id is
-   * equal to the given id `node`. Only values matching the active graph (set
-   * via `setGraphId`) will be returned.
-   *
-   * @param node The input id, which will be looked up in startIds_
-   * @return A ql::span<Id>, which consists of all targetIds_ where
-   * startIds_ == node.
-   */
+  // Return all target nodes for the given source node in the currently
+  // active graph.
   ql::span<const Id> successors(Id node) const;
 
-  // Return a pair of matching ids + graph ids. If `node` originates from a
-  // `LocalVocab` an equivalent entry from the graph is used instead,
-  // eliminating the need to keep the `LocalVocab` around any longer. If no
-  // entry matches an empty vector is returned. The first id of the pair is
-  // always the same element. It is flattened out because all callers of this
-  // function need it in this format for convenience. The most common case is
-  // that there's a single matching entry, (especially when using this without
-  // an active graph,) which is why `absl::InlinedVector` is used with size 1.
-  //  If `node` is undefined, it
-  // will return all elements in the currently active graph, or all elements if
-  // no graph is set. Active graphs set via `setGraphId` are ignored. Entries
-  // are deduplicated.
-  IdWithGraphs getEquivalentIdAndMatchingGraphs(Id node) const;
+  // Find all `Id`s in `startIds_` that are equal to `id` together with the
+  // corresponding graph `Id`s, with the following special cases:
+  //
+  // 1. If `id` is undefined, return all distinct `Id`s in `startIds_`.
+  //
+  // 2. if `id` holds a `LocalVocabIndex`, return those `Id`s from `startIds_`
+  // that represent the same IRI or literal (`startIds_` never holds entries
+  // from the `LocalVocab`).
+  //
+  // 3. If `graphIds_` is empty, use `Id::makeUndefined()` as graph `Id`.
+  //
+  // NOTE: If no such `Id`s exist, an empty vector is returned.
+  IdWithGraphs getEquivalentIdAndMatchingGraphs(Id id) const;
 
-  // Prefilter the map for values of a certain graph. If graphs are active, i.e.
-  // the constructor of this class was called with a graph column, this has to
-  // be set before calling `successors`.
+  // Set `offsetOfActiveGraph_` and `sizeOfActiveGraph_` according to the given
+  // `graphId`.
   void setGraphId(Id graphId);
 };
 
-/**
- * @class TransitivePathBinSearch
- * @brief This class implements the transitive path operation. The
- * implementation represents the graph as adjacency lists and uses binary search
- * to find successors of given nodes.
- */
+// Subclass of `TransitivePathImpl` for evaluation a transitive path operation
+// using the `BinSearchMap` from above.
 class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
  public:
   TransitivePathBinSearch(QueryExecutionContext* qec,
@@ -103,15 +82,15 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  // initialize the map from the subresult
+  // Create the `BinSearchMap` from the given `edges`, which is an `IdTable`
+  // with either two columns (without graph variable) or three columns (with
+  // graph variable).
   BinSearchMap setupEdgesMap(
-      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const IdTable& edges, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
 
-  // We store the subtree in two different orderings such that the appropriate
-  // ordering is available when the right side of the transitive path operation
-  // is bound. When the left side is bound, we already have the correct
-  // ordering.
+  // Alternative subtree sorted by (graph, target, source). This is used then
+  // the right side of the transitive path operation is bound.
   std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
   ql::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
       const override {
