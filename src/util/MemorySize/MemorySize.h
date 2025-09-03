@@ -176,11 +176,12 @@ consteval MemorySize operator""_TB(unsigned long long int terabytes);
 // Helper functions.
 namespace detail {
 // Just the number of bytes per memory unit.
+using MapPair = ConstexprMapPair<std::string_view, size_t>;
 constexpr ConstexprMap<std::string_view, size_t, 5> numBytesPerUnit(
-    {std::pair{"B", 1uL}, std::pair{"kB", ad_utility::pow<size_t>(10, 3)},
-     std::pair{"MB", ad_utility::pow<size_t>(10, 6)},
-     std::pair{"GB", ad_utility::pow<size_t>(10, 9)},
-     std::pair{"TB", ad_utility::pow<size_t>(10, 12)}});
+    {MapPair{"B", 1uL}, MapPair{"kB", ad_utility::pow<size_t>(10, 3)},
+     MapPair{"MB", ad_utility::pow<size_t>(10, 6)},
+     MapPair{"GB", ad_utility::pow<size_t>(10, 9)},
+     MapPair{"TB", ad_utility::pow<size_t>(10, 12)}});
 
 /*
 Helper function for dividing two instances of `size_t`.
@@ -200,12 +201,13 @@ constexpr static double sizeTDivision(const size_t dividend,
 static constexpr size_t size_t_max = std::numeric_limits<size_t>::max();
 
 // The maximal amount of a memory unit, that a `MemorySize` can remember.
-constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
-    {std::pair{"B", sizeTDivision(size_t_max, numBytesPerUnit.at("B"))},
-     std::pair{"kB", sizeTDivision(size_t_max, numBytesPerUnit.at("kB"))},
-     std::pair{"MB", sizeTDivision(size_t_max, numBytesPerUnit.at("MB"))},
-     std::pair{"GB", sizeTDivision(size_t_max, numBytesPerUnit.at("GB"))},
-     std::pair{"TB", sizeTDivision(size_t_max, numBytesPerUnit.at("TB"))}});
+static constexpr auto maxAmountOfUnit = []() {
+  auto p = [](std::string_view unitName) {
+    return ConstexprMapPair<std::string_view, double>{
+        unitName, sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))};
+  };
+  return ConstexprMap{std::array{p("B"), p("kB"), p("MB"), p("GB"), p("TB")}};
+}();
 
 // Converts a given number to `size_t`. Rounds up, if needed.
 CPP_template(typename T)(requires Arithmetic<T>) constexpr size_t
