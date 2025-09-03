@@ -8,6 +8,7 @@
 #define QLEVER_SRC_BACKPORTS_ITERATOR_H
 
 #include <iterator>
+#include <range/v3/iterator/access.hpp>
 
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
