@@ -68,7 +68,7 @@ static void compareToColumn(
   // Compare every entry with the fitting comparison function.
   AD_CONTRACT_CHECK(expectedContent.size() == tableToCompareAgainst.numRows());
   for (size_t i = 0; i < expectedContent.size(); i++) {
-    if constexpr (std::floating_point<T>) {
+    if constexpr (ql::concepts::floating_point<T>) {
       ASSERT_FLOAT_EQ(expectedContent.at(i),
                       tableToCompareAgainst.getEntry<T>(
                           i, columnsToCompareAgainst.columnNum_));

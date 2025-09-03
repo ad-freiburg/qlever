@@ -35,7 +35,7 @@ For an example of a valid `GrammarParseException` see
 */
 CPP_template(typename GrammarParseException)(
     requires std::derived_from<GrammarParseException, ParseException> CPP_and
-        std::constructible_from<
+        ql::concepts::constructible_from<
             GrammarParseException, std::string_view,
             std::optional<ExceptionMetadata>>) struct ThrowingErrorListener
     : public antlr4::BaseErrorListener {

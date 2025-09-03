@@ -92,7 +92,7 @@ class Synchronized {
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
 
-  Synchronized() requires std::default_initializable<T> = default;
+  Synchronized() requires ql::concepts::default_initializable<T> = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying

@@ -106,7 +106,7 @@ template <typename T>
 concept VectorOrExpressionResult =
     SingleExpressionResult<T> ||
     (ad_utility::isVector<T> && isConstantResult<typename T::value_type>) ||
-    std::convertible_to<T, std::string_view>;
+    ql::concepts::convertible_to<T, std::string_view>;
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
@@ -1715,16 +1715,19 @@ TEST(SparqlExpression, encodeForUri) {
   auto l = [](std::string_view s, std::string_view langOrDatatype = "") {
     return IoS{lit(s, langOrDatatype)};
   };
-  checkEncodeForUri("Los Angeles", "Los%20Angeles");
-  checkEncodeForUri(l("Los Angeles", "@en"), "Los%20Angeles");
-  checkEncodeForUri(l("Los Angeles", "^^<someDatatype>"), "Los%20Angeles");
-  checkEncodeForUri(l("Los Ängeles", "^^<someDatatype>"), "Los%20%C3%84ngeles");
-  checkEncodeForUri(l("\"Los Angeles"), "%22Los%20Angeles");
-  checkEncodeForUri(l("L\"os \"Angeles"), "L%22os%20%22Angeles");
+
+  using namespace std::string_view_literals;
+  checkEncodeForUri("Los Angeles"sv, "Los%20Angeles"sv);
+  checkEncodeForUri(l("Los Angeles", "@en"), "Los%20Angeles"sv);
+  checkEncodeForUri(l("Los Angeles", "^^<someDatatype>"), "Los%20Angeles"sv);
+  checkEncodeForUri(l("Los Ängeles", "^^<someDatatype>"),
+                    "Los%20%C3%84ngeles"sv);
+  checkEncodeForUri(l("\"Los Angeles"), "%22Los%20Angeles"sv);
+  checkEncodeForUri(l("L\"os \"Angeles"), "L%22os%20%22Angeles"sv);
   // Literals from the global and local vocab.
-  checkEncodeForUri(testContext().aelpha, "%C3%A4lpha");
-  checkEncodeForUri(testContext().notInVocabA, "notInVocabA");
-  checkEncodeForUri(testContext().notInVocabAelpha, "notInVocab%C3%84lpha");
+  checkEncodeForUri(testContext().aelpha, "%C3%A4lpha"sv);
+  checkEncodeForUri(testContext().notInVocabA, "notInVocabA"sv);
+  checkEncodeForUri(testContext().notInVocabAelpha, "notInVocab%C3%84lpha"sv);
   // Entities from the local and global vocab (become undefined without STR()
   // around the expression).
   checkEncodeForUri(testContext().label, IoS{U});

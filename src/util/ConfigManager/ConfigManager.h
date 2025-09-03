@@ -93,12 +93,12 @@ class ConfigManager {
 
     // Wrapper for calling `std::visit` on the saved `Data`.
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis);
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis) const;
 
    private:
@@ -131,10 +131,10 @@ class ConfigManager {
     CPP_template(typename Visitor, typename PointerType)(
         requires ad_utility::SimilarTo<
             std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-            CPP_and std::invocable<
+            CPP_and ql::concepts::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigOption&, ConfigOption&>>
-                CPP_and std::invocable<
+                CPP_and ql::concepts::invocable<
                     Visitor,
                     std::conditional_t<std::is_const_v<PointerType>,
                                        const ConfigManager&,
