@@ -283,12 +283,14 @@ Permutation::IdTableGenerator IndexScan::applyColumnSubsetToGenerator(
 }
 
 // _____________________________________________________________________________
-Result::LazyResult IndexScan::chunkedIndexScan() const {
-  // Convert the underlying block generator into a type-erased input range of
-  // IdTableVocabPair without using coroutines in this translation unit.
+// Helper function to convert a Permutation::IdTableGenerator to a LazyResult
+// with column subset applied, without using coroutines in this translation
+// unit.
+Result::LazyResult IndexScan::createLazyResultFromGenerator(
+    Permutation::IdTableGenerator generator) const {
   auto applySubset = makeApplyColumnSubset();
   auto range = ad_utility::InputRangeFromGetCallable{
-      [gen = getLazyScan(), applySubset,
+      [gen = std::move(generator), applySubset,
        it = std::optional<Permutation::IdTableGenerator::iterator>{}]() mutable
       -> std::optional<Result::IdTableVocabPair> {
         // Initialize or advance iterator.
@@ -305,6 +307,11 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
         return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
       }};
   return Result::LazyResult{std::move(range)};
+}
+
+// _____________________________________________________________________________
+Result::LazyResult IndexScan::chunkedIndexScan() const {
+  return createLazyResultFromGenerator(getLazyScan());
 }
 
 // _____________________________________________________________________________
@@ -659,12 +666,11 @@ struct IndexScan::SharedGeneratorState {
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
-  using Pair = Result::IdTableVocabPair;
   auto range = ad_utility::InputRangeFromGetCallable{
       [state = std::move(innerState),
        buffer = SharedGeneratorState::PrefetchStorage{}]() mutable
-      -> std::optional<Pair> {
-        // If there are UNDEFs, just pass through the remaining input.
+      -> std::optional<Result::IdTableVocabPair> {
+        // Handle UNDEF case: pass through remaining input
         if (state->hasUndef()) {
           if (!state->iterator_.has_value()) {
             state->iterator_ = state->generator_.begin();
@@ -673,13 +679,13 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
           if (it == state->generator_.end()) {
             return std::nullopt;
           }
-          Pair p = std::move(*it);
+          auto result = std::move(*it);
           ++it;
-          return p;
+          return result;
         }
 
         auto& prefetched = state->prefetchedValues_;
-        // Fill local buffer from prefetched values, fetching if necessary.
+        // Helper to fill buffer from prefetched values
         auto fillBuffer = [&]() -> bool {
           while (buffer.empty()) {
             if (prefetched.empty()) {
@@ -701,9 +707,9 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
         if (!fillBuffer()) {
           return std::nullopt;
         }
-        Pair p = std::move(buffer.front());
+        auto result = std::move(buffer.front());
         buffer.erase(buffer.begin());
-        return p;
+        return result;
       }};
   return Result::LazyResult{std::move(range)};
 }
@@ -714,17 +720,17 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
   if (innerState->hasUndef()) {
     return chunkedIndexScan();
   }
-  using Pair = Result::IdTableVocabPair;
+
   auto applySubset = makeApplyColumnSubset();
   auto range = ad_utility::InputRangeFromGetCallable{
       [this, state = std::move(innerState), metadata = LazyScanMetadata{},
        curScan = std::optional<Permutation::IdTableGenerator>{},
        it = std::optional<Permutation::IdTableGenerator::iterator>{},
-       applySubset, active = false]() mutable -> std::optional<Pair> {
+       applySubset,
+       active = false]() mutable -> std::optional<Result::IdTableVocabPair> {
         auto& pendingBlocks = state->pendingBlocks_;
 
-        // Ensure there is an active scan over matching blocks, starting a new
-        // one if necessary, or fetch more input if we currently have none.
+        // Helper to ensure we have an active scan
         auto ensureActiveScan = [&]() -> bool {
           while (!active) {
             if (pendingBlocks.empty()) {
@@ -754,8 +760,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           if (!ensureActiveScan()) {
             return std::nullopt;
           }
-          // If the current scan is exhausted, aggregate metadata and prepare
-          // the next one.
+          // If current scan is exhausted, prepare for next one
           if (*it == curScan->end()) {
             metadata.aggregate(curScan->details());
             curScan.reset();
@@ -767,7 +772,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           IdTable t = std::move(**it);
           ++(*it);
           t = applySubset(std::move(t));
-          return Pair{std::move(t), LocalVocab{}};
+          return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
         }
       }};
   return Result::LazyResult{std::move(range)};
@@ -780,14 +785,17 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
-    using Pair = Result::IdTableVocabPair;
-    auto empty1 = ad_utility::InputRangeFromGetCallable{
-        []() -> std::optional<Pair> { return std::nullopt; }};
-    auto empty2 = ad_utility::InputRangeFromGetCallable{
-        []() -> std::optional<Pair> { return std::nullopt; }};
-    return {Result::LazyResult{std::move(empty1)},
-            Result::LazyResult{std::move(empty2)}};
+    // Helper to create empty range
+    auto createEmptyRange = []() {
+      return ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<Result::IdTableVocabPair> {
+            return std::nullopt;
+          }};
+    };
+    return {Result::LazyResult{createEmptyRange()},
+            Result::LazyResult{createEmptyRange()}};
   }
+
   auto state = std::make_shared<SharedGeneratorState>(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),

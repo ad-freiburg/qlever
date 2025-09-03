@@ -114,19 +114,19 @@ class IndexScan final : public Operation {
       Result::LazyResult input, ColumnIndex joinColumn);
 
  private:
-  // Implementation detail that allows to consume a generator from two other
-  // cooperating generators. Needs to be forward declared as it is used by
+  // Implementation detail that allows to consume a lazy range from two other
+  // cooperating ranges. Needs to be forward declared as it is used by
   // several member functions below.
   struct SharedGeneratorState;
 
-  // Helper function that creates a lazy range that re-yields the generator
+  // Helper function that creates a lazy range that re-yields the input
   // wrapped by `innerState`.
   static Result::LazyResult createPrefilteredJoinSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
   // Helper function that creates a lazy range yielding prefiltered rows of
   // this index scan according to the block metadata, that match the tables
-  // yielded by the generator wrapped by `innerState`.
+  // yielded by the input wrapped by `innerState`.
   Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
@@ -195,6 +195,12 @@ class IndexScan final : public Operation {
   static Permutation::IdTableGenerator applyColumnSubsetToGenerator(
       Permutation::IdTableGenerator generator,
       std::optional<std::vector<ColumnIndex>> columnSubset);
+
+  // Helper function to convert a Permutation::IdTableGenerator to a LazyResult
+  // with column subset applied, without using coroutines in this translation
+  // unit.
+  Result::LazyResult createLazyResultFromGenerator(
+      Permutation::IdTableGenerator generator) const;
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
