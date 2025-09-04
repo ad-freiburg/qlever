@@ -6,7 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
