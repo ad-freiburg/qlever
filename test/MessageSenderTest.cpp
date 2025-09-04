@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <chrono>
 
 #include "util/AsyncTestHelpers.h"
 #include "util/http/websocket/MessageSender.h"
@@ -19,6 +20,7 @@ using ad_utility::websocket::QueryRegistry;
 
 using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 using ::testing::Pointee;
 using ::testing::VariantWith;
@@ -36,7 +38,7 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   { MessageSender dummy{std::move(queryId), queryHub}; }
 
   auto impl = [&]() -> net::awaitable<void> {
-    net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
+    net::steady_timer timer{ioContext, 2s};
 
     auto result = co_await (distributor->waitForNextDataPiece(0) ||
                             timer.async_wait(net::use_awaitable));
@@ -65,7 +67,7 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
     updateWrapper("Still");
     updateWrapper("Dre");
 
-    net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
+    net::steady_timer timer{ioContext, 2s};
 
     auto impl = [&]() -> net::awaitable<void> {
       auto result = co_await (distributor->waitForNextDataPiece(0) ||
