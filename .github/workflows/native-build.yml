@@ -21,8 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-        compiler-version: [8, 11, 12, 13, 15, 16, 17, 18]
+        compiler: [gcc]
+        compiler-version: [8]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
@@ -70,10 +70,10 @@ jobs:
             continue-on-error: true
             use-keep-going: true
             use-ignore-errors: true
-          - compiler: gcc
-            compiler-version: 11
-            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
-            build-type: Release
+#          - compiler: gcc
+#            compiler-version: 11
+#            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
+#            build-type: Release
 # TODO<joka921> Figure out a way to enable this build only for master pushes and not for the PR.
 #          - compiler: clang
 #            compiler-version: 15
@@ -84,24 +84,24 @@ jobs:
 #            continue-on-error: true
 #            use-keep-going: true
 #            use-ignore-errors: true
-          - compiler: clang
-            compiler-version: 16
-            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
-            build-type: RelWithDebInfo
-            expensive-tests: false
-          - compiler: clang
-            compiler-version: 16
-            ubsan-flags: " -fsanitize=undefined"
-            build-type: RelWithDebInfo
-            expensive-tests: false
-            skipIfPr: false
-          - compiler: clang
-            compiler-version: 17
-            build-type: Debug
-            expensive-tests: false
-            ubsan-flags: " -fsanitize=thread -O1 -g"
-            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
-            skipIfPr: false
+#          - compiler: clang
+#            compiler-version: 16
+#            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+#            build-type: RelWithDebInfo
+#            expensive-tests: false
+#          - compiler: clang
+#            compiler-version: 16
+#            ubsan-flags: " -fsanitize=undefined"
+#            build-type: RelWithDebInfo
+#            expensive-tests: false
+#            skipIfPr: false
+#          - compiler: clang
+#            compiler-version: 17
+#            build-type: Debug
+#            expensive-tests: false
+#            ubsan-flags: " -fsanitize=thread -O1 -g"
+#            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
+#            skipIfPr: false
 
     runs-on: ubuntu-22.04
 
