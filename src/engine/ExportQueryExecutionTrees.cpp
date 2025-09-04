@@ -804,9 +804,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType < format ==
-              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab_,
-                                escapeFunction);
+              idToStringAndType<format == MediaType::csv>(
+                  qet.getQec()->getIndex(), id, pair.localVocab_,
+                  escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
           }
