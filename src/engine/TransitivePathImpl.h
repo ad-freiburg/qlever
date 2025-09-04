@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
+#include <cstdint>
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
@@ -242,7 +243,7 @@ class TransitivePathImpl : public TransitivePathBase {
     using NodeWithTargetRange =
         ad_utility::InputRangeTypeErased<NodeWithTargets>;
     using ZippedTypeRange =
-        ad_utility::InputRangeTypeErased<std::pair<long int, ZippedType>>;
+        ad_utility::InputRangeTypeErased<std::pair<int64_t, ZippedType>>;
 
     // input arguments
     const TransitivePathImpl<T>* parent_{nullptr};
