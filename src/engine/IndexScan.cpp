@@ -247,32 +247,13 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
-// Helper function to convert a Permutation::IdTableGenerator to a LazyResult
-// without using coroutines in this translation unit.
-Result::LazyResult IndexScan::createLazyResultFromGenerator(
-    Permutation::IdTableGenerator generator) const {
-  auto range = ad_utility::InputRangeFromGetCallable{
-      [gen = std::move(generator),
-       it = std::optional<Permutation::IdTableGenerator::iterator>{}]() mutable
-      -> std::optional<Result::IdTableVocabPair> {
-        // Initialize or advance iterator.
-        if (!it.has_value()) {
-          it.emplace(gen.begin());
-        } else if (*it != gen.end()) {
-          ++(*it);
-        }
-        if (*it == gen.end()) {
-          return std::nullopt;
-        }
-        IdTable t = std::move(**it);
-        return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
-      }};
-  return Result::LazyResult{std::move(range)};
-}
-
-// _____________________________________________________________________________
 Result::LazyResult IndexScan::chunkedIndexScan() const {
-  return createLazyResultFromGenerator(getLazyScan());
+  auto generator = getLazyScan();
+  auto transformedRange = ad_utility::CachingTransformInputRange(
+      std::move(generator), [](auto&& table) {
+        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+      });
+  return Result::LazyResult{std::move(transformedRange)};
 }
 
 // _____________________________________________________________________________

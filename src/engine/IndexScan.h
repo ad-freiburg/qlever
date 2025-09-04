@@ -189,11 +189,6 @@ class IndexScan final : public Operation {
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
-  // Helper function to convert a Permutation::IdTableGenerator to a LazyResult
-  // without using coroutines in this translation unit.
-  Result::LazyResult createLazyResultFromGenerator(
-      Permutation::IdTableGenerator generator) const;
-
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
