@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
@@ -531,6 +531,11 @@ class CompressedRelationReader {
     static void checkBlockMetadataInvariant(
         std::span<const CompressedBlockMetadata> blocks,
         size_t firstFreeColIndex);
+
+    // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
+    // be used if it is known that those are not needed anymore, e.g. because
+    // they have already been dealt with by a lazy `IndexScan` or `Join`.
+    void removePrefix(size_t numBlocksToRemove);
   };
 
   // This struct additionally contains the first and last triple of the scan
@@ -597,6 +602,15 @@ class CompressedRelationReader {
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
 
+  // Helper function that enables a comparison of a triple with an `Id` in the
+  // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
+  // the given `ScanSpecification`, then `col1Id` is returned. If the given
+  // triple matches neither, a sentinel value is returned `ScanSpecification`,
+  // or `Id::max` if it is higher).
+  static Id getRelevantIdFromTriple(
+      CompressedBlockMetadata::PermutedTriple triple,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
+
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
   // elements in the `joinColumn` (The col0Id is fixed and specified by the
@@ -604,7 +618,15 @@ class CompressedRelationReader {
   // is not fixed by the `metadataAndBlocks`, so the middle column (col1) in
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
-  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
+  // Additionally, return the number of blocks in the input that (according to
+  // their metadata) might contain IDs `<=` any value in the `joinColumn`. Note
+  // that this is an offset into `metadataAndBlocks` and not to be
+  // confused with the globally assigned `blockIndex_`.
+  struct GetBlocksForJoinResult {
+    std::vector<CompressedBlockMetadata> matchingBlocks_;
+    size_t numHandledBlocks{0};
+  };
+  static GetBlocksForJoinResult getBlocksForJoin(
       ql::span<const Id> joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 

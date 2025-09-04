@@ -666,10 +666,13 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   // Blank Nodes.
   EXPECT_EQ(blankNodeMap.size(), 0);
 
-  Id a =
-      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
-  Id b =
-      bTTC({{"type", "bnode"}, {"value", "B"}}).toValueIdIfNotString().value();
+  const EncodedIriManager encodedIriManager;
+  Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
+             .toValueIdIfNotString(&encodedIriManager)
+             .value();
+  Id b = bTTC({{"type", "bnode"}, {"value", "B"}})
+             .toValueIdIfNotString(&encodedIriManager)
+             .value();
   EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(a, b);
@@ -677,8 +680,9 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(blankNodeMap.size(), 2);
 
   // This BlankNode exists already, known Id will be used.
-  Id a2 =
-      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  Id a2 = bTTC({{"type", "bnode"}, {"value", "A"}})
+              .toValueIdIfNotString(&encodedIriManager)
+              .value();
   EXPECT_EQ(a, a2);
 
   // Invalid type -> throw.
@@ -741,6 +745,39 @@ TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
   EXPECT_NO_THROW(
       Service::precomputeSiblingResult(sibling, service, true, false));
   EXPECT_FALSE(service->siblingInfo_.has_value());
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit) {
+  std::array limitsAndOffsets{
+      LimitOffsetClause{1},
+      LimitOffsetClause{std::nullopt, 1},
+      LimitOffsetClause{1, 1},
+  };
+  for (const LimitOffsetClause& limitOffset : limitsAndOffsets) {
+    auto service = std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            true},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json"));
+
+    service->applyLimitOffset(limitOffset);
+
+    auto sibling =
+        std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
+
+    EXPECT_NO_THROW(
+        Service::precomputeSiblingResult(sibling, service, true, false));
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+  }
 }
 
 // ____________________________________________________________________________

@@ -43,7 +43,7 @@ CPP_class_template(typename View, typename F)(requires(
   // The input view, the function, and the current iterator into the `view_`.
   // The iterator is `nullopt` before the first call to `get`.
   View view_;
-  F transfomation_;
+  ::ranges::semiregular_box_t<F> transfomation_;
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:

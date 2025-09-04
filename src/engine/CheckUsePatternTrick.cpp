@@ -5,9 +5,9 @@
 #include "./CheckUsePatternTrick.h"
 
 #include <ranges>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
 
 namespace checkUsePatternTrick {

@@ -123,7 +123,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
-        " in ppatial search; supported arguments are: `<left>`, `<right>`, "
+        " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
         "`<joinType>`, `<payload>`, and `<algorithm>`"));
   }
@@ -147,6 +147,26 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     throw SpatialSearchException(
         "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
         "at least one of them is required for the selected algorithm");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` does not support the option "
+        "`<numNearestNeighbors>`");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
+      joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` supports the "
+        "`<maxDistance>` option only if `<joinType>` is set to "
+        "`<within-dist>`.");
+  }
+
+  if (joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    throw SpatialSearchException(
+        "The selected algorithm does not support the `<joinType>` option. Only "
+        "the `<libspatialjoin>` algorithm is suitable for this option.");
   }
 
   if (!right_.has_value()) {
