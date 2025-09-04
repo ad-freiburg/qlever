@@ -252,7 +252,7 @@ class TransitivePathImpl : public TransitivePathBase {
     TripleComponent target_;
     bool yieldOnce_;
     // runtime state
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
+    ad_utility::Timer timer_{ad_utility::Timer::Stopped};
     LocalVocab targetHelper_;
     LocalVocab mergedVocab_;
     std::optional<Id> targetId_;
@@ -299,7 +299,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                                      PayloadTable& payload) {
       using namespace ad_utility;
       const auto& [startNode, graphId] = idPair;
-      timer.cont();
+      timer_.cont();
       // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
       // where both `?g` variables are not the same.
       if (startsWithGraphVariable_ && startNode != graphId) {
@@ -314,7 +314,7 @@ class TransitivePathImpl : public TransitivePathBase {
       Set connectedNodes =
           parent_->findConnectedNodes(edges_, startNode, targetId_);
       if (!connectedNodes.empty()) {
-        parent_->runtimeInfo().addDetail("Hull time", timer.msecs());
+        parent_->runtimeInfo().addDetail("Hull time", timer_.msecs());
         NodeWithTargets result{startNode,
                                graphId,
                                std::move(connectedNodes),
@@ -326,10 +326,10 @@ class TransitivePathImpl : public TransitivePathBase {
         if (yieldOnce_) {
           mergedVocab_ = LocalVocab{};
         }
-        timer.stop();
+        timer_.stop();
         return LoopControl<NodeWithTargets>::yieldValue(std::move(result));
       }
-      timer.stop();
+      timer_.stop();
       return LoopControl<NodeWithTargets>::makeContinue();
     }
 
