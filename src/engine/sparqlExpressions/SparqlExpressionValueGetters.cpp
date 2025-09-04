@@ -406,6 +406,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case TextRecordIndex:
     case WordVocabIndex:
     case BlankNodeIndex:
+    case EncodedVal:
       return std::nullopt;
   }
 
