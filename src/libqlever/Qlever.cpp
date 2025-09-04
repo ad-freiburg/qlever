@@ -1,6 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "libqlever/Qlever.h"
 
@@ -15,7 +17,7 @@ namespace qlever {
 Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit.value())}},
+              config.memoryLimit_.value())}},
       index_{allocator_} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
@@ -27,14 +29,13 @@ Qlever::Qlever(const EngineConfig& config)
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
-  index_.usePatterns() = !config.noPatterns;
-  enablePatternTrick_ = !config.noPatterns;
-  index_.loadAllPermutations() = !config.onlyPsoAndPos;
+  index_.usePatterns() = !config.noPatterns_;
+  enablePatternTrick_ = !config.noPatterns_;
+  index_.loadAllPermutations() = !config.onlyPsoAndPos_;
 
   // Initialize the index.
-  index_.createFromOnDiskIndex(config.baseName, config.persistUpdates);
-  ;
-  if (config.text) {
+  index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+  if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
   }
 
@@ -47,60 +48,50 @@ Qlever::Qlever(const EngineConfig& config)
 void Qlever::buildIndex(IndexBuilderConfig config) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
-  if (config.memoryLimit.has_value()) {
-    index.memoryLimitIndexBuilding() = config.memoryLimit.value();
+  if (config.memoryLimit_.has_value()) {
+    index.memoryLimitIndexBuilding() = config.memoryLimit_.value();
   }
-  if (config.parserBufferSize.has_value()) {
-    index.parserBufferSize() = config.parserBufferSize.value();
+  if (config.parserBufferSize_.has_value()) {
+    index.parserBufferSize() = config.parserBufferSize_.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
-  if (config.textIndexName.empty() && !config.wordsfile.empty()) {
-    config.textIndexName =
-        ad_utility::getLastPartOfString(config.wordsfile, '/');
+  if (config.textIndexName_.empty() && !config.wordsfile_.empty()) {
+    config.textIndexName_ =
+        ad_utility::getLastPartOfString(config.wordsfile_, '/');
   }
   try {
     index.setKbName(config.kbIndexName);
-    index.setTextName(config.textIndexName);
-    index.usePatterns() = !config.noPatterns;
-    index.setOnDiskBase(config.baseName);
-    index.setKeepTempFiles(config.keepTemporaryFiles);
-    index.setSettingsFile(config.settingsFile);
-    index.loadAllPermutations() = !config.onlyPsoAndPos;
-    index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType);
+    index.setTextName(config.textIndexName_);
+    index.usePatterns() = !config.noPatterns_;
+    index.setOnDiskBase(config.baseName_);
+    index.setKeepTempFiles(config.keepTemporaryFiles_);
+    index.setSettingsFile(config.settingsFile_);
+    index.loadAllPermutations() = !config.onlyPsoAndPos_;
+    index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+    index.getImpl().setPrefixesForEncodedValues(
+        config.prefixesForIdEncodedIris_);
 
-    if (!config.onlyAddTextIndex) {
-      AD_CONTRACT_CHECK(!config.inputFiles.empty());
-      index.createFromFiles(config.inputFiles);
+    if (!config.onlyAddTextIndex_) {
+      AD_CONTRACT_CHECK(!config.inputFiles_.empty());
+      index.createFromFiles(config.inputFiles_);
     }
 
-    const auto& wordsfile = config.wordsfile;
-    const auto& docsfile = config.docsfile;
-    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
-
-    if (!(wordsAndDocsFileSpecified ||
-          (wordsfile.empty() && docsfile.empty()))) {
-      throw std::runtime_error(absl::StrCat(
-          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
-          ". Both or none of docsfile and wordsfile have to be given to build "
-          "text index. If none are given the option to add words from literals "
-          "has to be true. For details see --help."));
-    }
     auto textIndexBuilder = TextIndexBuilder(
         ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
 
-    if (wordsAndDocsFileSpecified || config.addWordsFromLiterals) {
+    if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
       textIndexBuilder.buildTextIndexFile(
-          wordsAndDocsFileSpecified
-              ? std::optional{std::pair{wordsfile, docsfile}}
+          config.wordsAndDocsFileSpecified()
+              ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
               : std::nullopt,
-          config.addWordsFromLiterals, config.textScoringMetric,
-          {config.bScoringParam, config.kScoringParam});
+          config.addWordsFromLiterals_, config.textScoringMetric_,
+          {config.bScoringParam_, config.kScoringParam_});
     }
 
-    if (!docsfile.empty()) {
-      textIndexBuilder.buildDocsDB(docsfile);
+    if (!config.docsfile_.empty()) {
+      textIndexBuilder.buildDocsDB(config.docsfile_);
     }
   } catch (std::exception& e) {
     // TODO<joka921> To make this visible, we have to reset the global logging
@@ -113,13 +104,14 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
-  return this->query(parseAndPlanQuery(std::move(query)), mediaType);
+std::string Qlever::query(std::string queryString,
+                          ad_utility::MediaType mediaType) const {
+  return query(parseAndPlanQuery(std::move(queryString)), mediaType);
 }
 
 // ___________________________________________________________________________
 std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
-                          ad_utility::MediaType mediaType) {
+                          ad_utility::MediaType mediaType) const {
   const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // TODO<joka921> For cancellation we have to call
@@ -135,10 +127,12 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
 }
 
 // ___________________________________________________________________________
-Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
+Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_);
-  auto parsedQuery = SparqlParser::parseQuery(std::move(query));
+  // TODO<joka921> support Dataset clauses.
+  auto parsedQuery = SparqlParser::parseQuery(
+      &index_.getImpl().encodedIriManager(), std::move(query), {});
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qecPtr.get(), handle};
   qp.setEnablePatternTrick(enablePatternTrick_);
@@ -150,14 +144,22 @@ Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
 }
 
 // ___________________________________________________________________________
-void IndexBuilderConfig::validate() {
-  if (kScoringParam < 0) {
+void IndexBuilderConfig::validate() const {
+  if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }
-  if (bScoringParam < 0 || bScoringParam > 1) {
+  if (bScoringParam_ < 0 || bScoringParam_ > 1) {
     throw std::invalid_argument(
         "The value of bm25-b must be between and "
         "including 0 and 1");
+  }
+  if (!(wordsAndDocsFileSpecified() ||
+        (wordsfile_.empty() && docsfile_.empty()))) {
+    throw std::runtime_error(absl::StrCat(
+        "Only specified ", wordsfile_.empty() ? "docsfile" : "wordsfile",
+        ". Both or none of docsfile and wordsfile have to be given to build "
+        "text index. If none are given the option to add words from literals "
+        "has to be true. For details see --help."));
   }
 }
 

@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
-  add("index-basename,i", po::value(&config.baseName)->required(),
+  add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
       "The file with the knowledge graph data to be parsed from. If omitted, "
@@ -198,24 +198,24 @@ int main(int argc, char** argv) {
       "`kg-input-file`).");
 
   // Options for the text index.
-  add("text-docs-input-file,d", po::value(&config.docsfile),
+  add("text-docs-input-file,d", po::value(&config.docsfile_),
       "The full text of the text records from which to build the text index.");
-  add("text-words-input-file,w", po::value(&config.wordsfile),
+  add("text-words-input-file,w", po::value(&config.wordsfile_),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W",
-      po::bool_switch(&config.addWordsFromLiterals),
+      po::bool_switch(&config.addWordsFromLiterals_),
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
-  add("text-index-name,T", po::value(&config.textIndexName),
+  add("text-index-name,T", po::value(&config.textIndexName_),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
-  add("add-text-index,A", po::bool_switch(&config.onlyAddTextIndex),
+  add("add-text-index,A", po::bool_switch(&config.onlyAddTextIndex_),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
-  add("bm25-b", po::value(&config.bScoringParam),
+  add("bm25-b", po::value(&config.bScoringParam_),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
-  add("bm25-k", po::value(&config.kScoringParam),
+  add("bm25-k", po::value(&config.kScoringParam_),
       "Sets the k param in the BM25 scoring metric for the fulltext index."
       "This has to be greater than or equal to 0.");
   add("set-scoring-metric,S", po::value(&scoringMetric),
@@ -225,21 +225,22 @@ int main(int argc, char** argv) {
       R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
-  add("settings-file,s", po::value(&config.settingsFile),
+  add("settings-file,s", po::value(&config.settingsFile_),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
-  add("no-patterns", po::bool_switch(&config.noPatterns),
+  add("no-patterns", po::bool_switch(&config.noPatterns_),
       "Disable the precomputation for `ql:has-predicate`.");
-  add("only-pso-and-pos-permutations,o", po::bool_switch(&config.onlyPsoAndPos),
+  add("only-pso-and-pos-permutations,o",
+      po::bool_switch(&config.onlyPsoAndPos_),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfSupportedValues());
-  add("vocabulary-type", po::value(&config.vocabType), msg.c_str());
+  add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
-      po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
+      po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
       "IRIs that start with one of these prefixes, followed by a sequence of "
       "digits, do not require a vocabulary entry, but are directly encoded "
@@ -248,13 +249,13 @@ int main(int argc, char** argv) {
       "and non-encoded IRIs is not");
 
   // Options for the index building process.
-  add("stxxl-memory,m", po::value(&config.memoryLimit),
+  add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
-  add("parser-buffer-size,b", po::value(&config.parserBufferSize),
+  add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
-  add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles),
+  add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
 
   // Process command line arguments.
@@ -278,8 +279,8 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    config.inputFiles = getFileSpecifications(filetype, inputFile,
-                                              defaultGraphs, parseParallel);
+    config.inputFiles_ = getFileSpecifications(filetype, inputFile,
+                                               defaultGraphs, parseParallel);
     config.validate();
     qlever::Qlever::buildIndex(config);
 

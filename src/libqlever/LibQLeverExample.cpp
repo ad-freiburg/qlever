@@ -21,8 +21,8 @@ std::vector<std::string> inputs{""};
 int main(int argc, char** argv) {
   qlever::IndexBuilderConfig config;
   AD_CONTRACT_CHECK(argc >= 2);
-  config.baseName = "exampleIndex";
-  config.inputFiles.emplace_back(argv[1], qlever::Filetype::Turtle);
+  config.baseName_ = "exampleIndex";
+  config.inputFiles_.emplace_back(argv[1], qlever::Filetype::Turtle);
   qlever::Qlever::buildIndex(config);
   qlever::EngineConfig engineConfig{config};
   qlever::Qlever qlever{engineConfig};

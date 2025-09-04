@@ -6,7 +6,6 @@ add_library(engine
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
-        Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
@@ -21,4 +20,4 @@ add_library(engine
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
 
 add_library(server Server.cpp)
-qlever_target_link_libraries(server)
+qlever_target_link_libraries(server engine util index parser http SortPerformanceEstimator)
