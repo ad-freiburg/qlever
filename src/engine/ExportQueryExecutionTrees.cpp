@@ -342,7 +342,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         double d = id.getDouble();
         if (!std::isfinite(d)) {
           // NOTE: We used `std::stringstream` before which is bad for two
-          // reasons. First, it would ouput "nan" or "inf" in lowercase, which
+          // reasons. First, it would output "nan" or "inf" in lowercase, which
           // is not legal RDF syntax. Second, creating a `std::stringstream`
           // object is unnecessarily expensive.
           std::string literal = [d]() {
