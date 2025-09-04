@@ -363,15 +363,27 @@ TEST(StringUtils, strLangTag) {
   ASSERT_TRUE(strIsLangTag("en"));
 }
 
+// Constants for the tests of `constexprStrCat` below. They have to be at
+// namespace scope, because of the compilation on G++-8.
+namespace {
+constexpr std::string_view empty = "";
+constexpr std::string_view single = "single";
+constexpr std::string_view hello = "hello";
+constexpr std::string_view space = " ";
+constexpr std::string_view world = "World!";
+constexpr std::string_view h = "h";
+constexpr std::string_view i = "i";
+}  // namespace
 // _____________________________________________________________________________
 TEST(StringUtils, constexprStrCat) {
   using namespace std::string_view_literals;
   ASSERT_EQ((constexprStrCat<>()), ""sv);
-  ASSERT_EQ((constexprStrCat<"">()), ""sv);
-  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
-  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+  ASSERT_EQ((constexprStrCat<empty>()), ""sv);
+  ASSERT_EQ((constexprStrCat<single>()), "single"sv);
+  ASSERT_EQ((constexprStrCat<empty, single, empty>()), "single"sv);
+
+  ASSERT_EQ((constexprStrCat<hello, space, world>()), "hello World!"sv);
+  static_assert(constexprStrCat<hello, space, world>() == "hello World!"sv);
 }
 
 // _____________________________________________________________________________
@@ -379,12 +391,9 @@ TEST(StringUtils, constexprStrCatImpl) {
   // The coverage tools don't track the compile time usages of these internal
   // helper functions, so we test them manually.
   using namespace ad_utility::detail::constexpr_str_cat_impl;
-  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((constexprStrCatBufferImpl<h, i>()), (std::array{'h', 'i', '\0'}));
 
-  using C = ConstexprString;
-  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((catImpl<2>(std::array{&h, &i})), (std::array{'h', 'i', '\0'}));
 }
 
 // _____________________________________________________________________________

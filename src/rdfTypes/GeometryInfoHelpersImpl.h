@@ -139,21 +139,32 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
 // prefix.
-template <detail::constexpr_str_cat_impl::ConstexprString suffix>
-inline constexpr std::string_view addSfPrefix() {
+template <const std::string_view& suffix>
+constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();
 }
 
-// Concrete IRIs, built at compile time, for the supported geometry types.
-static constexpr std::array<std::optional<std::string_view>, 8> SF_WKT_TYPE_IRI{
-    std::nullopt,  // Invalid geometry
-    addSfPrefix<"Point">(),
-    addSfPrefix<"LineString">(),
-    addSfPrefix<"Polygon">(),
-    addSfPrefix<"MultiPoint">(),
-    addSfPrefix<"MultiLineString">(),
-    addSfPrefix<"MultiPolygon">(),
-    addSfPrefix<"GeometryCollection">()};
+namespace detail::geoStrings {
+constexpr inline std::string_view point = "Point";
+constexpr inline std::string_view linestring = "LineString";
+constexpr inline std::string_view polygon = "Polygon";
+constexpr inline std::string_view multipoint = "MultiPoint";
+constexpr inline std::string_view multiLineString = "MultiLineString";
+constexpr inline std::string_view multiPolygon = "MultiPolygon";
+constexpr inline std::string_view geometryCollection = "GeometryCollection";
+}  // namespace detail::geoStrings
+inline constexpr auto SF_WKT_TYPE_IRI = []() {
+  using namespace detail::geoStrings;
+  return std::array<std::optional<std::string_view>, 8>{
+      std::nullopt,  // Invalid geometry
+      addSfPrefix<point>(),
+      addSfPrefix<linestring>(),
+      addSfPrefix<polygon>(),
+      addSfPrefix<multipoint>(),
+      addSfPrefix<multiLineString>(),
+      addSfPrefix<multiPolygon>(),
+      addSfPrefix<geometryCollection>()};
+}();
 
 // Lookup the IRI for a given WKT type in the array of prepared IRIs.
 inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {

@@ -186,6 +186,10 @@ TEST(GeometryInfoTest, GeometryTypeAsIri) {
   ASSERT_FALSE(GeometryType{8}.asIri().has_value());
 }
 
+namespace {
+constexpr std::string_view example = "Example";
+}
+
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
   using namespace ad_utility::detail;
@@ -216,7 +220,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
       boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
-  EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
+  EXPECT_EQ(addSfPrefix<example>(), "http://www.opengis.net/ont/sf#Example");
   EXPECT_FALSE(wktTypeToIri(0).has_value());
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());

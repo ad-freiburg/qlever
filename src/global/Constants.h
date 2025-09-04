@@ -35,48 +35,79 @@ constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
-constexpr inline char QLEVER_INTERNAL_PREFIX_URL[] =
+constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";
 
 // Make a QLever-internal IRI from `QL_INTERNAL_PREFIX_URL` by appending the
 // concatenation of the given `suffixes` and enclosing the result in angle
 // brackets (const and non-const version).
-template <
-    ad_utility::detail::constexpr_str_cat_impl::ConstexprString... suffixes>
+namespace string_constants::detail {
+constexpr inline std::string_view openAngle = "<";
+constexpr inline std::string_view closeAngle = ">";
+}  // namespace string_constants::detail
+template <const std::string_view&... suffixes>
 constexpr std::string_view makeQleverInternalIriConst() {
-  return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
-                                     suffixes..., ">">();
+  using namespace string_constants::detail;
+  return ad_utility::constexprStrCat<openAngle, QLEVER_INTERNAL_PREFIX_URL,
+                                     suffixes..., closeAngle>();
 }
 template <typename... T>
 inline std::string makeQleverInternalIri(const T&... suffixes) {
-  return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
-                      suffixes..., ">");
+  return absl::StrCat("<", QLEVER_INTERNAL_PREFIX_URL, suffixes..., ">");
 }
 
+namespace string_constants::detail {
+constexpr inline std::string_view empty = "";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
-    makeQleverInternalIriConst<"">();
+    makeQleverInternalIriConst<string_constants::detail::empty>();
 constexpr inline std::string_view
     QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET =
-        ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL>();
+        ad_utility::constexprStrCat<string_constants::detail::openAngle,
+                                    QLEVER_INTERNAL_PREFIX_URL>();
+namespace string_constants::detail {
+constexpr inline std::string_view contains_entity = "contains-entity";
+}  // namespace string_constants::detail
 constexpr inline std::string_view CONTAINS_ENTITY_PREDICATE =
-    makeQleverInternalIriConst<"contains-entity">();
+    makeQleverInternalIriConst<string_constants::detail::contains_entity>();
+namespace string_constants::detail {
+constexpr inline std::string_view contains_word = "contains-word";
+}  // namespace string_constants::detail
 constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
-    makeQleverInternalIriConst<"contains-word">();
+    makeQleverInternalIriConst<string_constants::detail::contains_word>();
 
+namespace string_constants::detail {
+constexpr inline std::string_view text = "text";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_TEXT_MATCH_PREDICATE =
-    makeQleverInternalIriConst<"text">();
+    makeQleverInternalIriConst<string_constants::detail::text>();
+namespace string_constants::detail {
+constexpr inline std::string_view has_predicate = "has-predicate";
+}  // namespace string_constants::detail
 constexpr inline std::string_view HAS_PREDICATE_PREDICATE =
-    makeQleverInternalIriConst<"has-predicate">();
+    makeQleverInternalIriConst<string_constants::detail::has_predicate>();
+namespace string_constants::detail {
+constexpr inline std::string_view has_pattern = "has-pattern";
+}  // namespace string_constants::detail
 constexpr inline std::string_view HAS_PATTERN_PREDICATE =
-    makeQleverInternalIriConst<"has-pattern">();
+    makeQleverInternalIriConst<string_constants::detail::has_pattern>();
+namespace string_constants::detail {
+constexpr inline std::string_view default_graph = "default-graph";
+}  // namespace string_constants::detail
 constexpr inline std::string_view DEFAULT_GRAPH_IRI =
-    makeQleverInternalIriConst<"default-graph">();
+    makeQleverInternalIriConst<string_constants::detail::default_graph>();
+namespace string_constants::detail {
+constexpr inline std::string_view internal_graph = "internal-graph";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
-    makeQleverInternalIriConst<"internal-graph">();
+    makeQleverInternalIriConst<string_constants::detail::internal_graph>();
+namespace string_constants::detail {
+constexpr inline std::string_view blank_node_prefix = "blank-node/";
+}  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
-    ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
-                                "blank-node/">();
-
+    ad_utility::constexprStrCat<string_constants::detail::openAngle,
+                                QLEVER_INTERNAL_PREFIX_URL,
+                                string_constants::detail::blank_node_prefix>();
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
@@ -100,8 +131,11 @@ constexpr inline std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
 
+namespace constants::details::strings {
+constexpr inline std::string_view langtag{"langtag"};
+}
 constexpr inline std::string_view LANGUAGE_PREDICATE =
-    makeQleverInternalIriConst<"langtag">();
+    makeQleverInternalIriConst<constants::details::strings::langtag>();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -153,19 +187,36 @@ constexpr inline char RDF_PREFIX[] =
 constexpr inline char RDF_LANGTAG_STRING[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-constexpr inline char GEO_WKT_LITERAL[] =
+constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+namespace string_constants::detail {
+constexpr inline std::string_view geo_literal_prefix = "\"^^<";
+}  // namespace string_constants::detail
 static constexpr std::string_view GEO_LITERAL_SUFFIX =
-    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
+    ad_utility::constexprStrCat<string_constants::detail::geo_literal_prefix,
+                                GEO_WKT_LITERAL,
+                                string_constants::detail::closeAngle>();
 
 enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
+namespace string_constants::detail {
+constexpr inline std::string_view unit_meter = "M";
+}  // namespace string_constants::detail
 constexpr inline std::string_view UNIT_METER_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX, "M">();
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_meter>();
+namespace string_constants::detail {
+constexpr inline std::string_view unit_kilometer = "KiloM";
+}  // namespace string_constants::detail
 constexpr inline std::string_view UNIT_KILOMETER_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_kilometer>();
+namespace string_constants::detail {
+constexpr inline std::string_view unit_mile = "MI";
+}  // namespace string_constants::detail
 constexpr inline std::string_view UNIT_MILE_IRI =
-    ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
+    ad_utility::constexprStrCat<UNIT_PREFIX,
+                                string_constants::detail::unit_mile>();
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 

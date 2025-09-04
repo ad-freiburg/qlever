@@ -105,5 +105,5 @@ std::string GeoPoint::toStringRepresentation() const {
 
 // _____________________________________________________________________________
 std::pair<std::string, const char*> GeoPoint::toStringAndType() const {
-  return std::pair(toStringRepresentation(), GEO_WKT_LITERAL);
+  return std::pair(toStringRepresentation(), GEO_WKT_LITERAL.data());
 };
