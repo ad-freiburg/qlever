@@ -11,32 +11,11 @@
 #include "global/IndexTypes.h"
 
 namespace textIndexScanTestHelpers {
-// NOTE: this function exploits a "lucky accident" that allows us to
-// obtain the textRecord using indexToString.
-// TODO: Implement a more elegant/stable version
-// Idea for a more stable version is to add the literals to the docsfile
-// which is later parsed and written to the docsDB. This would lead to a
-// possible retrieval of the literals text with the getTextExcerpt function.
-// The only problem is the increased size of the docsDB and the double saving
-// of the literals.
 inline std::string getTextRecordFromResultTable(
     const QueryExecutionContext* qec, const Result& result,
     const size_t& rowIndex) {
-  size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
-  uint64_t textRecordIdFromTable =
-      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
-  if (nofNonLiterals <= textRecordIdFromTable) {
-    // Return when from Literals
-    // Note: the return type of `indexToString` might be `string_view` if the
-    // vocabulary is stored uncompressed in memory, hence the explicit cast to
-    // `std::string`.
-    return std::string{qec->getIndex().indexToString(
-        VocabIndex::make(textRecordIdFromTable - nofNonLiterals))};
-  } else {
-    // Return when from DocsDB
-    return std::string{qec->getIndex().getTextExcerpt(
-        result.idTable().getColumn(0)[rowIndex].getTextRecordIndex())};
-  }
+  return std::string{qec->getIndex().getTextExcerpt(
+      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex())};
 }
 
 inline const TextRecordIndex getTextRecordIdFromResultTable(
