@@ -633,10 +633,10 @@ struct IndexScan::SharedGeneratorState {
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
-  auto range = ad_utility::InputRangeFromGetCallable{
-      [state = std::move(innerState),
-       buffer = SharedGeneratorState::PrefetchStorage{}]() mutable
-      -> std::optional<Result::IdTableVocabPair> {
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+
+  auto range = ad_utility::InputRangeFromLoopControlGet{
+      [state = std::move(innerState)]() mutable -> LoopControl {
         // Handle UNDEF case: pass through remaining input
         if (state->hasUndef()) {
           if (!state->iterator_.has_value()) {
@@ -644,39 +644,34 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
           }
           auto& it = state->iterator_.value();
           if (it == state->generator_.end()) {
-            return std::nullopt;
+            return LoopControl::makeBreak();
           }
           auto result = std::move(*it);
           ++it;
-          return result;
+          return LoopControl::yieldValue(std::move(result));
         }
 
         auto& prefetched = state->prefetchedValues_;
-        // Helper to fill buffer from prefetched values
-        auto fillBuffer = [&]() -> bool {
-          while (buffer.empty()) {
-            if (prefetched.empty()) {
-              if (state->doneFetching_) {
-                return false;
-              }
-              state->fetch();
-              AD_CORRECTNESS_CHECK(!prefetched.empty() || state->doneFetching_);
-              if (prefetched.empty()) {
-                return false;
-              }
+        while (true) {
+          if (prefetched.empty()) {
+            if (state->doneFetching_) {
+              return LoopControl::makeBreak();
             }
-            buffer = std::move(prefetched);
-            prefetched.clear();
+            state->fetch();
+            AD_CORRECTNESS_CHECK(!prefetched.empty() || state->doneFetching_);
+            if (prefetched.empty()) {
+              return LoopControl::makeBreak();
+            }
           }
-          return true;
-        };
 
-        if (!fillBuffer()) {
-          return std::nullopt;
+          // Make a defensive copy of the values to avoid modification during
+          // iteration when yielding.
+          auto copy = std::move(prefetched);
+          prefetched.clear();
+
+          // Yield all values from the copy, then break to fetch more
+          return LoopControl::yieldAll(std::move(copy));
         }
-        auto result = std::move(buffer.front());
-        buffer.erase(buffer.begin());
-        return result;
       }};
   return Result::LazyResult{std::move(range)};
 }
@@ -688,13 +683,13 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     return chunkedIndexScan();
   }
 
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
   auto applySubset = makeApplyColumnSubset();
-  auto range = ad_utility::InputRangeFromGetCallable{
+  auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState), metadata = LazyScanMetadata{},
        curScan = std::optional<Permutation::IdTableGenerator>{},
        it = std::optional<Permutation::IdTableGenerator::iterator>{},
-       applySubset,
-       active = false]() mutable -> std::optional<Result::IdTableVocabPair> {
+       applySubset, active = false]() mutable -> LoopControl {
         auto& pendingBlocks = state->pendingBlocks_;
 
         // Helper to ensure we have an active scan
@@ -723,24 +718,24 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           return true;
         };
 
-        while (true) {
-          if (!ensureActiveScan()) {
-            return std::nullopt;
-          }
-          // If current scan is exhausted, prepare for next one
-          if (*it == curScan->end()) {
-            metadata.aggregate(curScan->details());
-            curScan.reset();
-            it.reset();
-            active = false;
-            continue;
-          }
-
-          IdTable t = std::move(**it);
-          ++(*it);
-          t = applySubset(std::move(t));
-          return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
+        if (!ensureActiveScan()) {
+          return LoopControl::makeBreak();
         }
+
+        // If current scan is exhausted, prepare for next one
+        if (*it == curScan->end()) {
+          metadata.aggregate(curScan->details());
+          curScan.reset();
+          it.reset();
+          active = false;
+          return LoopControl::makeContinue();
+        }
+
+        IdTable t = std::move(**it);
+        ++(*it);
+        t = applySubset(std::move(t));
+        return LoopControl::yieldValue(
+            Result::IdTableVocabPair{std::move(t), LocalVocab{}});
       }};
   return Result::LazyResult{std::move(range)};
 }
@@ -754,10 +749,9 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
   if (!metaBlocks.has_value()) {
     // Helper to create empty range
     auto createEmptyRange = []() {
-      return ad_utility::InputRangeFromGetCallable{
-          []() -> std::optional<Result::IdTableVocabPair> {
-            return std::nullopt;
-          }};
+      using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+      return ad_utility::InputRangeFromLoopControlGet{
+          []() -> LoopControl { return LoopControl::makeBreak(); }};
     };
     return {Result::LazyResult{createEmptyRange()},
             Result::LazyResult{createEmptyRange()}};
