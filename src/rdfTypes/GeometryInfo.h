@@ -61,18 +61,25 @@ struct GeometryType {
   std::optional<std::string_view> asIri() const;
 };
 
+// Represents the number of child geometries inside a collection geometry type.
+struct NumGeometries {
+  uint32_t numGeometries_;
+
+  constexpr bool operator==(const NumGeometries& other) const = default;
+};
+
 // Forward declaration for concept
 class GeometryInfo;
 
 // Concept for the `RequestedInfo` template parameter: any of these types is
 // allowed to be requested.
 template <typename T>
-CPP_concept RequestedInfoT =
-    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
+CPP_concept RequestedInfoT = SameAsAny<T, GeometryInfo, Centroid, BoundingBox,
+                                       GeometryType, NumGeometries>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 2;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -86,6 +93,7 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  uint32_t numGeometries_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
@@ -99,7 +107,7 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid);
+               Centroid centroid, NumGeometries numGeometries);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
@@ -127,6 +135,13 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
+
+  // Get the number of child geometries contained in this geometry.
+  NumGeometries getNumGeometries() const;
+
+  // Parse an arbitrary WKT literal and compute only the number of child
+  // geometries.
+  static std::optional<NumGeometries> getNumGeometries(std::string_view wkt);
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>

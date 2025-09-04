@@ -166,11 +166,11 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"LINESTRING(2 2, 4 "
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}});
+      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, {1}});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"POLYGON(2 4, 4 4, 4 "
       "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}});
+      ad_utility::GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}, {1}});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                                 std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
@@ -185,7 +185,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   checkGeoInfoFromValueId(
       ValueId::makeFromGeoPoint({3, 2}),
-      ad_utility::GeometryInfo{1, {{3, 2}, {3, 2}}, {3, 2}});
+      ad_utility::GeometryInfo{1, {{3, 2}, {3, 2}}, {3, 2}, {1}});
   checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);
