@@ -247,50 +247,12 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
-// Helper function to apply column subset to a generator while preserving
-// details. Returns the modified generator or the original if no subset is
-// needed.
-Permutation::IdTableGenerator IndexScan::applyColumnSubsetToGenerator(
-    Permutation::IdTableGenerator generator,
-    std::optional<std::vector<ColumnIndex>> columnSubset) {
-  if (!columnSubset.has_value()) {
-    return generator;
-  }
-
-  // Extract details from the original generator
-  auto originalDetails = generator.details();
-
-  // Create a transformer that applies the column subset
-  auto transformer = [permutation =
-                          std::move(columnSubset.value())](auto& table) {
-    table.setColumnSubset(permutation);
-    return std::move(table);
-  };
-
-  // Apply transformation using CachingTransformInputRange and preserve details
-  auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(generator), std::move(transformer));
-
-  // Create InputRangeTypeErasedWithDetails to preserve the details
-  auto rangeWithDetails =
-      ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
-          ad_utility::InputRangeTypeErased<IdTable>(
-              std::move(transformedRange)),
-          std::move(originalDetails));
-
-  // Convert back to generator while preserving details
-  return cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
-}
-
-// _____________________________________________________________________________
 // Helper function to convert a Permutation::IdTableGenerator to a LazyResult
-// with column subset applied, without using coroutines in this translation
-// unit.
+// without using coroutines in this translation unit.
 Result::LazyResult IndexScan::createLazyResultFromGenerator(
     Permutation::IdTableGenerator generator) const {
-  auto applySubset = makeApplyColumnSubset();
   auto range = ad_utility::InputRangeFromGetCallable{
-      [gen = std::move(generator), applySubset,
+      [gen = std::move(generator),
        it = std::optional<Permutation::IdTableGenerator::iterator>{}]() mutable
       -> std::optional<Result::IdTableVocabPair> {
         // Initialize or advance iterator.
@@ -303,7 +265,6 @@ Result::LazyResult IndexScan::createLazyResultFromGenerator(
           return std::nullopt;
         }
         IdTable t = std::move(**it);
-        t = applySubset(std::move(t));
         return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
       }};
   return Result::LazyResult{std::move(range)};
@@ -316,14 +277,18 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = getScanPermutation().scan(
-      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
-      locatedTriplesSnapshot(), getLimitOffset());
+  LOG(DEBUG) << "IndexScan result computation...\n";
+  // Use the lazy scan and materialize it to ensure consistent column subset
+  // handling
+  auto lazyResult = getLazyScan();
+  IdTable result(getResultWidth(), getExecutionContext()->getAllocator());
+  for (auto& table : lazyResult) {
+    result.insertAtEnd(table);
+  }
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeApplyColumnSubset()(std::move(idTable));
-  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
-  return idTable;
+  AD_CORRECTNESS_CHECK(result.numColumns() == getResultWidth());
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -442,11 +407,41 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  // Directly return the underlying lazy scan; column-subset application is
-  // performed at the consumption sites to keep this TU coroutine-free.
-  return getScanPermutation().lazyScan(
+
+  // Get the base lazy scan from the permutation
+  auto baseScan = getScanPermutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
+
+  // Check if we need to apply column subset
+  auto columnSubset = getColumnSubsetIfAny();
+  if (!columnSubset.has_value()) {
+    return baseScan;
+  }
+
+  // Extract details from the original generator
+  auto originalDetails = baseScan.details();
+
+  // Create a transformer that applies the column subset
+  auto transformer = [permutation =
+                          std::move(columnSubset.value())](auto& table) {
+    table.setColumnSubset(permutation);
+    return std::move(table);
+  };
+
+  // Apply transformation using CachingTransformInputRange and preserve details
+  auto transformedRange = ad_utility::CachingTransformInputRange(
+      std::move(baseScan), std::move(transformer));
+
+  // Create InputRangeTypeErasedWithDetails to preserve the details
+  auto rangeWithDetails =
+      ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
+          ad_utility::InputRangeTypeErased<IdTable>(
+              std::move(transformedRange)),
+          std::move(originalDetails));
+
+  // Convert back to generator while preserving details
+  return cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
 };
 
 // _____________________________________________________________________________
@@ -500,12 +495,6 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
 
-  // Apply column subsets if either scan is configured to strip columns.
-  result[0] = applyColumnSubsetToGenerator(std::move(result[0]),
-                                           s1.getColumnSubsetIfAny());
-  result[1] = applyColumnSubsetToGenerator(std::move(result[1]),
-                                           s2.getColumnSubsetIfAny());
-
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
   result[1].details().numBlocksAll_ = metaBlocks2.value().sizeBlockMetadata_;
   return result;
@@ -525,10 +514,6 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks.value());
   auto result = getLazyScan(std::move(blocks.matchingBlocks_));
-
-  // Apply column subset if this scan strips columns.
-  result =
-      applyColumnSubsetToGenerator(std::move(result), getColumnSubsetIfAny());
 
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;

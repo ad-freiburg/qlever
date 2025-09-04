@@ -189,16 +189,8 @@ class IndexScan final : public Operation {
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
-  // Helper function to apply column subset to a generator while preserving
-  // details. Returns the modified generator or the original if no subset is
-  // needed.
-  static Permutation::IdTableGenerator applyColumnSubsetToGenerator(
-      Permutation::IdTableGenerator generator,
-      std::optional<std::vector<ColumnIndex>> columnSubset);
-
   // Helper function to convert a Permutation::IdTableGenerator to a LazyResult
-  // with column subset applied, without using coroutines in this translation
-  // unit.
+  // without using coroutines in this translation unit.
   Result::LazyResult createLazyResultFromGenerator(
       Permutation::IdTableGenerator generator) const;
 
