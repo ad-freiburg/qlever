@@ -598,21 +598,22 @@ struct IndexScan::SharedGeneratorState {
       // `newBlocks` or can never match any entry that is larger than the
       // entries in `joinColumn` and thus can be ignored from now on.
       metaBlocks_.removePrefix(numBlocksCompletelyHandled);
-      // If we didn't get new blocks, check if future values might still match.
-      if (newBlocks.empty()) {
-        const auto lastSeen = lastEntryInBlocks_.value_or(Id::makeUndefined());
-        if (joinColumn[0] > lastSeen) {
-          if (metaBlocks_.blockMetadata_.empty()) {
-            // No more blocks in the index can match any future input.
-            doneFetching_ = true;
-            return;
-          }
-          // No matching block for current input, try the next input table.
-          continue;
-        }
-      } else {
+      if (!newBlocks.empty()) {
         lastEntryInBlocks_ = CompressedRelationReader::getRelevantIdFromTriple(
             newBlocks.back().lastTriple_, metaBlocks_);
+      } else if (joinColumn[0] >
+                 lastEntryInBlocks_.value_or(Id::makeUndefined())) {
+        if (metaBlocks_.blockMetadata_.empty()) {
+          // We have seen entries in the join column that are larger than the
+          // largest block in the index scan, which means that there will be no
+          // more matches.
+          doneFetching_ = true;
+          return;
+        }
+        // The current `joinColumn` has no matching block in the index, we can
+        // safely skip appending it to `prefetchedValues_`, but future values
+        // might require later blocks from the index.
+        continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
       ql::ranges::move(newBlocks, std::back_inserter(pendingBlocks_));
