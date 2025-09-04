@@ -27,9 +27,9 @@ class Sort : public Operation {
        std::vector<ColumnIndex> sortColumnIndices);
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override {
+  virtual std::vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -61,12 +61,16 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const vector<ColumnIndex>& sortColumns) const override;
+      const std::vector<ColumnIndex>& sortColumns) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -78,7 +82,7 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

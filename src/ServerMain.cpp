@@ -27,6 +27,9 @@ namespace po = boost::program_options;
 
 // Main function.
 int main(int argc, char** argv) {
+  // TODO<joka921> This is a hack, because the unit tests currently don't work
+  // with the strip-columns feature.
+  RuntimeParameters().set<"strip-columns">(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();
@@ -137,6 +140,20 @@ int main(int argc, char** argv) {
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
+  add("enable-prefilter-on-index-scans",
+      optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
+      "If set to false, the prefilter procedures for FILTER expressions are "
+      "disabled.");
+  add("spatial-join-max-num-threads",
+      optionFactory.getProgramOption<"spatial-join-max-num-threads">(),
+      "The maximum number of threads to be used for spatial join processing. "
+      "If this option is set to `0`, the number of CPU threads will be used.");
+  add("spatial-join-prefilter-max-size",
+      optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
+      "The maximum size in square coordinates of the aggregated bounding box "
+      "of the smaller join partner in a spatial join, such that prefiltering "
+      "will be employed. To disable prefiltering for non-point geometries, set "
+      "this option to 0.");
   po::variables_map optionsMap;
 
   try {

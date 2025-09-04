@@ -87,7 +87,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
       object_{triple.o_} {}
 
 // ___________________________________________________________________________
-string HasPredicateScan::getCacheKeyImpl() const {
+std::string HasPredicateScan::getCacheKeyImpl() const {
   std::ostringstream os;
   checkType(type_);
   switch (type_) {
@@ -108,7 +108,7 @@ string HasPredicateScan::getCacheKeyImpl() const {
 }
 
 // ___________________________________________________________________________
-string HasPredicateScan::getDescriptor() const {
+std::string HasPredicateScan::getDescriptor() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
@@ -141,7 +141,7 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
@@ -268,13 +268,15 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
   auto hasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_,
-                    locatedTriplesSnapshot());
+      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
+                    std::nullopt, {}, cancellationHandle_, locatedTriple);
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id = tc.toValueId(getIndex().getVocab());
+    std::optional<Id> id =
+        tc.toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
     if (!id.has_value()) {
       AD_THROW("The entity '" + tc.toRdfLiteral() +
                "' required by `ql:has-predicate` is not in the vocabulary.");
@@ -342,9 +344,11 @@ void HasPredicateScan::computeFreeO(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
           std::nullopt}
           .toScanSpecification(index);
-  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
-                        .scan(std::move(scanSpec), {}, cancellationHandle_,
-                              locatedTriplesSnapshot());
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
+  auto hasPattern =
+      perm.scan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple), {},
+                cancellationHandle_, locatedTriple);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

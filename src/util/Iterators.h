@@ -6,11 +6,12 @@
 #define QLEVER_SRC_UTIL_ITERATORS_H
 
 #include <cstdint>
-#include <iterator>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
+#include "backports/type_traits.h"
 #include "util/Enums.h"
+#include "util/Exception.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -67,7 +68,7 @@ class IteratorForAccessOperator {
                          RandomAccessContainer&>,
       index_type>;
   using value_type = std::conditional_t<!std::is_void_v<ValueType>, ValueType,
-                                        std::remove_cvref_t<AccessorResult>>;
+                                        ql::remove_cvref_t<AccessorResult>>;
   using reference =
       std::conditional_t<!std::is_void_v<Reference>, Reference, AccessorResult>;
   using pointer = value_type*;
@@ -341,7 +342,7 @@ CPP_template(typename T, typename F)(
         F, std::optional<T>>) struct InputRangeFromGetCallable
     : public InputRangeFromGet<T> {
  private:
-  F function_;
+  ::ranges::semiregular_box_t<F> function_;
 
  public:
   std::optional<T> get() override { return function_(); }
@@ -405,6 +406,8 @@ class InputRangeTypeErased {
   std::unique_ptr<InputRangeFromGet<ValueType>> impl_;
 
  public:
+  // Add value_type definition to make compatible with range-based functions
+  using value_type = ValueType;
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
@@ -412,6 +415,13 @@ class InputRangeTypeErased {
           InputRangeFromGet<ValueType>,
           Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
+
+  // Constructor for ranges that are not movable
+  CPP_template(typename Range)(
+      requires std::is_base_of_v<
+          InputRangeFromGet<ValueType>,
+          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+      : impl_{std::move(range)} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
@@ -434,6 +444,67 @@ class InputRangeTypeErased {
 template <typename Range>
 InputRangeTypeErased(Range)
     -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
+
+template <typename Range>
+InputRangeTypeErased(std::unique_ptr<Range>)
+    -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
+
+// A general type-erased input range with details. This combines an
+// InputRangeTypeErased with additional metadata/details of arbitrary type.
+template <typename ValueType, typename DetailsType>
+class InputRangeTypeErasedWithDetails {
+ private:
+  InputRangeTypeErased<ValueType> range_;
+  // Use variant to support both owned details and external details pointer
+  std::variant<DetailsType, const DetailsType*> details_;
+
+ public:
+  // Constructor that takes the range and owned details
+  template <typename Range>
+  explicit InputRangeTypeErasedWithDetails(Range range, DetailsType details)
+      : range_(std::move(range)), details_(std::move(details)) {}
+
+  // Constructor that takes the range and a pointer to external details
+  template <typename Range>
+  explicit InputRangeTypeErasedWithDetails(Range range,
+                                           const DetailsType* detailsPtr)
+      : range_(std::move(range)), details_(detailsPtr) {}
+
+  // Delegate iterator methods to the underlying range
+  auto begin() { return range_.begin(); }
+  auto end() { return range_.end(); }
+
+  // Provide access to the details
+  const DetailsType& details() const {
+    return std::visit(
+        [](const auto& d) -> const DetailsType& {
+          if constexpr (std::is_same_v<std::decay_t<decltype(d)>,
+                                       DetailsType>) {
+            return d;
+          } else {
+            return *d;
+          }
+        },
+        details_);
+  }
+
+  // Note: Mutable access only available for owned details
+  DetailsType& details() {
+    AD_CONTRACT_CHECK(std::holds_alternative<DetailsType>(details_),
+                      "Cannot get mutable reference to external details");
+    return std::get<DetailsType>(details_);
+  }
+
+  // Additional type aliases for compatibility
+  using value_type = ValueType;
+  using iterator = typename InputRangeTypeErased<ValueType>::iterator;
+};
+
+// Deduction guide
+template <typename Range, typename DetailsType>
+InputRangeTypeErasedWithDetails(Range, DetailsType)
+    -> InputRangeTypeErasedWithDetails<ql::ranges::range_value_t<Range>,
+                                       DetailsType>;
 
 // A view that takes an iterator and a sentinel (similar to
 // `ql::ranges::subrange`, but yields the iterators instead of the values when

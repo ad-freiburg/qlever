@@ -31,20 +31,24 @@ class OptionalJoin : public Operation {
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
+  // Specify whether the join columns should be part of the result.
+  bool keepJoinColumns_ = true;
+
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2);
+               std::shared_ptr<QueryExecutionTree> t2,
+               bool keepJoinColumns = true);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -56,7 +60,7 @@ class OptionalJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
@@ -79,6 +83,18 @@ class OptionalJoin : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
+  // logic reusable.
+  bool isIndexNestedLoopJoinSuitable() const;
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

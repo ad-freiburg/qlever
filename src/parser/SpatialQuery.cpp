@@ -5,13 +5,9 @@
 
 #include "parser/SpatialQuery.h"
 
-#include <type_traits>
-#include <variant>
-
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
 
 namespace parsedQuery {
 
@@ -72,6 +68,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       joinType_ = SpatialJoinType::OVERLAPS;
     } else if (type == "equals") {
       joinType_ = SpatialJoinType::EQUALS;
+    } else if (type == "within") {
+      joinType_ = SpatialJoinType::WITHIN;
     } else if (type == "within-dist") {
       joinType_ = SpatialJoinType::WITHIN_DIST;
     } else {
@@ -79,7 +77,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "The IRI given for the parameter `<joinType>` does not refer to a "
           "supported join type. Currently supported are `<intersects>`, "
           "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within-dist>`");
+          "`<equals>`, `<within>`, `<within-dist>`");
     }
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
@@ -125,7 +123,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
-        " in ppatial search; supported arguments are: `<left>`, `<right>`, "
+        " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
         "`<joinType>`, `<payload>`, and `<algorithm>`"));
   }
@@ -149,6 +147,26 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     throw SpatialSearchException(
         "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
         "at least one of them is required for the selected algorithm");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` does not support the option "
+        "`<numNearestNeighbors>`");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
+      joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` supports the "
+        "`<maxDistance>` option only if `<joinType>` is set to "
+        "`<within-dist>`.");
+  }
+
+  if (joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    throw SpatialSearchException(
+        "The selected algorithm does not support the `<joinType>` option. Only "
+        "the `<libspatialjoin>` algorithm is suitable for this option.");
   }
 
   if (!right_.has_value()) {
@@ -195,8 +213,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Task specification
   SpatialJoinTask task;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    task = SpatialJoinConfig{joinType.value_or(SpatialJoinType::INTERSECTS),
-                             maxDist_};
+    task = LibSpatialJoinConfig{joinType.value_or(SpatialJoinType::INTERSECTS),
+                                maxDist_};
   } else if (maxResults_.has_value()) {
     task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
   } else {
@@ -210,10 +228,11 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
 // ____________________________________________________________________________
 SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
-  AD_CONTRACT_CHECK(triple.getSimplePredicate().has_value(),
+  auto predicate = triple.getSimplePredicate();
+  AD_CONTRACT_CHECK(predicate.has_value(),
                     "The config triple for SpatialJoin must have a special IRI "
                     "as predicate");
-  const std::string& input = std::get<PropertyPath>(triple.p_).iri_;
+  std::string_view input = predicate.value();
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),

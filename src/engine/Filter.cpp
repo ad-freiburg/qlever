@@ -4,7 +4,7 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Filter.h"
+#include "engine/Filter.h"
 
 #include <sstream>
 
@@ -15,9 +15,9 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/RuntimeParameters.h"
 
 using std::endl;
-using std::string;
 
 // _____________________________________________________________________________
 size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
@@ -32,11 +32,13 @@ Filter::Filter(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  setPrefilterExpressionForChildren();
+  if (RuntimeParameters().get<"enable-prefilter-on-index-scans">()) {
+    setPrefilterExpressionForChildren();
+  }
 }
 
 // _____________________________________________________________________________
-string Filter::getCacheKeyImpl() const {
+std::string Filter::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "FILTER " << _subtree->getCacheKey();
   os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
@@ -44,7 +46,7 @@ string Filter::getCacheKeyImpl() const {
 }
 
 //______________________________________________________________________________
-string Filter::getDescriptor() const {
+std::string Filter::getDescriptor() const {
   return absl::StrCat("Filter ", _expression.getDescriptor());
 }
 
@@ -61,30 +63,33 @@ void Filter::setPrefilterExpressionForChildren() {
 
 // _____________________________________________________________________________
 Result Filter::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
-  LOG(DEBUG) << "Filter result computation..." << endl;
+  AD_LOG_DEBUG << "Filter result computation..." << endl;
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable(),
-                                   subRes->localVocab());
-    LOG(DEBUG) << "Filter result computation done." << endl;
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
+    AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
   }
 
   if (requestLaziness) {
-    return {[](auto subRes, auto* self) -> Result::Generator {
-              for (auto& [idTable, localVocab] : subRes->idTables()) {
-                IdTable result = self->filterIdTable(subRes->sortedBy(),
-                                                     idTable, localVocab);
-                if (!result.empty()) {
-                  co_yield {std::move(result), std::move(localVocab)};
-                }
-              }
-            }(std::move(subRes), this),
-            resultSortedOn()};
+    return {Result::LazyResult{
+                ad_utility::OwningView{ad_utility::CachingTransformInputRange{
+                    subRes->idTables(),
+                    [this, subRes](auto& idTableVocabPair) {
+                      IdTable filteredTable = this->filterIdTable(
+                          subRes->sortedBy(), idTableVocabPair.idTable_);
+                      return Result::IdTableVocabPair{
+                          std::move(filteredTable),
+                          std::move(idTableVocabPair.localVocab_)};
+                    }}} |
+
+                ql::views::filter(
+                    [](const auto& pair) { return !pair.idTable_.empty(); })},
+            subRes->sortedBy()};
   }
 
   // If we receive a generator of IdTables, we need to materialize it into a
@@ -97,12 +102,12 @@ Result Filter::computeResult(bool requestLaziness) {
       width, [this, &subRes, &result, &resultLocalVocab](auto WIDTH) {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
           computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
-                                   pair.localVocab_, subRes->sortedBy());
+                                   subRes->sortedBy());
           resultLocalVocab.mergeWith(pair.localVocab_);
         }
       });
 
-  LOG(DEBUG) << "Filter result computation done." << endl;
+  AD_LOG_DEBUG << "Filter result computation done." << endl;
 
   return {std::move(result), resultSortedOn(), std::move(resultLocalVocab)};
 }
@@ -110,13 +115,12 @@ Result Filter::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
     IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                                  Table&& idTable,
-                                  const LocalVocab& localVocab) const {
+                                  Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
-  auto impl = [this, &result, &idTable, &localVocab, &sortedBy](auto WIDTH) {
-    return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable), localVocab,
+  auto impl = [this, &result, &idTable, &sortedBy](auto WIDTH) {
+    return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable),
                                           std::move(sortedBy));
   };
   ad_utility::callFixedSizeVi(width, impl);
@@ -127,7 +131,6 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 CPP_template_def(int WIDTH, typename Table)(
     requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      [[maybe_unused]] const LocalVocab& localVocab,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);

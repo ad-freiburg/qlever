@@ -51,14 +51,9 @@ string MultiColumnJoin::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 string MultiColumnJoin::getDescriptor() const {
   std::string joinVars = "";
-  for (auto p : _left->getVariableColumns()) {
-    for (auto jc : _joinColumns) {
-      // If the left join column matches the index of a variable in the left
-      // subresult.
-      if (jc[0] == p.second.columnIndex_) {
-        joinVars += p.first.name() + " ";
-      }
-    }
+  for (auto jc : _joinColumns) {
+    joinVars +=
+        _left->getVariableAndInfoByColumnIndex(jc[0]).first.name() + " ";
   }
   return "MultiColumnJoin on " + joinVars;
 }
@@ -111,7 +106,7 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
   std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {

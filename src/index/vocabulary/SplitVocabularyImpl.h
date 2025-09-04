@@ -5,20 +5,18 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 
-#include "concepts/concepts.hpp"
+#include "backports/type_traits.h"
 #include "index/Vocabulary.h"
-#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
-#include "index/vocabulary/VocabularyInMemory.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
-#include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
-  auto readSingle = [](auto& vocab, const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
+  auto readSingle = [](auto& vocab, const std::string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
     vocab.close();
@@ -48,7 +46,7 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::open(const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
   auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
@@ -98,9 +96,61 @@ void SplitVocabulary<SF, SFN, S...>::WordWriter::finishImpl() {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`SplitVocabulary`");
+  }
+}
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 void SplitVocabulary<SF, SFN, S...>::close() {
   for (auto& vocab : underlying_) {
     std::visit([&](auto& v) { v.close(); }, vocab);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+std::optional<ad_utility::GeometryInfo>
+SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
+  // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
+  // if it is a `GeoVocabulary`.
+  const auto& vocab = underlying_[getMarker(indexWithMarker)];
+  return std::visit(
+      [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+          return v.getGeoInfo(getVocabIndex(indexWithMarker));
+        } else {
+          static_assert(NeverProvidesGeometryInfo<T>);
+          return std::nullopt;
+        }
+      },
+      vocab);
+}
+
+// _____________________________________________________________________________
+template <typename SF, typename SFN, typename... S>
+requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
+bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
+  // If any of the underlying vocabularies is a `GeoVocabulary`, then this
+  // `SplitVocabulary` is able to provide precomputed `GeometryInfo`. The other
+  // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which
+  // could potentially hold a `GeoVocabulary` are forbidden here due to the
+  // constraints of this `SplitVocabulary` for its underlying vocabularies.
+  if constexpr (ad_utility::anyIsInstantiationOf<GeoVocabulary, S...>) {
+    return true;
+  } else {
+    // This assertion guarantees that none of the underlying vocabularies are
+    // able to provide precomputed `GeometryInfo` (neither directly nor in a
+    // nested fashion). For more details and if it fails, see the definition of
+    // this concept in `VocabularyConstraints.h`.
+    static_assert(AllNeverProvideGeometryInfo<S...>);
+    return false;
   }
 }
 

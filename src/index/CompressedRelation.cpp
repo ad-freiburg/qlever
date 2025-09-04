@@ -388,21 +388,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       });
 }
 
-// Helper function that enables a comparison of a triple with an `Id` in
-// the function `getBlocksForJoin` below.
-//
-// If the given triple matches `col0Id` of the given `ScanSpecification`, then
-// `col1Id` is returned.
-// respective other `Id` of the triple is returned.
-//
-// If the given triple matches neither, a sentinel value is returned (`Id::min`
-// if the triple is lower than all triples matching the `ScanSpecification`, or
-// `Id::max` if it is higher).
-namespace {
-auto getRelevantIdFromTriple(
+// _____________________________________________________________________________
+Id CompressedRelationReader::getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
-    const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
-        metadataAndBlocks) {
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // The `ScanSpecifcation`, which must ask for at least one column.
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
   AD_CORRECTNESS_CHECK(!scanSpec.col2Id());
@@ -459,50 +448,72 @@ auto getRelevantIdFromTriple(
       .value_or(triple.col2Id_);
 }
 
-// `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
-// fulfill a concept for the `ql::ranges` algorithms.
-struct BlockLessThanBlock {
-  template <typename T = void>
-  bool operator()(const CompressedBlockMetadata&,
-                  const CompressedBlockMetadata&) const;
-};
-}  // namespace
-
 // _____________________________________________________________________________
-std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
+auto CompressedRelationReader::getBlocksForJoin(
     ql::span<const Id> joinColumn,
-    const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
-  // We need symmetric comparisons between Ids and blocks.
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
+    -> GetBlocksForJoinResult {
+  if (joinColumn.empty() || metadataAndBlocks.getBlockMetadataView().empty()) {
+    return {};
+  }
+
+  // `id < block` iff `id < block.firstTriple`
   auto idLessThanBlock = [&metadataAndBlocks](
                              Id id, const CompressedBlockMetadata& block) {
     return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
   };
 
+  // `block < id` iff `block.lastTriple < id`
   auto blockLessThanId = [&metadataAndBlocks](
                              const CompressedBlockMetadata& block, Id id) {
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
 
-  auto lessThan = ad_utility::OverloadCallOperator{
-      idLessThanBlock, blockLessThanId, BlockLessThanBlock{}, std::less<Id>{}};
-
-  // Find the matching blocks by performing binary search on the `joinColumn`.
-  // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
-  // this doesn't work because the implicit equality defined by
-  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
-    return !ql::ranges::equal_range(joinColumn, block, lessThan).empty();
-  };
-
   std::vector<CompressedBlockMetadata> result;
-  ql::ranges::copy(metadataAndBlocks.getBlockMetadataView() |
-                       ql::views::filter(blockIsNeeded),
-                   std::back_inserter(result));
+  const auto& mdView = metadataAndBlocks.getBlockMetadataView();
 
-  // The following check is cheap as there are only few blocks.
-  AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
-                       result.end());
-  return result;
+  auto [colIt, colEnd] = getBeginAndEnd(joinColumn);
+  auto [blockIt, blockEnd] = getBeginAndEnd(mdView);
+  GetBlocksForJoinResult res;
+
+  // Manually count the number of blocks that have been fully processed in the
+  // `mdView`. This includes blocks that are returned as part of the result as
+  // well as blocks that are completely skipped, because they are
+  // `< joinColumn.back()` but don't match any of the entries in the
+  // `joinColumn`.
+  auto& blockIdx = res.numHandledBlocks;
+  while (true) {
+    // Skip all IDs in the `joinColumn` that are strictly smaller than any block
+    // that hasn't been handled so far.
+    while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
+      ++colIt;
+    }
+    if (colIt == colEnd) {
+      return res;
+    }
+
+    // At this point, `*blockIt <= *colIt`.
+    // Now skip all blocks that are `< *colIt`.
+    while (blockIt != blockEnd && blockLessThanId(*blockIt, *colIt)) {
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      return res;
+    }
+    // Now it holds that `*blockIt >= *colIt`. As the entries in the
+    // `joinColumn` as well as the blocks are sorted, it suffices to
+    // additionally find the values where `*blockIt <= *colIt` to find possibly
+    // matching blocks.
+    while (blockIt != blockEnd && !idLessThanBlock(*colIt, *blockIt)) {
+      res.matchingBlocks_.push_back(*blockIt);
+      ++blockIt;
+      ++blockIdx;
+    }
+    if (blockIt == blockEnd) {
+      return res;
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -1832,6 +1843,28 @@ void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
     std::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);
   checkBlockMetadataInvariantBlockConsistencyImpl(blocks, firstFreeColIndex);
+}
+
+// _____________________________________________________________________________
+void CompressedRelationReader::ScanSpecAndBlocks::removePrefix(
+    size_t numBlocksToRemove) {
+  auto it = blockMetadata_.begin();
+  auto end = blockMetadata_.end();
+  for (; it != end; ++it) {
+    auto& subspan = *it;
+    auto sz = ql::ranges::size(subspan);
+    if (numBlocksToRemove < sz) {
+      // Partially remove a subspan if it contains less blocks than we have
+      // to remove.
+      subspan.advance(numBlocksToRemove);
+      break;
+    } else {
+      // Completely remove the subspan (via the `erase` at the end).
+      numBlocksToRemove -= sz;
+    }
+  }
+  // Remove all the blocks that are to be erased completely.
+  blockMetadata_.erase(blockMetadata_.begin(), it);
 }
 
 // _____________________________________________________________________________

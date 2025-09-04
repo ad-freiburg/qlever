@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
-if(POLICY CMP0167)
+if (POLICY CMP0167)
     cmake_policy(SET CMP0167 NEW)
-endif()
+endif ()
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -46,7 +46,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # libstdc++13 ranges in some cases.
         MESSAGE(STATUS "range-v3 is used for clang-16 because of its incompatibility with libstdc++13")
         set(RANGE_V3_REQUIRED_BY_COMPILER ON)
-    endif()
+    endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
@@ -111,11 +111,17 @@ FetchContent_Declare(
 #################################
 # Range v3 (for C++-17 backwards compatibility)
 ################################
+
 FetchContent_Declare(
         range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG  b661537be421fee77df40bdffa8f221ead53bb8e  # branch fork-for-qlever
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
+        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
 )
+
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
 # libspatialjoin
@@ -220,10 +226,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept
 # macros from `range-v3`.
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} )
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
-endif()
+endif ()
 
 set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
 if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
@@ -258,7 +264,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
 )
 
 ################################
@@ -431,12 +437,13 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
 add_subdirectory(benchmark)
 
 enable_testing()
-option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
+option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools and greatly reduces the total disk space required when building all unit tests with debug symbols" OFF)
 add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
@@ -452,7 +459,7 @@ qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} 
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

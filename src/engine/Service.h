@@ -83,7 +83,7 @@ class Service : public Operation {
   bool knownEmptyResult() override { return false; }
 
   // A SERVICE clause has no children.
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(
@@ -161,6 +161,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
 

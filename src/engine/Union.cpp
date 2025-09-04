@@ -3,6 +3,8 @@
 // Author:
 //   2018     Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #include "Union.h"
 
 #include "backports/span.h"
@@ -61,7 +63,7 @@ Union::Union(QueryExecutionContext* qec,
 
   if (!targetOrder_.empty()) {
     auto computeSortOrder = [this](bool left) {
-      vector<ColumnIndex> specificSortOrder;
+      std::vector<ColumnIndex> specificSortOrder;
       for (ColumnIndex index : targetOrder_) {
         ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
         if (realIndex != NO_COLUMN) {
@@ -87,7 +89,7 @@ Union::Union(QueryExecutionContext* qec,
   }
 }
 
-string Union::getCacheKeyImpl() const {
+std::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
@@ -106,7 +108,7 @@ string Union::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-string Union::getDescriptor() const { return "Union"; }
+std::string Union::getDescriptor() const { return "Union"; }
 
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of
@@ -115,7 +117,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -204,9 +206,19 @@ uint64_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 
+// _____________________________________________________________________________
 size_t Union::getCostEstimate() {
+  // TODO<joka921> Analyze the magic numbers here, and make them configurable.
+  auto ownEstimate = getSizeEstimateBeforeLimit();
+  if (targetOrder_.empty()) {
+    // A simple union is very cheap to compute.
+    ownEstimate = std::max(uint64_t{1}, ownEstimate / 30);
+  } else {
+    // A sorted UNION is rather expensive.
+    ownEstimate *= 3;
+  }
   return _subtrees[0]->getCostEstimate() + _subtrees[1]->getCostEstimate() +
-         getSizeEstimateBeforeLimit();
+         ownEstimate;
 }
 
 Result Union::computeResult(bool requestLaziness) {
@@ -327,31 +339,40 @@ IdTable Union::transformToCorrectColumnFormat(
 }
 
 // _____________________________________________________________________________
-Result::Generator Union::computeResultLazily(
+Result::LazyResult Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
-  std::vector<ColumnIndex> permutation = computePermutation<true>();
-  if (result1->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result1->idTable().clone(), permutation),
-        result1->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result1->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
+  auto transformFactory = [this](const std::vector<ColumnIndex>& permutation) {
+    return [this, permutation](IdTable&& idTable, LocalVocab&& vocab) {
+      return Result::IdTableVocabPair{
+          this->transformToCorrectColumnFormat(std::move(idTable), permutation),
+          std::move(vocab)};
+    };
+  };
+
+  auto rangeFactory = [transformFactory = std::move(transformFactory)](
+                          std::shared_ptr<const Result> result,
+                          std::vector<ColumnIndex> permutation) {
+    using namespace ad_utility;
+    if (result->isFullyMaterialized()) {
+      return InputRangeTypeErased(
+          lazySingleValueRange([transform = transformFactory(permutation),
+                                result = std::move(result)]() {
+            return transform(result->idTable().clone(),
+                             result->getCopyOfLocalVocab());
+          }));
     }
-  }
-  permutation = computePermutation<false>();
-  if (result2->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result2->idTable().clone(), permutation),
-        result2->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result2->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
-    }
-  }
+    return InputRangeTypeErased(CachingTransformInputRange(
+        result->idTables(), [transform = transformFactory(permutation)](
+                                Result::IdTableVocabPair& idTableAndVocab) {
+          return transform(std::move(idTableAndVocab.idTable_),
+                           std::move(idTableAndVocab.localVocab_));
+        }));
+  };
+
+  return Result::LazyResult{::ranges::concat_view(
+      rangeFactory(std::move(result1), computePermutation<true>()),
+      rangeFactory(std::move(result2), computePermutation<false>()))};
 }
 
 // _____________________________________________________________________________
@@ -365,7 +386,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const vector<ColumnIndex>& sortColumns) const {
+    const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
       _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
@@ -421,4 +442,22 @@ Result::LazyResult Union::computeResultKeepOrder(
             });
       },
       std::move(leftRange), std::move(rightRange));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  // TODO<joka921> Implement this optimization for the `sortedUnion` case, we
+  // have to find out the names of the variables.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  auto left =
+      QueryExecutionTree::makeTreeWithStrippedColumns(leftChild(), variables);
+  auto right =
+      QueryExecutionTree::makeTreeWithStrippedColumns(rightChild(), variables);
+
+  return ad_utility::makeExecutionTree<Union>(
+      getExecutionContext(), std::move(left), std::move(right));
 }

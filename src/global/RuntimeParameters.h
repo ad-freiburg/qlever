@@ -83,6 +83,30 @@ inline auto& RuntimeParameters() {
         // false,
         // the result will be `NaN` or `infinity` respectively.
         Bool<"division-by-zero-is-undef">{true},
+        // If set to `true`, the contained `FILTER` expressions in the query
+        // try to set and apply a corresponding `PrefilterExpression` (see
+        // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
+        // operation.
+        //
+        // If set to `false`, the queries `FILTER` expressions omit setting and
+        // applying `PrefilterExpression`s. This is useful to set a
+        // prefilter-free baseline, or for debugging, as wrong results may be
+        // related to the `PrefilterExpression`s.
+        Bool<"enable-prefilter-on-index-scans">{true},
+        // If set, then unneeded variables will not be emitted as the result of
+        // each operation.
+        // This makes the queries faster, but leads to more cache misses if e.g.
+        // variables in a SELECT clause change
+        // between otherwise equal queries.
+        Bool<"strip-columns">{false},
+        // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+        SizeT<"spatial-join-max-num-threads">{8},
+        // The maximum size of the `prefilterBox` for
+        // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+        SizeT<"spatial-join-prefilter-max-size">{2'500},
+        // Push joins into both children of unions if this leads to a cheaper
+        // cost-estimate.
+        Bool<"enable-distributive-union">{true},
     };
   }();
   return params;

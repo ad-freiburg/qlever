@@ -19,6 +19,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "util/BlankNodeManager.h"
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -45,7 +46,7 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
+      std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
@@ -53,9 +54,9 @@ class SparqlQleverVisitor {
   using SubQueryAndMaybeValues =
       std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
-      std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
+      std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
-  using PrefixMap = ad_utility::HashMap<string, string>;
+  using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
@@ -66,7 +67,21 @@ class SparqlQleverVisitor {
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
 
+  // The blank node manager is needed to handle blank nodes in the templates of
+  // UPDATE requests.
+  ad_utility::BlankNodeManager* blankNodeManager_;
+
+  // Needed to efficiently encode common IRIs directly into the ID.
+  const EncodedIriManager* encodedIriManager_;
+
+  // Convert a GraphTerm to TripleComponent with IRI encoding support
+  TripleComponent graphTermToTripleComponentWithEncoding(
+      const GraphTerm& graphTerm) const;
+
   size_t _blankNodeCounter = 0;
+  // Counter that increments for every variable generated using
+  // `getNewInternalVariable` to ensure distinctness.
+  int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
@@ -99,10 +114,29 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
-  // This is set to true if and only if we are only inside the template of a
-  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
-  // meaning of blank and anonymous nodes is different.
-  bool isInsideConstructTriples_ = false;
+  // In most contexts, blank node labels in a SPARQL query are actually
+  // variables. But sometimes they are in fact blank node labels (e.g. in
+  // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by
+  // the standard (e.g. in DELETE clauses). The following enum keeps track of
+  // which of these modes is currently active.
+  enum struct TreatBlankNodesAs { InternalVariables, BlankNodes, Illegal };
+  TreatBlankNodesAs treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+
+  // Set the blank node treatment (see above) the `newValue` and return a
+  // cleanup object that in its destructor restores the original blank node
+  // treatment. If blank nodes were already illegal before calling this
+  // function, then they remain illegal (because "blank nodes forbidden" from an
+  // outer scope is more important than a local rule). This behavior is used
+  // when parsing DELETE requests, which don't support updates, but recursively
+  // use the same parser rules as INSERT requests which do support updates, but
+  // under some circumstances require them to be treated as blank nodes instead
+  // of internal variables.
+  [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
+    bool wasIllegal = treatBlankNodesAs_ == TreatBlankNodesAs::Illegal;
+    auto previous = wasIllegal ? treatBlankNodesAs_
+                               : std::exchange(treatBlankNodesAs_, newValue);
+    return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
+  }
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -118,28 +152,31 @@ class SparqlQleverVisitor {
                              Func iriStringToPredicate);
 
  public:
-  SparqlQleverVisitor() = default;
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager,
+      const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : blankNodeManager_{bnodeManager},
+        encodedIriManager_{encodedIriManager},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
       activeDatasetClauses_ = std::move(*datasetOverride);
       datasetsAreFixed_ = true;
     }
+    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
   }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
-    isInsideConstructTriples_ = true;
+    treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
   }
 
   // ___________________________________________________________________________
@@ -190,11 +227,11 @@ class SparqlQleverVisitor {
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  std::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
   GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  std::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
   SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
@@ -306,7 +343,7 @@ class SparqlQleverVisitor {
 
   parsedQuery::SparqlValues visit(Parser::InlineDataFullContext* ctx);
 
-  vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
+  std::vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
 
   TripleComponent visit(Parser::DataBlockValueContext* ctx);
 
@@ -320,7 +357,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
-  vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
+  std::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
   std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
@@ -342,7 +379,7 @@ class SparqlQleverVisitor {
 
   SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
 
-  vector<TripleWithPropertyPath> visit(
+  std::vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
   std::optional<PathObjectPairsAndTriples> visit(
@@ -375,12 +412,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an exception
-  // because the corresponding feature is not (yet) supported by QLever. Most
-  // of them have a return type of `void`. Some of the don't, in order to make
-  // the usage of abstractions like `visitAlternative` easier.
-
-  [[noreturn]] static void visit(Parser::PathModContext* ctx);
+  // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
+  // lower and upper bounds of the path length.
+  static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
@@ -500,15 +534,15 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  string visit(Parser::IrirefContext* ctx) const;
+  std::string visit(Parser::IrirefContext* ctx) const;
 
-  string visit(Parser::PrefixedNameContext* ctx);
+  std::string visit(Parser::PrefixedNameContext* ctx);
 
   GraphTerm visit(Parser::BlankNodeContext* ctx);
 
-  string visit(Parser::PnameLnContext* ctx);
+  std::string visit(Parser::PnameLnContext* ctx);
 
-  string visit(Parser::PnameNsContext* ctx);
+  std::string visit(Parser::PnameNsContext* ctx);
 
   DatasetClause visit(Parser::UsingClauseContext* ctx);
 
@@ -526,6 +560,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
+  // Return the next internal variable.
+  Variable getNewInternalVariable();
+
+  // Return a callable (not threadsafe) that when being called creates a new
+  // internal variable by calling `getNewInternalVariable()` above.
+  auto makeInternalVariableGenerator();
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 
@@ -533,6 +574,12 @@ class SparqlQleverVisitor {
   // this inside of a CONSTRUCT block, and a new variable otherwise, which is
   // required for graph pattern matching inside `WHERE` clauses.
   GraphTerm newBlankNodeOrVariable();
+
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
@@ -635,8 +682,8 @@ class SparqlQleverVisitor {
   // stays semantically the same, but for blank nodes, this step converts them
   // into internal variables so they are interpreted correctly by the query
   // planner.
-  static parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples);
+  parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from

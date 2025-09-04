@@ -4,16 +4,15 @@
 
 #include "SparqlExpressionValueGetters.h"
 
-#include <type_traits>
-
+#include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 using namespace sparqlExpression::detail;
 
@@ -31,6 +30,7 @@ NumericValue NumericValueGetter::operator()(
       // functions.
       return static_cast<int64_t>(id.getBool());
     case Datatype::Undefined:
+    case Datatype::EncodedVal:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
@@ -59,6 +59,9 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
+    case Datatype::EncodedVal:
+      // This assumes that we never use this for empty IRIs.
+      return True;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
@@ -195,6 +198,9 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
       return Id::makeFromBool(word.has_value() &&
                               word.value().first.starts_with(prefix));
     }
+    case Datatype::EncodedVal:
+      // We currently only encode IRIs.
+      return Id::makeFromBool(prefix == isIriPrefix);
     case Datatype::Bool:
     case Datatype::Int:
     case Datatype::Double:
@@ -217,7 +223,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // _____________________________________________________________________________
-std::optional<string> LiteralFromIdGetter::operator()(
+std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
@@ -258,6 +264,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
+    case Datatype::EncodedVal:
       auto optString = LiteralFromIdGetter{}(id, context);
       if (optString.has_value()) {
         return std::move(optString.value());
@@ -295,6 +302,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       AD_CORRECTNESS_CHECK(dateType != nullptr);
       return Iri::fromIrirefWithoutBrackets(dateType);
     }
+    case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
       return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -358,8 +366,13 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
 
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s,
-    [[maybe_unused]] const EvaluationContext* context) const {
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return litOrIriToUnit(s);
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
   // of measurement. Because this is a rather obscure requirement, we support
   // IRIs also.
@@ -381,6 +394,7 @@ CPP_template(typename T, typename ValueGetter)(
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
+    case EncodedVal:
     case VocabIndex:
       return valueGetter(
           ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -424,6 +438,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
       // standard.
       return {""};
     case Undefined:
+    case EncodedVal:
     case VocabIndex:
     case LocalVocabIndex:
     case TextRecordIndex:
@@ -449,18 +464,12 @@ template <typename RequestedInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 std::optional<ad_utility::GeometryInfo>
 GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
-    ValueId id, const EvaluationContext*) {
+    ValueId id, const EvaluationContext* context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
-    // TODO<ullingerc> After merge of GeoVocabulary this can be activated
-    // TODO<ullingerc> Retrieve via getGeoInfo only if we have a GeoVocab as
-    // underlying vocabulary of the PolymorphicVocabulary, otherwise return
-    // nullopt
-
     // All geometry strings encountered during index build have a precomputed
     // geometry info object.
-    // return
-    // context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
+    return context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
   }
   return std::nullopt;
 }
@@ -472,6 +481,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
+    case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex: {
       auto precomputed = getPrecomputedGeometryInfo(id, context);

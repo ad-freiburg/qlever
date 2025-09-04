@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 
 template <typename... T>
@@ -53,4 +54,32 @@ TEST(ConceptBackports, lambdas) {
   EXPECT_EQ(g(4), 7);
   EXPECT_EQ(f(5), 8);
   EXPECT_EQ(i, 4);
+}
+
+// _____________________________________________________________________________
+TEST(ConceptBackports, RangeV3AndStdRangesAreCompatible) {
+  // Test that `view`s from `std::views` also fulfill the `::ranges::view`
+  // concept from `range-v3`. Previously this didn't work, because an rvalue of
+  // `std::ranges::iota` was not a `view` according to `range-v3`.
+  [[maybe_unused]] auto blubb = ::ranges::views::concat(
+      ql::views::iota(0, 4), ::ranges::views::single(4));
+
+  // This `static_assert` tests that there is no unneeded `owning_view` being
+  // added in the type signature.
+  static_assert(
+      std::is_same_v<decltype(blubb),
+                     ::ranges::concat_view<ql::ranges::iota_view<int, int>,
+                                           ::ranges::single_view<int>>>);
+  ;
+  // Test the other way round : `view`s from `range-v3` also fulfill the
+  // `std::ranges::view` concept.
+  [[maybe_unused]] auto blabb =
+      ql::views::join(::ranges::views::single(std::vector<int>{1, 2, 3}));
+
+  // This `static_assert` tests that there is no unneeded `owning_view` being
+  // added in the type signature.
+  static_assert(
+      std::is_same_v<
+          decltype(blabb),
+          ql::ranges::join_view<::ranges::single_view<std::vector<int>>>>);
 }

@@ -67,6 +67,12 @@ static BlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
 }
 
 //______________________________________________________________________________
+// Materialize the given `BlockMetadataRanges` as a `std::vector`.
+auto toVec = [](const BlockMetadataRanges& blocks) {
+  return CompressedRelationReader::convertBlockMetadataRangesToVector(blocks);
+};
+
+//______________________________________________________________________________
 /*
 Our pre-filtering procedure expects blocks that are in correct (ascending)
 order w.r.t. their contained ValueIds given the first and last triple.
@@ -427,7 +433,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(expr->evaluate(indexVocab, testBlocks, 2),
+    ASSERT_EQ(toVec(expr->evaluate(indexVocab, testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -441,7 +447,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   auto makeTestIsDatatype(std::unique_ptr<PrefilterExpression> expr,
                           std::vector<CompressedBlockMetadata>&& expected,
                           bool testIsIriOrIsLit = false,
-                          std::vector<CompressedBlockMetadata>&& input = {}) {
+                          std::vector<CompressedBlockMetadata>&& input = {},
+                          ad_utility::source_location loc =
+                              ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(loc);
     // The evaluation implementation of `isLiteral()` and `isIri()` uses two
     // conjuncted relational `PrefilterExpression`s. Thus we have to add all
     // CompressedBlockMetadata values containing mixed datatypes.
@@ -450,8 +459,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
     ASSERT_EQ(
-        expr->evaluate(indexVocab,
-                       input.empty() ? allTestBlocksIsDatatype : input, 2),
+        toVec(expr->evaluate(
+            indexVocab, input.empty() ? allTestBlocksIsDatatype : input, 2)),
         adjustedExpected);
   }
 
@@ -494,13 +503,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(expr->evaluate(indexVocab, dateBlocks, 2), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexVocab, dateBlocks, 2)), expected);
   }
 
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(expr->evaluate(indexVocab, blocksRegexTest, 2), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexVocab, blocksRegexTest, 2)), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -515,10 +524,17 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                                   IdxPairRanges&& rExpected) {
     ql::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
-    auto mergedBlockItRanges =
-        prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<
-            TestUnion>(convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1),
-                       convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2));
+    BlockMetadataRanges mergedBlockItRanges;
+    const auto& br1 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1);
+    const auto& br2 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2);
+    if constexpr (TestUnion) {
+      mergedBlockItRanges =
+          prefilterExpressions::detail::logicalOps::getUnionOfBlockRanges(br1,
+                                                                          br2);
+    } else {
+      mergedBlockItRanges = prefilterExpressions::detail::logicalOps::
+          getIntersectionOfBlockRanges(br1, br2);
+    }
     auto expectedBlockItRanges =
         convertFromSpanIdxToSpanBlockItRanges(spanBegin, rExpected);
     ASSERT_EQ(mergedBlockItRanges.size(), expectedBlockItRanges.size());
@@ -846,20 +862,28 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   // Test isLiteral
-  // Blocks b18 - b22 contain LITERAL values.
-  makeTestIsDatatype(isLit(), {b18, b19, b21, b22}, true);
+  // Blocks b18 - b22 contain arbitrary LITERAL values. The other blocks contain
+  // inlined literals like int, float, bool, date and point.
+  makeTestIsDatatype(isLit(),
+                     {b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13, b14,
+                      b15, b16, b17, b18, b19, b21, b22, b25, b27, b28},
+                     true);
   // Block b18GapiriAndLiteral contains possibly hidden literal values.
   // Remark: b28 is a block holding mixed datatypes, this block should also be
   // returned with the current implementation of getSetDifference (see
   // PrefilterExpressionIndex.cpp).
-  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
+  makeTestIsDatatype(isLit(), {b16, b17, b18GapIriAndLiteral, b27, b28}, false,
                      {b16, b17, b18GapIriAndLiteral, b27, b28});
   makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
   makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
                      {b18GapIriAndLiteral, b28});
-  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
+  makeTestIsDatatype(isLit(), {b14, b15, b16, b18GapIriAndLiteral}, false,
                      {b14, b15, b16, b18GapIriAndLiteral});
+  // Test inlined literals
+  makeTestIsDatatype(isLit(), {b6, b7}, false, {b1, b6, b7});
+  makeTestIsDatatype(isLit(), {b16, b13}, false, {b16, b13});
+  makeTestIsDatatype(isLit(), {b27}, false, {b27});
 
   // Test isIri
   // Blocks b22 - b25 contain IRI values.
@@ -908,19 +932,15 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 
   // Test !isLiteral
   // Blocks b19 - b21 contain only IRI related Ids (not contained in expected)
-  makeTestIsDatatype(notExpr(isLit()),
-                     {b1,  b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13, b14,
-                      b15, b16, b17, b18, b22, b23, b24, b25, b27, b28},
-                     true);
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b22, b23, b24, b25, b28}, true);
   // b18GapIriAndLiteral should be considered relevant when evaluating
   // expression !isLit.
   makeTestIsDatatype(notExpr(isLit()), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b17, b18GapIriAndLiteral},
-                     false, {b1, b2, b17, b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()),
-                     {b1, b2, b17, b18GapIriAndLiteral, b27, b28}, false,
-                     {b1, b2, b17, b18GapIriAndLiteral, b27, b28});
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b18GapIriAndLiteral}, false,
+                     {b1, b2, b17, b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b18GapIriAndLiteral, b28},
+                     false, {b1, b2, b17, b18GapIriAndLiteral, b27, b28});
 
   // Test !isIri
   // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
@@ -1177,10 +1197,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
   const auto& vocab = ad_utility::testing::getQec()->getIndex().getVocab();
-  auto filteredBlocks = gt(IntId(0))->evaluate(vocab, blocks, 2);
-  BlockMetadataSpan blockSpan(filteredBlocks);
-  BlockMetadataRanges blockRanges;
-  blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
+  auto blockRanges = gt(IntId(0))->evaluate(vocab, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
@@ -1188,7 +1205,8 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockRanges));
-  blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
+  ASSERT_TRUE(blockRanges.size() > 1);
+  blockRanges.push_back(blockRanges.at(0));
   EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
 }
@@ -1199,16 +1217,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 0), input);
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 1), input);
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 2), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 2),
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 2)),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 1),
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 1)),
             std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(indexVocab, input, 0),
+  EXPECT_EQ(toVec(expr->evaluate(indexVocab, input, 0)),
             std::vector<CompressedBlockMetadata>{});
 }
 

@@ -167,6 +167,8 @@ constexpr inline std::string_view UNIT_KILOMETER_IRI =
 constexpr inline std::string_view UNIT_MILE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
 
+constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
+
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
@@ -277,5 +279,8 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // Operation string is echoed. This operation string is truncated to ensure
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
+    "http-graph-store";
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

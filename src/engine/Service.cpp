@@ -223,7 +223,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
+                                        getIndex().encodedIriManager());
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -405,8 +406,10 @@ TripleComponent Service::bindingToTripleComponent(
   if (type == "literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     binding["datatype"].get<std::string_view>()));
+          value,
+          TripleComponent::Iri::fromIrirefWithoutBrackets(
+              binding["datatype"].get<std::string_view>()),
+          getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
@@ -566,6 +569,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     }
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
+
+  // If this operation is constrained by a `LIMIT` or `OFFSET` we can't apply
+  // the optimization.
+  if (!service->getLimitOffset().isUnconstrained()) {
+    return;
+  }
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;

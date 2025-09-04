@@ -24,7 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -635,8 +635,9 @@ TEST(SparqlExpression, stringOperators) {
       Ids{I(3), I(1), I(3), I(0)});
   checkStr(Ids{I(1), I(2), I(3)},
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
-  checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
-           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
+  checkStr(Ids{D(-1.0), D(1.0), D(2.34), D(NAN), D(INFINITY), D(-INFINITY)},
+           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34"), lit("NaN"),
+                               lit("INF"), lit("-INF")});
   checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
                Id::makeBoolFromZeroOrOne(false)},
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
@@ -1339,6 +1340,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1380,6 +1382,44 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           geoLit("LINESTRING(2 4, 8 8)")},
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+
+  auto sfGeoType = [](std::string_view type) {
+    return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
+               "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
+  checkGeometryType(
+      IdOrLiteralOrIriVec{U, D(0.0), v, geoLit("LINESTRING(2 2, 4 4)"),
+                          geoLit("POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                          geoLit("BLABLIBLU(1 1, 2 2)")},
+      IdOrLiteralOrIriVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
+                          sfGeoType("Polygon"), U});
+
+  // Bounding coordinate expressions
+  using enum ad_utility::BoundingCoordinate;
+  auto checkMinX =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
+  auto checkMinY =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MIN_Y>>;
+  auto checkMaxX =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MAX_X>>;
+  auto checkMaxY =
+      testUnaryExpression<&makeBoundingCoordinateExpression<MAX_Y>>;
+
+  const IdOrLiteralOrIriVec boundingCoordInputs{
+      U,
+      D(0.0),
+      v,  // POINT(24.3, 26.8)
+      geoLit("LINESTRING(2 8, 4 6)"),
+      geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
+      lit("BLABLIBLU(1 1, 2 2)")
+      // TODO<ullingerc> Handle invalid geo literals gracefully. Then add
+      // geoLit("BLABLIBLU(1 1, 2 2)")
+  };
+  using IdVec = std::vector<ValueId>;
+  checkMinX(boundingCoordInputs, IdVec{U, U, D(24.3), D(2), D(2), U});
+  checkMinY(boundingCoordInputs, IdVec{U, U, D(26.8), D(6), D(2), U});
+  checkMaxX(boundingCoordInputs, IdVec{U, U, D(24.3), D(4), D(4), U});
+  checkMaxY(boundingCoordInputs, IdVec{U, U, D(26.8), D(8), D(4), U});
 }
 
 // ________________________________________________________________________________________

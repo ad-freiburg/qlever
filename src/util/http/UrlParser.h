@@ -22,13 +22,13 @@ namespace ad_utility::url_parser {
 
 // A map that stores the values for parameters. Parameters can be specified
 // multiple times with different values.
-using ParamValueMap = ad_utility::HashMap<string, std::vector<string>>;
+using ParamValueMap = HashMap<std::string, std::vector<std::string>>;
 
 // Extracts a parameter that must be present exactly once. If the parameter is
 // not present std::nullopt is returned. If the parameter is present multiple
 // times an exception is thrown.
 std::optional<std::string> getParameterCheckAtMostOnce(const ParamValueMap& map,
-                                                       string_view key);
+                                                       std::string_view key);
 
 // Checks if a parameter exists, and it matches the
 // expected `value`. If yes, return the value, otherwise return

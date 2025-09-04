@@ -33,7 +33,7 @@
 #include "global/Constants.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -227,14 +227,17 @@ using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
     SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+  EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries
   auto pqLeft = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
       "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
   auto pqRight = SparqlParser::parseQuery(
+      &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
@@ -389,7 +392,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -402,7 +405,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
@@ -461,7 +464,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -474,7 +477,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
@@ -804,6 +807,24 @@ TEST(SpatialJoin, getDescriptor) {
   ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
+  // The `SpatialJoin`'s descriptor should contain a readable representation of
+  // the join type
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          getQec(),
+          SpatialJoinConfiguration{
+              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
+              Variable{"?subject"}, Variable{"?object"}},
+          std::nullopt, std::nullopt);
+  auto description = spatialJoinOperation->getRootOperation()->getDescriptor();
+  ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
+  ASSERT_THAT(description, ::testing::HasSubstr("?object"));
+  ASSERT_THAT(description, ::testing::HasSubstr("intersects"));
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, getCacheKeyImpl) {
   auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;

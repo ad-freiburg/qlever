@@ -15,7 +15,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
-    std::variant<Variable, std::string> entity, string word)
+    std::variant<Variable, std::string> entity, std::string word)
     : Operation(qec),
       config_(TextIndexScanForEntityConfiguration{
           std::move(textRecordVar), std::move(entity), std::move(word)}) {
@@ -97,11 +97,11 @@ size_t TextIndexScanForEntity::getCostEstimate() {
   if (hasFixedEntity()) {
     // We currently have to first materialize and then filter the complete list
     // for the fixed entity
-    return 2 * getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-                   config_.word_);
+    return 2 * getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+                   config_.word_, TextScanMode::EntityScan);
   } else {
-    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        config_.word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+        config_.word_, TextScanMode::EntityScan);
   }
 }
 
@@ -111,30 +111,30 @@ uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
     return static_cast<uint64_t>(
         getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
-    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        config_.word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+        config_.word_, TextScanMode::EntityScan);
   }
 }
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-             config_.word_) == 0;
+  return getExecutionContext()->getIndex().getSizeOfTextBlocksSum(
+             config_.word_, TextScanMode::EntityScan) == 0;
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForEntity::getDescriptor() const {
+std::string TextIndexScanForEntity::getDescriptor() const {
   return absl::StrCat("TextIndexScanForEntity on ",
                       config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
-string TextIndexScanForEntity::getCacheKeyImpl() const {
+std::string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
      << " with word: \"" << config_.word_ << "\" and fixed-entity: \""
