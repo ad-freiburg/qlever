@@ -151,9 +151,9 @@ constexpr inline std::string_view polygon = "Polygon";
 constexpr inline std::string_view multipoint = "MultiPoint";
 constexpr inline std::string_view multiLineString = "MultiLineString";
 constexpr inline std::string_view multiPolygon = "MultiPolygon";
-constexpr inline std::string_view geometryCollection = "geometryCollection";
+constexpr inline std::string_view geometryCollection = "GeometryCollection";
 }  // namespace detail::geoStrings
-static constexpr auto SF_WKT_TYPE_IRI = []() {
+inline constexpr auto SF_WKT_TYPE_IRI = []() {
   using namespace detail::geoStrings;
   return std::array<std::optional<std::string_view>, 8>{
       std::nullopt,  // Invalid geometry
