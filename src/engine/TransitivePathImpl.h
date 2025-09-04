@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
+#include <cstdint>
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
@@ -235,6 +236,180 @@ class TransitivePathImpl : public TransitivePathBase {
     return connectedNodes;
   }
 
+  CPP_template(typename Node)(
+      requires ql::ranges::range<Node>) class TransitiveHullLazyRange
+      : public ad_utility::InputRangeMixin<TransitiveHullLazyRange<Node>> {
+   private:
+    using NodeWithTargetRange =
+        ad_utility::InputRangeTypeErased<NodeWithTargets>;
+    using ZippedTypeRange =
+        ad_utility::InputRangeTypeErased<std::pair<int64_t, ZippedType>>;
+
+    // input arguments
+    const TransitivePathImpl<T>* parent_{nullptr};
+    T edges_;
+    LocalVocab edgesVocab_;
+    Node startNodes_;
+    TripleComponent target_;
+    bool yieldOnce_;
+    // runtime state
+    ad_utility::Timer timer_{ad_utility::Timer::Stopped};
+    LocalVocab targetHelper_;
+    LocalVocab mergedVocab_;
+    std::optional<Id> targetId_;
+    bool sameVariableOnBothSides_;
+    bool endsWithGraphVariable_;
+    bool startsWithGraphVariable_;
+    // range state
+    bool finished_{false};
+    ql::ranges::iterator_t<Node> tableColumnIt_{};
+    std::optional<ZippedTypeRange> zippedTypeRange_;
+    ql::ranges::iterator_t<ZippedTypeRange> zippedTypeIt_{};
+    std::optional<NodeWithTargetRange> resultRange_;
+    NodeWithTargetRange::iterator result_{};
+
+   public:
+    TransitiveHullLazyRange(const TransitivePathImpl<T>* parent, const T edges,
+                            LocalVocab edgesVocab, Node startNodes,
+                            TripleComponent start, TripleComponent target,
+                            bool yieldOnce)
+        : parent_(parent),
+          edges_(std::move(edges)),
+          edgesVocab_(std::move(edgesVocab)),
+          startNodes_(std::move(startNodes)),
+          target_(std::move(target)),
+          yieldOnce_(yieldOnce) {
+      // `targetId` is only ever used for comparisons, and never stored in the
+      // result, so we use a separate local vocabulary - targetHelper_.
+      const auto& index = parent_->getIndex();
+      targetId_ = target_.isVariable()
+                      ? std::nullopt
+                      : std::optional{std::move(target_).toValueId(
+                            index.getVocab(), targetHelper_,
+                            index.encodedIriManager())};
+      sameVariableOnBothSides_ = !targetId_.has_value() &&
+                                 parent_->lhs_.value_ == parent_->rhs_.value_;
+      endsWithGraphVariable_ = !targetId_.has_value() &&
+                               parent_->graphVariable_ == target_.getVariable();
+      startsWithGraphVariable_ =
+          start.isVariable() && parent_->graphVariable_ == start.getVariable();
+    }
+
+    ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
+                                                     size_t currentRow,
+                                                     PayloadTable& payload) {
+      using namespace ad_utility;
+      const auto& [startNode, graphId] = idPair;
+      timer_.cont();
+      // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
+      // where both `?g` variables are not the same.
+      if (startsWithGraphVariable_ && startNode != graphId) {
+        return LoopControl<NodeWithTargets>::makeContinue();
+      }
+      if (sameVariableOnBothSides_) {
+        targetId_ = startNode;
+      } else if (endsWithGraphVariable_) {
+        targetId_ = graphId;
+      }
+      edges_.setGraphId(graphId);
+      Set connectedNodes =
+          parent_->findConnectedNodes(edges_, startNode, targetId_);
+      if (!connectedNodes.empty()) {
+        parent_->runtimeInfo().addDetail("Hull time", timer_.msecs());
+        NodeWithTargets result{startNode,
+                               graphId,
+                               std::move(connectedNodes),
+                               mergedVocab_.clone(),
+                               payload,
+                               currentRow};
+        // Reset vocab to prevent merging the same vocab over and over
+        // again.
+        if (yieldOnce_) {
+          mergedVocab_ = LocalVocab{};
+        }
+        timer_.stop();
+        return LoopControl<NodeWithTargets>::yieldValue(std::move(result));
+      }
+      timer_.stop();
+      return LoopControl<NodeWithTargets>::makeContinue();
+    }
+
+    NodeWithTargetRange buildResultRange() {
+      auto& tableColumn = *tableColumnIt_;
+      const auto& [currentRow, zippedType] = *zippedTypeIt_;
+      return NodeWithTargetRange(
+          ad_utility::CachingContinuableTransformInputRange(
+              tableColumn.expandUndef(zippedType, edges_,
+                                      parent_->graphVariable_.has_value()),
+              [this, currentRow = currentRow,
+               payload = tableColumn.payload_](auto& idPair) mutable {
+                return process(idPair, currentRow, payload);
+              }));
+    }
+
+    void setRuntimeState() {
+      if (tableColumnIt_ == ql::ranges::end(startNodes_)) {
+        finished_ = true;
+        return;
+      }
+      auto& tableColumn = *tableColumnIt_;
+      mergedVocab_ = std::move(tableColumn.vocab_);
+      mergedVocab_.mergeWith(edgesVocab_);
+
+      zippedTypeRange_ =
+          ZippedTypeRange(::ranges::views::enumerate(tableColumn.startNodes_));
+      zippedTypeIt_ = zippedTypeRange_->begin();
+
+      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+        ++tableColumnIt_;
+        return setRuntimeState();
+      }
+    }
+
+    void getNextResultRange() {
+      ++zippedTypeIt_;
+      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+        ++tableColumnIt_;
+        setRuntimeState();
+      }
+
+      if (finished_) {
+        return;
+      }
+
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    void start() {
+      tableColumnIt_ = ql::ranges::begin(startNodes_);
+      setRuntimeState();
+      if (finished_) {
+        return;
+      }
+
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    void next() {
+      ++result_;
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    bool isFinished() { return finished_; }
+    auto& get() { return *result_; }
+    const auto& get() const { return *result_; }
+  };
+
   /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
@@ -259,62 +434,9 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
-    // `targetId` is only ever used for comparisons, and never stored in the
-    // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
-    const auto& index = getIndex();
-    std::optional<Id> targetId =
-        target.isVariable()
-            ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
-    bool sameVariableOnBothSides =
-        !targetId.has_value() && lhs_.value_ == rhs_.value_;
-    bool endsWithGraphVariable =
-        !targetId.has_value() && graphVariable_ == target.getVariable();
-    bool startsWithGraphVariable =
-        start.isVariable() && graphVariable_ == start.getVariable();
-    for (auto&& tableColumn : startNodes) {
-      timer.cont();
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab);
-      for (const auto& [currentRow, pair] :
-           ::ranges::views::enumerate(tableColumn.startNodes_)) {
-        for (const auto& [startNode, graphId] :
-             tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
-          // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
-          // where both `?g` variables are not the same.
-          if (startsWithGraphVariable && startNode != graphId) {
-            continue;
-          }
-          if (sameVariableOnBothSides) {
-            targetId = startNode;
-          } else if (endsWithGraphVariable) {
-            targetId = graphId;
-          }
-          edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-          if (!connectedNodes.empty()) {
-            runtimeInfo().addDetail("Hull time", timer.msecs());
-            timer.stop();
-            co_yield NodeWithTargets{startNode,
-                                     graphId,
-                                     std::move(connectedNodes),
-                                     mergedVocab.clone(),
-                                     tableColumn.payload_,
-                                     static_cast<size_t>(currentRow)};
-            timer.cont();
-            // Reset vocab to prevent merging the same vocab over and over
-            // again.
-            if (yieldOnce) {
-              mergedVocab = LocalVocab{};
-            }
-          }
-        }
-      }
-      timer.stop();
-    }
+    return NodeGenerator(TransitiveHullLazyRange<Node>(
+        this, std::move(edges), std::move(edgesVocab), std::move(startNodes),
+        std::move(start), std::move(target), yieldOnce));
   }
 
   /**
