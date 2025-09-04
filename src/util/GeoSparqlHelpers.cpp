@@ -15,9 +15,11 @@
 #include <limits>
 #include <numbers>
 #include <string_view>
+#include <type_traits>
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -91,6 +93,15 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
     return UnitOfMeasurement::MILES;
   }
   return UnitOfMeasurement::UNKNOWN;
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> wktGetGeometryN(std::string_view wkt, int64_t n) {
+  auto [type, parsed] = parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  return getGeometryN(parsed.value(), n);
 }
 
 }  // namespace detail
