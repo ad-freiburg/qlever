@@ -65,15 +65,15 @@ struct AllMemoryUnitSizes {
 
 // A hash map pairing up a single memory size unit with the corresponding
 // `AllMemoryUnitSizes` representations.
+using Pair = ad_utility::ConstexprMapPair<std::string_view, AllMemoryUnitSizes>;
 constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 5>
     singleMemoryUnitSizes(
-        {std::pair{"B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
-         std::pair{"kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
-         std::pair{"MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
-         std::pair{"GB",
-                   AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
-         std::pair{"TB",
-                   AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
+        {Pair{"B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
+         Pair{"kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
+         Pair{"MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
+         Pair{"GB", AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
+         Pair{"TB",
+              AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
 
 /*
 Checks all the getters of the class with the wanted memory sizes.
