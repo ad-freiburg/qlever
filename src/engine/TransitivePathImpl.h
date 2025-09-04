@@ -294,50 +294,56 @@ class TransitivePathImpl : public TransitivePathBase {
           start.isVariable() && parent_->graphVariable_ == start.getVariable();
     }
 
-    NodeWithTargetRange buildResultRange() {
+    ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
+                                                     size_t currentRow,
+                                                     PayloadTable& payload) {
       using namespace ad_utility;
+      const auto& [startNode, graphId] = idPair;
+      timer.cont();
+      // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
+      // where both `?g` variables are not the same.
+      if (startsWithGraphVariable_ && startNode != graphId) {
+        return LoopControl<NodeWithTargets>::makeContinue();
+      }
+      if (sameVariableOnBothSides_) {
+        targetId_ = startNode;
+      } else if (endsWithGraphVariable_) {
+        targetId_ = graphId;
+      }
+      edges_.setGraphId(graphId);
+      Set connectedNodes =
+          parent_->findConnectedNodes(edges_, startNode, targetId_);
+      if (!connectedNodes.empty()) {
+        parent_->runtimeInfo().addDetail("Hull time", timer.msecs());
+        NodeWithTargets result{startNode,
+                               graphId,
+                               std::move(connectedNodes),
+                               mergedVocab_.clone(),
+                               payload,
+                               currentRow};
+        // Reset vocab to prevent merging the same vocab over and over
+        // again.
+        if (yieldOnce_) {
+          mergedVocab_ = LocalVocab{};
+        }
+        timer.stop();
+        return LoopControl<NodeWithTargets>::yieldValue(std::move(result));
+      }
+      timer.stop();
+      return LoopControl<NodeWithTargets>::makeContinue();
+    }
+
+    NodeWithTargetRange buildResultRange() {
       auto& tableColumn = *tableColumnIt_;
       const auto& [currentRow, zippedType] = *zippedTypeIt_;
-      return NodeWithTargetRange(CachingContinuableTransformInputRange(
-          tableColumn.expandUndef(zippedType, edges_,
-                                  parent_->graphVariable_.has_value()),
-          [this, currentRow = currentRow,
-           payload = tableColumn.payload_](auto& idPair) mutable {
-            const auto& [startNode, graphId] = idPair;
-            timer.cont();
-            // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
-            // where both `?g` variables are not the same.
-            if (startsWithGraphVariable_ && startNode != graphId) {
-              return LoopControl<NodeWithTargets>::makeContinue();
-            }
-            if (sameVariableOnBothSides_) {
-              targetId_ = startNode;
-            } else if (endsWithGraphVariable_) {
-              targetId_ = graphId;
-            }
-            edges_.setGraphId(graphId);
-            Set connectedNodes =
-                parent_->findConnectedNodes(edges_, startNode, targetId_);
-            if (!connectedNodes.empty()) {
-              parent_->runtimeInfo().addDetail("Hull time", timer.msecs());
-              NodeWithTargets result{startNode,
-                                     graphId,
-                                     std::move(connectedNodes),
-                                     mergedVocab_.clone(),
-                                     payload,
-                                     static_cast<size_t>(currentRow)};
-              // Reset vocab to prevent merging the same vocab over and over
-              // again.
-              if (yieldOnce_) {
-                mergedVocab_ = LocalVocab{};
-              }
-              timer.stop();
-              return LoopControl<NodeWithTargets>::yieldValue(
-                  std::move(result));
-            }
-            timer.stop();
-            return LoopControl<NodeWithTargets>::makeContinue();
-          }));
+      return NodeWithTargetRange(
+          ad_utility::CachingContinuableTransformInputRange(
+              tableColumn.expandUndef(zippedType, edges_,
+                                      parent_->graphVariable_.has_value()),
+              [this, currentRow = currentRow,
+               payload = tableColumn.payload_](auto& idPair) mutable {
+                return process(idPair, currentRow, payload);
+              }));
     }
 
     void setRuntimeState() {
