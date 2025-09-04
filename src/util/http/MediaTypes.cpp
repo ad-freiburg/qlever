@@ -16,7 +16,7 @@ using std::string;
 namespace ad_utility {
 
 namespace detail {
-using enum MediaType;
+QL_USING_ENUM(MediaType);
 // The first media type in this list is the default, if no other type is
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
