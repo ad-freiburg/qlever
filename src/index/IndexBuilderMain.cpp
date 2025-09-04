@@ -142,6 +142,8 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  bool useWordsFromDocsfile = false;
+  bool addEntitiesFromWordsfile = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
@@ -185,6 +187,14 @@ int main(int argc, char** argv) {
   // Options for the text index.
   add("text-docs-input-file,d", po::value(&docsfile),
       "The full text of the text records from which to build the text index.");
+  add("text-words-from-docsfile,D", po::bool_switch(&useWordsFromDocsfile),
+      "Use the words in the documents from the docsfile to build the text "
+      "index. Can be used together with a wordsfile to add the co-occuring "
+      "entities from the wordsfile.");
+  add("text-entities-from-wordsfile,E",
+      po::bool_switch(&addEntitiesFromWordsfile),
+      "Used together with the text-words-from-docsfile option to add entities "
+      "to the text index using the wordsfile.");
   add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
@@ -258,6 +268,12 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "The value of bm25-b must be between and "
           "including 0 and 1");
+    }
+    if (!docsfile.empty() && wordsfile.empty() && !useWordsFromDocsfile) {
+      throw std::invalid_argument(
+          "A docsfile was given without a wordsfile and without the flag -D to "
+          "specify building the text "
+          "index from docsfile.");
     }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
@@ -344,26 +360,23 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
-    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
 
-    if (!(wordsAndDocsFileSpecified ||
-          (wordsfile.empty() && docsfile.empty()))) {
-      throw std::runtime_error(absl::StrCat(
-          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
-          ". Both or none of docsfile and wordsfile have to be given to build "
-          "text index. If none are given the option to add words from literals "
-          "has to be true. For details see --help."));
-    }
     auto textIndexBuilder = TextIndexBuilder(
         ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
 
-    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      textIndexBuilder.buildTextIndexFile(
-          wordsAndDocsFileSpecified
-              ? std::optional{std::pair{wordsfile, docsfile}}
-              : std::nullopt,
-          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
-          {bScoringParam, kScoringParam});
+    bool buildFromDocsOrWordsFile =
+        !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
+    if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
+      textIndexBuilder.buildTextIndexFile(TextIndexConfig{
+          wordsfile.empty() ? std::nullopt
+                            : std::optional<const string>(wordsfile),
+          docsfile.empty() ? std::nullopt
+                           : std::optional<const string>(docsfile),
+          addWordsFromLiterals,
+          useWordsFromDocsfile,
+          addEntitiesFromWordsfile,
+          {getTextScoringMetricFromString(scoringMetric),
+           {bScoringParam, kScoringParam}}});
     }
 
     if (!docsfile.empty()) {
