@@ -7,11 +7,11 @@
 
 #include <cstdint>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "../TypeTraits.h"
 #include "./Serializer.h"
+#include "backports/type_traits.h"
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(

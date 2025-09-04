@@ -22,7 +22,9 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
+#include "util/Generator.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
@@ -83,10 +85,12 @@ template <typename T1, typename T2>
 static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
+    return std::move(idTable);
   };
-  return ad_utility::inPlaceTransformView(
+
+  return ad_utility::CachingTransformInputRange{
       ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset);
+      setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
@@ -1150,7 +1154,7 @@ void IndexImpl::readConfiguration() {
   }
 
   auto loadDataMember = [this](std::string_view key, auto& target,
-                               std::optional<std::type_identity_t<
+                               std::optional<ql::type_identity_t<
                                    std::decay_t<decltype(target)>>>
                                    defaultValue = std::nullopt) {
     using Target = std::decay_t<decltype(target)>;

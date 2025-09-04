@@ -12,8 +12,8 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "global/Constants.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"

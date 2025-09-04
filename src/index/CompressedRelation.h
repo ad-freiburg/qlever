@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
