@@ -926,10 +926,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   AD_CORRECTNESS_CHECK(smallRelationsBuffer_.numColumns() == numColumns());
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
-  compressAndWriteBlock(
-      currentBlockFirstCol0_, currentBlockLastCol0_,
-      std::make_shared<IdTable>(std::move(smallRelationsBuffer_).toDynamic()),
-      true);
+  compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
+                        std::move(smallRelationsBuffer_).toDynamic(), true);
   smallRelationsBuffer_.clear();
   smallRelationsBuffer_.reserve(2 * blocksize());
 }
@@ -1027,23 +1025,23 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
 // contains only a few distinct graphs such that we can store this information
 // in the block metadata.
 static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const std::shared_ptr<IdTable>& block) {
-  AD_CORRECTNESS_CHECK(block->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
+    const IdTable& block) {
+  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
   auto hasDuplicates = [&block]() {
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
-        block->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
+        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
     size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
                                                ad_utility::noop);
-    return numDistinct != block->numRows();
+    return numDistinct != block.numRows();
   };
 
   // Return the contained graphs, or  `nullopt` if there are too many of them.
   auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
     std::vector<Id> graphColumn;
-    ql::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
                      std::back_inserter(graphColumn));
     ql::ranges::sort(graphColumn);
     auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
@@ -1063,20 +1061,21 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::compressAndWriteBlock(
-    Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
-    bool invokeCallback) {
+void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
+                                                     Id lastCol0Id,
+                                                     IdTable block,
+                                                     bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : block->getColumns()) {
+    for (const auto& column : block.getColumns()) {
       offsets.push_back(compressAndWriteColumn(column));
     }
     AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = block->numRows();
-    const auto& first = (*block)[0];
-    const auto& last = (*block)[numRows - 1];
+    auto numRows = block.numRows();
+    const auto& first = block[0];
+    const auto& last = block[numRows - 1];
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
@@ -1343,8 +1342,8 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
-  compressAndWriteBlock(currentCol0Id_, currentCol0Id_,
-                        std::make_shared<IdTable>(std::move(relation)), false);
+  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
+                        false);
 }
 
 namespace {
@@ -1565,27 +1564,25 @@ auto CompressedRelationWriter::createPermutationPair(
   // A complete block of them is handed from `writer1` to the following lambda
   // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the
   // block and feeds it to `writer2`.)
-  auto addBlockOfSmallRelationsToSwitched =
-      [&writer2](std::shared_ptr<IdTable> relationPtr) {
-        auto& relation = *relationPtr;
-        // We don't use the parallel twinRelationSorter to create the twin
-        // relation as its overhead is far too high for small relations.
-        relation.swapColumns(c1Idx, c2Idx);
+  auto addBlockOfSmallRelationsToSwitched = [&writer2](IdTable relation) {
+    // We don't use the parallel twinRelationSorter to create the twin
+    // relation as its overhead is far too high for small relations.
+    relation.swapColumns(c1Idx, c2Idx);
 
-        // We only need to sort by the columns of the triple + the graph
-        // column, not the additional payload. Note: We could also use
-        // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
-        // sort is far from being a performance bottleneck.
-        auto compare = [](const auto& a, const auto& b) {
-          return std::tie(a[0], a[1], a[2], a[3]) <
-                 std::tie(b[0], b[1], b[2], b[3]);
-        };
-        ql::ranges::sort(relation, compare);
-        AD_CORRECTNESS_CHECK(!relation.empty());
-        writer2.compressAndWriteBlock(relation.at(0, 0),
-                                      relation.at(relation.size() - 1, 0),
-                                      std::move(relationPtr), false);
-      };
+    // We only need to sort by the columns of the triple + the graph
+    // column, not the additional payload. Note: We could also use
+    // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
+    // sort is far from being a performance bottleneck.
+    auto compare = [](const auto& a, const auto& b) {
+      return std::tie(a[0], a[1], a[2], a[3]) <
+             std::tie(b[0], b[1], b[2], b[3]);
+    };
+    ql::ranges::sort(relation, compare);
+    AD_CORRECTNESS_CHECK(!relation.empty());
+    writer2.compressAndWriteBlock(relation.at(0, 0),
+                                  relation.at(relation.size() - 1, 0),
+                                  std::move(relation), false);
+  };
 
   writer1.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
 
