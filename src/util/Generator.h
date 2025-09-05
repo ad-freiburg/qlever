@@ -10,16 +10,11 @@
 #include <functional>
 #include <utility>
 
-#include "Iterators.h"
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Exception.h"
-#include "util/TypeTraits.h"
 
-namespace ad_utility {
-struct NoDetails;
-}
 namespace cppcoro {
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
@@ -301,27 +296,6 @@ T getSingleElement(generator<T, Details> g) {
   return t;
 }
 
-// helper function to convert ad_utility::InputRangeTypeErased<T,D> to
-// cppcoro::generator<T,D> with no details
-template <typename T>
-generator<T, NoDetails> fromInputRange(
-    ad_utility::InputRangeTypeErased<T, ad_utility::NoDetails> range) {
-  for (auto& value : range) {
-    co_yield value;
-  }
-}
-
-// helper function to convert ad_utility::InputRangeTypeErased<T,D> to
-// cppcoro::generator<T,D>, details type is copied
-template <typename T, typename D>
-generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
-  auto& detailsRef = co_await cppcoro::getDetails;
-  range.setDetailsPointer(&detailsRef);
-
-  for (auto& value : range) {
-    co_yield value;
-  }
-}
 }  // namespace cppcoro
 
 #endif

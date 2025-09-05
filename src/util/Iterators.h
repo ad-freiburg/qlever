@@ -12,8 +12,8 @@
 #include "backports/type_traits.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
+#include "util/Generator.h"
 #include "util/LambdaHelpers.h"
-#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -261,7 +261,7 @@ class InputRangeMixin {
 };
 
 // No details empty struct, the default for no details
-struct NoDetails {};
+using cppcoro::NoDetails;
 
 // A similar mixin to the above, with slightly different characteristics:
 // 1. It only requires a single function `std::optional<ValueType> get()

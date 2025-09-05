@@ -13,6 +13,7 @@
 
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
+#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/http/MediaTypes.h"
