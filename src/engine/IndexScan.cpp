@@ -258,18 +258,14 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  LOG(DEBUG) << "IndexScan result computation...\n";
-  // Use the lazy scan and materialize it to ensure consistent column subset
-  // handling
-  auto lazyResult = getLazyScan();
-  IdTable result(getResultWidth(), getExecutionContext()->getAllocator());
-  for (auto& table : lazyResult) {
-    result.insertAtEnd(table);
-  }
+  IdTable idTable = getScanPermutation().scan(
+      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
+      locatedTriplesSnapshot(), getLimitOffset());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
-  AD_CORRECTNESS_CHECK(result.numColumns() == getResultWidth());
-  return result;
+  idTable = makeApplyColumnSubset()(std::move(idTable));
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
+  return idTable;
 }
 
 // _____________________________________________________________________________
