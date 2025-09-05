@@ -21,10 +21,14 @@ namespace ad_utility {
 
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
+ private:
   GeoPoint centroid_;
 
-  Centroid(GeoPoint centroid) : centroid_{centroid} {};
+ public:
+  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {};
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
+
+  GeoPoint centroid() const { return centroid_; };
 };
 
 // The individual coordinates describing the bounding box.
@@ -33,8 +37,19 @@ enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
 struct BoundingBox {
+ private:
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
+
+ public:
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
+      : lowerLeft_{lowerLeft}, upperRight_{upperRight} {};
+
+  GeoPoint lowerLeft() const { return lowerLeft_; }
+  GeoPoint upperRight() const { return upperRight_; }
+  std::pair<GeoPoint, GeoPoint> pair() const {
+    return {lowerLeft_, upperRight_};
+  }
 
   std::string asWkt() const;
 
@@ -54,11 +69,18 @@ struct EncodedBoundingBox {
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
 struct GeometryType {
+ private:
   uint8_t type_;
-  GeometryType(uint8_t type) : type_{type} {};
+
+ public:
+  explicit GeometryType(uint8_t type) : type_{type} {};
+
+  uint8_t type() const { return type_; };
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
+
+  constexpr bool operator==(const GeometryType& other) const = default;
 };
 
 // Forward declaration for concept
