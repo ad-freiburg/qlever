@@ -147,6 +147,7 @@ int main(int argc, char** argv) {
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
   std::optional<ad_utility::VocabularyType> vocabType;
+  std::vector<std::string> prefixesForIdEncodedIris;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -221,6 +222,15 @@ int main(int argc, char** argv) {
       ad_utility::VocabularyType::getListOfSupportedValues());
   add("vocabulary-type", po::value(&vocabType), msg.c_str());
 
+  add("encode-as-id",
+      po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
+      "Space-separated list of IRI prefixes (without angle brackets). "
+      "IRIs that start with one of these prefixes, followed by a sequence of "
+      "digits, do not require a vocabulary entry, but are directly encoded "
+      "in the ID. NOTE: When using ORDER BY, the order among encoded IRIs and "
+      "among non-encoded IRIs is correct, but the order between encoded "
+      "and non-encoded IRIs is not");
+
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&indexMemoryLimit),
       "The amount of memory in to use for sorting during the index build. "
@@ -294,6 +304,7 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
+    index.getImpl().setPrefixesForEncodedValues(prefixesForIdEncodedIris);
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

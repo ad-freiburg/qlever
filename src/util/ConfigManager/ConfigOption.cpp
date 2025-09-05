@@ -13,10 +13,10 @@
 #include <ranges>
 #include <sstream>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"

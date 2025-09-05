@@ -475,7 +475,7 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
         [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
           ad_utility::zipperJoinForBlocksWithPotentialUndef(
               leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-              std::true_type{});
+              ad_utility::OptionalJoinTag{});
         },
         leftRange, rightRange);
     auto localVocab = std::move(rowAdder.localVocab());
@@ -525,7 +525,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto rightRes = computeResultSkipChild(_right->getRootOperation());
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+  ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _joinColumns, std::move(leftRes), std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output

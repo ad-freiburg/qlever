@@ -236,7 +236,7 @@ class IsDatatypeExpression : public PrefilterExpression {
 
  public:
   explicit IsDatatypeExpression(bool isNegated = false)
-      : isNegated_(isNegated){};
+      : isNegated_(isNegated) {}
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;

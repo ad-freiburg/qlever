@@ -19,6 +19,13 @@ using namespace ad_utility::url_parser::sparqlOperation;
 using Var = Variable;
 using TC = TripleComponent;
 
+auto lit = ad_utility::testing::tripleComponentLiteral;
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
+
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
   auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
@@ -88,7 +95,9 @@ TEST(GraphStoreProtocolTest, transformGet) {
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
+        EXPECT_THAT(
+            GraphStoreProtocol::transformGet(graph, encodedIriManager()),
+            matcher);
       };
   expectTransformGet(
       DEFAULT{},
@@ -275,4 +284,81 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                                    iri("<e>"), iri("<a>")},
        SparqlTripleSimpleWithGraph{bn.getBlankNodeIndex("_:c"), iri("<f>"),
                                    iri("<g>"), iri("<a>")}});
+}
+
+// _____________________________________________________________________________________________
+TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
+  // Create a simple index with default config for now
+  auto index = ad_utility::testing::makeTestIndex("GraphStoreProtocolTest",
+                                                  TestIndexConfig{});
+
+  // Test transformPost with IRIs that would be encoded if the feature were
+  // enabled
+  auto expectTransformPost = CPP_template_lambda(&index)(typename RequestT)(
+      const RequestT& request, const GraphOrDefault& graph,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
+                matcher);
+  };
+
+  // Test with encodable IRIs - they should remain as IRIs since the index
+  // doesn't have EncodedIriManager configured
+  expectTransformPost(
+      makePostRequest(
+          "/?default", "text/turtle",
+          "<http://example.org/123> <http://test.com/id/456> \"value\" ."),
+      DEFAULT{},
+      m::UpdateClause(
+          m::GraphUpdate({}, {{iri("<http://example.org/123>"),
+                               iri("<http://test.com/id/456>"),
+                               lit("\"value\""), std::monostate{}}}),
+          m::GraphPattern()));
+
+  // Test with non-encodable IRIs
+  expectTransformPost(
+      makePostRequest(
+          "/?default", "text/turtle",
+          "<http://other.org/123> <http://different.com/456> \"value\" ."),
+      DEFAULT{},
+      m::UpdateClause(
+          m::GraphUpdate({}, {{iri("<http://other.org/123>"),
+                               iri("<http://different.com/456>"),
+                               lit("\"value\""), std::monostate{}}}),
+          m::GraphPattern()));
+
+  // Test with multiple triples
+  expectTransformPost(
+      makePostRequest(
+          "/?default", "text/turtle",
+          "<http://example.org/111> <http://test.com/id/222> \"value1\" .\n"
+          "<http://example.org/333> <http://test.com/id/444> \"value2\" ."),
+      DEFAULT{},
+      m::UpdateClause(
+          m::GraphUpdate({}, {{iri("<http://example.org/111>"),
+                               iri("<http://test.com/id/222>"),
+                               lit("\"value1\""), std::monostate{}},
+                              {iri("<http://example.org/333>"),
+                               iri("<http://test.com/id/444>"),
+                               lit("\"value2\""), std::monostate{}}}),
+          m::GraphPattern()));
+
+  // Test transformGet functionality
+  auto getQuery =
+      GraphStoreProtocol::transformGet(DEFAULT{}, encodedIriManager());
+  EXPECT_EQ(getQuery._originalString,
+            "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+  EXPECT_TRUE(
+      std::holds_alternative<parsedQuery::ConstructClause>(getQuery._clause));
+
+  // Test transformGet with specific graph IRI
+  auto graphIri =
+      ad_utility::triple_component::Iri::fromIriref("<http://example.org/123>");
+  auto graphQuery =
+      GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
+  EXPECT_THAT(
+      graphQuery._originalString,
+      testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
 }

@@ -16,10 +16,10 @@
 #include <optional>
 #include <queue>
 #include <tuple>
-#include <type_traits>
 #include <unordered_set>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/VariableToColumnMap.h"
