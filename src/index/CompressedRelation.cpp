@@ -631,9 +631,15 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   AD_CORRECTNESS_CHECK(ADDITIONAL_COLUMN_GRAPH_ID <
                        blockMetadata.offsetsAndCompressedSize_.size());
 
-  // We first scan the complete block including ALL columns.
-  std::vector<ColumnIndex> allAdditionalColumns;
   bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
+  // We first scan the complete block including ALL columns with the following
+  // exception: If `manuallyDeleteGraphColumn` is true, then the `graphColumn`
+  // is contained inside `scanConfig.scanColumns`, but this function is supposed
+  // to delete it. In this case we will not scan the graph column, that way the
+  // `readAndDecompressBlock` function will correctly delete all duplicates from
+  // the block. The downside of this approach is that further down we have to be
+  // aware of this already dropped column when assembling the final result.
+  std::vector<ColumnIndex> allAdditionalColumns;
   ql::ranges::copy(
       ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID +
                           static_cast<size_t>(manuallyDeleteGraphColumn),
@@ -698,6 +704,11 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   result.resize(endIdx - beginIdx);
   size_t i = 0;
   const auto& columnIndices = scanConfig.scanColumns_;
+
+  // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
+  // column. Additionally, it means that the graph column has already been
+  // dropped by the call to `readAndDecompressBlock` (see above), so we have to
+  // shift the column origins above the graph column down by one.
   for (const auto& inputColIdx :
        columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
@@ -1074,6 +1085,9 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
                                                      IdTable block,
                                                      bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
+  // Note: We need a `shared_ptr` in the capture, because `std::function`
+  // requires copyability.
+  // TODO<joka921> Use
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
