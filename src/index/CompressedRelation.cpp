@@ -237,11 +237,13 @@ CompressedRelationReader::asyncParallelBlockGenerator(
             return block;
           }
           if (limitOffset_._limit.value_or(1) == 0) {
-            popTimer_.cont();
-            return std::nullopt;
+            break;
           }
         }
       }
+
+      popTimer_.stop();
+      details().blockingTime_ = popTimer_.msecs();
 
       return std::nullopt;
     }
