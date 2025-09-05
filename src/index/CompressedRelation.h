@@ -99,6 +99,10 @@ struct CompressedBlockMetadataNoBlockIndex {
 
     template <typename T>
     friend std::true_type allowTrivialSerialization(PermutedTriple, T);
+
+    // Helper function to make `PermutedTriple` easier to compare without
+    // `graphId_`
+    auto tieWithoutGraph() const { return std::tie(col0Id_, col1Id_, col2Id_); }
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
@@ -336,12 +340,9 @@ class CompressedRelationWriter {
       result.emplace_back(std::move(blocks.at(i)), i);
     }
 
-    auto tieWithoutGraph = [](const auto& triple) {
-      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
-    };
     for (auto&& adjacent : ::ranges::views::sliding(result, 2)) {
-      AD_CORRECTNESS_CHECK(tieWithoutGraph(adjacent.front().lastTriple_) !=
-                           tieWithoutGraph(adjacent.back().firstTriple_));
+      AD_CORRECTNESS_CHECK(adjacent.front().lastTriple_.tieWithoutGraph() !=
+                           adjacent.back().firstTriple_.tieWithoutGraph());
     }
     return result;
   }

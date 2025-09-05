@@ -32,6 +32,14 @@ static auto getBeginAndEnd(T& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+namespace {
+// Helper function to make a row from `IdTable` easier to compare. This ties
+// the cells of the given row with the indices 0, 1 and 2.
+auto tieThreeCells = [](const auto& row) {
+  return std::tie(row[0], row[1], row[2]);
+};
+}  // namespace
+
 // TODO @realHannes:
 // Create a separate header file CompressedRelationMetadata for all the
 // metadata related helper structs and functions. This should include
@@ -61,20 +69,20 @@ static auto getMaskedTriple(
       // ignoreIndex out of bound.
       AD_FAIL();
   }
-};
+}
 
 bool CompressedBlockMetadataNoBlockIndex::containsInconsistentTriples(
     size_t columnIndex) const {
   return getMaskedTriple(firstTriple_, columnIndex) !=
          getMaskedTriple(lastTriple_, columnIndex);
-};
+}
 
 bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
     const CompressedBlockMetadataNoBlockIndex& other,
     size_t columnIndex) const {
   return getMaskedTriple(lastTriple_, columnIndex) ==
          getMaskedTriple(other.firstTriple_, columnIndex);
-};
+}
 
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
@@ -652,8 +660,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     }
   }();
   if (manuallyDeleteGraphColumn) {
-    auto tie = [](const auto& row) { return std::tie(row[0], row[1], row[2]); };
-    auto unique = ::ranges::unique(block, ::ranges::equal_to{}, tie);
+    auto unique = ::ranges::unique(block, ::ranges::equal_to{}, tieThreeCells);
     block.erase(unique, block.end());
   }
 
@@ -1453,9 +1460,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     // as the last row in the buffered block
     for (; mergeUpTo < block.numRows(); ++mergeUpTo) {
       const auto& currentRow = block[mergeUpTo];
-      if (currentRow[0] != lastRowFromPrevious[0] ||
-          currentRow[1] != lastRowFromPrevious[1] ||
-          currentRow[2] != lastRowFromPrevious[2]) {
+      if (tieThreeCells(currentRow) != tieThreeCells(lastRowFromPrevious)) {
         break;
       }
     }
@@ -1656,9 +1661,7 @@ auto CompressedRelationWriter::createPermutationPair(
         // Compare first three columns of current triple with last buffered
         // triple
         const auto& lastBufferedRow = relation.back();
-        if (curRemainingCols[0] != lastBufferedRow[0] ||
-            curRemainingCols[1] != lastBufferedRow[1] ||
-            curRemainingCols[2] != lastBufferedRow[2]) {
+        if (tieThreeCells(curRemainingCols) != tieThreeCells(lastBufferedRow)) {
           addBlockForLargeRelation();
         }
       }
