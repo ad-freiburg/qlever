@@ -314,7 +314,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   std::vector<ColumnIndex> additionalColumns;
   ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
-  auto getMetadata = [&, &metaData = metaData](size_t i) {
+  auto getMetadata = [&](size_t i) {
     Id col0 = V(inputs[i].col0_);
     auto it = ql::ranges::lower_bound(metaData, col0, {},
                                       &CompressedRelationMetadata::col0Id_);
@@ -335,12 +335,6 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       const auto& m = getMetadata(i);
       ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
       ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
-      // TODO<joka921> As we use the real code, we also need the real
-      // multiplicities here.
-      /*
-      ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
-                      m.multiplicityCol1_);
-                      */
     }
 
     // Scan for all distinct `col0` and check that we get the expected result.
