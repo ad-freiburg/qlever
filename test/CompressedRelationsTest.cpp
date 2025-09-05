@@ -314,7 +314,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   std::vector<ColumnIndex> additionalColumns;
   ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
-  auto getMetadata = [&, &metaData = metaData](size_t i) {
+  auto getMetadata = [&](size_t i) {
     Id col0 = V(inputs[i].col0_);
     auto it = ql::ranges::lower_bound(metaData, col0, {},
                                       &CompressedRelationMetadata::col0Id_);
@@ -335,12 +335,6 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       const auto& m = getMetadata(i);
       ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
       ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
-      // TODO<joka921> As we use the real code, we also need the real
-      // multiplicities here.
-      /*
-      ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
-                      m.multiplicityCol1_);
-                      */
     }
 
     // Scan for all distinct `col0` and check that we get the expected result.
@@ -1053,8 +1047,6 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
 }
 
 // Test the correct setting of the metadata for the contained graphs.
-// TODO<joka921> Commented out for now because it currently doesn't work because
-// of an assertion that the test infrastructure violates.
 TEST(CompressedRelationWriter, scanWithGraphs) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   std::vector<RelationInput> inputs;
@@ -1116,7 +1108,6 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
-    /*
     spec =
         ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
     res = reader->scan(
@@ -1124,7 +1115,6 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}));
-                         */
   }
 }
 
@@ -1140,9 +1130,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {4, 0, 0},
                                   {5, 0, 0},
                                   {6, 0, 0},
-                                  {7, 0, 0},
-                                  {8, 0, 0},
-                                  {9, 0, 0}}});
+                                  {7, 0, 0}}});
   auto [blocks, metadata, reader] =
       writeAndOpenRelations(inputs, "removePrefix", 16_B);
   ScanSpecification spec{
