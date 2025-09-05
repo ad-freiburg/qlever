@@ -10,7 +10,7 @@
 namespace cppcoro {
 
 // helper function to convert ad_utility::InputRangeTypeErased<T,D> to
-// cppcoro::generator<T,D>, details type is copied if neccessarry
+// cppcoro::generator<T,D>, details type is copied if necessary
 template <typename T, typename D>
 generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
   if constexpr (!std::is_same_v<D, ad_utility::NoDetails>) {
