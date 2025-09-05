@@ -139,8 +139,8 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   // Convert the string to `MemorySize` and put it into the option.
   v = VocabularyType::fromString(s);
 }
-
 }  // namespace ad_utility
+
 namespace qlever {
 // This function is required  to use `TextScoringMetric` in
 // `boost::program_options`.

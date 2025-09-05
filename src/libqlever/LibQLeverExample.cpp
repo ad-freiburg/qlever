@@ -27,8 +27,9 @@ int main(int argc, char** argv) {
     qlever::Qlever qlever{engineConfig};
     ad_utility::Timer t{ad_utility::Timer::Started};
     auto result = qlever.query(query);
-    std::cout << "Retrieved a query result of size " << result.size() << " in "
-              << t.msecs().count() << "ms\n";
+    std::cout << "Retrieved the following result in " << t.msecs().count()
+              << "ms\n"
+              << result << '\n';
   } catch (const std::exception& e) {
     std::cerr << "An error occurred: " << e.what() << "\n";
     return 1;

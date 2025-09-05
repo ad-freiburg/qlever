@@ -14,7 +14,7 @@ using namespace testing;
 
 // _____________________________________________________________________________
 TEST(LibQlever, buildIndexAndRunQuery) {
-  std::string filename = "testIndexForLibQlever.ttl";
+  std::string filename = "libQleverbuildIndexAndRunQuery.ttl";
   {
     auto ofs = ad_utility::makeOfstream(filename);
     ofs << "<s> <p> <o>. <s2> <p> \"kartoffel und salat\".";
@@ -26,12 +26,14 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
   // Test the activation of the memory limit
   c.memoryLimit_ = ad_utility::MemorySize::bytes(0);
-  EXPECT_ANY_THROW(Qlever::buildIndex(c));
+  AD_EXPECT_THROW_WITH_MESSAGE(Qlever::buildIndex(c),
+                               ::testing::HasSubstr("memory limit"));
 
   c.memoryLimit_ = std::nullopt;
 
   c.parserBufferSize_ = ad_utility::MemorySize::bytes(0);
-  EXPECT_ANY_THROW(Qlever::buildIndex(c));
+  AD_EXPECT_THROW_WITH_MESSAGE(Qlever::buildIndex(c),
+                               ::testing::HasSubstr("buffer size"));
 
   c.parserBufferSize_ = std::nullopt;
   EXPECT_NO_THROW(Qlever::buildIndex(c));
@@ -43,7 +45,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
                             ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?s\n<s>\n");
 
-    // Run with a different media type
+    // Run with a different media type.
     res = engine.query("SELECT * WHERE { <s> <p> ?o }",
                        ad_utility::MediaType::csv);
     EXPECT_EQ(res, "o\no\n");
@@ -66,16 +68,17 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, fulltextIndex) {
-  std::string filename = "testIndexForLibQleverFulltext.ttl";
-  std::string wordsfileName = "testIndexForLibQleverFulltext.words";
-  std::string docsFileName = "testIndexForLibQleverFulltext.docs";
+  auto basename = "libQleverFulltextIndex";
+  std::string filename = absl::StrCat(basename, ".ttl");
+  std::string wordsfileName = absl::StrCat(basename, ".words");
+  std::string docsFileName = absl::StrCat(basename, ".docs");
   {
     auto ofs = ad_utility::makeOfstream(filename);
     ofs << "<s> <p> <o>. <s2> <p> \"kartoffel und salat\".";
     auto words = ad_utility::makeOfstream(wordsfileName);
     words << "kartoffel\t0\t13\t1\n<s>\t1\t13\t1\n";
     auto docs = ad_utility::makeOfstream(docsFileName);
-    docs << "13\tKartoffeln sind ein schönes Gemüse";
+    docs << "13\tKartoffeln sind ein schönes Gemüse🥔";
   }
 
   IndexBuilderConfig c;
@@ -93,9 +96,9 @@ TEST(LibQlever, fulltextIndex) {
         "SELECT ?s ?p ?o ?t WHERE { ?t ql:contains-word \"kartoff*\". ?t "
         "ql:contains-entity ?s. ?s ?p ?o }",
         ad_utility::MediaType::tsv);
-    EXPECT_EQ(
-        res,
-        "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes Gemüse\n");
+    EXPECT_EQ(res,
+              "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes "
+              "Gemüse🥔\n");
   }
 
   // Now the same test with separately building the RDF and the text index
@@ -118,9 +121,9 @@ TEST(LibQlever, fulltextIndex) {
         "SELECT ?s ?p ?o ?t WHERE { ?t ql:contains-word \"kartoff*\". ?t "
         "ql:contains-entity ?s. ?s ?p ?o }",
         ad_utility::MediaType::tsv);
-    EXPECT_EQ(
-        res,
-        "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes Gemüse\n");
+    EXPECT_EQ(res,
+              "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes "
+              "Gemüse🥔\n");
   }
 }
 
