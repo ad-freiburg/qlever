@@ -158,7 +158,10 @@ class Qlever {
   explicit Qlever(const EngineConfig& config);
 
   // The result of parsing and planning a query. Using a `QueryPlan` one can
-  // simply
+  // simply run `query` without having to parse and plan the query again. This
+  // is useful for benchmarking the actual time the query planning vs execution
+  // takes and to manually inspect and modify execution trees before running
+  // them.
   using QueryPlan =
       std::tuple<std::shared_ptr<QueryExecutionTree>,
                  std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
@@ -168,13 +171,15 @@ class Qlever {
 
   // Run the given query on the index. Currently only queries, but no updates
   // are supported.
+  // Note: Currently this function neither sets a timeout nor does support
+  // manual cancellation.
   // TODO<joka921> Support UPDATE, support
   // cancellation, time limits, and observable queries via runtime information.
   std::string query(std::string query,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
-  // Same as `query` above, but takes a previously preconstructed `QueryPlan`
+  // Same as `query` above, but takes a previously preconstructed `QueryPlan`.
   std::string query(const QueryPlan& queryPlan,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;

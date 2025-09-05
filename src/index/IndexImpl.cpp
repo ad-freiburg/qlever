@@ -72,6 +72,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
+  AD_CONTRACT_CHECK(parserBufferSize().getBytes() > 0,
+                    "The buffer size of the RDF parser must be non-zero");
   return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
                                               parserBufferSize());
 }

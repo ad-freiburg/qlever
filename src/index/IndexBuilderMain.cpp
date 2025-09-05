@@ -6,6 +6,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/functional/bind_front.h>
+
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <exception>
@@ -15,13 +17,7 @@
 #include "CompilationInfo.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/Index.h"
-#include "index/IndexImpl.h"
-#include "index/TextIndexBuilder.h"
 #include "libqlever/Qlever.h"
-#include "parser/RdfParser.h"
-#include "parser/Tokenizer.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 
@@ -33,24 +29,23 @@ namespace po = boost::program_options;
 // vector will also be accepted. If this condition is violated, throw an
 // exception. This is used to validate the parameters for file types and default
 // graphs.
-template <typename T>
-static void checkNumParameterValues(const T& values, size_t numFiles,
-                                    std::string_view parameterName) {
-  if (values.empty()) {
-    return;
-  }
-  if (values.size() == 1 || values.size() == numFiles) {
-    return;
-  }
-  auto error = absl::StrCat(
-      "The parameter \"", parameterName,
-      "\" must be specified either exactly once (in which case it is "
-      "used for all input files) or exactly as many times as there are "
-      "input files, in which case each input file has its own value.",
-      " The parameter can also be omitted entirely, in which "
-      " case a default value is used for all input files.");
-  throw std::runtime_error{error};
-}
+static constexpr auto checkNumParameterValues =
+    [](size_t numFiles, const auto& values, std::string_view parameterName) {
+      if (values.empty()) {
+        return;
+      }
+      if (values.size() == 1 || values.size() == numFiles) {
+        return;
+      }
+      auto error = absl::StrCat(
+          "The parameter \"", parameterName,
+          "\" must be specified either exactly once (in which case it is "
+          "used for all input files) or exactly as many times as there are "
+          "input files, in which case each input file has its own value.",
+          " The parameter can also be omitted entirely, in which "
+          " case a default value is used for all input files.");
+      throw std::runtime_error{error};
+    };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
 // corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
@@ -118,11 +113,10 @@ T getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
 auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
                                 const auto& defaultGraphs,
                                 const auto& parseParallel) {
-  checkNumParameterValues(filetype, inputFile.size(), "--file-format, -F");
-  checkNumParameterValues(defaultGraphs, inputFile.size(),
-                          "--default-graph, -g");
-  checkNumParameterValues(parseParallel, parseParallel.size(),
-                          "--parse-parallel, p");
+  auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
+  check(filetype, "--file-format, -F");
+  check(defaultGraphs, "--default-graph, -g");
+  check(parseParallel, "--parse-parallel, p");
 
   std::vector<qlever::InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
@@ -161,7 +155,6 @@ int main(int argc, char** argv) {
   ad_utility::Log::imbue(locWithNumberGrouping);
 
   qlever::IndexBuilderConfig config;
-  string scoringMetric = "explicit";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -218,7 +211,7 @@ int main(int argc, char** argv) {
   add("bm25-k", po::value(&config.kScoringParam_),
       "Sets the k param in the BM25 scoring metric for the fulltext index."
       "This has to be greater than or equal to 0.");
-  add("set-scoring-metric,S", po::value(&scoringMetric),
+  add("set-scoring-metric,S", po::value(&config.textScoringMetric_),
       R"(Sets the scoring metric used. Options are "explicit" for explicit )"
       "scores that are read from the wordsfile, "
       R"("tf-idf" for tf idf )"
@@ -285,7 +278,9 @@ int main(int argc, char** argv) {
     qlever::Qlever::buildIndex(config);
 
   } catch (std::exception& e) {
-    LOG(ERROR) << e.what() << std::endl;
+    LOG(ERROR) << "Creating the index for QLever failed with the following "
+                  "exception: "
+               << e.what() << std::endl;
     return 2;
   }
   return 0;

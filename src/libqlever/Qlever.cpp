@@ -17,7 +17,7 @@ namespace qlever {
 Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value())}},
+              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
       index_{allocator_} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
@@ -61,45 +61,36 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     config.textIndexName_ =
         ad_utility::getLastPartOfString(config.wordsfile_, '/');
   }
-  try {
-    index.setKbName(config.kbIndexName);
-    index.setTextName(config.textIndexName_);
-    index.usePatterns() = !config.noPatterns_;
-    index.setOnDiskBase(config.baseName_);
-    index.setKeepTempFiles(config.keepTemporaryFiles_);
-    index.setSettingsFile(config.settingsFile_);
-    index.loadAllPermutations() = !config.onlyPsoAndPos_;
-    index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-    index.getImpl().setPrefixesForEncodedValues(
-        config.prefixesForIdEncodedIris_);
 
-    if (!config.onlyAddTextIndex_) {
-      AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-      index.createFromFiles(config.inputFiles_);
-    }
+  index.setKbName(config.kbIndexName);
+  index.setTextName(config.textIndexName_);
+  index.usePatterns() = !config.noPatterns_;
+  index.setOnDiskBase(config.baseName_);
+  index.setKeepTempFiles(config.keepTemporaryFiles_);
+  index.setSettingsFile(config.settingsFile_);
+  index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
 
-    auto textIndexBuilder = TextIndexBuilder(
-        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+  if (!config.onlyAddTextIndex_) {
+    AD_CONTRACT_CHECK(!config.inputFiles_.empty());
+    index.createFromFiles(config.inputFiles_);
+  }
 
-    if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
-      textIndexBuilder.buildTextIndexFile(
-          config.wordsAndDocsFileSpecified()
-              ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
-              : std::nullopt,
-          config.addWordsFromLiterals_, config.textScoringMetric_,
-          {config.bScoringParam_, config.kScoringParam_});
-    }
+  auto textIndexBuilder = TextIndexBuilder(
+      ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
 
-    if (!config.docsfile_.empty()) {
-      textIndexBuilder.buildDocsDB(config.docsfile_);
-    }
-  } catch (std::exception& e) {
-    // TODO<joka921> To make this visible, we have to reset the global logging
-    // stream.
-    LOG(ERROR) << "Creating the index for QLever failed with the following "
-                  "exception: "
-               << e.what() << std::endl;
-    throw;
+  if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
+    textIndexBuilder.buildTextIndexFile(
+        config.wordsAndDocsFileSpecified()
+            ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
+            : std::nullopt,
+        config.addWordsFromLiterals_, config.textScoringMetric_,
+        {config.bScoringParam_, config.kScoringParam_});
+  }
+
+  if (!config.docsfile_.empty()) {
+    textIndexBuilder.buildDocsDB(config.docsfile_);
   }
 }
 
