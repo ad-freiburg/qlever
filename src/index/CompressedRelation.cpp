@@ -223,7 +223,10 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       while ((item = queue_.get()) != std::nullopt) {
         popTimer_.stop();
 
-        cancellationHandle_->throwIfCancelled();
+        if (cancellationHandle_->isCancelled()) {
+          details().blockingTime_ = popTimer_.msecs();
+          cancellationHandle_->throwIfCancelled();
+        }
 
         auto& optBlock{item.value()};
 
