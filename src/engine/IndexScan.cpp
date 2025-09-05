@@ -672,68 +672,39 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
   // Handle UNDEF case using LoopControl pattern
   if (innerState->hasUndef()) {
-    auto range = ad_utility::InputRangeFromLoopControlGet{
-        [this, handledUndef = false]() mutable -> LoopControl {
-          if (!handledUndef) {
-            handledUndef = true;
-            return LoopControl::yieldAll(chunkedIndexScan());
-          }
-          return LoopControl::makeBreak();
+    auto range =
+        ad_utility::InputRangeFromLoopControlGet{[this]() -> LoopControl {
+          return LoopControl::breakWithYieldAll(chunkedIndexScan());
         }};
     return Result::LazyResult{std::move(range)};
   }
 
-  auto range = ad_utility::InputRangeFromGetCallable{
-      [this, state = std::move(innerState), metadata = LazyScanMetadata{},
-       curScan = std::optional<Permutation::IdTableGenerator>{},
-       it = std::optional<Permutation::IdTableGenerator::iterator>{},
-       applySubset = makeApplyColumnSubset(),
-       active = false]() mutable -> std::optional<Result::IdTableVocabPair> {
+  auto range = ad_utility::InputRangeFromLoopControlGet{
+      [this, state = std::move(innerState),
+       metadata = LazyScanMetadata{}]() mutable -> LoopControl {
         auto& pendingBlocks = state->pendingBlocks_;
 
-        // Helper to ensure we have an active scan
-        auto ensureActiveScan = [&]() -> bool {
-          while (!active) {
-            if (pendingBlocks.empty()) {
-              if (state->doneFetching_) {
-                metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-                updateRuntimeInfoForLazyScan(metadata);
-                return false;
-              }
-              state->fetch();
-              if (pendingBlocks.empty() && state->doneFetching_) {
-                metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-                updateRuntimeInfoForLazyScan(metadata);
-                return false;
-              }
-              continue;
-            }
-            auto scan = getLazyScan(std::move(pendingBlocks));
-            AD_CORRECTNESS_CHECK(pendingBlocks.empty());
-            curScan.emplace(std::move(scan));
-            it.emplace(curScan->begin());
-            active = true;
-          }
-          return true;
-        };
-
         while (true) {
-          if (!ensureActiveScan()) {
-            return std::nullopt;
-          }
-          // If current scan is exhausted, prepare for next one
-          if (*it == curScan->end()) {
-            metadata.aggregate(curScan->details());
-            curScan.reset();
-            it.reset();
-            active = false;
+          if (pendingBlocks.empty()) {
+            if (state->doneFetching_) {
+              metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+              updateRuntimeInfoForLazyScan(metadata);
+              return LoopControl::makeBreak();
+            }
+            state->fetch();
             continue;
           }
 
-          IdTable t = std::move(**it);
-          ++(*it);
-          t = applySubset(std::move(t));
-          return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
+          auto scan = getLazyScan(std::move(pendingBlocks));
+          AD_CORRECTNESS_CHECK(pendingBlocks.empty());
+          metadata.aggregate(scan.details());
+
+          // Transform the scan to Result::IdTableVocabPair and yield all
+          auto transformedScan = ad_utility::CachingTransformInputRange(
+              std::move(scan), [](auto&& table) {
+                return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+              });
+          return LoopControl::yieldAll(std::move(transformedScan));
         }
       }};
   return Result::LazyResult{std::move(range)};
