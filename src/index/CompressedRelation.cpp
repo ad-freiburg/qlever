@@ -1559,7 +1559,7 @@ auto CompressedRelationWriter::createPermutationPair(
       twinRelationSorter.push(row);
     }
     writer1.addBlockForLargeRelation(col0IdCurrentRelation.value(),
-                                     IdTable(std::move(relation).toDynamic()));
+                                     std::move(relation).toDynamic());
     relation.clear();
     relation.reserve(blocksize);
     ++numBlocksCurrentRel;

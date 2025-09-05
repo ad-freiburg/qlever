@@ -101,7 +101,7 @@ struct CompressedBlockMetadataNoBlockIndex {
     friend std::true_type allowTrivialSerialization(PermutedTriple, T);
 
     // Helper function to make `PermutedTriple` easier to compare without
-    // `graphId_`
+    // `graphId_`.
     auto tieWithoutGraph() const { return std::tie(col0Id_, col1Id_, col2Id_); }
   };
   PermutedTriple firstTriple_;
@@ -327,11 +327,8 @@ class CompressedRelationWriter {
   std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
     auto blocks = std::move(*(blockBuffer_.wlock()));
-    ql::ranges::sort(
-        blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
-          return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                          bl.firstTriple_.col2Id_, bl.firstTriple_.graphId_);
-        });
+    ql::ranges::sort(blocks, {},
+                     &CompressedBlockMetadataNoBlockIndex::firstTriple_);
 
     std::vector<CompressedBlockMetadata> result;
     result.reserve(blocks.size());
