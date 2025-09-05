@@ -55,12 +55,73 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   }
 
   c.addWordsFromLiterals_ = true;
-  // TODO<joka921, flixtastic> With this change we have a chance to finally test
-  // all those configs, for now we just artificially increase the test coverage.
+
+  // Note: Currently the `addWordsFromLiterals` feature is broken, but
+  // @flixtastic has a fix for this.
   EXPECT_NO_THROW(Qlever::buildIndex(c));
   EngineConfig ec{c};
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, fulltextIndex) {
+  std::string filename = "testIndexForLibQleverFulltext.ttl";
+  std::string wordsfileName = "testIndexForLibQleverFulltext.words";
+  std::string docsFileName = "testIndexForLibQleverFulltext.docs";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>. <s2> <p> \"kartoffel und salat\".";
+    auto words = ad_utility::makeOfstream(wordsfileName);
+    words << "kartoffel\t0\t13\t1\n<s>\t1\t13\t1\n";
+    auto docs = ad_utility::makeOfstream(docsFileName);
+    docs << "13\tKartoffeln sind ein schönes Gemüse";
+  }
+
+  IndexBuilderConfig c;
+  c.inputFiles_.emplace_back(filename, Filetype::Turtle);
+  c.wordsfile_ = wordsfileName;
+  c.docsfile_ = docsFileName;
+  c.baseName_ = "testIndexForLibQlever";
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  {
+    EngineConfig ec{c};
+    ec.loadTextIndex_ = true;
+    Qlever engine{ec};
+    // Run a simple query.
+    auto res = engine.query(
+        "SELECT ?s ?p ?o ?t WHERE { ?t ql:contains-word \"kartoff*\". ?t "
+        "ql:contains-entity ?s. ?s ?p ?o }",
+        ad_utility::MediaType::tsv);
+    EXPECT_EQ(
+        res,
+        "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes Gemüse\n");
+  }
+
+  // Now the same test with separately building the RDF and the text index
+  c.docsfile_ = "";
+  c.wordsfile_ = "";
+  c.baseName_ = "testIndexWithSeparateTextIndex";
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  // Separately add the text index.
+  c.onlyAddTextIndex_ = true;
+  c.wordsfile_ = wordsfileName;
+  c.docsfile_ = docsFileName;
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  {
+    EngineConfig ec{c};
+    ec.loadTextIndex_ = true;
+    Qlever engine{ec};
+    // Run a simple query.
+    auto res = engine.query(
+        "SELECT ?s ?p ?o ?t WHERE { ?t ql:contains-word \"kartoff*\". ?t "
+        "ql:contains-entity ?s. ?s ?p ?o }",
+        ad_utility::MediaType::tsv);
+    EXPECT_EQ(
+        res,
+        "?s\t?p\t?o\t?t\n<s>\t<p>\t<o>\tKartoffeln sind ein schönes Gemüse\n");
+  }
 }
 
 // _____________________________________________________________________________
@@ -87,6 +148,3 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified docsfile"));
 }
-
-// TODO<joka921> Add some initial tests for the building and querying of
-// indices.
