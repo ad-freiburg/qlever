@@ -1053,8 +1053,6 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
 }
 
 // Test the correct setting of the metadata for the contained graphs.
-// TODO<joka921> Commented out for now because it currently doesn't work because
-// of an assertion that the test infrastructure violates.
 TEST(CompressedRelationWriter, scanWithGraphs) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   std::vector<RelationInput> inputs;
@@ -1116,7 +1114,6 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
-    /*
     spec =
         ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
     res = reader->scan(
@@ -1124,7 +1121,6 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}));
-                         */
   }
 }
 
@@ -1140,9 +1136,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {4, 0, 0},
                                   {5, 0, 0},
                                   {6, 0, 0},
-                                  {7, 0, 0},
-                                  {8, 0, 0},
-                                  {9, 0, 0}}});
+                                  {7, 0, 0}}});
   auto [blocks, metadata, reader] =
       writeAndOpenRelations(inputs, "removePrefix", 16_B);
   ScanSpecification spec{

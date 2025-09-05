@@ -35,6 +35,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
             ql::ranges::lower_bound(
                 blockMetadata, triple.toPermutedTriple(),
                 [](const auto& a, const auto& b) {
+                  // All identical triples with different graphs are currently
+                  // stored in the same block, so we don't need to check the
+                  // graph.
                   return a.tieWithoutGraph() < b.tieWithoutGraph();
                 },
                 &CompressedBlockMetadata::lastTriple_) -

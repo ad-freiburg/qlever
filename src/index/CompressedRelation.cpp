@@ -35,7 +35,7 @@ static auto getBeginAndEnd(T& range) {
 namespace {
 // Helper function to make a row from `IdTable` easier to compare. This ties
 // the cells of the given row with the indices 0, 1 and 2.
-auto tieThreeCells = [](const auto& row) {
+auto tieFirstThreeColumns = [](const auto& row) {
   return std::tie(row[0], row[1], row[2]);
 };
 }  // namespace
@@ -660,7 +660,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     }
   }();
   if (manuallyDeleteGraphColumn) {
-    auto unique = ::ranges::unique(block, ::ranges::equal_to{}, tieThreeCells);
+    auto unique =
+        ::ranges::unique(block, ::ranges::equal_to{}, tieFirstThreeColumns);
     block.erase(unique, block.end());
   }
 
@@ -1460,7 +1461,8 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     // as the last row in the buffered block
     for (; mergeUpTo < block.numRows(); ++mergeUpTo) {
       const auto& currentRow = block[mergeUpTo];
-      if (tieThreeCells(currentRow) != tieThreeCells(lastRowFromPrevious)) {
+      if (tieFirstThreeColumns(currentRow) !=
+          tieFirstThreeColumns(lastRowFromPrevious)) {
         break;
       }
     }
@@ -1661,7 +1663,8 @@ auto CompressedRelationWriter::createPermutationPair(
         // Compare first three columns of current triple with last buffered
         // triple
         const auto& lastBufferedRow = relation.back();
-        if (tieThreeCells(curRemainingCols) != tieThreeCells(lastBufferedRow)) {
+        if (tieFirstThreeColumns(curRemainingCols) !=
+            tieFirstThreeColumns(lastBufferedRow)) {
           addBlockForLargeRelation();
         }
       }
