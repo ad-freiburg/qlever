@@ -395,24 +395,17 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
   // Check if we need to apply column subset
-  auto columnSubset = getColumnSubsetIfAny();
-  if (!columnSubset.has_value()) {
+  auto applySubset = makeApplyColumnSubset();
+  if (!varsToKeep_.has_value()) {
     return baseScan;
   }
 
   // Extract details from the original generator
   auto originalDetails = baseScan.details();
 
-  // Create a transformer that applies the column subset
-  auto transformer = [permutation =
-                          std::move(columnSubset.value())](auto& table) {
-    table.setColumnSubset(permutation);
-    return std::move(table);
-  };
-
   // Apply transformation using CachingTransformInputRange and preserve details
   auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(baseScan), std::move(transformer));
+      std::move(baseScan), std::move(applySubset));
 
   // Create InputRangeTypeErasedWithDetails to preserve the details
   auto rangeWithDetails =
@@ -679,17 +672,27 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
+  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+
+  // Handle UNDEF case using LoopControl pattern
   if (innerState->hasUndef()) {
-    return chunkedIndexScan();
+    auto range = ad_utility::InputRangeFromLoopControlGet{
+        [this, handledUndef = false]() mutable -> LoopControl {
+          if (!handledUndef) {
+            handledUndef = true;
+            return LoopControl::yieldAll(chunkedIndexScan());
+          }
+          return LoopControl::makeBreak();
+        }};
+    return Result::LazyResult{std::move(range)};
   }
 
-  using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
-  auto applySubset = makeApplyColumnSubset();
-  auto range = ad_utility::InputRangeFromLoopControlGet{
+  auto range = ad_utility::InputRangeFromGetCallable{
       [this, state = std::move(innerState), metadata = LazyScanMetadata{},
        curScan = std::optional<Permutation::IdTableGenerator>{},
        it = std::optional<Permutation::IdTableGenerator::iterator>{},
-       applySubset, active = false]() mutable -> LoopControl {
+       applySubset = makeApplyColumnSubset(),
+       active = false]() mutable -> std::optional<Result::IdTableVocabPair> {
         auto& pendingBlocks = state->pendingBlocks_;
 
         // Helper to ensure we have an active scan
@@ -718,24 +721,24 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           return true;
         };
 
-        if (!ensureActiveScan()) {
-          return LoopControl::makeBreak();
-        }
+        while (true) {
+          if (!ensureActiveScan()) {
+            return std::nullopt;
+          }
+          // If current scan is exhausted, prepare for next one
+          if (*it == curScan->end()) {
+            metadata.aggregate(curScan->details());
+            curScan.reset();
+            it.reset();
+            active = false;
+            continue;
+          }
 
-        // If current scan is exhausted, prepare for next one
-        if (*it == curScan->end()) {
-          metadata.aggregate(curScan->details());
-          curScan.reset();
-          it.reset();
-          active = false;
-          return LoopControl::makeContinue();
+          IdTable t = std::move(**it);
+          ++(*it);
+          t = applySubset(std::move(t));
+          return Result::IdTableVocabPair{std::move(t), LocalVocab{}};
         }
-
-        IdTable t = std::move(**it);
-        ++(*it);
-        t = applySubset(std::move(t));
-        return LoopControl::yieldValue(
-            Result::IdTableVocabPair{std::move(t), LocalVocab{}});
       }};
   return Result::LazyResult{std::move(range)};
 }

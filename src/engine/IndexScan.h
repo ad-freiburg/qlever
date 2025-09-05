@@ -168,15 +168,6 @@ class IndexScan final : public Operation {
 
   Permutation::Enum permutation() const { return permutation_; }
 
-  // If this IndexScan is configured to return only a subset of its columns,
-  // return that subset as column indices; otherwise return std::nullopt.
-  std::optional<std::vector<ColumnIndex>> getColumnSubsetIfAny() const {
-    if (varsToKeep_.has_value()) {
-      return getSubsetForStrippedColumns();
-    }
-    return std::nullopt;
-  }
-
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
   // {&predicate_, &subject_, &object_}
