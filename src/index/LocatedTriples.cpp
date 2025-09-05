@@ -37,7 +37,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
                 [](const auto& a, const auto& b) {
                   // All identical triples with different graphs are currently
                   // stored in the same block, so we don't need to check the
-                  // graph.
+                  // graph. In particular, if this triple is equal (without
+                  // graphs) to the first or last triple of a block, then this
+                  // call to `lower_bound` will correctly identify this block.
                   return a.tieWithoutGraph() < b.tieWithoutGraph();
                 },
                 &CompressedBlockMetadata::lastTriple_) -
@@ -358,12 +360,9 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     updateGraphMetadata(lastBlock, blockUpdates);
     augmentedMetadata_->push_back(lastBlock);
 
-    for (auto&& adjacent : ::ranges::views::sliding(*augmentedMetadata_, 2)) {
-      // TODO<joka921> This assertion is important, but it currently might be
-      // violated by updates.
-      AD_CORRECTNESS_CHECK(adjacent.front().lastTriple_.tieWithoutGraph() !=
-                           adjacent.back().firstTriple_.tieWithoutGraph());
-    }
+    AD_CORRECTNESS_CHECK(
+        CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+            *augmentedMetadata_));
   }
 }
 

@@ -128,7 +128,6 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
 // Note: This function can't be declared in the anonymous namespace, because it
 // has to be a `friend` of the `CompressedRelationWriter` class. We therefore
 // give it a rather long name.
-
 template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
@@ -1104,7 +1103,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                                {8, 5, 1},
                                                {9, 4, 1},
                                                {9, 5, 1}}))
-        << "blocksize " << blocksize.getBytes();
+        << "Failed with blocksize " << blocksize.getBytes();
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
@@ -1114,7 +1113,8 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
-                         {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}));
+                         {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
+        << "Failed with blocksize " << blocksize.getBytes();
   }
 }
 

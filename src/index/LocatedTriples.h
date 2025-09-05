@@ -26,6 +26,11 @@ struct NumAddedAndDeleted {
   size_t numDeleted_;
 
   bool operator<=>(const NumAddedAndDeleted&) const = default;
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const NumAddedAndDeleted& n) {
+    str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
+    return str;
+  }
 };
 
 // A triple and its block in a particular permutation. For a detailed definition

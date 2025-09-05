@@ -166,6 +166,20 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
     str << "block index: " << blockMetadata.blockIndex_ << "\n";
     return str;
   }
+
+  // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
+  // all the triples that are the same when disregarding the graph are in the
+  // same block.
+  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+    return ::ranges::all_of(
+        ::ranges::views::sliding(sequenceOfBlocks, 2),
+        [](const auto& adjacent) {
+          const auto& first = adjacent.front().lastTriple_;
+          const auto& second = adjacent.back().firstTriple_;
+          return (first < second) &&
+                 (first.tieWithoutGraph() != second.tieWithoutGraph());
+        });
+  }
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
@@ -337,10 +351,8 @@ class CompressedRelationWriter {
       result.emplace_back(std::move(blocks.at(i)), i);
     }
 
-    for (auto&& adjacent : ::ranges::views::sliding(result, 2)) {
-      AD_CORRECTNESS_CHECK(adjacent.front().lastTriple_.tieWithoutGraph() !=
-                           adjacent.back().firstTriple_.tieWithoutGraph());
-    }
+    AD_CORRECTNESS_CHECK(
+        CompressedBlockMetadata::checkInvariantsForSortedBlocks(result));
     return result;
   }
 

@@ -946,7 +946,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
   compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
-                        std::move(smallRelationsBuffer_).toDynamic(), true);
+                        std::move(smallRelationsBuffer_), true);
   smallRelationsBuffer_.clear();
   smallRelationsBuffer_.reserve(2 * blocksize());
 }
@@ -1085,9 +1085,6 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
                                                      IdTable block,
                                                      bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
-  // Note: We need a `shared_ptr` in the capture, because `std::function`
-  // requires copyability.
-  // TODO<joka921> Use
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
@@ -1450,58 +1447,56 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
 
-  // Buffer to collect blocks and ensure equal first three columns stay together
+  // Buffer used to ensure the invariant that equal triples (when disregarding
+  // the graph) stay in the same block.
   std::optional<IdTable> bufferedBlock;
 
-  for (auto& block : sortedBlocks) {
+  for (auto& block :
+       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
 
-    // Skip empty blocks early
-    if (block.empty()) {
-      continue;
-    }
-
     if (!bufferedBlock.has_value()) {
-      // First non-empty block - initialize buffer
-      bufferedBlock = std::move(block).toDynamic();
+      // First non-empty block - initialize buffer.
+      bufferedBlock = std::move(block);
       continue;
     }
 
     const auto& lastRowFromPrevious = bufferedBlock.value().back();
 
-    size_t mergeUpTo = 0;
-
     // Find how many rows from current block have the same first three columns
     // as the last row in the buffered block
-    for (; mergeUpTo < block.numRows(); ++mergeUpTo) {
-      const auto& currentRow = block[mergeUpTo];
-      if (tieFirstThreeColumns(currentRow) !=
-          tieFirstThreeColumns(lastRowFromPrevious)) {
-        break;
-      }
-    }
+    const size_t upperBoundEqualTriples =
+        ql::ranges::find_if(
+            block,
+            [&lastRowFromPrevious](const auto& row) {
+              return tieFirstThreeColumns(lastRowFromPrevious) !=
+                     tieFirstThreeColumns(row);
+            }) -
+        block.begin();
 
     // If we found rows to merge, add them to the buffered block
-    if (mergeUpTo > 0) {
-      bufferedBlock->insertAtEnd(block, 0, mergeUpTo);
+    if (upperBoundEqualTriples > 0) {
+      bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
 
       // Remove the merged rows from the current block
-      block.erase(block.begin(), block.begin() + mergeUpTo);
+      block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
     }
 
-    // If current block is empty after merge, continue (keep buffered block for
-    // potential future merges)
+    // If the `block` is empty after moving the duplicate triples into the
+    // buffer, continue without writing a block, because the next block might
+    // again contain the `lastRowFromPrevious`
     if (block.empty()) {
       continue;
     }
 
-    // Current block has remaining rows, write buffered block and use current as
-    // new buffer
+    // At this point we know that the `block` contains at least a single triple
+    // larger than `lastRowFromPrevious`, so we can safely write the
+    // `bufferedBlock`.
     addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
-    bufferedBlock = std::move(block).toDynamic();
+    bufferedBlock = std::move(block);
   }
 
-  // Write the final buffered block if it exists
+  // Write the remaining triples from the buffer.
   if (bufferedBlock.has_value() && !bufferedBlock->empty()) {
     addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
   }
@@ -1600,9 +1595,13 @@ auto CompressedRelationWriter::createPermutationPair(
     };
     ql::ranges::sort(relation, compare);
     AD_CORRECTNESS_CHECK(!relation.empty());
-    writer2.compressAndWriteBlock(relation.at(0, 0),
-                                  relation.at(relation.size() - 1, 0),
-                                  std::move(relation), false);
+    // Note: it is important that we store these two IDs before moving the
+    // `relation`, because the evaluation order of function arguments is
+    // unspecified.
+    auto firstCol0 = relation.at(0, 0);
+    auto lastCol0 = relation.at(relation.numRows() - 1, 0);
+    writer2.compressAndWriteBlock(firstCol0, lastCol0, std::move(relation),
+                                  false);
   };
 
   writer1.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
