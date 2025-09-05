@@ -6,6 +6,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/functional/bind_front.h>
+
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <exception>
@@ -15,13 +17,7 @@
 #include "CompilationInfo.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/Index.h"
-#include "index/IndexImpl.h"
-#include "index/TextIndexBuilder.h"
-#include "parser/RdfParser.h"
-#include "parser/Tokenizer.h"
-#include "util/File.h"
-#include "util/MemorySize/MemorySize.h"
+#include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 
@@ -33,24 +29,23 @@ namespace po = boost::program_options;
 // vector will also be accepted. If this condition is violated, throw an
 // exception. This is used to validate the parameters for file types and default
 // graphs.
-template <typename T>
-static void checkNumParameterValues(const T& values, size_t numFiles,
-                                    std::string_view parameterName) {
-  if (values.empty()) {
-    return;
-  }
-  if (values.size() == 1 || values.size() == numFiles) {
-    return;
-  }
-  auto error = absl::StrCat(
-      "The parameter \"", parameterName,
-      "\" must be specified either exactly once (in which case it is "
-      "used for all input files) or exactly as many times as there are "
-      "input files, in which case each input file has its own value.",
-      " The parameter can also be omitted entirely, in which "
-      " case a default value is used for all input files.");
-  throw std::runtime_error{error};
-}
+static constexpr auto checkNumParameterValues =
+    [](size_t numFiles, const auto& values, std::string_view parameterName) {
+      if (values.empty()) {
+        return;
+      }
+      if (values.size() == 1 || values.size() == numFiles) {
+        return;
+      }
+      auto error = absl::StrCat(
+          "The parameter \"", parameterName,
+          "\" must be specified either exactly once (in which case it is "
+          "used for all input files) or exactly as many times as there are "
+          "input files, in which case each input file has its own value.",
+          " The parameter can also be omitted entirely, in which "
+          " case a default value is used for all input files.");
+      throw std::runtime_error{error};
+    };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
 // corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
@@ -113,6 +108,39 @@ T getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
   }
   return values.at(idx);
 }
+// Convert the parameters for the filenames, file types, and default graphs
+// into a `vector<InputFileSpecification>`.
+auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
+                                const auto& defaultGraphs,
+                                const auto& parseParallel) {
+  auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
+  check(filetype, "--file-format, -F");
+  check(defaultGraphs, "--default-graph, -g");
+  check(parseParallel, "--parse-parallel, p");
+
+  std::vector<qlever::InputFileSpecification> fileSpecs;
+  for (size_t i = 0; i < inputFile.size(); ++i) {
+    auto type = getParameterValue<std::optional<std::string_view>>(
+        i, filetype, std::nullopt);
+
+    auto defaultGraph = getParameterValue<std::optional<string>>(
+        i, defaultGraphs, std::nullopt);
+    if (defaultGraph == "-") {
+      defaultGraph = std::nullopt;
+    }
+
+    bool parseInParallel = getParameterValue(i, parseParallel, false);
+    bool parseInParallelSetExplicitly = i < parseParallel.size();
+    auto& filename = inputFile.at(i);
+    if (filename == "-") {
+      filename = "/dev/stdin";
+    }
+    fileSpecs.emplace_back(filename, getFiletype(type, filename),
+                           std::move(defaultGraph), parseInParallel,
+                           parseInParallelSetExplicitly);
+  }
+  return fileSpecs;
+};
 
 // Main function.
 int main(int argc, char** argv) {
@@ -126,31 +154,11 @@ int main(int argc, char** argv) {
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
-  string baseName;
-  string wordsfile;
-  string docsfile;
-  string textIndexName;
-  string kbIndexName;
-  string settingsFile;
-  string scoringMetric = "explicit";
+  qlever::IndexBuilderConfig config;
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
-  bool noPatterns = false;
-  bool onlyAddTextIndex = false;
-  bool keepTemporaryFiles = false;
-  bool onlyPsoAndPos = false;
-  bool addWordsFromLiterals = false;
-  float bScoringParam = 0.75;
-  float kScoringParam = 1.75;
-  std::optional<ad_utility::MemorySize> indexMemoryLimit;
-  std::optional<ad_utility::MemorySize> parserBufferSize;
-  std::optional<ad_utility::VocabularyType> vocabType;
-  std::vector<std::string> prefixesForIdEncodedIris;
-  optind = 1;
-
-  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
@@ -158,7 +166,7 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
-  add("index-basename,i", po::value(&baseName)->required(),
+  add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
       "The file with the knowledge graph data to be parsed from. If omitted, "
@@ -178,52 +186,54 @@ int main(int argc, char** argv) {
       "using the N-Triples or N-Quads format, as well as for well-behaved "
       "Turtle files, where all the prefix declarations come in one block at "
       "the beginning and there are no multiline literals");
-  add("kg-index-name,K", po::value(&kbIndexName),
+  add("kg-index-name,K", po::value(&config.kbIndexName_),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
 
   // Options for the text index.
-  add("text-docs-input-file,d", po::value(&docsfile),
+  add("text-docs-input-file,d", po::value(&config.docsfile_),
       "The full text of the text records from which to build the text index.");
-  add("text-words-input-file,w", po::value(&wordsfile),
+  add("text-words-input-file,w", po::value(&config.wordsfile_),
       "Words of the text records from which to build the text index.");
-  add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
+  add("text-words-from-literals,W",
+      po::bool_switch(&config.addWordsFromLiterals_),
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
-  add("text-index-name,T", po::value(&textIndexName),
+  add("text-index-name,T", po::value(&config.textIndexName_),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
-  add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
+  add("add-text-index,A", po::bool_switch(&config.onlyAddTextIndex_),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
-  add("bm25-b", po::value(&bScoringParam),
+  add("bm25-b", po::value(&config.bScoringParam_),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
-  add("bm25-k", po::value(&kScoringParam),
+  add("bm25-k", po::value(&config.kScoringParam_),
       "Sets the k param in the BM25 scoring metric for the fulltext index."
       "This has to be greater than or equal to 0.");
-  add("set-scoring-metric,S", po::value(&scoringMetric),
+  add("set-scoring-metric,S", po::value(&config.textScoringMetric_),
       R"(Sets the scoring metric used. Options are "explicit" for explicit )"
       "scores that are read from the wordsfile, "
       R"("tf-idf" for tf idf )"
       R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
-  add("settings-file,s", po::value(&settingsFile),
+  add("settings-file,s", po::value(&config.settingsFile_),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
-  add("no-patterns", po::bool_switch(&noPatterns),
+  add("no-patterns", po::bool_switch(&config.noPatterns_),
       "Disable the precomputation for `ql:has-predicate`.");
-  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
+  add("only-pso-and-pos-permutations,o",
+      po::bool_switch(&config.onlyPsoAndPos_),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfSupportedValues());
-  add("vocabulary-type", po::value(&vocabType), msg.c_str());
+  add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
-      po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
+      po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
       "IRIs that start with one of these prefixes, followed by a sequence of "
       "digits, do not require a vocabulary entry, but are directly encoded "
@@ -232,13 +242,13 @@ int main(int argc, char** argv) {
       "and non-encoded IRIs is not");
 
   // Options for the index building process.
-  add("stxxl-memory,m", po::value(&indexMemoryLimit),
+  add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
-  add("parser-buffer-size,b", po::value(&parserBufferSize),
+  add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
-  add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
+  add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
 
   // Process command line arguments.
@@ -251,40 +261,10 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
-    if (kScoringParam < 0) {
-      throw std::invalid_argument("The value of bm25-k must be >= 0");
-    }
-    if (bScoringParam < 0 || bScoringParam > 1) {
-      throw std::invalid_argument(
-          "The value of bm25-b must be between and "
-          "including 0 and 1");
-    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
-  }
-  if (indexMemoryLimit.has_value()) {
-    index.memoryLimitIndexBuilding() = indexMemoryLimit.value();
-  }
-  if (parserBufferSize.has_value()) {
-    index.parserBufferSize() = parserBufferSize.value();
-  }
-
-  if (vocabType.has_value()) {
-    index.getImpl().setVocabularyTypeForIndexBuilding(vocabType.value());
-  }
-
-  // If no text index name was specified, take the part of the wordsfile after
-  // the last slash.
-  if (textIndexName.empty() && !wordsfile.empty()) {
-    textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
-  }
-
-  // If no index name was specified, take the part of the input file name after
-  // the last slash.
-  if (kbIndexName.empty()) {
-    kbIndexName = "no index name specified";
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
@@ -292,85 +272,15 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    size_t posOfLastSlash = baseName.rfind('/');
-    string location = baseName.substr(0, posOfLastSlash + 1);
-    string tail = baseName.substr(posOfLastSlash + 1);
-    LOG(TRACE) << "done." << std::endl;
+    config.inputFiles_ = getFileSpecifications(filetype, inputFile,
+                                               defaultGraphs, parseParallel);
+    config.validate();
+    qlever::Qlever::buildIndex(config);
 
-    index.setKbName(kbIndexName);
-    index.setTextName(textIndexName);
-    index.usePatterns() = !noPatterns;
-    index.setOnDiskBase(baseName);
-    index.setKeepTempFiles(keepTemporaryFiles);
-    index.setSettingsFile(settingsFile);
-    index.loadAllPermutations() = !onlyPsoAndPos;
-    index.getImpl().setPrefixesForEncodedValues(prefixesForIdEncodedIris);
-
-    // Convert the parameters for the filenames, file types, and default graphs
-    // into a `vector<InputFileSpecification>`.
-    auto getFileSpecifications = [&]() {
-      checkNumParameterValues(filetype, inputFile.size(), "--file-format, -F");
-      checkNumParameterValues(defaultGraphs, inputFile.size(),
-                              "--default-graph, -g");
-      checkNumParameterValues(parseParallel, parseParallel.size(),
-                              "--parse-parallel, p");
-
-      std::vector<qlever::InputFileSpecification> fileSpecs;
-      for (size_t i = 0; i < inputFile.size(); ++i) {
-        auto type = getParameterValue<std::optional<std::string_view>>(
-            i, filetype, std::nullopt);
-
-        auto defaultGraph = getParameterValue<std::optional<string>>(
-            i, defaultGraphs, std::nullopt);
-        if (defaultGraph == "-") {
-          defaultGraph = std::nullopt;
-        }
-
-        bool parseInParallel = getParameterValue(i, parseParallel, false);
-        bool parseInParallelSetExplicitly = i < parseParallel.size();
-        auto& filename = inputFile.at(i);
-        if (filename == "-") {
-          filename = "/dev/stdin";
-        }
-        fileSpecs.emplace_back(filename, getFiletype(type, filename),
-                               std::move(defaultGraph), parseInParallel,
-                               parseInParallelSetExplicitly);
-      }
-      return fileSpecs;
-    };
-
-    if (!onlyAddTextIndex) {
-      auto fileSpecifications = getFileSpecifications();
-      AD_CONTRACT_CHECK(!fileSpecifications.empty());
-      index.createFromFiles(fileSpecifications);
-    }
-    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
-
-    if (!(wordsAndDocsFileSpecified ||
-          (wordsfile.empty() && docsfile.empty()))) {
-      throw std::runtime_error(absl::StrCat(
-          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
-          ". Both or none of docsfile and wordsfile have to be given to build "
-          "text index. If none are given the option to add words from literals "
-          "has to be true. For details see --help."));
-    }
-    auto textIndexBuilder = TextIndexBuilder(
-        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
-
-    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      textIndexBuilder.buildTextIndexFile(
-          wordsAndDocsFileSpecified
-              ? std::optional{std::pair{wordsfile, docsfile}}
-              : std::nullopt,
-          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
-          {bScoringParam, kScoringParam});
-    }
-
-    if (!docsfile.empty()) {
-      textIndexBuilder.buildDocsDB(docsfile);
-    }
   } catch (std::exception& e) {
-    LOG(ERROR) << e.what() << std::endl;
+    LOG(ERROR) << "Creating the index for QLever failed with the following "
+                  "exception: "
+               << e.what() << std::endl;
     return 2;
   }
   return 0;

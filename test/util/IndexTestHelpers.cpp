@@ -12,6 +12,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
+using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
