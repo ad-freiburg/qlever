@@ -1762,8 +1762,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
-    const ScanSpecification& scanSpec,
-    CompressedRelationReader::ColumnIndicesRef additionalColumns,
+    const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
     const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   // Determine the index of the graph column (which we need either for
@@ -1774,18 +1773,15 @@ auto CompressedRelationReader::getScanConfig(
   // before any additional payload columns. Otherwise `prepareLocatedTriples`
   // will throw an assertion.
   auto [graphColumnIndex,
-        deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
-    auto idx = static_cast<size_t>(
-        ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
-        columnIndices.begin());
-    bool deleteColumn = false;
-    if (idx == columnIndices.size()) {
-      idx = columnIndices.size() - additionalColumns.size();
+        deleteGraphColumn] = [&]() -> std::pair<size_t, bool> {
+    auto it = ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID);
+    if (it == columnIndices.end()) {
+      size_t idx = columnIndices.size() - additionalColumns.size();
       columnIndices.insert(columnIndices.begin() + idx,
                            ADDITIONAL_COLUMN_GRAPH_ID);
-      deleteColumn = true;
+      return {idx, true};
     }
-    return {idx, deleteColumn};
+    return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
                                         graphColumnIndex, deleteGraphColumn};
