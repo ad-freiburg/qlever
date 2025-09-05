@@ -101,19 +101,36 @@ struct LoopControl {
  public:
   using type = T;
   using Range = InputRangeTypeErased<T>;
-  using V = std::variant<T, Continue, Break, BreakWithValue, Range>;
+
+ private:
+  // A statement that yields all values from a range and then immediately breaks
+  // the loop.
+  struct BreakWithYieldAll {
+    Range range_;
+  };
+
+ public:
+  using V = std::variant<T, Continue, Break, BreakWithValue, Range,
+                         BreakWithYieldAll>;
   V v_;
   bool isContinue() const { return std::holds_alternative<Continue>(v_); }
   bool isBreak() const {
     return std::holds_alternative<Break>(v_) ||
-           std::holds_alternative<BreakWithValue>(v_);
+           std::holds_alternative<BreakWithValue>(v_) ||
+           std::holds_alternative<BreakWithYieldAll>(v_);
+  }
+  bool isBreakWithYieldAll() const {
+    return std::holds_alternative<BreakWithYieldAll>(v_);
   }
 
-  // If the variant holds a `Range<T>`, return the range by moving it out,
-  // else `nullopt`.
+  // If the variant holds a `Range<T>` or `BreakWithYieldAll`, return the range
+  // by moving it out, else `nullopt`.
   std::optional<Range> moveRangeIfPresent() {
     if (std::holds_alternative<Range>(v_)) {
       return std::move(std::get<Range>(v_));
+    }
+    if (std::holds_alternative<BreakWithYieldAll>(v_)) {
+      return std::move(std::get<BreakWithYieldAll>(v_).range_);
     }
     return std::nullopt;
   }
@@ -127,7 +144,8 @@ struct LoopControl {
         return std::nullopt;
       } else if constexpr (ad_utility::SimilarTo<U, T>) {
         return std::move(v);
-      } else if constexpr (ad_utility::SimilarTo<U, InputRangeTypeErased<T>>) {
+      } else if constexpr (ad_utility::SimilarToAny<U, InputRangeTypeErased<T>,
+                                                    BreakWithYieldAll>) {
         AD_FAIL();
       } else {
         static_assert(ad_utility::SimilarTo<U, BreakWithValue>);
@@ -142,6 +160,11 @@ struct LoopControl {
   static LoopControl makeBreak() { return LoopControl{Break{}}; }
   static LoopControl breakWithValue(T t) {
     return LoopControl{BreakWithValue{std::move(t)}};
+  }
+  template <typename R>
+  static LoopControl breakWithYieldAll(R&& r) {
+    return LoopControl{BreakWithYieldAll{
+        InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}}};
   }
   static LoopControl yieldValue(T t) { return LoopControl{std::move(t)}; }
 
@@ -221,6 +244,10 @@ CPP_class_template(typename F)(
   // are yielded.
   bool receivedBreak_ = false;
 
+  // If set to true, we should break after the current innerRange_ is exhausted.
+  // This is used for BreakWithYieldAll.
+  bool shouldBreakAfterRange_ = false;
+
  public:
   // Constructor.
   explicit InputRangeFromLoopControlGet(F transformation = {})
@@ -238,6 +265,12 @@ CPP_class_template(typename F)(
         auto res = innerRange_.value().get();
         if (!res.has_value()) {
           innerRange_.reset();
+          // If we were supposed to break after this range, do so now
+          if (shouldBreakAfterRange_) {
+            receivedBreak_ = true;
+            shouldBreakAfterRange_ = false;
+            return std::nullopt;
+          }
         } else {
           return res;
         }
@@ -246,12 +279,17 @@ CPP_class_template(typename F)(
       if (loopControl.isContinue()) {
         continue;
       }
-      if (loopControl.isBreak()) {
+      if (loopControl.isBreak() && !loopControl.isBreakWithYieldAll()) {
         receivedBreak_ = true;
       }
 
       innerRange_ = loopControl.moveRangeIfPresent();
       if (innerRange_.has_value()) {
+        // For BreakWithYieldAll, we set shouldBreakAfterRange_ so that
+        // once this range is exhausted, we don't call getFunction_ again
+        if (loopControl.isBreakWithYieldAll()) {
+          shouldBreakAfterRange_ = true;
+        }
         continue;
       }
       return loopControl.moveValueIfPresent();

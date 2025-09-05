@@ -315,4 +315,32 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
   EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)),
               ElementsAre(0, 42, 123, 13, 18, 9));
 }
+
+TEST(InputRangeFromLoopControlGet, BreakWithYieldAll) {
+  using namespace ad_utility;
+  using namespace testing;
+  using L = LoopControl<int>;
+
+  // Test BreakWithYieldAll: should yield all values from range and then break
+  auto f = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(10);
+    }
+    if (val == 1) {
+      return L::yieldValue(20);
+    }
+    if (val == 2) {
+      // This should yield all values from the array and then break
+      // without calling the function again
+      return L::breakWithYieldAll(std::array{100, 200, 300});
+    }
+    // This should never be reached because BreakWithYieldAll should
+    // prevent further function calls
+    return L::yieldValue(999);
+  };
+
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f)),
+              ElementsAre(10, 20, 100, 200, 300));
+}
 }  // namespace
