@@ -633,8 +633,10 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // We first scan the complete block including ALL columns.
   std::vector<ColumnIndex> allAdditionalColumns;
+  bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
   ql::ranges::copy(
-      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
+      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID +
+                          static_cast<size_t>(manuallyDeleteGraphColumn),
                       blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
   ScanSpecification specForAllColumns{std::nullopt,
@@ -644,7 +646,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
                                       scanConfig.graphFilter_.desiredGraphs_};
   auto config = getScanConfig(specForAllColumns,
                               std::move(allAdditionalColumns), locatedTriples);
-  bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
 
   // Helper lambda that returns the decompressed block or an empty block if
   // `readAndDecompressBlock` returns `std::nullopt`.
@@ -659,10 +660,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
   }();
-  if (manuallyDeleteGraphColumn) {
-    auto unique = ::ranges::unique(block, ::ranges::equal_to{}, tieThreeCells);
-    block.erase(unique, block.end());
-  }
 
   // We now compute the range of the block according to the `scanSpec`. We
   // start with the full range of the block.
@@ -704,6 +701,10 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   for (const auto& inputColIdx :
        columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
+       }) | ql::views::transform([&](const auto& idx) {
+         return manuallyDeleteGraphColumn && idx > ADDITIONAL_COLUMN_GRAPH_ID
+                    ? idx - 1
+                    : idx;
        })) {
     const auto& inputCol = block.getColumn(inputColIdx);
     ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
