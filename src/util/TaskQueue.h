@@ -5,8 +5,8 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 
-#include <functional>
 #include <optional>
 #include <queue>
 #include <string>
@@ -29,7 +29,7 @@ namespace ad_utility {
 template <bool TrackTimes = false>
 class TaskQueue {
  private:
-  using Task = std::function<void()>;
+  using Task = absl::AnyInvocable<void()>;
   using Timer = ad_utility::Timer;
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;

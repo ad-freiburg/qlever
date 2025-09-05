@@ -26,6 +26,11 @@ struct NumAddedAndDeleted {
   size_t numDeleted_;
 
   bool operator<=>(const NumAddedAndDeleted&) const = default;
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const NumAddedAndDeleted& n) {
+    str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
+    return str;
+  }
 };
 
 // A triple and its block in a particular permutation. For a detailed definition
@@ -243,7 +248,13 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 // of the previous block is smaller and the first triple of the next block is
 // larger), then the block is the next block.
 //
-// 2.2. In particular, if the triple is smaller than all triples in the
+// 2.2. [Exception to 2.1] triples that are equal to the last triple of a block
+// with only the graph ID being higher, also belong to that block. This enforces
+// the invariant that triples that only differ in their graph are stored in the
+// same block (this is expected and enforced by the
+// `CompressedRelationReader/Writer`).
+//
+// 2.3. In particular, if the triple is smaller than all triples in the
 // permutation, the position is the first position of the first block.
 //
 // 3. If the triple is larger than all triples in the permutation, the block

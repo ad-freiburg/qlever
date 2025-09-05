@@ -32,9 +32,17 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                    std::less<>{},
-                                    &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(
+                blockMetadata, triple.toPermutedTriple(),
+                [](const auto& a, const auto& b) {
+                  // All identical triples with different graphs are currently
+                  // stored in the same block, so we don't need to check the
+                  // graph. In particular, if this triple is equal (without
+                  // graphs) to the first or last triple of a block, then this
+                  // call to `lower_bound` will correctly identify this block.
+                  return a.tieWithoutGraph() < b.tieWithoutGraph();
+                },
+                &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, insertOrDelete);
       },
@@ -351,6 +359,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, blockUpdates);
     augmentedMetadata_->push_back(lastBlock);
+
+    AD_CORRECTNESS_CHECK(
+        CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+            *augmentedMetadata_));
   }
 }
 
