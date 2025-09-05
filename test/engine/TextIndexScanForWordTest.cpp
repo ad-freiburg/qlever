@@ -127,12 +127,33 @@ struct TextResult {
                                       scoreIsInt_);
   }
 
-  void checkListOfWords(const std::vector<std::string>& expectedWords,
-                        size_t& startingIndex) const {
-    for (const auto& word : expectedWords) {
-      ASSERT_EQ(word, getWord(startingIndex));
-      ++startingIndex;
+  // Collect all words of rows [start, end) and compare them in unordered
+  // fashion to expectedWords.
+  // This function is necessary since the results of a TextIndexScanForWord is
+  // only sorted by `TextRecordIndex`. This leads to the words not being in
+  // order and an unpredictability in which row they appear in.
+  void checkUnorderedListOfWordsInRange(
+      const std::vector<std::string>& expectedWords, size_t start,
+      size_t end) const {
+    std::vector<std::string> wordsInTable;
+    wordsInTable.reserve(end - start);
+    for (; start < end; ++start) {
+      wordsInTable.emplace_back(getWord(start));
     }
+    ASSERT_THAT(wordsInTable,
+                ::testing::UnorderedElementsAreArray(expectedWords));
+  }
+
+  void checkUnorderedListOfScoresInRange(
+      const std::vector<Score>& expectedScores, size_t start,
+      size_t end) const {
+    std::vector<Score> scoresInTable;
+    scoresInTable.reserve(end - start);
+    for (; start < end; ++start) {
+      scoresInTable.emplace_back(getScore(start));
+    }
+    ASSERT_THAT(scoresInTable,
+                ::testing::UnorderedElementsAreArray(expectedScores));
   }
 };
 
@@ -224,10 +245,11 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ(secondDocText, tr.getTextRecord(7));
 
   // Tests if correct words are deducted from prefix
-  ASSERT_EQ("astronomer", tr.getWord(0));
-  ASSERT_EQ("astronomy", tr.getWord(1));
-  ASSERT_EQ("astronomer", tr.getWord(2));
-  ASSERT_EQ("astronomy", tr.getWord(3));
+  // The first two have to be checked without an order since the result is only
+  // sorted by TextRecordIndex so the first column. The last 4 only belong to on
+  // TextRecord, therefore it doesn't matter.
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 0, 2);
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 2, 4);
   ASSERT_EQ("astronomy", tr.getWord(4));
   ASSERT_EQ("astronomy", tr.getWord(5));
   ASSERT_EQ("astronomer", tr.getWord(6));
@@ -240,10 +262,10 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
   auto tr1 = TextResult{qec, scoreResultCount, true};
-  ASSERT_EQ(1, tr1.getScore(0));
-  ASSERT_EQ(1, tr1.getScore(1));
-  ASSERT_EQ(0, tr1.getScore(2));
-  ASSERT_EQ(0, tr1.getScore(3));
+
+  // Same explanation for this structure is seen for the words.
+  tr1.checkUnorderedListOfScoresInRange({1, 1}, 0, 2);
+  tr1.checkUnorderedListOfScoresInRange({0, 0}, 2, 4);
   ASSERT_EQ(1, tr1.getScore(4));
   ASSERT_EQ(1, tr1.getScore(5));
   ASSERT_EQ(1, tr1.getScore(6));
@@ -258,10 +280,10 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord1Doc7 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord2Doc4 = h::calculateTFIDFFromParameters(1, 1, 6);
-  ASSERT_EQ(tfidfWord1Doc4, tr2.getScore(0));
-  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(1));
-  ASSERT_EQ(tfidfWord1Doc4, tr2.getScore(2));
-  ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(3));
+
+  // See above when testing words why this is necessary
+  tr2.checkUnorderedListOfScoresInRange({tfidfWord1Doc4, tfidfWord2Doc4}, 0, 2);
+  tr2.checkUnorderedListOfScoresInRange({tfidfWord1Doc4, tfidfWord2Doc4}, 2, 4);
   ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(4));
   ASSERT_EQ(tfidfWord2Doc4, tr2.getScore(5));
   ASSERT_EQ(tfidfWord1Doc7, tr2.getScore(6));
@@ -279,10 +301,10 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
       h::calculateBM25FromParameters(1, 2, 6, 7, 10, 0.75, 1.75);
   float bm25Word2Doc4 =
       h::calculateBM25FromParameters(1, 1, 6, 7, 15, 0.75, 1.75);
-  ASSERT_EQ(bm25Word1Doc4, tr3.getScore(0));
-  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(1));
-  ASSERT_EQ(bm25Word1Doc4, tr3.getScore(2));
-  ASSERT_EQ(bm25Word2Doc4, tr3.getScore(3));
+
+  // See above when testing words why this is necessary
+  tr3.checkUnorderedListOfScoresInRange({bm25Word1Doc4, bm25Word2Doc4}, 0, 2);
+  tr3.checkUnorderedListOfScoresInRange({bm25Word1Doc4, bm25Word2Doc4}, 2, 4);
   ASSERT_EQ(bm25Word2Doc4, tr3.getScore(4));
   ASSERT_EQ(bm25Word2Doc4, tr3.getScore(5));
   ASSERT_EQ(bm25Word1Doc7, tr3.getScore(6));
@@ -300,18 +322,17 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
   auto tr = TextResult{qec, result};
   ASSERT_EQ(result.idTable().numColumns(), 3);
   ASSERT_EQ(result.idTable().size(), 10);
+  // TODO<Flixtastic> write test methods that can check if certain rows contain
+  // a word. Similar to the e2e mechanics. This becomes necessary if there is
+  // no certain order in the idTable other than the first row.
 
   // Check if word and text are correctly retrieved
-  ASSERT_EQ(withFirst("astronomer"), tr.getRow(0));
-  ASSERT_EQ(withFirst("astronomy"), tr.getRow(1));
-  ASSERT_EQ(withFirst("astronomer"), tr.getRow(2));
-  ASSERT_EQ(withFirst("astronomy"), tr.getRow(3));
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 0, 2);
+  tr.checkUnorderedListOfWordsInRange({"astronomer", "astronomy"}, 2, 4);
   ASSERT_EQ(withFirst("astronomy"), tr.getRow(4));
   ASSERT_EQ(withFirst("astronomy"), tr.getRow(5));
-  ASSERT_EQ(withSecond("although"), tr.getRow(6));
-  ASSERT_EQ(withSecond("astronomer"), tr.getRow(7));
-  ASSERT_EQ(withSecond("although"), tr.getRow(8));
-  ASSERT_EQ(withSecond("astronomer"), tr.getRow(9));
+  tr.checkUnorderedListOfWordsInRange({"although", "astronomer"}, 6, 8);
+  tr.checkUnorderedListOfWordsInRange({"although", "astronomer"}, 8, 10);
 }
 
 TEST(TextIndexScanForWord, WordScanStarPrefix) {
@@ -379,8 +400,7 @@ TEST(TextIndexScanForWord, WordScanStarPrefix) {
                                     "test",
                                     "the",
                                     "was"};
-  size_t startingIndex = 0;
-  tr.checkListOfWords(words, startingIndex);
+  tr.checkUnorderedListOfWordsInRange(words, 0, words.size());
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {

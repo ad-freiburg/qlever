@@ -106,6 +106,28 @@ class RandomDoubleGenerator {
   std::uniform_real_distribution<double> _distribution;
 };
 
+/*
+ * @brief Create random booleans with weighted probability.
+ *
+ * For example: RandomBoolGenerator(1, 9) produces true ~10% of the time,
+ * and false ~90% of the time.
+ */
+class RandomBoolGenerator {
+ public:
+  explicit RandomBoolGenerator(
+      size_t trueWeight, size_t falseWeight,
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
+      : randomEngine_{seed.get()},
+        distribution_{static_cast<double>(trueWeight) /
+                      (trueWeight + falseWeight)} {}
+
+  bool operator()() { return distribution_(randomEngine_); }
+
+ private:
+  std::mt19937_64 randomEngine_;
+  std::bernoulli_distribution distribution_;
+};
+
 // GENERATE UUID
 class UuidGenerator {
  public:
