@@ -18,7 +18,8 @@ Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
-      index_{allocator_} {
+      index_{allocator_},
+      enablePatternTrick_{!config.noPatterns_} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
@@ -29,8 +30,7 @@ Qlever::Qlever(const EngineConfig& config)
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
-  index_.usePatterns() = !config.noPatterns_;
-  enablePatternTrick_ = !config.noPatterns_;
+  index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
 
   // Initialize the index.
@@ -62,7 +62,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         ad_utility::getLastPartOfString(config.wordsfile_, '/');
   }
 
-  index.setKbName(config.kbIndexName);
+  index.setKbName(config.kbIndexName_);
   index.setTextName(config.textIndexName_);
   index.usePatterns() = !config.noPatterns_;
   index.setOnDiskBase(config.baseName_);

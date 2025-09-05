@@ -32,7 +32,7 @@ struct CommonConfig {
 
   // The name of the dataset, will be output by the index when requested to
   // identify a dataset.
-  std::string kbIndexName = "no index name specified";
+  std::string kbIndexName_ = "no index name specified";
 
   // A memory limit that will be applied during the index building as well as
   // during the query processing.

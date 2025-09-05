@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
       "using the N-Triples or N-Quads format, as well as for well-behaved "
       "Turtle files, where all the prefix declarations come in one block at "
       "the beginning and there are no multiline literals");
-  add("kg-index-name,K", po::value(&config.kbIndexName),
+  add("kg-index-name,K", po::value(&config.kbIndexName_),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
 
