@@ -144,14 +144,15 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     const ScanImplConfig& scanConfig_;
     CancellationHandle cancellationHandle_;
     LimitOffsetClause& limitOffset_;
+    const CompressedRelationReader* reader_;
     ad_utility::Timer popTimer_{
         ad_utility::timer::Timer::InitialStatus::Started};
     std::mutex blockIteratorMutex_;
     T blockMetadataIterator_;
-    const CompressedRelationReader* reader_;
     ad_utility::InputRangeTypeErased<
         std::optional<DecompressedBlockAndMetadata>>
         queue_;
+    bool needsStart{true};
 
     Generator(T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
               CancellationHandle cancellationHandle,
@@ -162,8 +163,10 @@ CompressedRelationReader::asyncParallelBlockGenerator(
           scanConfig_{scanConfig},
           cancellationHandle_{cancellationHandle},
           limitOffset_{limitOffset},
-          blockMetadataIterator_{beginBlock},
-          reader_{reader} {
+          reader_{reader},
+          blockMetadataIterator_{beginBlock} {}
+
+    void start() {
       auto numThreads{RuntimeParameters().get<"lazy-index-scan-num-threads">()};
       auto queueSize{RuntimeParameters().get<"lazy-index-scan-queue-size">()};
       auto producer{std::bind(&Generator::readAndDecompressBlock, this)};
@@ -217,9 +220,14 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     std::optional<IdTable> get() override {
       std::optional<std::optional<DecompressedBlockAndMetadata>> item{};
 
-      // Yield the blocks (in the right order) as soon as they become available.
-      // Stop when all the blocks have been yielded or the LIMIT of the query is
-      // reached. Keep track of various statistics.
+      if (needsStart) {
+        start();
+        needsStart = false;
+      }
+
+      // Yield the blocks (in the right order) as soon as they become
+      // available. Stop when all the blocks have been yielded or the LIMIT of
+      // the query is reached. Keep track of various statistics.
       while ((item = queue_.get()) != std::nullopt) {
         popTimer_.stop();
 
