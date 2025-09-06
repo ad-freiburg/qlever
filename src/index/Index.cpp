@@ -101,7 +101,7 @@ size_t Index::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // ____________________________________________________________________________
-std::string_view Index::wordIdToString(WordIndex wordIndex) const {
+std::string_view Index::wordIdToString(WordVocabIndex wordIndex) const {
   return pimpl_->wordIdToString(wordIndex);
 }
 // ____________________________________________________________________________

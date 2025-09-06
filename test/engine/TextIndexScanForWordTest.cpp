@@ -7,7 +7,6 @@
 
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "../WordsAndDocsFileLineCreator.h"
 #include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -30,45 +29,45 @@ std::string kg =
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 std::string wordsFileContent =
-    createWordsFileLineAsString("astronomer", false, 1, 1) +
-    createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
-    createWordsFileLineAsString("scientist", false, 1, 1) +
-    createWordsFileLineAsString("field", false, 1, 1) +
-    createWordsFileLineAsString("astronomy", false, 1, 1) +
-    createWordsFileLineAsString("astronomer", false, 2, 0) +
-    createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
-    createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
-    createWordsFileLineAsString("scientist", false, 2, 0) +
-    createWordsFileLineAsString("field", false, 2, 0) +
-    createWordsFileLineAsString("astronomy", false, 2, 0) +
-    createWordsFileLineAsString("astronomy", false, 3, 1) +
-    createWordsFileLineAsString("concentrates", false, 3, 1) +
-    createWordsFileLineAsString("studies", false, 3, 1) +
-    createWordsFileLineAsString("specific", false, 3, 1) +
-    createWordsFileLineAsString("question", false, 3, 1) +
-    createWordsFileLineAsString("outside", false, 3, 1) +
-    createWordsFileLineAsString("scope", false, 3, 1) +
-    createWordsFileLineAsString("earth", false, 3, 1) +
-    createWordsFileLineAsString("astronomy", false, 4, 1) +
-    createWordsFileLineAsString("concentrates", false, 4, 1) +
-    createWordsFileLineAsString("studies", false, 4, 1) +
-    createWordsFileLineAsString("field", false, 4, 1) +
-    createWordsFileLineAsString("outside", false, 4, 1) +
-    createWordsFileLineAsString("scope", false, 4, 1) +
-    createWordsFileLineAsString("earth", false, 4, 1) +
-    createWordsFileLineAsString("tester", false, 5, 1) +
-    createWordsFileLineAsString("rockets", false, 5, 1) +
-    createWordsFileLineAsString("astronomer", false, 5, 1) +
-    createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
-    createWordsFileLineAsString("although", false, 5, 1) +
-    createWordsFileLineAsString("astronomer", false, 6, 0) +
-    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
-    createWordsFileLineAsString("although", false, 6, 0) +
-    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
-    createWordsFileLineAsString("space", false, 6, 1) +
-    createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
-    createWordsFileLineAsString("space", false, 7, 0) +
-    createWordsFileLineAsString("earth", false, 7, 1);
+    h::createWordsFileLineAsString("astronomer", false, 1, 1) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
+    h::createWordsFileLineAsString("scientist", false, 1, 1) +
+    h::createWordsFileLineAsString("field", false, 1, 1) +
+    h::createWordsFileLineAsString("astronomy", false, 1, 1) +
+    h::createWordsFileLineAsString("astronomer", false, 2, 0) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
+    h::createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
+    h::createWordsFileLineAsString("scientist", false, 2, 0) +
+    h::createWordsFileLineAsString("field", false, 2, 0) +
+    h::createWordsFileLineAsString("astronomy", false, 2, 0) +
+    h::createWordsFileLineAsString("astronomy", false, 3, 1) +
+    h::createWordsFileLineAsString("concentrates", false, 3, 1) +
+    h::createWordsFileLineAsString("studies", false, 3, 1) +
+    h::createWordsFileLineAsString("specific", false, 3, 1) +
+    h::createWordsFileLineAsString("question", false, 3, 1) +
+    h::createWordsFileLineAsString("outside", false, 3, 1) +
+    h::createWordsFileLineAsString("scope", false, 3, 1) +
+    h::createWordsFileLineAsString("earth", false, 3, 1) +
+    h::createWordsFileLineAsString("astronomy", false, 4, 1) +
+    h::createWordsFileLineAsString("concentrates", false, 4, 1) +
+    h::createWordsFileLineAsString("studies", false, 4, 1) +
+    h::createWordsFileLineAsString("field", false, 4, 1) +
+    h::createWordsFileLineAsString("outside", false, 4, 1) +
+    h::createWordsFileLineAsString("scope", false, 4, 1) +
+    h::createWordsFileLineAsString("earth", false, 4, 1) +
+    h::createWordsFileLineAsString("tester", false, 5, 1) +
+    h::createWordsFileLineAsString("rockets", false, 5, 1) +
+    h::createWordsFileLineAsString("astronomer", false, 5, 1) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
+    h::createWordsFileLineAsString("although", false, 5, 1) +
+    h::createWordsFileLineAsString("astronomer", false, 6, 0) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    h::createWordsFileLineAsString("although", false, 6, 0) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    h::createWordsFileLineAsString("space", false, 6, 1) +
+    h::createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
+    h::createWordsFileLineAsString("space", false, 7, 0) +
+    h::createWordsFileLineAsString("earth", false, 7, 1);
 
 std::string firstDocText =
     "An astronomer is a scientist in the field of "
@@ -81,8 +80,8 @@ std::string secondDocText =
     "too although they might not be in space but on "
     "earth.";
 
-std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
-                              createDocsFileLineAsString(7, secondDocText);
+std::string docsFileContent = h::createDocsFileLineAsString(4, firstDocText) +
+                              h::createDocsFileLineAsString(7, secondDocText);
 
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};
@@ -96,45 +95,6 @@ auto withFirst(const std::string& s) {
 auto withSecond(const std::string& s) {
   return h::combineToString(secondDocText, s);
 }
-
-// Struct to reduce code duplication
-struct TextResult {
-  QueryExecutionContext* qec_;
-  const Result& result_;
-  bool isPrefixSearch_ = true;
-  bool scoreIsInt_ = true;
-
-  auto getRow(size_t row) const {
-    return h::combineToString(
-        h::getTextRecordFromResultTable(qec_, result_, row),
-        h::getWordFromResultTable(qec_, result_, row));
-  }
-
-  auto getId(size_t row) const {
-    return h::getTextRecordIdFromResultTable(qec_, result_, row);
-  }
-
-  auto getTextRecord(size_t row) const {
-    return h::getTextRecordFromResultTable(qec_, result_, row);
-  }
-
-  auto getWord(size_t row) const {
-    return h::getWordFromResultTable(qec_, result_, row);
-  }
-
-  auto getScore(size_t row) const {
-    return h::getScoreFromResultTable(qec_, result_, row, isPrefixSearch_,
-                                      scoreIsInt_);
-  }
-
-  void checkListOfWords(const std::vector<std::string>& expectedWords,
-                        size_t& startingIndex) const {
-    for (const auto& word : expectedWords) {
-      ASSERT_EQ(word, getWord(startingIndex));
-      ++startingIndex;
-    }
-  }
-};
 
 // Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
 // text index that contains the literals from the `kg` as well as the
@@ -194,7 +154,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Tests if the correct texts are retrieved from a mix of non literal and
   // literal texts
-  TextResult tr{qec, result};
+  h::TextResult tr{qec, result};
   ASSERT_EQ(withSecond("tester"), tr.getRow(0));
   ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"), tr.getRow(1));
   ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
@@ -239,7 +199,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
-  auto tr1 = TextResult{qec, scoreResultCount, true};
+  auto tr1 = h::TextResult{qec, scoreResultCount, true};
   ASSERT_EQ(1, tr1.getScore(0));
   ASSERT_EQ(1, tr1.getScore(1));
   ASSERT_EQ(0, tr1.getScore(2));
@@ -254,7 +214,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   qec = getQecWithTextIndex(TextScoringMetric::TFIDF);
   TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
-  auto tr2 = TextResult{qec, scoreResultTFIDF, true, false};
+  auto tr2 = h::TextResult{qec, scoreResultTFIDF, true, false};
   float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord1Doc7 = h::calculateTFIDFFromParameters(1, 2, 6);
   float tfidfWord2Doc4 = h::calculateTFIDFFromParameters(1, 1, 6);
@@ -272,7 +232,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   qec = getQecWithTextIndex(TextScoringMetric::BM25);
   TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultBM25 = score3.computeResultOnlyForTesting();
-  auto tr3 = TextResult{qec, scoreResultBM25, true, false};
+  auto tr3 = h::TextResult{qec, scoreResultBM25, true, false};
   float bm25Word1Doc4 =
       h::calculateBM25FromParameters(1, 2, 6, 7, 15, 0.75, 1.75);
   float bm25Word1Doc7 =
@@ -297,7 +257,7 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  auto tr = TextResult{qec, result};
+  auto tr = h::TextResult{qec, result};
   ASSERT_EQ(result.idTable().numColumns(), 3);
   ASSERT_EQ(result.idTable().size(), 10);
 
@@ -321,7 +281,7 @@ TEST(TextIndexScanForWord, WordScanStarPrefix) {
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  auto tr = TextResult{qec, result};
+  auto tr = h::TextResult{qec, result};
   ASSERT_EQ(result.idTable().numColumns(), 3);
   ASSERT_EQ(result.idTable().size(), 50);
 
@@ -391,7 +351,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s1.getResultWidth(), 2);
 
   auto result = s1.computeResultOnlyForTesting();
-  auto tr1 = TextResult{qec, result, false};
+  auto tr1 = h::TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 2);
 
@@ -403,7 +363,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s2.getResultWidth(), 2);
 
   result = s2.computeResultOnlyForTesting();
-  auto tr2 = TextResult{qec, result, false};
+  auto tr2 = h::TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
@@ -414,7 +374,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s3.getResultWidth(), 2);
 
   result = s3.computeResultOnlyForTesting();
-  auto tr3 = TextResult{qec, result, false};
+  auto tr3 = h::TextResult{qec, result, false};
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
