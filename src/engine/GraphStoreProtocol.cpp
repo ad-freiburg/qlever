@@ -113,6 +113,6 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
       return "DROP DEFAULT";
     }
   };
-  return ad_utility::getSingleElement(
-      SparqlParser::parseUpdate(index.getBlankNodeManager(), getUpdate()));
+  return ad_utility::getSingleElement(SparqlParser::parseUpdate(
+      index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
 }

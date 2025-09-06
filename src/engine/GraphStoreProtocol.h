@@ -167,8 +167,8 @@ class GraphStoreProtocol {
       }
     };
 
-    ParsedQuery drop = ad_utility::getSingleElement(
-        SparqlParser::parseUpdate(index.getBlankNodeManager(), getDrop()));
+    ParsedQuery drop = ad_utility::getSingleElement(SparqlParser::parseUpdate(
+        index.getBlankNodeManager(), &index.encodedIriManager(), getDrop()));
     drop._originalString = stringRepresentation;
 
     auto triples =
