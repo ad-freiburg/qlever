@@ -9,8 +9,8 @@
 
 #include <concepts>
 #include <stdexcept>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"

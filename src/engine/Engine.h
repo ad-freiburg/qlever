@@ -5,9 +5,9 @@
 #ifndef QLEVER_SRC_ENGINE_ENGINE_H
 #define QLEVER_SRC_ENGINE_ENGINE_H
 
-#include <type_traits>
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "util/Log.h"

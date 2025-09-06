@@ -114,6 +114,7 @@ class GraphStoreProtocol {
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPostAndTsop);
+  FRIEND_TEST(GraphStoreProtocolTest, EncodedIriManagerUsage);
 
   // `TSOP` (`POST` backwards) does a `DELETE DATA` of the payload. It is an
   // extension to the Graph Store Protocol.
@@ -135,7 +136,8 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.
-  static ParsedQuery transformGet(const GraphOrDefault& graph);
+  static ParsedQuery transformGet(const GraphOrDefault& graph,
+                                  const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
@@ -202,7 +204,7 @@ class GraphStoreProtocol {
     using enum boost::beast::http::verb;
     std::string_view method = rawRequest.method_string();
     if (method == "GET") {
-      return {transformGet(operation.graph_)};
+      return {transformGet(operation.graph_, &index.encodedIriManager())};
     } else if (method == "PUT") {
       return transformPut(rawRequest, operation.graph_, index);
     } else if (method == "DELETE") {
