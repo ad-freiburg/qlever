@@ -57,10 +57,10 @@ const auto getAllTestLiterals = []() {
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
   GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}};
-  ASSERT_EQ(g.getWktType().type_, 5);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLat(), 1.5, 0.0001);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLng(), 1.5, 0.0001);
-  auto [lowerLeft, upperRight] = g.getBoundingBox();
+  ASSERT_EQ(g.getWktType().type(), 5);
+  ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
+  ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
+  auto [lowerLeft, upperRight] = g.getBoundingBox().pair();
   ASSERT_NEAR(lowerLeft.getLat(), 1, 0.0001);
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
   ASSERT_NEAR(upperRight.getLat(), 2, 0.0001);
@@ -114,12 +114,12 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, p};
+  GeometryInfo exp{1, {p, p}, Centroid{p}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, p2};
+  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}};
   checkGeoInfo(g2, exp2);
 }
 
@@ -217,7 +217,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   checkBoundingBox(bb1, bbExp1);
 
   auto bb1Wkt =
-      boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
+      boundingBoxAsWkt(bb1.value().lowerLeft(), bb1.value().upperRight());
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<example>(), "http://www.opengis.net/ont/sf#Example");
@@ -237,10 +237,10 @@ TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
   checkInvalidLiteral(litCoordOutOfRange, true);
-  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
-                    {2});
-  checkGeometryType(
-      GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+  EXPECT_EQ(GeometryInfo::getWktType(litCoordOutOfRange).value(),
+            std::optional<GeometryType>{GeometryType{2}});
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
+            std::optional<GeometryType>{GeometryType{2}});
 }
 
 // _____________________________________________________________________________

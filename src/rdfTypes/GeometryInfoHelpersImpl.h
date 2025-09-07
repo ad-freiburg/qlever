@@ -90,7 +90,7 @@ inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
 inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
   try {
-    return utilPointToGeoPoint(uPoint);
+    return Centroid{utilPointToGeoPoint(uPoint)};
   } catch (const CoordinateOutOfRangeException& ex) {
     AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
                     "coordinates. Error: "
@@ -133,8 +133,8 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 // Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
 // required by `pb_util`.
 inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
-  return {geoPointToUtilPoint(boundingBox.lowerLeft_),
-          geoPointToUtilPoint(boundingBox.upperRight_)};
+  return {geoPointToUtilPoint(boundingBox.lowerLeft()),
+          geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
