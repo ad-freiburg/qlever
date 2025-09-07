@@ -80,6 +80,8 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkCentroid(a.getCentroid(), b.getCentroid());
 
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
+
+  EXPECT_EQ(a.getNumGeometries(), b.getNumGeometries());
 }
 
 // ____________________________________________________________________________
@@ -89,13 +91,16 @@ inline void checkRequestedInfoForInstance(
   ASSERT_TRUE(optGeoInfo.has_value());
   auto gi = optGeoInfo.value();
   auto l = generateLocationTrace(sourceLocation);
+
   checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>());
-  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>(),
-                   sourceLocation);
-  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>(),
-                sourceLocation);
-  checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>(),
-                    sourceLocation);
+
+  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>());
+
+  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
+
+  checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>());
+
+  EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
 }
 
 // ____________________________________________________________________________
@@ -112,11 +117,14 @@ inline void checkRequestedInfoForWktLiteral(
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
   checkGeometryType(gi.getWktType(),
                     GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+  EXPECT_EQ(gi.getNumGeometries(),
+            GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
 }
 
 // ____________________________________________________________________________
 inline void checkInvalidLiteral(std::string_view wkt,
                                 bool expectValidGeometryType = false,
+                                bool expectNumGeom = false,
                                 Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
 
@@ -130,6 +138,8 @@ inline void checkInvalidLiteral(std::string_view wkt,
             expectValidGeometryType);
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value(),
+            expectNumGeom);
 }
 
 // ____________________________________________________________________________

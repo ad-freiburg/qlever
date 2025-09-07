@@ -16,6 +16,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -30,6 +31,17 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
+
+template <typename T>
+CPP_concept WktSingleGeometryType =
+    SameAsAny<T, Point<CoordType>, Line<CoordType>, Polygon<CoordType>>;
+
+template <typename T>
+CPP_concept WktCollectionType =
+    SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
+              MultiPolygon<CoordType>, Collection<CoordType>>;
+
+static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
@@ -189,6 +201,21 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
+
+// Counts the number of geometries in a geometry collection.
+inline uint32_t countChildGeometries(const ParsedWkt& geom) {
+  return std::visit(
+      [](const auto& g) -> uint32_t {
+        using T = std::decay_t<decltype(g)>;
+        if constexpr (WktCollectionType<T>) {
+          return static_cast<uint32_t>(g.size());
+        } else {
+          static_assert(WktSingleGeometryType<T>);
+          return 1;
+        }
+      },
+      geom);
+}
 
 }  // namespace ad_utility::detail
 

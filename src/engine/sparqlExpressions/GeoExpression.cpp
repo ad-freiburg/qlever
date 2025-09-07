@@ -60,6 +60,10 @@ NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(NumGeometriesExpression, 1,
+                FV<ad_utility::WktNumGeometries,
+                   GeometryInfoValueGetter<ad_utility::NumGeometries>>);
+
 }  // namespace detail
 
 using namespace detail;
@@ -131,6 +135,11 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
 };
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<NumGeometriesExpression>(std::move(child));
+}
 
 namespace {
 
