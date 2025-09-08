@@ -1,7 +1,8 @@
 
-// Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
+// Generated from SparqlAutomatic.g4 by ANTLR 4.13.2
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H
+#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H
 
 #include "SparqlAutomaticParser.h"
 #include "antlr4-runtime.h"
@@ -12,11 +13,6 @@
  */
 class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
  public:
-  virtual void enterQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
-  virtual void exitQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
-
   virtual void enterQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
   virtual void exitQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
 
@@ -717,3 +713,5 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterPnameNs(SparqlAutomaticParser::PnameNsContext* ctx) = 0;
   virtual void exitPnameNs(SparqlAutomaticParser::PnameNsContext* ctx) = 0;
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLISTENER_H

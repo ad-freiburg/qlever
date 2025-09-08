@@ -3,19 +3,19 @@
 // Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
 //         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_EXCEPTION_H
+#define QLEVER_SRC_UTIL_EXCEPTION_H
+
+#include <absl/strings/str_cat.h>
+
 #include <exception>
 #include <functional>
 #include <sstream>
 #include <string>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
 #include "backports/concepts.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
-
-using std::string;
 
 // -------------------------------------------
 // Exception class code
@@ -27,7 +27,7 @@ namespace ad_utility {
 // message just in case
 class AbortException : public std::exception {
  private:
-  string what_;
+  std::string what_;
 
  public:
   explicit AbortException(const std::exception& original)
@@ -112,7 +112,8 @@ CPP_template(typename T)(
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
 // etc. Return "<concatenation of `getMessageImpl(messages)...`>" followed by
 // a full stop and space if there is at least one message.
-std::string concatMessages(auto&&... messages) {
+template <typename... Args>
+std::string concatMessages(Args&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
     return "";
   } else {
@@ -188,3 +189,5 @@ static constexpr bool areExpensiveChecksEnabled = false;
 }
 #define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif
+
+#endif  // QLEVER_SRC_UTIL_EXCEPTION_H

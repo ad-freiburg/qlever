@@ -2,15 +2,16 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG
 
 #include "parser/GraphPatternOperation.h"
 
-#include <optional>
-#include <string_view>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "engine/SpatialJoin.h"
+#include <string_view>
+#include <vector>
+
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
@@ -45,7 +46,8 @@ std::string SparqlValues::valuesToString() const {
 // Small anonymous helper function that is used in the definition of the member
 // functions of the `Subquery` class.
 namespace {
-auto m(auto&&... args) {
+template <typename... Args>
+auto m(Args&&... args) {
   return std::make_unique<ParsedQuery>(AD_FWD(args)...);
 }
 }  // namespace
@@ -75,15 +77,7 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<const Variable> Bind::containedVariables() const {
-  for (const auto* ptr : _expression.containedVariables()) {
-    co_yield *ptr;
-  }
-  co_yield _target;
-}
-
-// ____________________________________________________________________________
-[[nodiscard]] string Bind::getDescriptor() const {
+[[nodiscard]] std::string Bind::getDescriptor() const {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }

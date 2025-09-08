@@ -3,11 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
+#define QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
 
 #include "index/IndexMetaData.h"
-#include "index/MetaDataHandler.h"
 #include "util/File.h"
+#include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeHashMap.h"
@@ -89,7 +90,7 @@ void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
 
 // _____________________________________________________________________________
 template <class MapType>
-string IndexMetaData<MapType>::statistics() const {
+std::string IndexMetaData<MapType>::statistics() const {
   std::ostringstream os;
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
@@ -110,3 +111,5 @@ void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
     totalElements_ += block.numRows_;
   }
 }
+
+#endif  // QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H

@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_BIND_H
+#define QLEVER_SRC_ENGINE_BIND_H
 
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -22,15 +23,17 @@ class Bind : public Operation {
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
-  bool supportsLimit() const override;
+  bool supportsLimitOffset() const override;
+  void onLimitOffsetChanged(
+      const LimitOffsetClause& limitOffset) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -41,7 +44,7 @@ class Bind : public Operation {
   bool knownEmptyResult() override;
 
  protected:
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;
@@ -56,3 +59,5 @@ class Bind : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_BIND_H

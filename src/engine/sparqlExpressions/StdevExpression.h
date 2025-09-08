@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
 
 #include <cmath>
 #include <functional>
@@ -41,14 +42,14 @@ class DeviationExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
   }
 
  private:
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
     return {&child_, 1};
   }
 };
@@ -65,7 +66,7 @@ class DeviationAggExpression
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct, std::make_unique<DeviationExpression>(std::move(child)),
-            aggregateOp){};
+            aggregateOp) {}
 };
 
 // The final operation for dividing by degrees of freedom and calculation square
@@ -98,3 +99,5 @@ class StdevExpression : public StdevExpressionBase {
 using detail::StdevExpression;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_DESCRIBE_H
+#define QLEVER_SRC_ENGINE_DESCRIBE_H
 
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
@@ -34,8 +35,8 @@ class Describe : public Operation {
 
   // The following functions override those from the base class `Operation`.
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
 
@@ -48,7 +49,7 @@ class Describe : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -77,3 +78,5 @@ class Describe : public Operation {
   // IRIs that match `?y` in the WHERE clause, with all duplicates removed.
   IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_DESCRIBE_H

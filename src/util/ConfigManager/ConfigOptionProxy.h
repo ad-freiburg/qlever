@@ -2,14 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
 
 #include <absl/strings/str_cat.h>
 
 #include <concepts>
 #include <stdexcept>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
@@ -107,3 +108,5 @@ class ConfigOptionProxy
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H

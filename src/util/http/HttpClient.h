@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
+#define QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
 
 // IMPORTANT: The header `util/HttpServer/beast.h` redefines some variables
 // (important for our code) which are also defined in some of the ´<boost/...>´
@@ -15,9 +16,9 @@
 // order of the includes should not matter, and it should certainly not cause
 // segmentation faults.
 
-#include <span>
 #include <string>
 
+#include "backports/span.h"
 #include "util/CancellationHandle.h"
 #include "util/Generator.h"
 #include "util/http/HttpUtils.h"
@@ -27,7 +28,23 @@
 struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
-  cppcoro::generator<std::span<std::byte>> body_;
+  cppcoro::generator<ql::span<std::byte>> body_;
+
+  // Return the first `length` bytes of the response body as a string.
+  std::string readResponseHead(size_t length) && {
+    std::string ctx;
+    ctx.reserve(length);
+    for (const auto& bytes : std::move(body_)) {
+      // only copy until the ctx has reached length
+      size_t bytesToCopy = std::min(bytes.size(), length - ctx.size());
+      ctx += std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                              bytesToCopy);
+      if (ctx.size() == length) {
+        break;
+      }
+    }
+    return ctx;
+  }
 };
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
@@ -49,7 +66,7 @@ class HttpClientImpl {
   // Send a request (the first argument must be either `http::verb::get` or
   // `http::verb::post`) and return the status and content-type as
   // well as the body of the response (possibly very large) as an
-  // `cppcoro::generator<std::span<std::byte>>`. The connection can be used
+  // `cppcoro::generator<ql::span<std::byte>>`. The connection can be used
   // for only one request, as the client is moved to the content yielding
   // coroutine.
   static HttpOrHttpsResponse sendRequest(
@@ -84,8 +101,17 @@ using HttpClient = HttpClientImpl<boost::beast::tcp_stream>;
 using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
 
+// The type of the `sendHttpOrHttpsRequest` function below, wrapped in a
+// `std::function`. This type alias can be used when mocking an HTTP connection
+// for testing purposes.
+using SendRequestType = std::function<HttpOrHttpsResponse(
+    const ad_utility::httpUtils::Url&,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb&, std::string_view, std::string_view,
+    std::string_view)>;
+
 // Global convenience function for sending a request (default: GET) to the given
-// URL and obtaining the result as a `cppcoro::generator<std::span<std::byte>>`.
+// URL and obtaining the result as a `cppcoro::generator<ql::span<std::byte>>`.
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
 // `requestBody` is the payload sent for POST requests (default: empty).
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
@@ -95,3 +121,5 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain");
+
+#endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

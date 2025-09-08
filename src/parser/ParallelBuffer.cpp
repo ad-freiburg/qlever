@@ -4,7 +4,7 @@
 #include "./ParallelBuffer.h"
 
 // _________________________________________________________________________
-void ParallelFileBuffer::open(const string& filename) {
+void ParallelFileBuffer::open(const std::string& filename) {
   file_.open(filename, "r");
   eof_ = false;
   buf_.resize(blocksize_);

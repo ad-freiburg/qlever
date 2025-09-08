@@ -10,7 +10,7 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
 namespace sparqlExpression {
@@ -129,6 +129,10 @@ class SparqlExpressionPimpl {
 
   // Create a `SparqlExpressionPimpl` from a single variable.
   static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
+
+  // Convenience functions, that delegate to the respective `SparqlExpression`.
+  std::vector<const SparqlExpression*> getExistsExpressions() const;
+  std::vector<SparqlExpression*> getExistsExpressions();
 
  private:
   // TODO<joka921> Why can't this be a unique_ptr.

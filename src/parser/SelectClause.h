@@ -3,13 +3,14 @@
 // Author:
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SELECTCLAUSE_H
+#define QLEVER_SRC_PARSER_SELECTCLAUSE_H
 
 #include <variant>
 #include <vector>
 
 #include "parser/Alias.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace parsedQuery {
 
@@ -88,3 +89,5 @@ struct SelectClause : ClauseBase {
   void deleteAliasesButKeepVariables();
 };
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_SELECTCLAUSE_H

@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
+#define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -118,8 +119,7 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
     ql::ranges::sort(stringsCopy);
-    auto prefixes =
-        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
+    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);
     Strings compressedStrings;
     for (const auto& string : strings) {
@@ -130,3 +130,5 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
 };
 static_assert(CompressionWrapper<PrefixCompressionWrapper>);
 }  // namespace ad_utility::vocabulary
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H

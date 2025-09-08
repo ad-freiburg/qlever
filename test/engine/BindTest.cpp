@@ -42,7 +42,7 @@ void expectBindYieldsIdTable(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
     EXPECT_EQ(iterator->idTable_, expected);
@@ -123,7 +123,7 @@ TEST(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
     EXPECT_EQ(iterator->idTable_, table);
@@ -150,4 +150,26 @@ TEST(Bind, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(bind, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), bind.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Bind, limitIsPropagated) {
+  auto* qec = ad_utility::testing::getQec();
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {1}, {2}}, &Id::makeFromInt),
+      Vars{Variable{"?a"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
+      std::nullopt, true);
+  Bind bind{
+      qec,
+      std::move(valuesTree),
+      {SparqlExpressionPimpl{
+           std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
+       Variable{"?b"}}};
+
+  bind.applyLimitOffset({1, 1});
+
+  auto result = bind.computeResultOnlyForTesting();
+  const auto& idTable = result.idTable();
+
+  EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
 }

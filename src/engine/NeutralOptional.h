@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
+#define QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
 
 #include "engine/Operation.h"
 
@@ -34,8 +35,12 @@ class NeutralOptional : public Operation {
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool supportsLimit() const override;
+  bool supportsLimitOffset() const override;
+  void onLimitOffsetChanged(
+      const LimitOffsetClause& limitOffset) const override;
 
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

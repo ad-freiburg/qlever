@@ -3,10 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
+#define QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
 
 #include <absl/strings/str_split.h>
 #include <unicode/locid.h>
+#include <unicode/uchar.h>
 
 #include <fstream>
 #include <string>
@@ -15,8 +17,6 @@
 #include "index/StringSortComparator.h"
 #include "util/Iterators.h"
 #include "util/Views.h"
-
-using std::string;
 
 /**
  * @brief Represents a line in the words file.
@@ -62,7 +62,7 @@ using std::string;
  *                          the method getTextRecordFromResultTable
  */
 struct WordsFileLine {
-  string word_;
+  std::string word_;
   bool isEntity_;
   TextRecordIndex contextId_;
   Score score_;
@@ -92,18 +92,32 @@ struct WordsFileLine {
  */
 struct DocsFileLine {
   DocumentIndex docId_;
-  string docContent_;
+  std::string docContent_;
 };
 
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
 // The `Find` function returns the next delimiter in `text` after the given
 // `pos` or an empty substring if there is no next delimiter.
+// This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
-  absl::string_view Find(absl::string_view text, size_t pos) const {
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
-    auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
-    if (found == text.end()) return text.substr(text.size());
-    return {found, found + 1};
+  absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
+    auto pos = static_cast<int64_t>(unsignedPos);
+    auto size = static_cast<int64_t>(text.size());
+    // Note: If the Unicode handling ever becomes a bottleneck for ASCII only
+    // words, we can integrate a fast path here that handles the ascii
+    // characters. But before tackling such microoptimizations, the text index
+    // builder should first be parallelized.
+    while (pos < size) {
+      size_t oldPos = pos;
+      UChar32 codePoint;
+      U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
+              codePoint);
+      AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
+      if (!u_isalnum(codePoint)) {
+        return text.substr(oldPos, pos - oldPos);
+      }
+    }
+    return {text.end(), text.end()};
   }
 };
 
@@ -135,7 +149,7 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
  */
 class WordsAndDocsFileParser {
  public:
-  explicit WordsAndDocsFileParser(const string& wordsOrDocsFile,
+  explicit WordsAndDocsFileParser(const std::string& wordsOrDocsFile,
                                   const LocaleManager& localeManager);
   explicit WordsAndDocsFileParser(const WordsAndDocsFileParser& other) = delete;
   WordsAndDocsFileParser& operator=(const WordsAndDocsFileParser& other) =
@@ -190,3 +204,5 @@ class DocsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 };
+
+#endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H

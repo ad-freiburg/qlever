@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <iostream>
 #include <string>
@@ -13,12 +15,14 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
 using namespace std::literals;
+using ad_utility::use_type_identity::ti;
 using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
 using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
 using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
@@ -29,6 +33,29 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+
+auto re2Parser = []() { return Re2Parser{encodedIriManager()}; };
+auto ctreParser = []() { return CtreParser{encodedIriManager()}; };
+
+bool isPositiveInfinity(const TripleComponent& value) {
+  if (!value.isDouble()) {
+    return false;
+  }
+  double d = value.getDouble();
+  return std::isinf(d) && d > 0;
+}
+
+bool isNegativeInfinity(const TripleComponent& value) {
+  if (!value.isDouble()) {
+    return false;
+  }
+  double d = value.getDouble();
+  return std::isinf(d) && d < 0;
+}
 }  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
@@ -37,7 +64,7 @@ auto iri = [](std::string_view s) {
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
 template <typename Parser, auto rule, size_t blankNodePrefix = 0>
 std::optional<Parser> parseRule(const std::string& input) {
-  Parser parser;
+  Parser parser{encodedIriManager()};
   parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
   parser.setInputStream(input);
   if (!std::invoke(rule, parser)) {
@@ -76,8 +103,8 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.predicate_.toStringRepresentation()
-     << " " << tr.object_ << " " << tr.graphIri_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_ << " " << tr.object_ << " "
+     << tr.graphIri_ << ")";
   return os;
 }
 TEST(RdfParserTest, prefixedName) {
@@ -110,7 +137,7 @@ TEST(RdfParserTest, prefixedName) {
                  typename std::decay_t<decltype(parser)>::ParseException);
   };
   {
-    Re2Parser p;
+    Re2Parser p{encodedIriManager()};
     runCommonTests(p);
     p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
@@ -130,7 +157,7 @@ TEST(RdfParserTest, prefixedName) {
   }
 
   {
-    CtreParser p;
+    CtreParser p{encodedIriManager()};
     runCommonTests(p);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
@@ -232,6 +259,27 @@ TEST(RdfParserTest, rdfLiteral) {
                                                           expected[i]);
   }
 
+  auto testLiteral = [](const std::string& literal, const auto& predicate,
+                        ad_utility::source_location loc =
+                            ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(loc);
+
+    EXPECT_THAT((checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(literal))
+                    .getLastParseResult(),
+                ::testing::Truly(predicate));
+    EXPECT_THAT((checkParseResult<CtreParser, &CtreParser::rdfLiteral>(literal))
+                    .getLastParseResult(),
+                ::testing::Truly(predicate));
+  };
+
+  testLiteral(R"("NaN"^^)"s + "<" + XSD_DOUBLE_TYPE + ">",
+              [](const TripleComponent& tripleComponent) {
+                return tripleComponent.isDouble() &&
+                       std::isnan(tripleComponent.getDouble());
+              });
+  testLiteral(R"("INF"^^)"s + "<" + XSD_DOUBLE_TYPE + ">", isPositiveInfinity);
+  testLiteral(R"("-INF"^^)"s + "<" + XSD_DOUBLE_TYPE + ">", isNegativeInfinity);
+
   auto runCommonTests = [](auto p) {
     p.prefixMap_["doof"] = iri("<www.doof.org/>");
 
@@ -242,24 +290,29 @@ TEST(RdfParserTest, rdfLiteral) {
               lit("\"valuePrefixed\"", "^^<www.doof.org/sometype>"));
     ASSERT_EQ(p.getPosition(), s.size());
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
-  auto ladttc =
-      TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent;
+  auto ladttc = [](auto&&... inp) {
+    return TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
+        AD_FWD(inp)..., *encodedIriManager());
+  };
   auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
 
   ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
   ASSERT_EQ(ladttc("+42.2345", fromIri(XSD_DOUBLE_TYPE)), +42.2345);
+  ASSERT_TRUE(std::isnan(ladttc("NaN", fromIri(XSD_DOUBLE_TYPE)).getDouble()));
+  ASSERT_TRUE(isPositiveInfinity(ladttc("INF", fromIri(XSD_DOUBLE_TYPE))));
+  ASSERT_TRUE(isNegativeInfinity(ladttc("-INF", fromIri(XSD_DOUBLE_TYPE))));
   ASSERT_EQ(ladttc("-142.321", fromIri(XSD_DECIMAL_TYPE)), -142.321);
   ASSERT_EQ(ladttc("-142321", fromIri(XSD_INT_TYPE)), -142321);
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
   auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
-  auto vid = result.toValueIdIfNotString();
+  auto vid = result.toValueIdIfNotString(encodedIriManager());
   ASSERT_TRUE(vid.has_value() &&
               vid.value().getDatatype() == Datatype::GeoPoint);
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
@@ -316,8 +369,8 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  testPropertyListAsObject(Re2Parser{});
-  testPropertyListAsObject(CtreParser{});
+  testPropertyListAsObject(re2Parser());
+  testPropertyListAsObject(ctreParser());
 
   auto testPropertyListAsSubject = [](auto p) {
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>] <p1> <ob1>";
@@ -335,8 +388,8 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_THROW(p.blankNodePropertyList(),
                  TurtleParser<Tokenizer>::ParseException);
   };
-  testPropertyListAsSubject(Re2Parser{});
-  testPropertyListAsSubject(CtreParser{});
+  testPropertyListAsSubject(re2Parser());
+  testPropertyListAsSubject(ctreParser());
 }
 
 TEST(RdfParserTest, base) {
@@ -350,8 +403,8 @@ TEST(RdfParserTest, base) {
     parser.setInputStream("@base \"no iriref\" .");
     ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
   };
-  testForGivenParser(Re2Parser{});
-  testForGivenParser(CtreParser{});
+  testForGivenParser(re2Parser());
+  testForGivenParser(ctreParser());
 }
 
 TEST(RdfParserTest, sparqlBase) {
@@ -365,8 +418,8 @@ TEST(RdfParserTest, sparqlBase) {
     parser.setInputStream("BASE \"no iriref\" .");
     ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
   };
-  testForGivenParser(Re2Parser{});
-  testForGivenParser(CtreParser{});
+  testForGivenParser(re2Parser());
+  testForGivenParser(ctreParser());
 }
 
 TEST(RdfParserTest, object) {
@@ -398,8 +451,8 @@ TEST(RdfParserTest, object) {
     exp = TurtleTriple{sub, pred, "_:u_someblank"};
     ASSERT_EQ(p.triples_.back(), exp);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, objectList) {
@@ -422,8 +475,8 @@ TEST(RdfParserTest, objectList) {
     parser.setInputStream("<obj1>, @illFormed");
     ASSERT_THROW(parser.objectList(), TurtleParser<Tokenizer>::ParseException);
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, predicateObjectList) {
@@ -439,8 +492,8 @@ TEST(RdfParserTest, predicateObjectList) {
     ASSERT_EQ(parser.triples_, exp);
     ASSERT_EQ(parser.getPosition(), predL.size());
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, numericLiteral) {
@@ -470,9 +523,9 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
     return parser.parseAndReturnAllTriples();
   };
 
-  auto testTripleObjects = [&parseAllTriples]<typename T>(
-                               auto& parser, std::vector<std::string> triples,
-                               std::vector<T> expectedObjects) {
+  auto testTripleObjects = [&parseAllTriples](auto& parser,
+                                              std::vector<std::string> triples,
+                                              auto expectedObjects) {
     for (size_t i = 0; i < triples.size(); ++i) {
       const auto& triple = triples[i];
       std::vector<TurtleTriple> result;
@@ -482,7 +535,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
     }
   };
   auto runCommonTests = [&assertParsingFails, &testTripleObjects,
-                         &parseAllTriples]<typename Parser>(const Parser&) {
+                         &parseAllTriples](const auto& p) {
+    using Parser = std::decay_t<decltype(p)>;
     {
       // Test the default mode (overflowing integers throw an exception).
       std::vector<std::string> inputs{
@@ -496,7 +550,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer",
           "<a> <b> \"kartoffelsalat\"^^xsd:double",
           "<a> <b> \"123kartoffel\"^^xsd:decimal"};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       for (const auto& input : inputs) {
         assertParsingFails(parser, input);
@@ -514,7 +568,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           99999999999999999999999.0, -9999999999999999999999.0,
           9999999999999999999999.0, 99999999999999999999E4,
           99999999999999999999E4};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       testTripleObjects(parser, inputs, expectedObjects);
     }
@@ -527,7 +581,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"9999E4\"^^xsd:int",
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
@@ -547,7 +601,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<std::string> nonWorkingInputs{
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
@@ -581,7 +635,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
       std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
                                          {iri("<e>"), iri("<f>"), 234}};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.invalidLiteralsAreSkipped() = true;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
@@ -595,7 +649,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{
           {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
           {iri("<e>"), iri("<f>"), 234}};
-      Parser parser;
+      Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
       parser.integerOverflowBehavior() =
@@ -604,8 +658,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       ASSERT_EQ(result, expected);
     }
   };
-  runCommonTests(Re2Parser{});
-  runCommonTests(CtreParser{});
+  runCommonTests(re2Parser());
+  runCommonTests(ctreParser());
 }
 
 TEST(RdfParserTest, DateLiterals) {
@@ -717,8 +771,14 @@ TEST(RdfParserTest, booleanLiteralLongForm) {
   auto runCommonTests = [](const auto& ruleChecker) {
     ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
     ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
-    ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-                lit("\"maybe\""));
+    ruleChecker("\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                Id::makeBoolFromZeroOrOne(true));
+    ruleChecker("\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                Id::makeBoolFromZeroOrOne(false));
+    EXPECT_THROW(
+        ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+                    Id::makeUndefined()),
+        ParseException);
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::rdfLiteral>);
@@ -790,8 +850,8 @@ TEST(RdfParserTest, iriref) {
     ASSERT_FALSE(parser.iriref());
   };
   // Run tests for both parsers and reset std::cout.
-  runTestsForParser(Re2Parser{});
-  runTestsForParser(CtreParser{});
+  runTestsForParser(re2Parser());
+  runTestsForParser(ctreParser());
 }
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
@@ -803,15 +863,15 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
     ad_utility::MemorySize bufferSize = 1_kB) {
-  auto parserChild = [&]() {
-    if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+  auto parser = [&]() {
+    if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
+                    encodedIriManager(),
                     bufferSize};
     } else {
-      return Parser{filename, bufferSize};
+      return Parser{filename, encodedIriManager(), bufferSize};
     }
   }();
-  RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
   if (useBatchInterface) {
@@ -833,30 +893,20 @@ std::vector<TurtleTriple> parseFromFile(
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
 auto forAllParallelParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
-      true, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
-      false, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
-      true, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
-      false, args...);
+  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, true, args...);
+  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, false, args...);
+  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, true, args...);
+  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
 }
 auto forAllMultifileParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfMultifileParser<Tokenizer>>(true, args...);
-  function.template operator()<RdfMultifileParser<TokenizerCtre>>(true,
-                                                                  args...);
+  function(ti<RdfMultifileParser>, true, args...);
 }
 
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
-      true, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
-      false, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
-      true, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
-      false, args...);
+  function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, true, args...);
+  function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, false, args...);
+  function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, true, args...);
+  function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, false, args...);
   forAllParallelParsers(function, args...);
   forAllMultifileParsers(function, args...);
 }
@@ -875,7 +925,8 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
     }
   }
 
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
+  auto testWithParser = [&](auto t, bool useBatchInterface) {
+    using Parser = typename decltype(t)::type;
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
   };
@@ -888,8 +939,9 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
 // _______________________________________________________________________
 TEST(RdfParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
-                                             std::string_view input = "") {
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input = "") {
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -908,9 +960,10 @@ TEST(RdfParserTest, emptyInput) {
 // ________________________________________________________________________
 TEST(RdfParserTest, multilineComments) {
   std::string filename{"turtleParserMultilineComments.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
-                                             std::string_view input,
-                                             const auto& expectedTriples) {
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input,
+                            const auto& expectedTriples) {
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -960,8 +1013,9 @@ TEST(RdfParserTest, multilineComments) {
 // actual parsing happens on background threads.
 TEST(RdfParserTest, exceptionPropagation) {
   std::string filename{"turtleParserExceptionPropagation.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
-                                             std::string_view input) {
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -978,9 +1032,10 @@ TEST(RdfParserTest, exceptionPropagation) {
 // propagated.
 TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
-                                             ad_utility::MemorySize bufferSize,
-                                             std::string_view input) {
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -1002,6 +1057,140 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
+  std::string filename{"exceptionOnScatteredPrefixOrBaseInParallelParser.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::HasSubstr("'--parse-parallel false'"));
+    ad_utility::deleteFile(filename);
+  };
+  // Redefinition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex: <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex: <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+  // New definition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex1: <http://example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex1: <http://example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  }
+  // Same root, different relative base
+  {
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/abc> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://example.org/def> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/abc> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://example.org/def> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+}
+
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest,
+     noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser) {
+  std::string filename{
+      "noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    EXPECT_NO_THROW(
+        parseFromFile<Parser>(filename, useBatchInterface, bufferSize));
+    ad_utility::deleteFile(filename);
+  };
+  std::string_view inputWithScatteredPrefix =
+      "@prefix ex: <http://example.org/> . \n"
+      "<subject> <predicate> <object> . \n "
+      "@prefix ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+  std::string_view inputWithScatteredSparqlPrefix =
+      "PREFIX ex: <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "PREFIX ex: <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  std::string_view inputWithScatteredBase =
+      "@base <http://example.org/> . \n"
+      "<subject> <predicate> <object> . \n "
+      "@base <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+  std::string_view inputWithScatteredSparqlBase =
+      "BASE <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "BASE <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+}
+
+// Test for better error message in parallel parser when encountering a string
+// literal parsing error.
+TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
+  std::string filename{"betterErrorMessageOnMultilineLiteralError.dat"};
+  auto testWithParser = [&filename](auto t, bool useBatchInterface,
+                                    ad_utility::MemorySize bufferSize,
+                                    std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::AllOf(::testing::HasSubstr("`--parse-parallel false`"),
+                         ::testing::HasSubstr("multiline string literal")));
+    ad_utility::deleteFile(filename);
+  };
+  // Redefinition
+  std::string_view inputWithMultilineString =
+      "<subject1> <predicate1> <object1> . \n"
+      "<subject2> <predicate2> \"\"\".\n\"\"\" . \n"
+      "<subject3> <predicate3> <object3> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithMultilineString);
+}
+
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.
@@ -1010,26 +1199,27 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
-  auto testWithParser = [&]<typename Parser>(
-                            [[maybe_unused]] bool useBatchInterface,
+  auto testWithParser = [&](auto t, [[maybe_unused]] bool useBatchInterface,
                             std::string_view input) {
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
     }
-    ad_utility::Timer t{ad_utility::Timer::Stopped};
+    ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
-        if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+        if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
           return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
+                        encodedIriManager(),
                         40_B};
         } else {
-          return Parser{filename, 40_B, 10ms};
+          return Parser{filename, encodedIriManager(), 40_B, 10ms};
         }
       }();
-      t.cont();
+      timer.cont();
     }
-    EXPECT_LE(t.msecs(), 20ms);
+    EXPECT_LE(timer.msecs(), 20ms);
   };
   const std::string input = []() {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";
@@ -1064,7 +1254,8 @@ TEST(RdfParserTest, nQuadParser) {
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {
-      auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
+      auto parser =
+          RdfStringParser<NQuadParser<Tokenizer>>(encodedIriManager());
       parser.setInputStream(input);
       EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
     };
@@ -1077,8 +1268,8 @@ TEST(RdfParserTest, nQuadParser) {
                                                 // NQuad
     // format.
   };
-  runTestsForParser(NQuadRe2Parser{});
-  runTestsForParser(NQuadCtreParser{});
+  runTestsForParser(NQuadRe2Parser{encodedIriManager()});
+  runTestsForParser(NQuadCtreParser{encodedIriManager()});
 }
 
 // _____________________________________________________________________________
@@ -1088,28 +1279,29 @@ TEST(RdfParserTest, noGetlineInStringParser) {
     TurtleTriple t;
     EXPECT_ANY_THROW(parser.getLine(t));
   };
-  runTestsForParser(NQuadRe2Parser{});
-  runTestsForParser(NQuadCtreParser{});
-  runTestsForParser(Re2Parser{});
-  runTestsForParser(CtreParser{});
+  runTestsForParser(NQuadRe2Parser{encodedIriManager()});
+  runTestsForParser(NQuadCtreParser{encodedIriManager()});
+  runTestsForParser(re2Parser());
+  runTestsForParser(ctreParser());
 }
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, noGetlineInMultifileParsers) {
-  auto runTestsForParser =
-      []<typename Parser>([[maybe_unused]] bool interface) {
-        Parser parser{};
-        TurtleTriple t;
-        // Also test the dummy parse position member.
-        EXPECT_EQ(parser.getParsePosition(), 0u);
-        EXPECT_ANY_THROW(parser.getLine(t));
-      };
+  auto runTestsForParser = [](auto t, [[maybe_unused]] bool interface) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{encodedIriManager()};
+    TurtleTriple triple;
+    // Also test the dummy parse position member.
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+    EXPECT_ANY_THROW(parser.getLine(triple));
+  };
   forAllMultifileParsers(runTestsForParser);
 }
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, multifileParser) {
-  auto impl = []<typename Parser>(bool useParallelParser) {
+  auto impl = [](auto t, bool useParallelParser) {
+    using Parser = typename decltype(t)::type;
     std::vector<TurtleTriple> expected;
     std::string ttl = "<x> <y> <z>. <x> <y> <z2>.";
     expected.push_back(TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"),
@@ -1136,7 +1328,7 @@ TEST(RdfParserTest, multifileParser) {
                        useParallelParser);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
-    Parser p{specs};
+    Parser p{specs, encodedIriManager()};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1167,7 +1359,7 @@ TEST(RdfParserTest, specialPredicateA) {
              lit("\"object\"")}});
   };
 
-  auto parseTwoStatements = []<typename Parser>(Parser& parser) {
+  auto parseTwoStatements = [](auto& parser) {
     return parser.statement() && parser.statement();
   };
 
@@ -1175,4 +1367,174 @@ TEST(RdfParserTest, specialPredicateA) {
   auto checkCTRE = checkParseResult<CtreParser, parseTwoStatements>;
   runCommonTests(checkRe2);
   runCommonTests(checkCTRE);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
+  // Regression test for small payloads with long prefixes, where the initial
+  // chunk size of `ParallelBufferWithEndRegex::findRegexNearEnd` of 1000 is
+  // greater than the total size of the payload.
+  std::string filename{"payloadSmallerThanInitialChunkSize.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
+    EXPECT_THAT(result, ::testing::ElementsAre(TurtleTriple{
+                            iri("<http://vocab.getty.edu/aat/300312355>"),
+                            iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
+                            lit("\"test\"")}));
+    ad_utility::deleteFile(filename);
+  };
+
+  forAllParallelParsers(
+      testWithParser,
+      "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>. \n"
+      "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.\n"
+      "\n"
+      "<http://vocab.getty.edu/aat/300312355> rdfs:label \"test\".");
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, EncodedIriManagerUsage) {
+  // Create an EncodedIriManager with test prefixes
+  EncodedIriManager encodedIriManager{
+      {"http://example.org/", "http://test.com/id/"}};
+
+  // Create parsers with the EncodedIriManager
+  auto re2ParserWithEncoding = [&]() { return Re2Parser{&encodedIriManager}; };
+  auto ctreParserWithEncoding = [&]() {
+    return CtreParser{&encodedIriManager};
+  };
+
+  // Test lambda that reduces boilerplate
+  auto testIriAtPosition = [&](auto parserFactory, const std::string& tripleStr,
+                               TripleComponent TurtleTriple::*position,
+                               bool shouldEncode,
+                               const std::string& expectedValue) {
+    auto parser = parserFactory();
+    parser.setInputStream(tripleStr);
+    parser.turtleDoc();
+    ASSERT_EQ(parser.getTriples().size(), 1);
+    const auto& triple = parser.getTriples()[0];
+    const auto& component = triple.*position;
+
+    if (shouldEncode) {
+      EXPECT_TRUE(component.isId());
+      EXPECT_EQ(component.getId().getDatatype(), Datatype::EncodedVal);
+      auto decoded = encodedIriManager.toString(component.getId());
+      EXPECT_EQ(decoded, expectedValue);
+    } else {
+      EXPECT_TRUE(component.isIri());
+      EXPECT_EQ(component.getIri().toStringRepresentation(), expectedValue);
+    }
+  };
+
+  // Test IRI encoding in RDF parsing
+  auto testIriEncoding = [&](auto parserFactory) {
+    // Test encoding in subject position
+    testIriAtPosition(parserFactory, "<http://example.org/123> <p> <o> .",
+                      &TurtleTriple::subject_, true,
+                      "<http://example.org/123>");
+    testIriAtPosition(parserFactory, "<http://test.com/id/456> <p> <o> .",
+                      &TurtleTriple::subject_, true,
+                      "<http://test.com/id/456>");
+
+    // Test encoding in predicate position
+    testIriAtPosition(parserFactory, "<s> <http://example.org/789> <o> .",
+                      &TurtleTriple::predicate_, true,
+                      "<http://example.org/789>");
+
+    // Test encoding in object position
+    testIriAtPosition(parserFactory, "<s> <p> <http://test.com/id/999> .",
+                      &TurtleTriple::object_, true, "<http://test.com/id/999>");
+    testIriAtPosition(parserFactory, "<s> <p> <http://example.org/555> .",
+                      &TurtleTriple::object_, true, "<http://example.org/555>");
+
+    // Test non-encoding cases
+    testIriAtPosition(parserFactory, "<http://other.org/123> <p> <o> .",
+                      &TurtleTriple::subject_, false, "<http://other.org/123>");
+    testIriAtPosition(parserFactory, "<http://example.org/abc> <p> <o> .",
+                      &TurtleTriple::subject_, false,
+                      "<http://example.org/abc>");
+    testIriAtPosition(
+        parserFactory, "<http://example.org/123456789012345> <p> <o> .",
+        &TurtleTriple::subject_, false, "<http://example.org/123456789012345>");
+  };
+
+  testIriEncoding(re2ParserWithEncoding);
+  testIriEncoding(ctreParserWithEncoding);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
+  // Test that prefixed names also get encoded when they resolve to encodable
+  // IRIs
+  EncodedIriManager encodedIriManager{
+      {"http://example.org/", "http://test.com/id/"}};
+
+  // Meta-matcher that creates matchers for encoded IRIs at any position in a
+  // triple
+  auto makeTripleMatcher = [&](TripleComponent TurtleTriple::*memberPtr) {
+    return [&, memberPtr](const std::string& expectedDecodedIri) {
+      return ::testing::Field(
+          memberPtr,
+          ::testing::AllOf(
+              ::testing::ResultOf(std::mem_fn(&TripleComponent::isId), true),
+              ::testing::ResultOf(
+                  [](const TripleComponent& tc) {
+                    return tc.getId().getDatatype();
+                  },
+                  Datatype::EncodedVal),
+              ::testing::ResultOf(
+                  [&](const TripleComponent& tc) {
+                    return encodedIriManager.toString(tc.getId());
+                  },
+                  expectedDecodedIri)));
+    };
+  };
+
+  // Create specific matchers using the meta-matcher
+  auto TripleWithEncodedSubject = makeTripleMatcher(&TurtleTriple::subject_);
+  auto TripleWithEncodedPredicate =
+      makeTripleMatcher(&TurtleTriple::predicate_);
+  auto TripleWithEncodedObject = makeTripleMatcher(&TurtleTriple::object_);
+
+  auto testPrefixedNameEncoding = [&](auto parserFactory) {
+    auto parser = parserFactory();
+    parser.setInputStream(
+        "@prefix ex: <http://example.org/> . "
+        "@prefix test: <http://test.com/id/> . "
+        "ex:123 <p> test:456 .");
+    parser.turtleDoc();
+
+    // Using GMock matchers for cleaner, more readable assertions
+    EXPECT_THAT(parser.getTriples(),
+                ::testing::ElementsAre(::testing::AllOf(
+                    TripleWithEncodedSubject("<http://example.org/123>"),
+                    TripleWithEncodedObject("<http://test.com/id/456>"))));
+    parser = parserFactory();
+
+    // Test more prefixed name cases
+    parser.setInputStream(
+        "@prefix ex: <http://example.org/> . "
+        "ex:999 ex:777 \"literal\" .");
+    parser.turtleDoc();
+
+    EXPECT_THAT(parser.getTriples(),
+                ::testing::ElementsAre(::testing::AllOf(
+                    TripleWithEncodedSubject("<http://example.org/999>"),
+                    TripleWithEncodedPredicate("<http://example.org/777>"))));
+  };
+
+  auto re2ParserWithEncoding = [&]() { return Re2Parser{&encodedIriManager}; };
+  auto ctreParserWithEncoding = [&]() {
+    return CtreParser{&encodedIriManager};
+  };
+
+  testPrefixedNameEncoding(re2ParserWithEncoding);
+  testPrefixedNameEncoding(ctreParserWithEncoding);
 }

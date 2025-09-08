@@ -1,8 +1,11 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
+#define QLEVER_SRC_GLOBAL_VALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -13,7 +16,7 @@
 
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
@@ -33,7 +36,8 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  EncodedVal,
+  MaxValue = EncodedVal
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -51,6 +55,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
+    case Datatype::EncodedVal:
+      return "EncodedIri";
     case Datatype::VocabIndex:
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
@@ -82,13 +88,13 @@ class ValueId {
 
   /// The maximum value for the unsigned types that are used as indices
   /// (currently VocabIndex, LocalVocabIndex and Text).
-  static constexpr T maxIndex = 1ull << (numDataBits - 1);
+  static constexpr T maxIndex = (1ull << numDataBits) - 1;
 
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
   static constexpr double minPositiveDouble =
-      std::bit_cast<double>(1ull << numDatatypeBits);
+      absl::bit_cast<double>(1ull << numDatatypeBits);
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -160,8 +166,10 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
+
+    using IdProxy = LocalVocabEntry::IdProxy;
     auto compareVocabAndLocalVocab =
-        [](::VocabIndex vocabIndex,
+        [](IdProxy vocabIndex,
            ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
       auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
@@ -174,12 +182,14 @@ class ValueId {
     };
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
-    if (type == VocabIndex && otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(getVocabIndex(),
+    if ((type == VocabIndex || type == EncodedVal) &&
+        otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(IdProxy::make(getBits()),
                                        other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
-      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
-                                                    getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               (otherType == VocabIndex || otherType == EncodedVal)) {
+      auto inverseOrder = compareVocabAndLocalVocab(
+          IdProxy::make(other.getBits()), getLocalVocabIndex());
       return 0 <=> inverseOrder;
     }
 
@@ -230,13 +240,13 @@ class ValueId {
   /// precision of the mantissa of an IEEE double precision floating point
   /// number from 53 to 49 significant bits.
   static ValueId makeFromDouble(double d) {
-    auto shifted = std::bit_cast<T>(d) >> numDatatypeBits;
+    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   /// Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   /// Double` then the result is unspecified.
   [[nodiscard]] double getDouble() const noexcept {
-    return std::bit_cast<double>(_bits << numDatatypeBits);
+    return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   /// Create a `ValueId` for a signed integer value. Integers in the range
@@ -259,9 +269,28 @@ class ValueId {
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
+  /// Create a `ValueId` for a boolean value, represented as "0" or "1" instead
+  /// of "false" or "true".
+  static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(true) << 1;
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
   // Obtain the boolean value.
   [[nodiscard]] bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits));
+    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+  }
+
+  // Obtain the boolean value as a string view. In particular, return either
+  // `true`, `false`, `0` , or `1`, depending on whether the value was created
+  // via `makeFromBool` or `makeBoolFromZeroOrOne` (see above).
+  std::string_view getBoolLiteral() const noexcept {
+    bool value = getBool();
+    if (_bits & 0b10) {
+      return value ? "1" : "0";
+    }
+    return value ? "true" : "false";
   }
 
   /// Create a `ValueId` for an unsigned index of type
@@ -271,6 +300,11 @@ class ValueId {
   static ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
+
+  static ValueId makeFromEncodedVal(uint64_t idx) {
+    return makeFromIndex(idx, Datatype::EncodedVal);
+  }
+
   static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
@@ -294,6 +328,11 @@ class ValueId {
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
+
+  [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
+    return removeDatatypeBits(_bits);
+  }
+
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
@@ -310,11 +349,11 @@ class ValueId {
 
   // Store or load a `Date` object.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
-    return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
+    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
   DateYearOrDuration getDate() const noexcept {
-    return std::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -345,7 +384,19 @@ class ValueId {
   /// and `ad_utility::HashMap`
   template <typename H>
   friend H AbslHashValue(H h, const ValueId& id) {
-    return H::combine(std::move(h), id._bits);
+    // Adding 0/1 to the hash is required to ensure that for two unequal
+    // elements the hash expansions of neither is a suffix of the other.This is
+    // a property that absl requires for hashes. The hash expansion is the list
+    // of simpler values actually being hashed (here: bits or hash expansion of
+    // the LocalVocabEntry).
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      return H::combine(std::move(h), id._bits, 0);
+    }
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), lower.get(), 0);
+    }
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
@@ -358,9 +409,10 @@ class ValueId {
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
   /// TODO<joka921> This currently still has limited functionality because
-  /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
-  /// `uint64_t` and the visitor cannot distinguish between them. Create strong
-  /// types for these indices and make the `ValueId` class use them.
+  /// VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
+  /// the same type `uint64_t` and the visitor cannot distinguish between them.
+  /// Create strong types for these indices and make the `ValueId` class use
+  /// them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
@@ -372,6 +424,8 @@ class ValueId {
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
         return std::invoke(visitor, getInt());
+      case Datatype::EncodedVal:
+        return std::invoke(visitor, getEncodedVal());
       case Datatype::VocabIndex:
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
@@ -398,12 +452,13 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr]<typename T>(T&& value) {
-      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
+    auto visitor = [&ostr](auto&& value) {
+      using T = decltype(value);
+      if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t>) {
+      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
+                                                    uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");
@@ -450,3 +505,5 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
+
+#endif  // QLEVER_SRC_GLOBAL_VALUEID_H

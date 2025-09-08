@@ -48,7 +48,13 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimit() const { return true; }
+bool NeutralOptional::supportsLimitOffset() const { return true; }
+
+// _____________________________________________________________________________
+void NeutralOptional::onLimitOffsetChanged(
+    const LimitOffsetClause& limitOffset) const {
+  tree_->applyLimit(limitOffset);
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
@@ -100,15 +106,12 @@ struct WrapperWithEnsuredRow
 
 // _____________________________________________________________________________
 bool NeutralOptional::singleRowCroppedByLimit() const {
-  const auto& limit = getLimit();
+  const auto& limit = getLimitOffset();
   return limit._offset > 0 || limit.limitOrDefault() == 0;
 }
 
 // _____________________________________________________________________________
 Result NeutralOptional::computeResult(bool requestLaziness) {
-  const auto& limit = getLimit();
-  tree_->setLimit(limit);
-
   auto childResult = tree_->getResult(requestLaziness);
 
   IdTable singleRowTable{getResultWidth(), allocator()};
@@ -124,10 +127,10 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
             childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {
-    return {std::move(childResult->idTables()), childResult->sortedBy()};
+    return {childResult->idTables(), childResult->sortedBy()};
   }
-  return {Result::LazyResult{WrapperWithEnsuredRow{
-              std::move(childResult->idTables()), std::move(singleRowTable)}},
+  return {Result::LazyResult{WrapperWithEnsuredRow{childResult->idTables(),
+                                                   std::move(singleRowTable)}},
           childResult->sortedBy()};
 }
 

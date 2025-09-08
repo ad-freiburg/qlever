@@ -23,8 +23,32 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
+// Return a `QueryExecutionContext` from the given `kg`(see above) that has a
+// text index for the literals in the `kg`.
+auto qecWithTextIndex = []() {
+  TestIndexConfig config{kg};
+  config.createTextIndex = true;
+  return getQec(std::move(config));
+};
+
+TEST(TextIndexScanForEntity, ShortPrefixWord) {
+  auto qec = qecWithTextIndex();
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "t*"};
+  ASSERT_EQ(s1.getResultWidth(), 3);
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ("\"he failed the test\"",
+            h::getEntityFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"",
+            h::getEntityFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getEntityFromResultTable(qec, result, 2));
+}
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -55,9 +79,9 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
-  string fixedEntity = "\"some other sentence\"";
+  std::string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
 
   auto result = s3.computeResultOnlyForTesting();
@@ -86,7 +110,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -107,7 +131,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
   ASSERT_NE(s1.getCacheKeyImpl(), s4.getCacheKeyImpl());
 
   // fixed entity case
-  string fixedEntity = "\"some other sentence\"";
+  std::string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s5{qec, Variable{"?text3"}, fixedEntity, "sentence"};
   // Same text var, different entities (one entity var, one fixed entity), same
   // word
@@ -117,7 +141,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
   // Different text vars, same fixed entity, same word
   ASSERT_EQ(s5.getCacheKeyImpl(), s6.getCacheKeyImpl());
 
-  string newFixedEntity = "\"he failed the test\"";
+  std::string newFixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s7{qec, Variable{"?text7"}, newFixedEntity,
                             "sentence"};
   // Different text vars, different fixed entities, same word
@@ -130,13 +154,13 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};
   ASSERT_TRUE(s1.knownEmptyResult());
 
-  string fixedEntity = "\"non existent entity\"";
+  std::string fixedEntity = "\"non existent entity\"";
   AD_EXPECT_THROW_WITH_MESSAGE(
       TextIndexScanForEntity(qec, Variable{"?text"}, fixedEntity, "test*"),
       ::testing::ContainsRegex(absl::StrCat(

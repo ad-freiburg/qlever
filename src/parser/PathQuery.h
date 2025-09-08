@@ -3,7 +3,8 @@
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PATHQUERY_H
+#define QLEVER_SRC_PARSER_PATHQUERY_H
 
 #include "parser/MagicServiceQuery.h"
 
@@ -59,7 +60,8 @@ struct PathQuery : MagicServiceQuery {
    *              The Vocab is only used if the given vector contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+      std::vector<TripleComponent> side, const Index::Vocab& vocab,
+      const EncodedIriManager& encodedIriManager) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
@@ -73,7 +75,10 @@ struct PathQuery : MagicServiceQuery {
    * @return A valid PathSearchConfiguration
    */
   PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
+      const Index::Vocab& vocab,
+      const EncodedIriManager& encodedIriManager) const;
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_PATHQUERY_H

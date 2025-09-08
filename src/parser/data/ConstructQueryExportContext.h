@@ -2,14 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
-
-#include <string>
+#ifndef QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
+#define QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
 
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
-#include "parser/data/Variable.h"
-#include "util/HashMap.h"
+#include "rdfTypes/Variable.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
@@ -22,4 +20,7 @@ struct ConstructQueryExportContext {
   const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
+  const size_t _rowOffset;
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

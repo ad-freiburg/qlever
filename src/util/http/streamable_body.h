@@ -2,22 +2,24 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H
+#define QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H
 
 #include <exception>
+#include <string>
 
-#include "../Generator.h"
-#include "../Log.h"
-#include "../stream_generator.h"
-#include "./ContentEncodingHelper.h"
-#include "./beast.h"
+#include "util/Generator.h"
+#include "util/Log.h"
+#include "util/http/beast.h"
 
 namespace ad_utility::httpUtils::httpStreams {
 
 /**
- * A message body represented by a stream_generator. This allows to use a
- * generator function to dynamically create a response.
+ * A message body represented by a cppcoro::generator<std::string>. This allows
+ * to use a generator function to dynamically create a response.
+ *
  * Example usage:
+ *
  * http::response<streamable_body> response;
  * // generatorFunction returns a cppcoro::generator<std::string>
  * response.body() = generatorFunction();
@@ -65,8 +67,8 @@ class streamable_body::writer {
    * messages may only be serialized by one thread at
    * a time.
    *
-   * We need the non-const case here, because the one-shot stream_generator
-   * conceptually can't allow const access.
+   * We need the non-const case here, because the one-shot
+   * cppcoro::generator<std::string> conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
   writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& header,
@@ -132,3 +134,5 @@ static_assert(boost::beast::http::is_body<streamable_body>::value,
               "Body type requirements not met");
 
 }  // namespace ad_utility::httpUtils::httpStreams
+
+#endif  // QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H

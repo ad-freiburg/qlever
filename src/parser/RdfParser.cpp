@@ -5,6 +5,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstring>
@@ -13,19 +14,66 @@
 
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
+#include "index/EncodedIriManager.h"
 #include "parser/NormalizedString.h"
-#include "parser/RdfEscaping.h"
-#include "util/Conversions.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
-// _______________________________________________________________
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::clear() {
+  lastParseResult_ = "";
+
+  activeSubject_ = TripleComponent::Iri::fromIriref("<>");
+  activePredicate_ = TripleComponent::Iri::fromIriref("<>");
+  activePrefix_.clear();
+
+  prefixMap_ = prefixMapDefault_;
+
+  tok_.reset(nullptr, 0);
+  triples_.clear();
+  numBlankNodes_ = 0;
+  isParserExhausted_ = false;
+}
+
+// _____________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::statement() {
   tok_.skipWhitespaceAndComments();
   return directive() || (triples() && skip<TurtleTokenId::Dot>());
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raise(std::string_view error_message) const {
+  auto d = tok_.view();
+  std::stringstream errorMessage;
+  errorMessage << "Parse error at byte position " << getParsePosition() << ": "
+               << error_message << '\n';
+  if (!d.empty()) {
+    size_t num_bytes = 500;
+    auto s = std::min(size_t(num_bytes), size_t(d.size()));
+    errorMessage << "The next " << num_bytes << " bytes are:\n"
+                 << std::string_view(d.data(), s) << '\n';
+  }
+  throw ParseException{std::move(errorMessage).str()};
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raiseOrIgnoreTriple(
+    std::string_view errorMessage) {
+  if (invalidLiteralsAreSkipped()) {
+    currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
+  } else {
+    raise(errorMessage);
+  }
 }
 
 // ______________________________________________________________
@@ -41,7 +89,7 @@ bool TurtleParser<T>::prefixID() {
     if (check(pnameNS()) && check(iriref()) &&
         check(skip<TurtleTokenId::Dot>())) {
       // strip  the angled brackes <bla> -> bla
-      prefixMap_[activePrefix_] = lastParseResult_.getIri();
+      setPrefixOrThrow(activePrefix_, lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing @prefix definition failed");
@@ -57,8 +105,8 @@ bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
       const auto& iri = lastParseResult_.getIri();
-      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
+      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
+      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -73,7 +121,7 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      prefixMap_[activePrefix_] = lastParseResult_.getIri();
+      setPrefixOrThrow(activePrefix_, lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing PREFIX definition failed");
@@ -88,9 +136,9 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      auto iri = lastParseResult_.getIri();
-      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
+      const auto& iri = lastParseResult_.getIri();
+      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
+      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -181,7 +229,7 @@ bool TurtleParser<T>::subject() {
 template <class T>
 bool TurtleParser<T>::predicate() {
   if (iri()) {
-    activePredicate_ = lastParseResult_.getIri();
+    activePredicate_ = lastParseResult_;
     return true;
   } else {
     return false;
@@ -220,7 +268,7 @@ bool TurtleParser<T>::blankNodePropertyList() {
   auto savedSubject = activeSubject_;
   auto savedPredicate = activePredicate_;
   // new triple with blank node as object
-  string blank = createAnonNode();
+  std::string blank = createAnonNode();
   // the following triples have the blank node as subject
   activeSubject_ = blank;
   check(predicateObjectList());
@@ -415,7 +463,7 @@ bool NQuadParser<T>::nQuadSubject() {
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
   if (Base::iriref()) {
-    this->activePredicate_ = std::move(this->lastParseResult_.getIri());
+    this->activePredicate_ = std::move(this->lastParseResult_);
     return true;
   }
   return false;
@@ -453,8 +501,7 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
     lastParseResult_ = std::move(previous);
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
     literalAndDatatypeToTripleComponentImpl(
-        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri(),
-        this);
+        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri());
   }
 
   // It is okay to neither have a langtag nor an XSD datatype.
@@ -465,13 +512,13 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri, TurtleParser<T>* parser) {
+    const TripleComponent::Iri& typeIri) {
   auto literal = TripleComponent::Literal::literalWithNormalizedContent(
       asNormalizedStringViewUnsafe(normalizedLiteralContent));
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   // Helper to handle literals that are invalid for the respective datatype
-  auto makeNormalLiteral = [&parser, &literal, normalizedLiteralContent,
+  auto makeNormalLiteral = [this, &literal, normalizedLiteralContent,
                             type](std::optional<std::exception> error =
                                       std::nullopt) {
     std::string_view errorMsg = error.has_value() ? error.value().what() : "";
@@ -482,49 +529,54 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
                << ". It is treated as a plain string literal without datatype "
                   "instead."
                << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    lastParseResult_ = std::move(literal);
   };
 
   try {
     if (ad_utility::contains(integerDatatypes_, type)) {
-      parser->parseIntegerConstant(normalizedLiteralContent);
+      parseIntegerConstant(normalizedLiteralContent);
     } else if (type == XSD_BOOLEAN_TYPE) {
       if (normalizedLiteralContent == "true") {
-        parser->lastParseResult_ = true;
+        lastParseResult_ = true;
       } else if (normalizedLiteralContent == "false") {
-        parser->lastParseResult_ = false;
+        lastParseResult_ = false;
+      } else if (normalizedLiteralContent == "1") {
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(true);
+      } else if (normalizedLiteralContent == "0") {
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(false);
       } else {
-        makeNormalLiteral();
+        raiseOrIgnoreTriple(absl::StrCat("Invalid boolean literal: '",
+                                         normalizedLiteralContent, "'"));
       }
     } else if (ad_utility::contains(floatDatatypes_, type)) {
-      parser->parseDoubleConstant(normalizedLiteralContent);
+      parseDoubleConstant(normalizedLiteralContent);
     } else if (type == XSD_DATETIME_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDatetime(normalizedLiteralContent);
     } else if (type == XSD_DATE_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDate(normalizedLiteralContent);
     } else if (type == XSD_GYEARMONTH_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseGYearMonth(normalizedLiteralContent);
     } else if (type == XSD_GYEAR_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseGYear(normalizedLiteralContent);
     } else if (type == XSD_DAYTIME_DURATION_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
     } else if (type == GEO_WKT_LITERAL) {
       // Not all WKT literals represent points (we can only fold points)
       auto geopoint = GeoPoint::parseFromLiteral(literal, false);
       if (geopoint.has_value()) {
-        parser->lastParseResult_ = geopoint.value();
+        lastParseResult_ = geopoint.value();
       } else {
         literal.addDatatype(typeIri);
-        parser->lastParseResult_ = std::move(literal);
+        lastParseResult_ = std::move(literal);
       }
     } else {
       literal.addDatatype(typeIri);
-      parser->lastParseResult_ = std::move(literal);
+      lastParseResult_ = std::move(literal);
     }
   } catch (const DateParseException& ex) {
     makeNormalLiteral(ex);
@@ -537,20 +589,45 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   } catch (const CoordinateOutOfRangeException& ex) {
     makeNormalLiteral(ex);
   } catch (const std::exception& e) {
-    parser->raise(e.what());
+    raise(e.what());
   }
-  return parser->lastParseResult_;
+  return lastParseResult_;
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
+  AD_CORRECTNESS_CHECK(useSimplifiedGrammar_);
+  raise(
+      "@prefix or @base directives need to be at the beginning of the file "
+      "when using the parallel parser. Later redundant redefinitions are "
+      "fine. Use '--parse-parallel false' if you can't guarantee this. If "
+      "the reason for this error is that the input is a concatenation of "
+      "Turtle files, each of which has the prefixes at the beginning, you "
+      "should feed the files to QLever separately instead of concatenated");
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
+    const std::string& key, const ad_utility::triple_component::Iri& prefix) {
+  if (useSimplifiedGrammar_ &&
+      (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
+    raiseDisallowedPrefixOrBaseError();
+  }
+  prefixMap_[key] = prefix;
 }
 
 // ______________________________________________________________________
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri) {
-  RdfStringParser<TurtleParser<T>> parser;
+    const TripleComponent::Iri& typeIri,
+    const EncodedIriManager& encodedIriManager) {
+  RdfStringParser<TurtleParser<T>> parser{&encodedIriManager};
 
-  return literalAndDatatypeToTripleComponentImpl(normalizedLiteralContent,
-                                                 typeIri, &parser);
+  return parser.literalAndDatatypeToTripleComponentImpl(
+      normalizedLiteralContent, typeIri);
 }
 
 // ______________________________________________________________________
@@ -570,21 +647,29 @@ bool TurtleParser<T>::booleanLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
+  AD_CORRECTNESS_CHECK(!allowMultilineLiterals || !useSimplifiedGrammar_);
   // manually parse strings for efficiency
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  static constexpr std::array<std::string_view, 4> quotes{R"(""")", R"(''')",
+                                                          "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
       if (!allowMultilineLiterals && q.size() > 1) {
+        if (useSimplifiedGrammar_) {
+          raise(
+              "Found a multiline string literal with the parallel parser. This "
+              "is not supported. Please use `--parse-parallel false` or remove "
+              "the multiline string literal.");
+        }
         return false;
       }
       endPos = view.find(q, startPos);
-      while (endPos != string::npos) {
+      while (endPos != std::string::npos) {
         if (view[endPos - 1] == '\\') {
           size_t numBackslash = 1;
           auto slashPos = endPos - 2;
@@ -609,7 +694,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   if (!foundString) {
     return false;
   }
-  if (endPos == string::npos) {
+  if (endPos == std::string::npos) {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
@@ -624,13 +709,22 @@ template <class T>
 bool TurtleParser<T>::iri() {
   // irirefs always start with "<", prefixedNames never, so the lookahead always
   // works
-  return iriref() || prefixedName();
+  auto res = iriref() || prefixedName();
+  if (!res) {
+    return res;
+  }
+  const auto& s = lastParseResult_.getIri().toStringRepresentation();
+  auto optId = encodedIriManager().encode(s);
+  if (optId.has_value()) {
+    lastParseResult_ = optId.value();
+  }
+  return res;
 }
 
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     if (!(pnameLnRelaxed() || pnameNS())) {
       return false;
     }
@@ -668,6 +762,46 @@ bool TurtleParser<T>::parseTerminal() {
   return false;
 }
 
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::emitTriple() {
+  if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
+    triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
+                          defaultGraphIri_);
+  }
+  currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+bool TurtleParser<Tokenizer_T>::check(bool result) const {
+  if (result) {
+    return true;
+  } else {
+    raise("A check for a required element failed");
+  }
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
+    const std::string& prefix) {
+  if (!prefixMap_.count(prefix)) {
+    raise("Prefix " + prefix +
+          " was not previously defined using a PREFIX or @prefix "
+          "declaration");
+  } else {
+    return prefixMap_[prefix];
+  }
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+std::string TurtleParser<Tokenizer_T>::createAnonNode() {
+  return BlankNode{true, absl::StrCat(blankNodePrefix_, "_", numBlankNodes_++)}
+      .toSparql();
+}
+
 // ________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::blankNodeLabel() {
@@ -681,6 +815,16 @@ bool TurtleParser<T>::blankNodeLabel() {
         BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
   }
   return res;
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+bool TurtleParser<Tokenizer_T>::anon() {
+  if (!parseTerminal<TurtleTokenId::Anon>()) {
+    return false;
+  }
+  lastParseResult_ = createAnonNode();
+  return true;
 }
 
 // __________________________________________________________________________
@@ -705,14 +849,14 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
   auto pos = view.find(':');
-  if (pos == string::npos) {
+  if (pos == std::string::npos) {
     return false;
   }
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
   auto posEnd = view.find_first_of(" \t\r\n,;", pos);
-  if (posEnd == string::npos) {
+  if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
   }
@@ -737,7 +881,7 @@ bool TurtleParser<T>::iriref() {
     return false;
   }
   auto endPos = view.find_first_of("<>\"\n", 1);
-  if (endPos == string::npos || view[endPos] != '>') {
+  if (endPos == std::string::npos || view[endPos] != '>') {
     raise(
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
@@ -745,7 +889,7 @@ bool TurtleParser<T>::iriref() {
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
     lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
         view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
@@ -819,7 +963,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const string& filename,
+void RdfStreamParser<T>::initialize(const std::string& filename,
                                     ad_utility::MemorySize bufferSize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
@@ -948,20 +1092,21 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
 // `parallelParser_` have been fully processed. After the last batch we will
 // push another call to this lambda to the `parallelParser_` which will then
 // finish the `tripleCollector_` as soon as all batches have been computed.
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
+template <typename T>
+void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
   if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
     tripleCollector_.finish();
   }
 }
 
 // __________________________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
-                                                auto batch) {
+template <typename T>
+template <typename Batch>
+void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
-    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
+    RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
+    parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
@@ -972,15 +1117,16 @@ void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
     });
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
-    parallelParser_.finish();
   }
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
-    auto remainingBatchFromInitialization) {
+template <typename T>
+template <typename Batch>
+void RdfParallelParser<T>::feedBatchesToParser(
+    Batch remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
   auto cleanup =
@@ -1006,7 +1152,7 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
       auto batchSize = inputBatch.size();
       auto parseThisBatch = [this, parsePosition,
                              batch = std::move(inputBatch)]() mutable {
-        return parseBatch(parsePosition, std::move(batch));
+        parseBatch(parsePosition, std::move(batch));
       };
       parsePosition += batchSize;
       numBatchesTotal_.fetch_add(1);
@@ -1019,50 +1165,73 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
       }
     }
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
   }
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::initialize(
-    const string& filename, ad_utility::MemorySize bufferSize) {
+template <typename T>
+void RdfParallelParser<T>::initialize(const std::string& filename,
+                                      ad_utility::MemorySize bufferSize) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_->open(filename);
-  if (auto batch = fileBuffer_->getNextBlock(); !batch) {
-    LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
-              << std::endl;
-  } else {
-    RdfStringParser<Tokenizer_T> declarationParser{};
-    declarationParser.setInputStream(std::move(batch.value()));
-    while (declarationParser.parseDirectiveManually()) {
+  RdfStringParser<T> declarationParser{&this->encodedIriManager()};
+  std::string_view remainder;
+  while (remainder.empty()) {
+    if (auto batch = fileBuffer_->getNextBlock()) {
+      declarationParser.setInputStream(std::move(batch.value()));
+      while (declarationParser.parseDirectiveManually()) {
+      }
+      remainder = declarationParser.getUnparsedRemainder();
+    } else {
+      AD_LOG_WARN
+          << "Empty input to the TURTLE parser, is this what you intended?"
+          << std::endl;
+      break;
     }
-    this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-    auto remainder = declarationParser.getUnparsedRemainder();
-    remainingBatchFromInitialization.reserve(remainder.size());
-    ql::ranges::copy(remainder,
-                     std::back_inserter(remainingBatchFromInitialization));
   }
+  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+  remainingBatchFromInitialization.reserve(remainder.size());
+  ql::ranges::copy(remainder,
+                   std::back_inserter(remainingBatchFromInitialization));
 
   auto feedBatches = [this, firstBatch = std::move(
                                 remainingBatchFromInitialization)]() mutable {
-    return feedBatchesToParser(std::move(firstBatch));
+    feedBatchesToParser(std::move(firstBatch));
   };
 
   parseFuture_ = std::async(std::launch::async, feedBatches);
 }
 
-// _______________________________________________________________________
+// _____________________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+bool RdfParallelParser<T>::processTriples() {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
   // way)
   while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
+    auto optionalTripleTask = [&]() {
+      try {
+        return tripleCollector_.pop();
+      } catch (const std::exception&) {
+        AD_LOG_ERROR << "Error detected during parallel parsing, waiting for "
+                        "workers to finish ..."
+                     << std::endl;
+        // In case of multiple errors in parallel batches, we always report the
+        // first error.
+        parallelParser_.finish();
+        parallelParser_.waitUntilFinished();
+        auto errors = std::move(*errorMessages_.wlock());
+        const auto& firstError =
+            ql::ranges::min_element(errors, {}, ad_utility::first);
+        AD_CORRECTNESS_CHECK(firstError != errors.end());
+        throw std::runtime_error{firstError->second};
+      }
+    }();
     if (!optionalTripleTask) {
       // Everything has been parsed
       return false;
@@ -1070,28 +1239,26 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
     // OptionalTripleTask fills the triples_ vector
     (*optionalTripleTask)();
   }
-
-  // we now have at least one triple, return it.
-  *triple = std::move(triples_.back());
-  triples_.pop_back();
   return true;
 }
 
 // _______________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  // we need a while in case there is a batch that contains no triples
-  // (this should be rare, // TODO warn about this
-  while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
-    if (!optionalTripleTask) {
-      // everything has been parsed
-      return std::nullopt;
-    }
-    (*optionalTripleTask)();
+bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
+  bool triplesRemaining = processTriples();
+  if (triplesRemaining) {
+    // we now have at least one triple, return it.
+    *triple = std::move(triples_.back());
+    triples_.pop_back();
   }
+  return triplesRemaining;
+}
 
-  return std::move(triples_);
+// _______________________________________________________________________
+template <class T>
+std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
+  bool triplesRemaining = processTriples();
+  return triplesRemaining ? std::optional{std::move(triples_)} : std::nullopt;
 }
 
 // __________________________________________________________
@@ -1101,7 +1268,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
       [this] {
         parallelParser_.finish();
         tripleCollector_.finish();
-        parseFuture_.get();
+        parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
 }
@@ -1111,7 +1278,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const Index::InputFileSpecification& file,
+    const Index::InputFileSpecification& file, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
   auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
@@ -1121,17 +1288,18 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
     }
   };
-  auto makeRdfParserImpl = [&filename = file.filename_, &bufferSize,
-                            &graph]<int useParallel, int isTurtleInput>()
-      -> std::unique_ptr<RdfParserBase> {
-    using InnerParser =
-        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
-                           NQuadParser<TokenizerT>>;
-    using Parser =
-        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
-                           RdfStreamParser<InnerParser>>;
-    return std::make_unique<Parser>(filename, bufferSize, graph());
-  };
+  auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
+      [&filename = file.filename_, &bufferSize, &graph, ev](
+          auto useParallel,
+          auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
+        using InnerParser =
+            std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                               NQuadParser<TokenizerT>>;
+        using Parser =
+            std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                               RdfStreamParser<InnerParser>>;
+        return std::make_unique<Parser>(filename, ev, bufferSize, graph());
+      }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
   // integers. We use it here to create the correct combination of template
@@ -1142,18 +1310,39 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       makeRdfParserImpl);
 }
 
+// _____________________________________________________________________________
+std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
+  std::vector<TurtleTriple> result;
+  result.reserve(100'000);
+  for (size_t i = 0; i < 100'000; ++i) {
+    result.emplace_back();
+    bool success = getLine(result.back());
+    if (!success) {
+      result.resize(result.size() - 1);
+      break;
+    }
+  }
+  if (result.empty()) {
+    return std::nullopt;
+  }
+  return result;
+}
+
 // ______________________________________________________________
-template <typename T>
-RdfMultifileParser<T>::RdfMultifileParser(
+RdfMultifileParser::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files,
-    ad_utility::MemorySize bufferSize) {
+    const EncodedIriManager* encodedIriManager,
+    ad_utility::MemorySize bufferSize)
+    : RdfParserBase(encodedIriManager) {
   using namespace qlever;
   // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this](const InputFileSpecification& file,
-                          ad_utility::MemorySize bufferSize) {
+  auto parseFile = [this, encodedIriManager](
+                       const InputFileSpecification& file,
+                       ad_utility::MemorySize bufferSize) {
     try {
-      auto parser = makeSingleRdfParser<Tokenizer>(file, bufferSize);
+      auto parser =
+          makeSingleRdfParser<Tokenizer>(file, encodedIriManager, bufferSize);
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {
@@ -1178,7 +1367,7 @@ RdfMultifileParser<T>::RdfMultifileParser(
     for (const auto& file : files) {
       numActiveParsers_++;
       bool active =
-          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
+          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.
@@ -1191,8 +1380,7 @@ RdfMultifileParser<T>::RdfMultifileParser(
 }
 
 // _____________________________________________________________________________
-template <typename T>
-RdfMultifileParser<T>::~RdfMultifileParser() {
+RdfMultifileParser::~RdfMultifileParser() {
   ad_utility::ignoreExceptionIfThrows(
       [this] {
         parsingQueue_.finish();
@@ -1202,14 +1390,10 @@ RdfMultifileParser<T>::~RdfMultifileParser() {
 }
 
 //______________________________________________________________________________
-template <typename T>
-bool RdfMultifileParser<T>::getLineImpl(TurtleTriple*) {
-  AD_FAIL();
-}
+bool RdfMultifileParser::getLineImpl(TurtleTriple*) { AD_FAIL(); }
 
 // _____________________________________________________________________________
-template <typename T>
-std::optional<std::vector<TurtleTriple>> RdfMultifileParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
   return finishedBatchQueue_.pop();
 }
 
@@ -1224,5 +1408,3 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
-template class RdfMultifileParser<Tokenizer>;
-template class RdfMultifileParser<TokenizerCtre>;

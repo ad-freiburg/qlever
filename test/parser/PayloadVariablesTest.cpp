@@ -8,7 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "gmock/gmock.h"
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 

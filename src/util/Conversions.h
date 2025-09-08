@@ -2,7 +2,8 @@
 // Structures.
 // Author: Björn Buchhold <buchholb>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONVERSIONS_H
+#define QLEVER_SRC_UTIL_CONVERSIONS_H
 
 #include <string>
 #include <string_view>
@@ -18,8 +19,8 @@ constexpr std::string_view languageTaggedPredicatePrefix = "@";
 // removed as soon as we also store strongly-typed IRIs in the predicates of the
 // `SparqlTriple` class.
 triple_component::Iri convertLangtagToEntityUri(const std::string& tag);
-std::string convertToLanguageTaggedPredicate(const std::string& pred,
-                                             const std::string& langtag);
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag);
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONVERSIONS_H

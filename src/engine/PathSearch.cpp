@@ -5,7 +5,6 @@
 #include "PathSearch.h"
 
 #include <functional>
-#include <iterator>
 #include <optional>
 #include <ranges>
 #include <unordered_map>
@@ -13,6 +12,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -165,7 +165,7 @@ std::string PathSearch::getCacheKeyImpl() const {
 };
 
 // _____________________________________________________________________________
-string PathSearch::getDescriptor() const {
+std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();
@@ -203,7 +203,7 @@ bool PathSearch::knownEmptyResult() {
 };
 
 // _____________________________________________________________________________
-vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
@@ -294,10 +294,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 };
 
 // _____________________________________________________________________________
-std::pair<std::span<const Id>, std::span<const Id>>
+std::pair<ql::span<const Id>, ql::span<const Id>>
 PathSearch::handleSearchSides() const {
-  std::span<const Id> sourceIds;
-  std::span<const Id> targetIds;
+  ql::span<const Id> sourceIds;
+  ql::span<const Id> targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
@@ -387,7 +387,7 @@ PathsLimited PathSearch::findPaths(
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::allPaths(
-    std::span<const Id> sources, std::span<const Id> targets,
+    ql::span<const Id> sources, ql::span<const Id> targets,
     const BinSearchWrapper& binSearch, bool cartesian,
     std::optional<uint64_t> numPathsPerTarget) const {
   PathsLimited paths{allocator()};

@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <utility>
 
@@ -115,19 +117,20 @@ TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstexprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
+  ConstexprForLoopVi(std::make_index_sequence<100>{},
+                     [&i](auto /*valueIdentity*/) { i++; });
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
-  ConstexprForLoop(std::index_sequence<2, 5, 9>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ConstexprForLoopVi(std::index_sequence<2, 5, 9>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 16);
 
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
-  ConstexprForLoop(std::index_sequence<>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ConstexprForLoopVi(std::index_sequence<>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 0);
 }
 
@@ -135,15 +138,15 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
   // Create one function, that sets `i` to x, for every possible
   // version of x in [0,100].
   size_t i = 1;
-  auto setI = [&i]<size_t Number>() { i = Number; };
+  auto setI = [&i](auto Number) { i = Number.value; };
   for (size_t d = 0; d <= 100; d++) {
-    RuntimeValueToCompileTimeValue<100>(d, setI);
+    RuntimeValueToCompileTimeValueVi<100>(d, setI);
     ASSERT_EQ(i, d);
   }
 
   // Should cause an exception, if the given value is bigger than the
   // `MaxValue`.
-  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValue<5>(10, setI));
+  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValueVi<5>(10, setI));
 }
 
 // A helper struct for the following test.
@@ -156,13 +159,14 @@ struct F1 {
 TEST(ConstexprUtils, ConstexprSwitch) {
   using namespace ad_utility;
   {
-    auto f = []<int i> { return i * 2; };
+    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2)), 4);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4)));
   }
   {
-    auto f = []<int i>(int j) { return i * j; };
+    auto f =
+        ad_utility::ApplyAsValueIdentity{[](auto i, int j) { return i * j; }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2, 7)), 14);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5, 2)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4, 3)));
@@ -173,15 +177,11 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
-/*
-@brief Create a lambda, that adds the string representation of a (supported)
-type to a given vector.
+struct PushToVector {
+  std::vector<std::string>* typeToStringVector;
 
-@returns A lambda, that takes an explicit template type parameter and adds the
-string representation at the end of `*typeToStringVector`.
-*/
-auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
-  return [typeToStringVector]<typename T>() {
+  template <typename T>
+  void operator()() const {
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {
@@ -191,7 +191,39 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
     } else {
       AD_FAIL();
     }
-  };
+  }
+};
+
+struct PushToVectorWithTI {
+  std::vector<std::string>* typeToStringVector;
+
+  void operator()(auto t) const {
+    using T = typename decltype(t)::type;
+    if constexpr (ad_utility::isSimilar<T, int>) {
+      typeToStringVector->emplace_back("int");
+    } else if constexpr (ad_utility::isSimilar<T, bool>) {
+      typeToStringVector->emplace_back("bool");
+    } else if constexpr (ad_utility::isSimilar<T, std::string>) {
+      typeToStringVector->emplace_back("std::string");
+    } else {
+      AD_FAIL();
+    }
+  }
+};
+
+/*
+@brief Create a lambda, that adds the string representation of a (supported)
+type to a given vector.
+
+@returns A lambda, that takes an explicit template type parameter and adds the
+string representation at the end of `*typeToStringVector`.
+*/
+auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
+  return PushToVector{typeToStringVector};
+}
+
+auto typeToStringFactoryWithTI(std::vector<std::string>* typeToStringVector) {
+  return PushToVectorWithTI{typeToStringVector};
 }
 
 /*
@@ -201,14 +233,15 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
 parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
+template <typename F>
 void testConstExprForEachNormalCall(
-    const auto& callToForEachWrapper,
+    const F& callToForEachWrapper, auto callToTypeToStringFactory,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
 
   std::vector<std::string> typeToStringVector{};
-  auto typeToString = typeToStringFactory(&typeToStringVector);
+  auto typeToString = callToTypeToStringFactory(&typeToStringVector);
 
   // Normal call.
   callToForEachWrapper.template
@@ -224,11 +257,17 @@ void testConstExprForEachNormalCall(
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
 
+struct TestForEachTypeInParameterPack {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    forEachTypeInParameterPack<Ts...>(func);
+  }
+};
+
 TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   // Normal call.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInParameterPack<Ts...>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPack{},
+                                 typeToStringFactory);
 
   // No types given should end in nothing happening.
   std::vector<std::string> typeToStringVector{};
@@ -237,14 +276,119 @@ TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
+struct TestForEachTypeInParameterPackWithTI {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    forEachTypeInParameterPackWithTI<Ts...>(func);
+  }
+};
+
+TEST(ConstexprUtils, ForEachTypeInParameterPackWithTI) {
+  // Normal call.
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPackWithTI{},
+                                 typeToStringFactoryWithTI);
+
+  // No types given should end in nothing happening.
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = typeToStringFactoryWithTI(&typeToStringVector);
+  forEachTypeInParameterPackWithTI<>(typeToString);
+  ASSERT_TRUE(typeToStringVector.empty());
+}
+
+struct TestForEachTypeInTemplateTypeOfVariant {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    forEachTypeInTemplateType<std::variant<Ts...>>(func);
+  }
+};
+
+struct TestForEachTypeInTemplateTypeOfTuple {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
+  }
+};
+
 TEST(ConstexprUtils, forEachTypeInTemplateType) {
   // Normal call with `std::variant`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::variant<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfVariant{},
+                                 typeToStringFactory);
 
   // Normal call with `std::tuple`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfTuple{},
+                                 typeToStringFactory);
+}
+
+struct TestForEachTypeInTemplateTypeWithTIOfVariant {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::variant<Ts...>>, func);
+  }
+};
+
+struct TestForEachTypeInTemplateTypeWithTIOfTuple {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::tuple<Ts...>>, func);
+  }
+};
+
+TEST(ConstexprUtils, forEachTypeInTemplateTypeWithTI) {
+  // Normal call with `std::variant`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfVariant{},
+                                 typeToStringFactoryWithTI);
+
+  // Normal call with `std::tuple`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfTuple{},
+                                 typeToStringFactoryWithTI);
+}
+
+template <typename Values>
+struct TestForEachValueInValueSequence {
+  Values& values;
+
+  template <auto V>
+  void operator()() const {
+    values.push_back(V);
+  }
+};
+
+template <typename Values>
+TestForEachValueInValueSequence(Values&)
+    -> TestForEachValueInValueSequence<Values>;
+
+TEST(ConstexprUtils, forEachValueInValueSequence) {
+  // Test with an empty ValueSequence.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int>{}, collectValues);
+    ASSERT_TRUE(values.empty());
+  }
+
+  // Test with a ValueSequence of integers.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int, 1, 2, 3>{}, collectValues);
+    ASSERT_EQ(values.size(), 3);
+    ASSERT_EQ(values[0], 1);
+    ASSERT_EQ(values[1], 2);
+    ASSERT_EQ(values[2], 3);
+  }
+
+  // Test with a ValueSequence of std::array.
+  {
+    using ArrayType = std::array<int, 3>;
+    std::vector<ArrayType> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(
+        ValueSequence<ArrayType, ArrayType{1, 2, 3}, ArrayType{4, 5, 6}>{},
+        collectValues);
+    ASSERT_EQ(values.size(), 2);
+    ASSERT_EQ(values[0], (ArrayType{1, 2, 3}));
+    ASSERT_EQ(values[1], (ArrayType{4, 5, 6}));
+  }
 }

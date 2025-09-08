@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TEXTINDEXSCANFORWORD_H
+#define QLEVER_SRC_ENGINE_TEXTINDEXSCANFORWORD_H
 
 #include <string>
 
@@ -20,7 +21,7 @@ class TextIndexScanForWord : public Operation {
                        TextIndexScanForWordConfiguration config);
 
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
-                       string word);
+                       std::string word);
 
   ~TextIndexScanForWord() override = default;
 
@@ -28,9 +29,9 @@ class TextIndexScanForWord : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -42,7 +43,7 @@ class TextIndexScanForWord : public Operation {
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -55,7 +56,9 @@ class TextIndexScanForWord : public Operation {
   // the text variable and the completed word (if it was prefixed)
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   void setVariableToColumnMap();
 };
+
+#endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORWORD_H

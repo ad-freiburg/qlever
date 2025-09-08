@@ -65,6 +65,48 @@ inline auto& RuntimeParameters() {
         Bool<"zero-cost-estimate-for-cached-subtree">{false},
         // Maximum size for the body of requests that the server will process.
         MemorySizeParameter<"request-body-limit">{100_MB},
+        // SERVICE operations are not cached by default, but can be enabled
+        // which has the downside that the sibling optimization where VALUES are
+        // dynamically pushed into `SERVICE` is no longer used.
+        Bool<"cache-service-results">{false},
+        // If set to `true`, we expect the contents of URLs loaded via a LOAD to
+        // not change over time. This enables caching of LOAD operations.
+        Bool<"cache-load-results">{false},
+        // If set to `true`, several exceptions will silently be ignored and a
+        // dummy result will be returned instead.
+        // This mode should only be activated when running the syntax tests of
+        // the SPARQL conformance test suite.
+        Bool<"syntax-test-mode">{false},
+        // If set to `true`, then a division by zero in an expression will lead
+        // to an
+        // expression error, meaning that the result is undefined. If set to
+        // false,
+        // the result will be `NaN` or `infinity` respectively.
+        Bool<"division-by-zero-is-undef">{true},
+        // If set to `true`, the contained `FILTER` expressions in the query
+        // try to set and apply a corresponding `PrefilterExpression` (see
+        // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
+        // operation.
+        //
+        // If set to `false`, the queries `FILTER` expressions omit setting and
+        // applying `PrefilterExpression`s. This is useful to set a
+        // prefilter-free baseline, or for debugging, as wrong results may be
+        // related to the `PrefilterExpression`s.
+        Bool<"enable-prefilter-on-index-scans">{true},
+        // If set, then unneeded variables will not be emitted as the result of
+        // each operation.
+        // This makes the queries faster, but leads to more cache misses if e.g.
+        // variables in a SELECT clause change
+        // between otherwise equal queries.
+        Bool<"strip-columns">{false},
+        // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+        SizeT<"spatial-join-max-num-threads">{8},
+        // The maximum size of the `prefilterBox` for
+        // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+        SizeT<"spatial-join-prefilter-max-size">{2'500},
+        // Push joins into both children of unions if this leads to a cheaper
+        // cost-estimate.
+        Bool<"enable-distributive-union">{true},
     };
   }();
   return params;

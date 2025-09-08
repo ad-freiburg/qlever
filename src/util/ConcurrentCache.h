@@ -18,8 +18,6 @@
 
 namespace ad_utility {
 
-using std::shared_ptr;
-
 /** This exception is thrown if we are waiting for a computation result,
  * which is computed by a different thread and the computation in this
  * other thread fails.
@@ -63,7 +61,8 @@ constexpr std::string_view toString(CacheStatus status) {
 
 // Given a `cache` and a `key` determine the corresponding `CacheStatus`.
 // Note: `computed` in this case means "not contained in the cache".
-CacheStatus getCacheStatus(const auto& cache, const auto& key) {
+template <typename Cache, typename Key>
+CacheStatus getCacheStatus(const Cache& cache, const Key& key) {
   if (cache.containsPinned(key)) {
     return CacheStatus::cachedPinned;
   } else if (cache.containsNonPinned(key)) {
@@ -99,7 +98,7 @@ class ResultInProgress {
   // Distribute the computation results to all the threads that at some point
   // have called or will call getResult(). Check that none of the other threads
   // waiting for the result have already finished or were aborted.
-  void finish(shared_ptr<Value> result) {
+  void finish(std::shared_ptr<Value> result) {
     std::unique_lock lockGuard(_mutex);
     AD_CONTRACT_CHECK(_status == Status::IN_PROGRESS);
     _status = Status::FINISHED;
@@ -123,7 +122,7 @@ class ResultInProgress {
   // Wait for another thread to finish the computation and obtain the result.
   // If the computation is aborted, this function throws an
   // AbortedInOtherThreadException
-  shared_ptr<const Value> getResult() {
+  std::shared_ptr<const Value> getResult() {
     std::unique_lock uniqueLock(_mutex);
     _conditionVariable.wait(uniqueLock,
                             [this] { return _status != Status::IN_PROGRESS; });
@@ -135,7 +134,7 @@ class ResultInProgress {
 
  private:
   enum class Status { IN_PROGRESS, FINISHED, ABORTED };
-  shared_ptr<const Value> _result;
+  std::shared_ptr<const Value> _result;
   // See this SO answer for why mutable is ok here
   // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
   mutable std::condition_variable _conditionVariable;
@@ -160,12 +159,12 @@ class ConcurrentCache {
   ConcurrentCache() = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
-      !ql::concepts::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>))
+      !ql::concepts::same_as<ConcurrentCache, ql::remove_cvref_t<CacheArg>>))
       ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {
-    shared_ptr<const Value> _resultPointer;
+    std::shared_ptr<const Value> _resultPointer;
     CacheStatus _cacheStatus;
   };
 
@@ -334,12 +333,13 @@ class ConcurrentCache {
     Cache _cache;
     // Values that are currently being computed. The bool tells us whether this
     // result will be pinned in the cache.
-    HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
+    HashMap<Key, std::pair<bool, std::shared_ptr<ResultInProgress>>>
+        _inProgress;
 
     CacheAndInProgressMap() = default;
     CPP_template_2(typename Arg, typename... Args)(
         requires(!ql::concepts::same_as<
-                 std::remove_cvref_t<Arg>,
+                 ql::remove_cvref_t<Arg>,
                  CacheAndInProgressMap>)) explicit(sizeof...(Args) > 0)
         CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
@@ -351,7 +351,8 @@ class ConcurrentCache {
   // delete the operation with the key from the hash map of the operations that
   // are in progress, and add it to the cache using the computationResult
   // Will crash if the key cannot be found in the hash map
-  void moveFromInProgressToCache(Key key, shared_ptr<Value> computationResult) {
+  void moveFromInProgressToCache(Key key,
+                                 std::shared_ptr<Value> computationResult) {
     // Obtain a lock for the whole operation, making it atomic.
     auto lockPtr = _cacheAndInProgressMap.wlock();
     AD_CONTRACT_CHECK(lockPtr->_inProgress.contains(key));
@@ -376,6 +377,7 @@ class ConcurrentCache {
                       bool onlyReadFromCache,
                       const SuitabilityFuncT& suitableForCache) {
     using std::make_shared;
+    using std::shared_ptr;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
     // first determine whether we have to compute the result,

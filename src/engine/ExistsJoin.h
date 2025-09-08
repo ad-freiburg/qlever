@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_EXISTSJOIN_H
+#define QLEVER_SRC_ENGINE_EXISTSJOIN_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -52,14 +53,14 @@ class ExistsJoin : public Operation {
   // All following functions are inherited from `Operation`, see there for
   // comments.
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 
@@ -71,14 +72,30 @@ class ExistsJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {left_.get(), right_.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable();
+
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Lazy implementation for lazy exists joins.
+  Result lazyExistsJoin(std::shared_ptr<const Result> left,
+                        std::shared_ptr<const Result> right,
+                        bool requestLaziness);
+
+  FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
+
+#endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

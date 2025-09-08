@@ -2,7 +2,9 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -16,6 +18,11 @@ class CartesianProductJoin : public Operation {
  private:
   Children children_;
   size_t chunkSize_;
+  // If `true` calls to `computeResult` and `cloneImpl` will result in an
+  // exception. This is because this flag indicates that a limit has been
+  // dynamically applied to the children of this operation and we currently have
+  // to mechanism to reverse this.
+  bool forbiddenToRecompute_ = false;
 
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
@@ -46,12 +53,14 @@ class CartesianProductJoin : public Operation {
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
-  string getDescriptor() const override { return "Cartesian Product Join"; }
+  std::string getDescriptor() const override {
+    return "Cartesian Product Join";
+  }
   size_t getResultWidth() const override;
 
   size_t getCostEstimate() override;
@@ -69,7 +78,7 @@ class CartesianProductJoin : public Operation {
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
  protected:
   // Don't promise any sorting of the result.
@@ -77,7 +86,7 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -87,8 +96,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(std::span<Id> targetColumn,
-                         std::span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(ql::span<Id> targetColumn,
+                         ql::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
@@ -116,13 +125,15 @@ class CartesianProductJoin : public Operation {
   // `lastTableOffset` is the offset of the last table in the range. This is
   // used to handle `IdTable`s yielded by generators where the range of indices
   // they represent do not cover the whole result.
-  CPP_template(typename R)(requires ql::ranges::range<R>) Result::Generator
+  CPP_template(typename R)(requires ql::ranges::range<R>) Result::LazyResult
       produceTablesLazily(LocalVocab mergedVocab, R idTables, size_t offset,
                           size_t limit, size_t lastTableOffset = 0) const;
 
   // Similar to `produceTablesLazily` but can handle a single lazy result.
-  Result::Generator createLazyConsumer(
+  Result::LazyResult createLazyConsumer(
       LocalVocab staticMergedVocab,
-      std::vector<std::shared_ptr<const Result>> subresults,
+      ql::span<const std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

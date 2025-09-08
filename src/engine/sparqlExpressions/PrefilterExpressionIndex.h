@@ -1,8 +1,9 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
 
 #include <memory>
 #include <vector>
@@ -10,20 +11,23 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
+#include "index/Vocabulary.h"
+#include "util/Iterators.h"
 
-// For certain SparqlExpressions it is possible to perform a prefiltering
-// procedure w.r.t. relevant data blocks / ValueId values by making use of the
+// For certain SparqlExpressions it is possible to perform a pre-filtering
+// procedure w.r.t. relevant data blocks/ValueId values, by making use of the
 // available metadata (see CompressedBlockMetadata in CompressedRelation.h)
 // while performing the index scan. As a result, the actual SparqlExpression
 // evaluation is performed for a smaller IdTable if a PrefilterExpression
 // (declared in this file) for the respective SparqlExpression is available and
 // compatible with the IndexScan. The following SparqlExpressions construct a
 // PrefilterExpression if possible: logical-or, logical-and, logical-negate
-// (unary), relational-ops. and strstarts.
+// (unary), relational-ops and strstarts.
 
 namespace prefilterExpressions {
 
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using Vocab = RdfsVocabulary;
 
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
@@ -31,20 +35,57 @@ using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 constexpr size_t maxInfoRecursion = 3;
 
 //______________________________________________________________________________
-// The compressed block metadata (see `CompressedRelation.h`) that we use to
-// filter out the non-relevant blocks by checking their content of
-// `firstTriple_` and `lastTriple_` (`PermutedTriple`)
-using BlockMetadata = CompressedBlockMetadata;
+// `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
+// containerized `ql::span<cont CompressedBlockMetadata>` objects. This
+// (indexable) containerization procedure allows us to efficiently define
+// relevant ranges by indices/iterators, instead of returning the relevant
+// `CompressedBlockMetadata` values itself. `operator()(ql::span<const
+// CompressedBlockMetadata> randomAccessContainer,uint64_t i)` implements access
+// to the i-th `ValueId` regarding our containerized `ql::span<const
+// CompressedBlockMetadata> inputSpan`. Each `CompressedBlockMetadata` value
+// holds exactly two bound `ValueId`s (one in `firstTriple_` and `lastTriple_`
+// respectively) over the specified column `evaluationColumn_`. This leads to an
+// valid index range `[0, 2 * inputSpan.size())` for `i`. Under those conditions
+// and an given `ValueId` index `i`, we can simply determine that the
+// corresponding `ValueId` must be contained in `CompressedBlockMetadata` value
+// at position `i/2`. `i % 2` specifies in the following if we have to access
+// the ValueId from `fristTriple_` or `lastTriple_` of previously determined
+// `CompressedBlockMetadata` value. (1) `i % 2 == 0`: retrieve `ValueId` from
+// `firstTriple_`. (2) `i % 2 != 0`: retrieve `ValueId` from `lastTriple_`.
+struct AccessValueIdFromBlockMetadata {
+  size_t evaluationColumn_ = 0;
+  // `ql::ranges::subrange` requires default constructor
+  AccessValueIdFromBlockMetadata() = default;
+  explicit AccessValueIdFromBlockMetadata(size_t evaluationColumn)
+      : evaluationColumn_{evaluationColumn} {}
+
+  ValueId operator()(BlockMetadataSpan randomAccessContainer, uint64_t i) const;
+};
+
+// Specialized `Iterator` with `ValueId` access (retrieve `ValueId`s from
+// corresponding `CompressedBlockMetadata`) on containerized `ql::span<const
+// CompressedBlockMetadata>` objects.
+using ValueIdIt = ad_utility::IteratorForAccessOperator<
+    ql::span<const CompressedBlockMetadata>, AccessValueIdFromBlockMetadata,
+    ad_utility::IsConst::True>;
+
+//______________________________________________________________________________
+// `ValueIdSubrange` represents a (sub) range of relevant `ValueId`s over
+// the containerized `ql::span<const CompressedBlockMetadata> input`:
+using ValueIdSubrange = ql::ranges::subrange<ValueIdIt>;
+
+//______________________________________________________________________________
+// Required because `valueIdComparators::getRangesForId` directly returns pairs
+// of `ValueIdIt`s, and not sub ranges (`ValueIdSubrange`).
+// Remark: The pair defines a relevant range of `ValueId`s over containerized
+// `ql::span<const CompressedBlockMetadata> input` by iterators.
+using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;
 
 //______________________________________________________________________________
 /*
-`PrefilterExpression` represents a base class for the following sub-classes that
-implement the block-filtering procedure for the specific relational + logical
-operations/expressions.
-
-Remark: We do not actually evaluate the respective SPARQL Expression. We only
-pre-filter w.r.t. blocks that contain relevant data for the actual evaluation of
-those expressions to make the evaluation procedure more efficient.
+Remark: We don't evaluate the actual SPARQL Expression. We only pre-filter
+w.r.t. blocks that contain potentially relevant data for the actual evaluation
+of those expressions to make the evaluation procedure more efficient.
 
 The block-filtering is applied with the following operations:
 Relational Expressions - `<=`, `>=`, `<`, `>`, `==` and `!=`.
@@ -63,38 +104,45 @@ class PrefilterExpression {
   // Format content for debugging.
   virtual std::string asString(size_t depth) const = 0;
 
-  // This method is required for implementing the `NotExpression`. This method
-  // is required, because we logically operate on `BlockMetadata` values which
-  // define ranges given the `ValueIds` from last and first triple. E.g. the
-  // `BlockMetadata` that defines the range [IntId(0),... IntId(5)], should be
-  // considered relevant for the expression `?x >= IntId(3)`, but also for
-  // expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
-  // simply taking the complementing set of `BlockMetadata`, instead we
-  // retrieve it by directly negating/complementing the child expression itself.
-  // Every derived class can return it's respective logical complement
+  // This method is required for implementing the `NotExpression`, because we
+  // logically operate on `CompressedBlockMetadata` values which define ranges
+  // given the `ValueId`s from last and first triple. E.g. the
+  // `CompressedBlockMetadata` that defines the range [IntId(0),... IntId(5)]
+  // should be considered relevant for the expression `?x >= IntId(3)`, but also
+  // for expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
+  // simply taking the complementing set of `CompressedBlockMetadata`, instead
+  // we retrieve it by directly negating/complementing the child expression
+  // itself. Every derived class can return it's respective logical complement
   // (negation) when being called on `logicalCoplement()`. E.g. for a call
   // w.r.t. `RelationalExpression<LT>(IntId(5))` (< 5), the returned logical
   // complement is `RelationalExpression<GE>(IntId(5))` (>= 5). On a
-  // `LogicalExpression` (`AND` or `OR`), we respectively apply De-Morgan's law
-  // and return the resulting `LogicalExpression`. In case of the
-  // `NotExpression`, we just return its child expression given that two
-  // negations (complementations) cancel out. For a more concise explanation
-  // take a look at the actual implementation for derived classes.
+  // `LogicalExpression`
+  // (`AND` or `OR`), we respectively apply De-Morgan's law and return the
+  // resulting `LogicalExpression`. In case of the `NotExpression`, we just
+  // return its child expression given that two negations (complementations)
+  // cancel out. For a more concise explanation take a look at the actual
+  // implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
-  // It's expected that the provided `BlockMetadata` vector adheres to the
-  // following conditions:
-  // (1) unqiueness of blocks
-  // (2) sorted (order)
-  // (3) Constant values for all columns `< evaluationColumn`
-  // To indicate that the possibly incomplete first and last block should be
-  // handled appropriately, the `stripIncompleteBlocks` flag is set to `true`.
-  // The flag value shouldn't be changed in general, because `evaluate()` only
-  // removes the respective block if it is conditionally (inconsistent columns)
-  // necessary.
-  std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn,
-                                      bool stripIncompleteBlocks = true) const;
+  // It's expected that the provided `CompressedBlockMetadata` span adheres to
+  // the following conditions: (1) unqiueness of blocks (2) sorted (order) (3)
+  // Constant values for all columns `< evaluationColumn` Remark: The
+  // potentially incomplete first/last `CompressedBlockMetadata` values in input
+  // are handled automatically. They are stripped at the beginning and added
+  // again when the evaluation procedure was successfully performed.
+  BlockMetadataRanges evaluate(const Vocab& vocab, BlockMetadataSpan blockRange,
+                               size_t evaluationColumn) const;
+
+  // `evaluateImpl` is internally used for the actual pre-filter procedure.
+  // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
+  // column index `evaluationColumn` over the containerized `ql::span<const
+  // CompressedBlockMetadata> input` (`BlockMetadataSpan`).
+  // If `getTotalComplement` is set to `true`, the leaf `RelationalExpression`s
+  // return their corresponding complement over ALL datatypes. This is in
+  // particular needed for the complement of `IsDatatype` and `InExpression`.
+  virtual BlockMetadataRanges evaluateImpl(
+      const Vocab& vocab, const ValueIdSubrange& idRange,
+      BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -107,22 +155,128 @@ class PrefilterExpression {
   // `IdOrLocalVocabEntry` variant.
   static ValueId getValueIdFromIdOrLocalVocabEntry(
       const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
+};
+
+//______________________________________________________________________________
+// `PrefixRegexExpression` implements the prefilter procedure for the SPARQL
+// expressions `REGEX()` and `STRSTARTS()`.
+// For more details refer to the commentary within the declaration and
+// definitions of `PrefixRegexExpression`.
+class PrefixRegexExpression : public PrefilterExpression {
+ private:
+  TripleComponent::Literal prefixLiteral_;
+  // `isNegated_ = true` implies that we prefilter a negated expression, hence
+  // `!REGEX()` or `!STRSTARTS()`.
+  bool isNegated_;
+
+ public:
+  explicit PrefixRegexExpression(const TripleComponent::Literal& prefixLiteral,
+                                 bool isNegated = false)
+      : prefixLiteral_(prefixLiteral), isNegated_(isNegated) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
 
  private:
-  // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
-  // instead of this method.
-  // Performs the following conditional checks on
-  // the provided `BlockMetadata` values: (1) unqiueness of blocks (2) sorted
-  // (order) (3) Constant values for all columns `< evaluationColumn` This
-  // function subsequently invokes the `evaluateImpl` method and checks the
-  // corresponding result for those conditions again. If a respective condition
-  // is violated, the function performing the checks will throw a
-  // `std::runtime_error`.
-  std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
 
-  virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
+//______________________________________________________________________________
+// Helper struct for a compact class implementation regarding the logical
+// operations `AND` and `OR`. `NOT` is implemented separately given that the
+// expression is unary (single child expression).
+enum struct LogicalOperator { AND, OR };
+
+//______________________________________________________________________________
+template <LogicalOperator Operation>
+class LogicalExpression : public PrefilterExpression {
+ private:
+  std::unique_ptr<PrefilterExpression> child1_;
+  std::unique_ptr<PrefilterExpression> child2_;
+
+ public:
+  // AND and OR
+  explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1,
+                             std::unique_ptr<PrefilterExpression> child2)
+      : child1_(std::move(child1)), child2_(std::move(child2)) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
+  // requires access to the `evaluateImpl` declared here.
+  friend class PrefixRegexExpression;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
+
+//______________________________________________________________________________
+// Values to differentiate `PrefilterExpression` for the respective `isDatatype`
+// SPARQL expressions. Supported by the following prefilter
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+
+//______________________________________________________________________________
+// The specialized `PrefilterExpression` class that actually applies the
+// pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
+template <IsDatatype Datatype>
+class IsDatatypeExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+
+ public:
+  explicit IsDatatypeExpression(bool isNegated = false)
+      : isNegated_(isNegated) {}
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
+
+//______________________________________________________________________________
+// The `PrefilterExpression` associated with the `RelationalExpressions` `IN`,
+// and implicitly `NOT IN`. `IsInExpression` provides prefilter support for
+// statements such as `FILTER("4.0"  IN (<http://example/iri>, "someStr", 4.0))`
+// or `FILTER("4.0" NOT IN (<http://example/iri>, 2, 4.0))`.
+class IsInExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+  // Represents the reference values used for equality-based prefiltering, since
+  // the applied `PrefilterExpression` over these referenceValues is
+  // semantically equivalent to: refVal1 || refVal2 || ... || refValN.
+  std::vector<IdOrLocalVocabEntry> referenceValues_;
+
+ public:
+  explicit IsInExpression(std::vector<IdOrLocalVocabEntry> referenceValues,
+                          bool isNegated = false)
+      : isNegated_(isNegated), referenceValues_(std::move(referenceValues)) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -156,39 +310,13 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
-};
-
-//______________________________________________________________________________
-// Helper struct for a compact class implementation regarding the logical
-// operations `AND` and `OR`. `NOT` is implemented separately given that the
-// expression is unary (single child expression).
-enum struct LogicalOperator { AND, OR };
-
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-class LogicalExpression : public PrefilterExpression {
- private:
-  std::unique_ptr<PrefilterExpression> child1_;
-  std::unique_ptr<PrefilterExpression> child2_;
-
- public:
-  // AND and OR
-  explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1,
-                             std::unique_ptr<PrefilterExpression> child2)
-      : child1_(std::move(child1)), child2_(std::move(child2)) {}
-
-  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
-  bool operator==(const PrefilterExpression& other) const override;
-  std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string asString(size_t depth) const override;
-
- private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  // If `getTotalComplement` is set to `true`, this method returns
+  // the total complement over all datatype `ValueId`s from the
+  // provided `CompressedBlockMetadata` values.
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -211,9 +339,10 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -232,6 +361,17 @@ using GreaterThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GT>;
 
 //______________________________________________________________________________
+// Define convenient names for the templated `IsDatatypeExpression`s.
+using IsIriExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::IRI>;
+using IsBlankExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::BLANK>;
+using IsLiteralExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::LITERAL>;
+using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::NUMERIC>;
+
+//______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.
 using AndExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::AND>;
@@ -239,6 +379,41 @@ using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
+//______________________________________________________________________________
+namespace logicalOps {
+
+// Performs a `logical-And` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getIntersectionOfBlockRanges(const BlockMetadataRanges& r1,
+                                                 const BlockMetadataRanges& r2);
+// Performs a `logical-Or` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2);
+
+}  // namespace logicalOps
+
+//______________________________________________________________________________
+namespace mapping {
+// `This internal helper function is only exposed for unit tests!`
+// Map the complement of the given `ValueIdItPair`s, which directly refer to the
+// `ValueId`s held by the containerized `ql::span<const
+// CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
+// ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
+// `CompressedBlockMetadata` values of `ql::span<const
+// CompressedBlockMetadata>` (`BlockMetadataSpan`).
+BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
+    const std::vector<ValueIdItPair>& relevantIdRanges,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
+// `This internal helper function is only exposed for unit tests!`
+// Map the given `ValueIdItPair`s, which directly refer to the
+// `ValueId`s held by the containerized `ql::span<const
+// CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
+// ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
+// `CompressedBlockMetadata` values of `ql::span<const
+// CompressedBlockMetadata>` (`BlockMetadataSpan`).
+BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
+    const std::vector<ValueIdItPair>& relevantIdRanges,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
+}  // namespace mapping
 
 //______________________________________________________________________________
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.
@@ -271,8 +446,8 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 // comparison operations: e.g. `5 < ?x` is changed to `?x > 5`.
 // The `prefilterDateByYear` flag indicates that the constructed
 // `PrefilterExpression<comp>` needs to consider `Date`/`DateYearOrDuration`
-// value ranges for the `BlockMetadata` pre-selection (w.r.t. the year provided
-// as an Int-`ValueId` over `referenceValue`). This requires a slightly
+// value ranges for the `CompressedBlockMetadata` pre-selection (w.r.t. the year
+// provided as an Int-`ValueId` over `referenceValue`). This requires a slightly
 // different logic when constructing the expression, hence set
 // `prefilterDateByYear` as an indicator.
 template <CompOp comparison>
@@ -282,3 +457,5 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 
 }  // namespace detail
 }  // namespace prefilterExpressions
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H

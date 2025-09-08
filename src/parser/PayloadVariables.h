@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PAYLOADVARIABLES_H
+#define QLEVER_SRC_PARSER_PAYLOADVARIABLES_H
 
 #include <vector>
 
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace detail {
 // Represents the selection of all variables as payload
@@ -55,3 +56,5 @@ class PayloadVariables {
   std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =
       std::vector<Variable>{};
 };
+
+#endif  // QLEVER_SRC_PARSER_PAYLOADVARIABLES_H

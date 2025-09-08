@@ -32,7 +32,7 @@ class VariadicExpression : public SparqlExpression {
 
   // ___________________________________________________
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    string key = typeid(*this).name();
+    std::string key = typeid(*this).name();
     auto childKeys = ad_utility::lazyStrJoin(
         children_ | ql::views::transform([&varColMap](const auto& childPtr) {
           return childPtr->getCacheKey(varColMap);
@@ -43,7 +43,7 @@ class VariadicExpression : public SparqlExpression {
 
  private:
   // ___________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
     return {children_.data(), children_.size()};
   }
 };

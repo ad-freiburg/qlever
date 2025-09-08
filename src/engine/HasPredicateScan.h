@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
+#define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
 
 #include <memory>
 #include <string>
@@ -61,14 +63,14 @@ class HasPredicateScan : public Operation {
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 
@@ -85,7 +87,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] const TripleComponent& getObject() const;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     if (subtree_) {
       return {std::addressof(subtree())};
     } else {
@@ -94,15 +96,17 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
-                           const CompactVectorOfStrings<Id>& patterns);
+  template <typename HasPattern>
+  void computeFreeS(IdTable* resultTable, Id objectId, HasPattern& hasPattern,
+                    const CompactVectorOfStrings<Id>& patterns);
 
   void computeFreeO(IdTable* resultTable, Id subjectAsId,
                     const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
-                              const CompactVectorOfStrings<Id>& patterns,
-                              size_t resultSize);
+  template <typename HasPattern>
+  void computeFullScan(IdTable* resultTable, HasPattern& hasPattern,
+                       const CompactVectorOfStrings<Id>& patterns,
+                       size_t resultSize);
 
   template <int WIDTH>
   Result computeSubqueryS(IdTable* result,
@@ -115,3 +119,5 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

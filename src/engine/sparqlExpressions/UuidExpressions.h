@@ -4,7 +4,8 @@
 
 // Test for UuidExpressionImpl can be found in RandomExpressionTest.cpp
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
@@ -62,13 +63,13 @@ class UuidExpressionImpl : public SparqlExpression {
     return result;
   }
 
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return FuncKey(randId_);
   }
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  //  namespace detail::uuidExpression
@@ -79,3 +80,5 @@ using StrUuidExpression = detail::uuidExpression::UuidExpressionImpl<
     detail::uuidExpression::fromLiteral, detail::uuidExpression::litUuidKey>;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H

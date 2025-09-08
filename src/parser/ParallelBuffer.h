@@ -3,7 +3,9 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PARALLELBUFFER_H
+#define QLEVER_SRC_PARSER_PARALLELBUFFER_H
+
 #include <re2/re2.h>
 
 #include <future>
@@ -37,7 +39,7 @@ class ParallelBuffer {
    * (network/pipe) stream.
    * @param filename Name of the file which is to be opened.
    */
-  virtual void open(const string& filename) = 0;
+  virtual void open(const std::string& filename) = 0;
   /**
    * @brief Get (approximately) the next blocksize_ bytes from the input stream.
    *
@@ -67,7 +69,7 @@ class ParallelFileBuffer : public ParallelBuffer {
   explicit ParallelFileBuffer(size_t blocksize) : ParallelBuffer(blocksize) {}
 
   // _________________________________________________________________________
-  void open(const string& filename) override;
+  void open(const std::string& filename) override;
 
   // _____________________________________________________
   std::optional<BufferType> getNextBlock() override;
@@ -95,7 +97,7 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   std::optional<BufferType> getNextBlock() override;
 
   // Open the file from which the blocks are read.
-  void open(const string& filename) override { rawBuffer_.open(filename); }
+  void open(const std::string& filename) override { rawBuffer_.open(filename); }
 
  private:
   // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000,
@@ -110,3 +112,5 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   std::string endRegexAsString_;
   bool exhausted_ = false;
 };
+
+#endif  // QLEVER_SRC_PARSER_PARALLELBUFFER_H

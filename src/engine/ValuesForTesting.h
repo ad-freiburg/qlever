@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
@@ -135,7 +136,7 @@ class ValuesForTesting : public Operation {
       return {std::move(generator), resultSortedOn()};
     }
 
-    if (tables_.size() == 1 && getLimit().isUnconstrained()) {
+    if (tables_.size() == 1 && getLimitOffset().isUnconstrained()) {
       return {tables_.at(0), resultSortedOn(), localVocab_.clone()};
     }
     std::optional<IdTable> optionalTable;
@@ -150,10 +151,10 @@ class ValuesForTesting : public Operation {
     auto table = optionalTable.has_value() ? std::move(optionalTable).value()
                                            : tables_.at(0)->clone();
     if (supportsLimit_) {
-      table.erase(table.begin() + getLimit().upperBound(table.size()),
+      table.erase(table.begin() + getLimitOffset().upperBound(table.size()),
                   table.end());
       table.erase(table.begin(),
-                  table.begin() + getLimit().actualOffset(table.size()));
+                  table.begin() + getLimitOffset().actualOffset(table.size()));
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
@@ -168,7 +169,7 @@ class ValuesForTesting : public Operation {
     cacheSizeStorage_ = cacheSizeStorage;
   }
 
-  bool supportsLimit() const override { return supportsLimit_; }
+  bool supportsLimitOffset() const override { return supportsLimit_; }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
 
@@ -182,7 +183,7 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  string getCacheKeyImpl() const override {
+  std::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView =
         detail::getTables(tables_) | ql::views::transform(&IdTable::numRows);
@@ -206,7 +207,7 @@ class ValuesForTesting : public Operation {
   }
 
  public:
-  string getDescriptor() const override {
+  std::string getDescriptor() const override {
     return "explicit values for testing";
   }
 
@@ -216,7 +217,7 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables_.at(0)->numColumns();
   }
 
-  vector<ColumnIndex> resultSortedOn() const override {
+  std::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -234,7 +235,7 @@ class ValuesForTesting : public Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
@@ -309,3 +310,5 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
+
+#endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

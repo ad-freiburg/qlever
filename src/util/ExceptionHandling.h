@@ -2,15 +2,16 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_EXCEPTIONHANDLING_H
+#define QLEVER_SRC_UTIL_EXCEPTIONHANDLING_H
+
+#include <absl/strings/str_cat.h>
 
 #include <concepts>
 #include <exception>
 #include <iostream>
-#include <stdexcept>
-#include <type_traits>
 
-#include "absl/strings/str_cat.h"
+#include "backports/type_traits.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -20,17 +21,17 @@ namespace detail {
 [[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
   std::terminate();
 };
-}
+}  // namespace detail
 // Call `f()`. If this call throws, catch the exception and log it, but do not
 // propagate it. Can be used to make destructors `noexcept` when the destructor
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires std::invocable<std::remove_cvref_t<
+    requires std::invocable<ql::remove_cvref_t<
         F>>) void ignoreExceptionIfThrows(F&& f,
                                           std::string_view additionalNote =
                                               "") noexcept {
-  if constexpr (std::is_nothrow_invocable_v<std::remove_cvref_t<F>>) {
+  if constexpr (std::is_nothrow_invocable_v<ql::remove_cvref_t<F>>) {
     std::invoke(AD_FWD(f));
     return;
   }
@@ -55,7 +56,7 @@ CPP_template(typename F)(
 // this function must never throw an exception.
 CPP_template(typename F,
              typename TerminateAction = decltype(detail::callStdTerminate))(
-    requires std::invocable<std::remove_cvref_t<F>> CPP_and
+    requires std::invocable<ql::remove_cvref_t<F>> CPP_and
         std::is_nothrow_invocable_v<
             TerminateAction>) void terminateIfThrows(F&& f,
                                                      std::string_view message,
@@ -153,3 +154,5 @@ class ThrowInDestructorIfSafe {
   ~ThrowInDestructorIfSafe() noexcept(false) = default;
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_EXCEPTIONHANDLING_H

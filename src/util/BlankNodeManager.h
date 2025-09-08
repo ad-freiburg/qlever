@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
+#define QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
 
 #include <gtest/gtest_prod.h>
 
@@ -134,8 +135,13 @@ class BlankNodeManager {
   // Allocate and retrieve a block of new blank node indexes.
   [[nodiscard]] Block allocateBlock();
 
+  // Get the number of currently used blocks
+  size_t numBlocksUsed() const { return usedBlocksSet_.rlock()->size(); }
+
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
   FRIEND_TEST(BlankNodeManager, moveLocalBlankNodeManager);
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_BLANKNODEMANAGER_H

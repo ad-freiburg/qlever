@@ -3,7 +3,8 @@
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SORT_H
+#define QLEVER_SRC_ENGINE_SORT_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -26,9 +27,9 @@ class Sort : public Operation {
        std::vector<ColumnIndex> sortColumnIndices);
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override {
+  virtual std::vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -41,8 +42,6 @@ class Sort : public Operation {
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
-
-  std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
@@ -62,9 +61,16 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const std::vector<ColumnIndex>& sortColumns) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -76,5 +82,7 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SORT_H

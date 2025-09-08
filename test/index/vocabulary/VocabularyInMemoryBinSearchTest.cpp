@@ -41,10 +41,10 @@ class VocabularyCreator {
       if (ids.has_value()) {
         AD_CORRECTNESS_CHECK(ids.value().size() == words.size());
       }
-      size_t idx = 0;
+      uint64_t idx = 0;
       for (auto& word : words) {
         size_t actualIdx = ids.has_value() ? ids.value().at(idx) : idx;
-        writer(word, actualIdx);
+        EXPECT_EQ(writer(word, actualIdx), actualIdx);
         ++idx;
       }
       static std::atomic<unsigned> doFinish = 0;

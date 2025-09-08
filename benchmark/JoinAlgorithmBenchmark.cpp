@@ -3,6 +3,9 @@
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 // Author of the file this file is based on: Björn Buchhold
 // (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
@@ -114,7 +117,7 @@ struct SetOfIdTableColumnElements {
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const std::span<const ValueId>& idTableColumnRef) {
+      const ql::span<const ValueId>& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -388,6 +391,23 @@ concept isTypeOrGrowthFunction =
 template <typename... Ts>
 concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
+
+// Is something a growth function?
+struct IsGrowthFunction {
+  template <typename T>
+  constexpr bool operator()() const {
+    /*
+    We have to cheat a bit, because being a function is not something that
+    can easily be checked for to my knowledge. Instead, we simply check if
+    it's one of the limited variations of growth function that we allow.
+    */
+    if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
 
 /*
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
@@ -761,32 +781,36 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     @param canBeEqual If true, the generated lambda also returns true, if the
     values are equal.
     */
-    auto generateBiggerEqualLambda = []<typename T>(const T& minimumValue,
-                                                    bool canBeEqual) {
+    auto generateBiggerEqualLambda = [](const auto& minimumValue,
+                                        bool canBeEqual) {
+      using T = std::decay_t<decltype(minimumValue)>;
       return [minimumValue, canBeEqual](const T& valueToCheck) {
         return valueToCheck > minimumValue ||
                (canBeEqual && valueToCheck == minimumValue);
       };
     };
     auto generateBiggerEqualLambdaDesc =
-        []<typename OptionType,
-           typename = std::enable_if_t<ad_utility::isInstantiation<
-               OptionType, ad_utility::ConstConfigOptionProxy>>>(
-            const OptionType& option, const auto& minimumValue,
-            bool canBeEqual) {
-      return absl::StrCat("'", option.getConfigOption().getIdentifier(),
-                          "' must be bigger than",
-                          canBeEqual ? ", or equal to," : "", " ", minimumValue,
-                          ".");
-    };
+        [](const auto& option, const auto& minimumValue, bool canBeEqual) {
+          static_assert(
+              ad_utility::isInstantiation<std::decay_t<decltype(option)>,
+                                          ad_utility::ConstConfigOptionProxy>,
+              "The option must be an instance of 'ConfigOptionProxy'.");
+          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                              "' must be bigger than",
+                              canBeEqual ? ", or equal to," : "", " ",
+                              minimumValue, ".");
+        };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
-    auto generateLessEqualLambdaDesc =
-        []<typename OptionType,
-           typename = std::enable_if_t<ad_utility::isInstantiation<
-               OptionType, ad_utility::ConstConfigOptionProxy>>>(
-            const OptionType& lhs, const OptionType& rhs) {
+    auto generateLessEqualLambdaDesc = [](const auto& lhs, const auto& rhs) {
+      static_assert(std::is_same_v<std::decay_t<decltype(lhs)>,
+                                   std::decay_t<decltype(lhs)>>,
+                    "The arguments must be of the same type.");
+      static_assert(
+          ad_utility::isInstantiation<std::decay_t<decltype(lhs)>,
+                                      ad_utility::ConstConfigOptionProxy>,
+          "The arguments must be a instances of 'ConfigOptionProxy'.");
       return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
                           "' must be smaller than, or equal to, "
                           "'",
@@ -1184,32 +1208,19 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const T5& biggerTableNumColumns,
       const T6& smallerTableJoinColumnSampleSizeRatio,
       const T7& biggerTableJoinColumnSampleSizeRatio) const {
-    // Is something a growth function?
-    constexpr auto isGrowthFunction = []<typename T>() {
-      /*
-      We have to cheat a bit, because being a function is not something, that
-      can easily be checked for to my knowledge. Instead, we simply check, if
-      it's one of the limited variation of growth function, that we allow.
-      */
-      if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
-        return true;
-      } else {
-        return false;
-      }
-    };
-
+    constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
-        [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
+        [&isGrowthFunction](auto&... args) -> auto& {
       // Put them into a tuple, so that we can easily look them up.
-      auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
+      auto tup = std::tuple<decltype(args)...>{AD_FWD(args)...};
 
       // Get the index of the first growth function.
-      constexpr static size_t idx =
-          ad_utility::getIndexOfFirstTypeToPassCheck<isGrowthFunction, Ts...>();
+      constexpr static size_t idx = ad_utility::getIndexOfFirstTypeToPassCheck<
+          isGrowthFunction, std::decay_t<decltype(args)>...>();
 
       // Do we have a valid index?
-      static_assert(idx < sizeof...(Ts),
+      static_assert(idx < sizeof...(args),
                     "There was no growth function in this parameter pack.");
 
       return std::get<idx>(tup);
@@ -1220,9 +1231,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     created, if it's a function, and return the result. Otherwise  return the
     given `possibleGrowthFunction`.
     */
-    auto returnOrCall = [&isGrowthFunction]<typename T>(
-                            const T& possibleGrowthFunction,
-                            const size_t nextRowIdx) {
+    auto returnOrCall = [&isGrowthFunction](const auto& possibleGrowthFunction,
+                                            const size_t nextRowIdx) {
+      using T = std::decay_t<decltype(possibleGrowthFunction)>;
       if constexpr (isGrowthFunction.template operator()<T>()) {
         return possibleGrowthFunction(nextRowIdx);
       } else {

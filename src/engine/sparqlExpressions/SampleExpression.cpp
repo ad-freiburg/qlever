@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./SampleExpression.h"
 
@@ -11,8 +13,8 @@ using namespace sparqlExpression::detail;
 
 // ____________________________________________________________________________
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
-  auto evaluator =
-      [context]<typename T>(const T& childResult) -> ExpressionResult {
+  auto evaluator = [context](const auto& childResult) -> ExpressionResult {
+    using T = std::decay_t<decltype(childResult)>;
     if (getResultSize(*context, childResult) == 0) {
       return Id::makeUndefined();
     }
@@ -25,7 +27,7 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     } else if constexpr (std::is_same_v<T, ::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CORRECTNESS_CHECK(context->_endIndex > context->_beginIndex);
-      std::span<const ValueId> idOfFirstAsVector = detail::getIdsFromVariable(
+      ql::span<const ValueId> idOfFirstAsVector = detail::getIdsFromVariable(
           childResult, context, context->_beginIndex, context->_endIndex);
       return ExpressionResult{idOfFirstAsVector[0]};
     } else {

@@ -4,11 +4,13 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HASHSET_H
+#define QLEVER_SRC_UTIL_HASHSET_H
+
+#include <absl/container/flat_hash_set.h>
 
 #include <unordered_set>
 
-#include "absl/container/flat_hash_set.h"
 #include "util/AllocatorWithLimit.h"
 
 namespace ad_utility {
@@ -33,3 +35,5 @@ template <class T,
 using HashSetWithMemoryLimit = std::unordered_set<T, HashFct, EqualElem, Alloc>;
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_HASHSET_H

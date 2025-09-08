@@ -2,8 +2,11 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
@@ -31,7 +34,7 @@ class RelationalExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   // Check if this expression has the form `LANG(?var) = "literal"` and return
@@ -43,7 +46,7 @@ class RelationalExpression : public SparqlExpression {
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
   // corresponds to the sorted column.
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      [[maybe_unused]] bool isNegated) const override;
+      bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
@@ -52,7 +55,7 @@ class RelationalExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 // Implementation of the `IN` expression
@@ -74,8 +77,11 @@ class InExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
+
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
@@ -84,7 +90,7 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 }  // namespace sparqlExpression::relational
@@ -105,4 +111,16 @@ using GreaterEqualExpression =
     relational::RelationalExpression<valueIdComparators::Comparison::GE>;
 
 using InExpression = relational::InExpression;
+
+// This function is a helper for the query planner. It allows unpacking a
+// `SparqlExpression` of any of these forms
+// * `geof:distance(?variable1, ?variable2) <= constant`
+// * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
+// * `geof:metricDistance(?variable1, ?variable2) <= constant`
+// for rewriting filters to spatial joins.
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
+getGeoDistanceFilter(const SparqlExpression& expr);
+
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H

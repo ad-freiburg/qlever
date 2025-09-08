@@ -4,17 +4,18 @@
 
 // Simple interfaces for the random facilities from the STL
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_RANDOM_H
+#define QLEVER_SRC_UTIL_RANDOM_H
 
 #include <array>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 #include <random>
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "global/TypedIndex.h"
 
 namespace ad_utility {
@@ -128,3 +129,5 @@ void randomShuffle(RandomIt begin, RandomIt end,
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_RANDOM_H

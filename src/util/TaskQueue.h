@@ -5,8 +5,8 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 
-#include <functional>
 #include <optional>
 #include <queue>
 #include <string>
@@ -29,7 +29,7 @@ namespace ad_utility {
 template <bool TrackTimes = false>
 class TaskQueue {
  private:
-  using Task = std::function<void()>;
+  using Task = absl::AnyInvocable<void()>;
   using Timer = ad_utility::Timer;
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
@@ -119,6 +119,11 @@ class TaskQueue {
            std::to_string(pushTime_) + "ms (push), " +
            std::to_string(popTime_) + "ms (pop)";
   }
+
+  // Block the current thread until `finish()` on the queue has been called and
+  // successfully completed. This function may NOT be called from inside a queue
+  // thread, otherwise there will be a deadlock.
+  void waitUntilFinished() const { finishedFinishing_.wait(false); }
 
   ~TaskQueue() {
     if (startedFinishing_.test_and_set()) {

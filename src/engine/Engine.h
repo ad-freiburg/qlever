@@ -1,11 +1,13 @@
 // Copyright 2014, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
 
-#include <type_traits>
+#ifndef QLEVER_SRC_ENGINE_ENGINE_H
+#define QLEVER_SRC_ENGINE_ENGINE_H
+
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "util/Log.h"
@@ -65,3 +67,5 @@ class Engine {
   static size_t countDistinct(IdTableView<0> input,
                               const std::function<void()>& checkCancellation);
 };
+
+#endif  // QLEVER_SRC_ENGINE_ENGINE_H

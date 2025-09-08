@@ -23,8 +23,7 @@ TEST(AllocatorWithLimit, initial) {
   ASSERT_EQ(std::as_const(all).amountMemoryLeft(), 1_MB);
   AD_EXPECT_THROW_WITH_MESSAGE(
       all.allocate(500'000),
-      ::testing::StartsWith(
-          "Tried to allocate 2 MB, but only 1 MB were available."));
+      ::testing::StrEq("Tried to allocate 2 MB, but only 1 MB were available"));
   all.deallocate(ptr, 250'000);
 }
 

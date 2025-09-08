@@ -1,15 +1,22 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
-//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/DeltaTriples.h"
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
@@ -27,8 +34,8 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
-                                  std::span<const IdTriple<0>> idTriples,
-                                  bool shouldExist) {
+                                  ql::span<const IdTriple<0>> triples,
+                                  bool insertOrDelete) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -36,7 +43,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
         //  is done
-        idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
+        triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[static_cast<size_t>(permutation)] =
@@ -44,9 +51,9 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
-  std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
+  std::vector<DeltaTriples::LocatedTripleHandles> handles{triples.size()};
   for (auto permutation : Permutation::ALL) {
-    for (size_t i = 0; i < idTriples.size(); i++) {
+    for (size_t i = 0; i < triples.size(); i++) {
       handles[i].forPermutation(permutation) =
           intermediateHandles[static_cast<size_t>(permutation)][i];
     }
@@ -139,14 +146,14 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 
   // Convert all local vocab and blank node `Id`s in all `triples`.
   ql::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
-    ql::ranges::for_each(triple.ids_, convertId);
-    ql::ranges::for_each(triple.payload_, convertId);
+    ql::ranges::for_each(triple.ids(), convertId);
+    ql::ranges::for_each(triple.payload(), convertId);
   });
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
-                                     Triples triples, bool shouldExist,
+                                     Triples triples, bool insertOrDelete,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
@@ -163,9 +170,13 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
       inverseMap.erase(triple);
     }
   });
+  // Manually update the block metadata, because `eraseTripleInAllPermutations`
+  // does not update them for performance reason.
+  ql::ranges::for_each(locatedTriples(),
+                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
 
-  std::vector<LocatedTripleHandles> handles =
-      locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
+  std::vector<LocatedTripleHandles> handles = locateAndAddTriples(
+      std::move(cancellationHandle), triples, insertOrDelete);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with ql::views::zip in C++23
@@ -189,7 +200,7 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.clone(), snapshotIndex)};
+      locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex)};
 }
 
 // ____________________________________________________________________________
@@ -218,13 +229,14 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 // _____________________________________________________________________________
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
-    const std::function<ReturnType(DeltaTriples&)>& function) {
+    const std::function<ReturnType(DeltaTriples&)>& function,
+    bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
   return deltaTriples_.withWriteLock(
-      [this, &function](DeltaTriples& deltaTriples) {
+      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
         auto updateSnapshot = [this, &deltaTriples] {
           auto newSnapshot = deltaTriples.getSnapshot();
           currentLocatedTriplesSnapshot_.withWriteLock(
@@ -232,24 +244,35 @@ ReturnType DeltaTriplesManager::modify(
                 currentSnapshot = std::move(newSnapshot);
               });
         };
+        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
+                                       writeToDiskAfterRequest]() {
+          if (writeToDiskAfterRequest) {
+            // TODO<RobinTF> Find a good way to track the time it takes to write
+            // this and store it into the corresponding metadata object.
+            deltaTriples.writeToDisk();
+          }
+          updateSnapshot();
+        };
 
         if constexpr (std::is_void_v<ReturnType>) {
           function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
         } else {
           ReturnType returnValue = function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
           return returnValue;
         }
       });
 }
-// Explicit instantions
+// Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&);
+    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&);
+    const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&);
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
@@ -266,4 +289,72 @@ void DeltaTriples::setOriginalMetadata(
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::writeToDisk() const {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  auto toRange = [](const TriplesToHandlesMap& map) {
+    return map | ql::views::keys |
+           ql::views::transform(
+               [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+                 return triple.ids();
+               }) |
+           ql::views::join;
+  };
+  std::filesystem::path tempPath = filenameForPersisting_.value();
+  tempPath += ".tmp";
+  ad_utility::serializeIds(
+      tempPath, localVocab_,
+      std::array{toRange(triplesDeleted_), toRange(triplesInserted_)});
+  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::readFromDisk() {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  AD_CONTRACT_CHECK(localVocab_.empty());
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getBlankNodeManager());
+  if (idRanges.empty()) {
+    return;
+  }
+  AD_CORRECTNESS_CHECK(idRanges.size() == 2);
+  auto toTriples = [](const std::vector<Id>& ids) {
+    Triples triples;
+    static_assert(Triples::value_type::PayloadSize == 0);
+    constexpr size_t cols = Triples::value_type::NumCols;
+    AD_CORRECTNESS_CHECK(ids.size() % cols == 0);
+    triples.reserve(ids.size() / cols);
+    for (size_t i = 0; i < ids.size(); i += cols) {
+      triples.emplace_back(
+          std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
+    }
+    return triples;
+  };
+  auto cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
+              << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
+}
+// _____________________________________________________________________________
+void DeltaTriples::setPersists(std::optional<std::string> filename) {
+  filenameForPersisting_ = std::move(filename);
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+    std::string filename) {
+  modify<void>(
+      [&filename](DeltaTriples& deltaTriples) {
+        deltaTriples.setPersists(std::move(filename));
+        deltaTriples.readFromDisk();
+      },
+      false);
 }

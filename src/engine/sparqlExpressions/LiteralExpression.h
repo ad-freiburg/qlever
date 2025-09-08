@@ -1,8 +1,11 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/TypeTraits.h"
@@ -40,15 +43,18 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `Iri` case.
-    auto getIdOrString = [this, &context]<typename U>(const U& s)
+    auto getIdOrString = [this, &context](const auto& s)
         -> CPP_ret(ExpressionResult)(
-            requires ad_utility::SameAsAny<U, TripleComponent::Literal,
+            requires ad_utility::SameAsAny<std::decay_t<decltype(s)>,
+                                           TripleComponent::Literal,
                                            TripleComponent::Iri>) {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
       TripleComponent tc{s};
-      std::optional<Id> id = tc.toValueId(context->_qec.getIndex().getVocab());
+      const auto& index = context->_qec.getIndex();
+      std::optional<Id> id =
+          tc.toValueId(index.getVocab(), index.encodedIriManager());
       IdOrLiteralOrIri result =
           id.has_value()
               ? IdOrLiteralOrIri{id.value()}
@@ -74,7 +80,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Variables and string constants add their values.
-  std::span<const Variable> getContainedVariablesNonRecursive() const override {
+  ql::span<const Variable> getContainedVariablesNonRecursive() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {&_value, 1};
     } else {
@@ -83,7 +89,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // ___________________________________________________________________________
-  vector<Variable> getUnaggregatedVariables() const override {
+  std::vector<Variable> getUnaggregatedVariables() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {_value};
     } else {
@@ -92,14 +98,14 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // ___________________________________________________________________________
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
         return "Unbound Variable";
       }
       return {"#column_" + std::to_string(varColMap.at(_value).columnIndex_) +
               "#"};
-    } else if constexpr (std::is_same_v<T, string>) {
+    } else if constexpr (std::is_same_v<T, std::string>) {
       return _value;
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
@@ -182,7 +188,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Literal expressions don't have children
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 // A simple expression that just returns an explicit result. It can only be used
@@ -198,19 +204,19 @@ struct SingleUseExpression : public SparqlExpression {
     return std::move(result_);
   }
 
-  vector<Variable> getUnaggregatedVariables() const override {
+  std::vector<Variable> getUnaggregatedVariables() const override {
     // This class should only be used as an implementation of other expressions,
     // not as a "normal" part of an expression tree.
     AD_FAIL();
   }
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     // This class should only be used as an implementation of other expressions,
     // not as a "normal" part of an expression tree.
     AD_FAIL();
   }
 
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace detail
@@ -256,6 +262,23 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     return std::nullopt;
   }
 }
+
+//______________________________________________________________________________
+// Given a `SparqlExpression*` pointing to a `StringLiteralExpression`, return
+// the contained `Literal`. For all other `LiteralExpression` types return
+// `std::nullopt`.
+inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
+    const SparqlExpression* child) {
+  using enum Datatype;
+  if (const auto* literalExpr =
+          dynamic_cast<const StringLiteralExpression*>(child)) {
+    return literalExpr->value();
+  }
+  return std::nullopt;
+}
+
 }  // namespace detail
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H

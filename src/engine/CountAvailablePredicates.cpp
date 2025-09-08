@@ -21,7 +21,7 @@ CountAvailablePredicates::CountAvailablePredicates(
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getCacheKeyImpl() const {
+std::string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
@@ -33,7 +33,7 @@ string CountAvailablePredicates::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getDescriptor() const {
+std::string CountAvailablePredicates::getDescriptor() const {
   if (subtree_ == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }
@@ -44,7 +44,7 @@ string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
 }
@@ -165,10 +165,11 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
   auto fullHasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_,
-                    locatedTriplesSnapshot());
+      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
+                    std::nullopt, {}, cancellationHandle_, locatedTriple);
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
@@ -292,7 +293,7 @@ void CountAvailablePredicates::computePatternTrick(
       // TODO<joka921> As soon as we have a better way of handling the
       // parallelism, the following block can become a simple AD_CONTRACT_CHECK.
       if (patternIndex >= patterns.size()) {
-        if (patternIndex != NO_PATTERN) {
+        if (patternIndex != Pattern::NoPattern) {
           illegalPatternIndexFound = true;
         }
         continue;

@@ -3,7 +3,9 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_FILTER_H
+#define QLEVER_SRC_ENGINE_FILTER_H
 
 #include <utility>
 #include <vector>
@@ -27,10 +29,10 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
@@ -75,12 +77,13 @@ class Filter : public Operation {
       requires ad_utility::SimilarTo<
           Table, IdTable>) void computeFilterImpl(IdTable& dynamicResultTable,
                                                   Table&& input,
-                                                  const LocalVocab& localVocab,
                                                   std::vector<ColumnIndex>
                                                       sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
-  CPP_template(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
-      IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
-                            const LocalVocab& localVocab) const;
+  CPP_template(typename Table)(
+      requires ad_utility::SimilarTo<Table, IdTable>) IdTable
+      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_FILTER_H

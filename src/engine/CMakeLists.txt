@@ -5,8 +5,8 @@ add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
-        Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
-        OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
+        Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
+        OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
@@ -15,6 +15,6 @@ add_library(engine
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp
-        QueryExecutionContext.cpp ExistsJoin.cpp SPARQLProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp NamedQueryCache.cpp)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)
+        QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
+        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedQueryCache.cpp)
+qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)

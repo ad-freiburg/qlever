@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
+if (POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif ()
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -20,20 +23,29 @@ endif ()
 # recycling and gets rid of all of those errors and crashes.
 # TODO<joka921> Further analyze and then report this bug to the ASIO
 # developers.
-add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
+option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-    else ()
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
+    endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17.0.0")
+        # clang-16 doesn't support templated structs without explicit deduction guides, but those are required with
+        # libstdc++13 ranges in some cases.
+        MESSAGE(STATUS "range-v3 is used for clang-16 because of its incompatibility with libstdc++13")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
     endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
@@ -99,13 +111,28 @@ FetchContent_Declare(
 #################################
 # Range v3 (for C++-17 backwards compatibility)
 ################################
+
 FetchContent_Declare(
         range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
+        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
 )
 
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
+#################################
+# libspatialjoin
+################################
+FetchContent_Declare(
+        spatialjoin
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+)
+# disable bzip2 and zlib support in spatialjoin, we don't need it
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
 
 ################################
 # Threading
@@ -159,7 +186,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -178,7 +205,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst nlohmann_json::nlohmann_json)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -199,9 +226,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept
 # macros from `range-v3`.
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS})
-    add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
-endif()
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+endif ()
+
+set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
+if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
+    add_compile_definitions(QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY)
+endif ()
 
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
@@ -231,7 +264,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
 )
 
 ################################
@@ -264,27 +297,27 @@ if (USE_PARALLEL)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_definitions("-D_PARALLEL_SORT")
+        add_compile_definitions(_PARALLEL_SORT)
     endif ()
 endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
-    add_definitions("-D_QLEVER_NO_TIMING_TESTS")
+    add_compile_definitions(_QLEVER_NO_TIMING_TESTS)
 endif ()
 
 if (USE_TREE_BASED_CACHE)
-    add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
+    add_compile_definitions(_QLEVER_USE_TREE_BASED_CACHE)
 endif ()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
-    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+    add_compile_definitions(QLEVER_RUN_EXPENSIVE_TESTS)
 endif ()
 
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
-    add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
+    add_compile_definitions(AD_ENABLE_EXPENSIVE_CHECKS)
 endif ()
 
 set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
@@ -294,34 +327,15 @@ set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_
 if (QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
     message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
 endif ()
-add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
-
-################################
-# STXXL
-################################
-# Disable GNU parallel as it prevents build on Ubuntu 14.04
-set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
-set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
-
-set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
-FetchContent_Declare(
-        stxxl
-        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 449a8fed095ffd5c10560714b446895e54c65486
-)
+add_compile_definitions(QUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE})
 
 ################################
 # FSST
 ################################
 FetchContent_Declare(
         fsst
-        #GIT_REPOSITORY https://github.com/cwida/fsst.git
-        #GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
-        #FSST Currently has a struct name `Encoder` that leads to ODR violations with the `Encoder`class of S2.
-        # I (joka921) have filed bug reports for both of them and a PR for fsst, but for now we use our own fork
-        # of Fsst.
-        GIT_REPOSITORY https://github.com/joka921/fsst.git
-        GIT_TAG 43fb2d1756f5a5d0e85e765c7b51f5e3be8cc83f
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
 )
 
 
@@ -340,11 +354,10 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3)
-# Disable some warnings in RE2, STXXL, and GTEST
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+# Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
-target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
@@ -403,7 +416,7 @@ else ()
     set(LOGLEVEL INFO CACHE STRING "The loglevel")
 endif ()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
-add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
 
 ##################################################
@@ -424,10 +437,12 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/rdfTypes)
+add_subdirectory(src/global)
 add_subdirectory(benchmark)
 
 enable_testing()
-option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
+option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools and greatly reduces the total disk space required when building all unit tests with debug symbols" OFF)
 add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
@@ -443,7 +458,7 @@ qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

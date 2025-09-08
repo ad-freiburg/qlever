@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
-
-#include <util/Forward.h>
-#include <util/TypeTraits.h>
+#ifndef QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
+#define QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 
 #include <utility>
+
+#include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Contains several function object types with templated operator() that wrap
 // overloaded functions from the standard library. This enables passing them as
@@ -42,7 +43,8 @@ struct SecondImpl {
 // Implementation of `holdsAlternative` (see below).
 template <typename T>
 struct HoldsAlternativeImpl {
-  constexpr decltype(auto) operator()(auto&& variant) const {
+  template <typename V>
+  constexpr decltype(auto) operator()(V&& variant) const {
     return std::holds_alternative<T>(AD_FWD(variant));
   }
 };
@@ -50,7 +52,8 @@ struct HoldsAlternativeImpl {
 // Implementation of `get` (see below).
 template <typename T>
 struct GetImpl {
-  constexpr decltype(auto) operator()(auto&& variant) const {
+  template <typename V>
+  constexpr decltype(auto) operator()(V&& variant) const {
     return std::get<T>(AD_FWD(variant));
   }
 };
@@ -59,12 +62,12 @@ struct GetImpl {
 template <typename T>
 struct GetIfImpl {
   CPP_template(typename Ptr)(requires std::is_pointer_v<
-                             std::remove_cvref_t<Ptr>>) constexpr decltype(auto)
+                             ql::remove_cvref_t<Ptr>>) constexpr decltype(auto)
   operator()(Ptr& variantPtr) const {
     return std::get_if<T>(variantPtr);
   }
   CPP_template(typename Ptr)(requires CPP_NOT(
-      std::is_pointer_v<std::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
+      std::is_pointer_v<ql::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
   operator()(Ptr& variant) const {
     return std::get_if<T>(&variant);
   }
@@ -72,7 +75,8 @@ struct GetIfImpl {
 
 // Implementation of `toBool` (see below).
 struct ToBoolImpl {
-  constexpr decltype(auto) operator()(const auto& x) const {
+  template <typename T>
+  constexpr decltype(auto) operator()(const T& x) const {
     return static_cast<bool>(x);
   }
 };
@@ -80,14 +84,18 @@ struct ToBoolImpl {
 // Implementation of `staticCast` (see below).
 template <typename T>
 struct StaticCastImpl {
-  constexpr decltype(auto) operator()(auto&& x) const {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
     return static_cast<T>(AD_FWD(x));
   }
 };
 
 // Implementation of `dereference` (see below).
 struct DereferenceImpl {
-  constexpr decltype(auto) operator()(auto&& x) const { return *AD_FWD(x); }
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return *AD_FWD(x);
+  }
 };
 
 }  // namespace detail
@@ -132,7 +140,8 @@ static constexpr detail::DereferenceImpl dereference;
 // and does nothing. We also use the type `Noop`, hence it is defined here and
 // not in the `detail` namespace above.
 struct Noop {
-  void operator()(const auto&...) const {
+  template <typename... Args>
+  void operator()(const Args&...) const {
     // This function deliberately does nothing (static analysis expects a
     // comment here).
   }
@@ -140,3 +149,5 @@ struct Noop {
 [[maybe_unused]] static constexpr Noop noop{};
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H

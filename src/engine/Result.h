@@ -3,18 +3,22 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_RESULT_H
+#define QLEVER_SRC_ENGINE_RESULT_H
 
 #include <ranges>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/InputRangeUtils.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -40,6 +44,11 @@ class Result {
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
 
+  // A commonly used LoopControl type for CachingContinuableTransformInputRange
+  // generators
+  using IdTableLoopControl =
+      ad_utility::loopControl::LoopControl<IdTableVocabPair>;
+
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
@@ -48,8 +57,10 @@ class Result {
         std::make_unique<std::atomic_bool>(false);
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
-    explicit GenContainer(Generator generator)
-        : generator_{Generator{std::move(generator)}} {}
+    CPP_template(typename Range)(
+        requires std::is_constructible_v<
+            LazyResult, Range>) explicit GenContainer(Range range)
+        : generator_{LazyResult{std::move(range)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
@@ -60,6 +71,7 @@ class Result {
     LocalVocabPtr localVocab_;
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
+
   // The actual entries.
   Data data_;
 
@@ -69,8 +81,11 @@ class Result {
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
-  // those remain valid after calling non-const function like
-  // `applyLimitOffset`.
+  // 1. The members and invariants remain valid after calling non-const function
+  // like `applyLimitOffset`.
+  // 2. The generator returned by the `idTables()`method for lazy operations is
+  // valid even after the `Result` object from which it was obtained is
+  // destroyed.
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
@@ -96,10 +111,6 @@ class Result {
         : localVocab_{
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
-
-  // Check if sort order promised by `sortedBy` is kept within `idTable`.
-  static void assertSortOrderIsRespected(
-      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -165,8 +176,12 @@ class Result {
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
-  LazyResult& idTables() const;
+  // if the underlying `data_` member holds the wrong variant or if the result
+  // has previously already been retrieved.
+  // Note: The returned `LazyResult` is not coupled to the `Result` object, and
+  // thus can be used even after the `Result` object from which it was obtained
+  // was destroyed.
+  LazyResult idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
@@ -228,7 +243,7 @@ class Result {
   void logResultSize() const;
 
   // The first rows of the result and its total size (for debugging).
-  string asDebugString() const;
+  std::string asDebugString() const;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
   // This also applies if `data_` holds a generator yielding `IdTable`s, where
@@ -260,3 +275,5 @@ class Result {
   // generator.
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
+
+#endif  // QLEVER_SRC_ENGINE_RESULT_H

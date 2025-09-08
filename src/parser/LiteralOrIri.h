@@ -2,12 +2,13 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_LITERALORIRI_H
+#define QLEVER_SRC_PARSER_LITERALORIRI_H
 
 #include <variant>
 
-#include "parser/Iri.h"
-#include "parser/Literal.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';
@@ -24,9 +25,19 @@ class alignas(16) LiteralOrIri {
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
 
+  // Return a modifiable reference to the contained Iri object if available,
+  // throw exception otherwise. Allows the caller to modify the Iri object
+  // e.g. for SubStr in StringExpressions.cpp
+  Iri& getIri();
+
   // Return contained Literal object if available, throw exception
   // otherwise
   const Literal& getLiteral() const;
+
+  // Return a modifiable reference to the contained Literal object if available,
+  // throw exception otherwise. Allows the caller to modify the Literal object
+  // e.g. for SubStr in StringExpressions.cpp
+  Literal& getLiteral();
 
   // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal literal);
@@ -77,7 +88,7 @@ class alignas(16) LiteralOrIri {
   // exception if no Literal object is contained
   bool hasDatatype() const;
 
-  // Return content of contained Literal as string without leading or training
+  // Return content of contained Literal as string without leading or trailing
   // quotation marks. Throw exception if no Literal object is contained
   NormalizedStringView getLiteralContent() const;
 
@@ -128,3 +139,5 @@ class alignas(16) LiteralOrIri {
 };
 
 }  // namespace ad_utility::triple_component
+
+#endif  // QLEVER_SRC_PARSER_LITERALORIRI_H

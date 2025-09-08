@@ -2,10 +2,12 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H
+#define QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H
 
 #include <optional>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "engine/Union.h"
@@ -47,7 +49,8 @@ struct IterationData {
 
   // Fetch the next element from the range, make a copy if it's a `Wrapper`.
   // Otherwise move it. If the range is exhausted, return `std::nullopt`.
-  std::optional<Result::IdTableVocabPair> passNext(auto applyPermutation) {
+  template <typename T>
+  std::optional<Result::IdTableVocabPair> passNext(T applyPermutation) {
     if (it_ == range_.end()) {
       return std::nullopt;
     }
@@ -64,7 +67,7 @@ struct IterationData {
   void appendCurrent(IdTable& resultTable, LocalVocab& localVocab) {
     resultTable.insertAtEnd(it_.value()->idTable_, index_, std::nullopt,
                             permutation_, Id::makeUndefined());
-    localVocab.mergeWith(std::span{&it_.value()->localVocab_, 1});
+    localVocab.mergeWith(it_.value()->localVocab_);
     index_ = 0;
     ++it_.value();
   }
@@ -116,7 +119,7 @@ struct SortedUnionImpl
                   bool requestLaziness,
                   const std::vector<std::array<size_t, 2>>& columnOrigins,
                   const ad_utility::AllocatorWithLimit<Id>& allocator,
-                  std::span<const ColumnIndex, SPAN_SIZE> comparatorView,
+                  ql::span<const ColumnIndex, SPAN_SIZE> comparatorView,
                   Func applyPermutation)
       : data1_{std::move(data1)},
         data2_{std::move(data2)},
@@ -135,8 +138,9 @@ struct SortedUnionImpl
   }
 
   // Always inline makes makes a huge difference on large datasets.
-  AD_ALWAYS_INLINE bool isSmaller(const auto& row1, const auto& row2) const {
-    using StaticRange = std::span<const std::array<size_t, 2>, SPAN_SIZE>;
+  template <typename T1, typename T2>
+  AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
+    using StaticRange = ql::span<const std::array<size_t, 2>, SPAN_SIZE>;
     for (auto [index1, index2] : StaticRange{targetOrder_}) {
       if (index1 == Union::NO_COLUMN) {
         return true;
@@ -153,7 +157,8 @@ struct SortedUnionImpl
 
   // Write a new row to the result table. The parameter `left` controls which
   // permutation is used to write the row to the result table.
-  void pushRow(bool left, const auto& row) {
+  template <typename T>
+  void pushRow(bool left, const T& row) {
     resultTable_.emplace_back();
     for (size_t column = 0; column < resultTable_.numColumns(); column++) {
       ColumnIndex origin = columnOrigins_.at(column).at(!left);
@@ -192,8 +197,8 @@ struct SortedUnionImpl
            data2_.it_ != data2_.range_.end()) {
       auto& idTable1 = data1_.it_.value()->idTable_;
       auto& idTable2 = data2_.it_.value()->idTable_;
-      localVocab_.mergeWith(std::span{&data1_.it_.value()->localVocab_, 1});
-      localVocab_.mergeWith(std::span{&data2_.it_.value()->localVocab_, 1});
+      localVocab_.mergeWith(data1_.it_.value()->localVocab_);
+      localVocab_.mergeWith(data2_.it_.value()->localVocab_);
       size_t& index1 = data1_.index_;
       size_t& index2 = data2_.index_;
       while (index1 < idTable1.size() && index2 < idTable2.size()) {
@@ -239,6 +244,8 @@ template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
 SortedUnionImpl(IterationData<Range1>, IterationData<Range2>, bool,
                 const std::vector<std::array<size_t, 2>>&,
                 const ad_utility::AllocatorWithLimit<Id>&,
-                std::span<const ColumnIndex, SPAN_SIZE>, Func)
+                ql::span<const ColumnIndex, SPAN_SIZE>, Func)
     -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
 }  // namespace sortedUnion
+
+#endif  // QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H

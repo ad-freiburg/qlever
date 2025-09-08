@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_ORDERBY_H
+#define QLEVER_SRC_ENGINE_ORDERBY_H
 
 #include <utility>
 #include <vector>
@@ -33,10 +35,10 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   // The function `resultSortedOn` refers to the `internal` sorting by ID value.
   // This is different from the `semantic` sorting that the ORDER BY operation
@@ -73,7 +75,7 @@ class OrderBy : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
 
@@ -86,3 +88,5 @@ class OrderBy : public Operation {
     return subtree_->getVariableColumns();
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_ORDERBY_H

@@ -3,18 +3,21 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Result.h"
 
 #include <absl/cleanup/cleanup.h>
 
+#include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
+#include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
 // _____________________________________________________________________________
-string Result::asDebugString() const {
+std::string Result::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
@@ -47,6 +50,21 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
     return false;
   };
 }
+
+namespace {
+// _____________________________________________________________________________
+// Check if sort order promised by `sortedBy` is kept within `idTable`.
+void assertSortOrderIsRespected(const IdTable& idTable,
+                                const std::vector<ColumnIndex>& sortedBy) {
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
+        return colIndex < idTable.numColumns();
+      }));
+
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
@@ -88,21 +106,21 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{[](auto idTables, auto sortedBy) -> Generator {
-        std::optional<IdTable::row_type> previousId = std::nullopt;
-        for (IdTableVocabPair& pair : idTables) {
-          auto& idTable = pair.idTable_;
-          if (!idTable.empty()) {
-            if (previousId.has_value()) {
-              AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
-                  idTable.at(0), previousId.value()));
+    : data_{GenContainer{ad_utility::CachingTransformInputRange(
+          std::move(idTables),
+          [sortedBy, previousId = std::optional<IdTable::row_type>{}](
+              Result::IdTableVocabPair& pair) mutable {
+            auto& idTable = pair.idTable_;
+            if (!idTable.empty()) {
+              if (previousId.has_value()) {
+                AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
+                    idTable.at(0), previousId.value()));
+              }
+              previousId = idTable.at(idTable.size() - 1);
             }
-            previousId = idTable.at(idTable.size() - 1);
-          }
-          assertSortOrderIsRespected(idTable, sortedBy);
-          co_yield pair;
-        }
-      }(std::move(idTables), sortedBy)}},
+            assertSortOrderIsRespected(idTable, sortedBy);
+            return std::move(pair);
+          })}},
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
@@ -112,8 +130,8 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
-        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+        ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
   size_t targetSize = limitOffset.actualSize(idTable.numRows());
@@ -129,7 +147,7 @@ void Result::applyLimitOffset(
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
-  // `O(1)` (see the docs for `std::shift_left`).
+  // `O(1)` (see the docs for `ql::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
   if (limitOffset.isUnconstrained()) {
     return;
@@ -145,31 +163,31 @@ void Result::applyLimitOffset(
     resizeIdTable(std::get<IdTable>(tableOrPtr), limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    auto generator = [](LazyResult original, LimitOffsetClause limitOffset,
-                        auto limitTimeCallback) -> Generator {
-      if (limitOffset._limit.value_or(1) == 0) {
-        co_return;
-      }
-      for (IdTableVocabPair& pair : original) {
-        auto& idTable = pair.idTable_;
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        size_t originalSize = idTable.numRows();
-        resizeIdTable(idTable, limitOffset);
-        uint64_t offsetDelta = limitOffset.actualOffset(originalSize);
-        limitOffset._offset -= offsetDelta;
-        if (limitOffset._limit.has_value()) {
-          limitOffset._limit.value() -=
-              limitOffset.actualSize(originalSize - offsetDelta);
-        }
-        limitTimeCallback(limitTimer.value(), idTable);
-        if (limitOffset._offset == 0) {
-          co_yield pair;
-        }
-        if (limitOffset._limit.value_or(1) == 0) {
-          break;
-        }
-      }
-    }(std::move(idTables()), limitOffset, std::move(limitTimeCallback));
+    ad_utility::CachingContinuableTransformInputRange generator{
+        idTables(), [limitOffset = limitOffset,
+                     limitTimeCallback = std::move(limitTimeCallback)](
+                        Result::IdTableVocabPair& pair) mutable {
+          if (limitOffset._limit.value_or(1) == 0) {
+            return IdTableLoopControl::makeBreak();
+          }
+          auto& idTable = pair.idTable_;
+          ad_utility::timer::Timer limitTimer{
+              ad_utility::timer::Timer::Started};
+          size_t originalSize = idTable.numRows();
+          resizeIdTable(idTable, limitOffset);
+          uint64_t offsetDelta = limitOffset.actualOffset(originalSize);
+          limitOffset._offset -= offsetDelta;
+          if (limitOffset._limit.has_value()) {
+            limitOffset._limit.value() -=
+                limitOffset.actualSize(originalSize - offsetDelta);
+          }
+          limitTimeCallback(limitTimer.value(), idTable);
+          if (limitOffset._offset == 0) {
+            return IdTableLoopControl::yieldValue(std::move(pair));
+          } else {
+            return IdTableLoopControl::makeContinue();
+          }
+        }};
     data_.emplace<GenContainer>(std::move(generator));
   }
 }
@@ -181,17 +199,14 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
-    auto generator = [](LazyResult original,
-                        LimitOffsetClause limitOffset) -> Generator {
-      auto limit = limitOffset._limit;
-      uint64_t elementCount = 0;
-      for (IdTableVocabPair& pair : original) {
-        elementCount += pair.idTable_.numRows();
-        AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
-        co_yield pair;
-      }
-      AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
-    }(std::move(idTables()), limitOffset);
+    ad_utility::CachingTransformInputRange generator{
+        idTables(), [limit = limitOffset._limit, elementCount = uint64_t{0}](
+                        Result::IdTableVocabPair& pair) mutable {
+          elementCount += pair.idTable_.numRows();
+          AD_CONTRACT_CHECK(!limit.has_value() ||
+                            elementCount <= limit.value());
+          return std::move(pair);
+        }};
     data_.emplace<GenContainer>(std::move(generator));
   }
 }
@@ -212,16 +227,16 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   if (isFullyMaterialized()) {
     AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable()));
   } else {
-    auto generator = [](LazyResult original,
-                        [[maybe_unused]] VariableToColumnMap varColMap,
-                        [[maybe_unused]] auto performCheck) -> Generator {
-      for (IdTableVocabPair& pair : original) {
-        // No need to check subsequent idTables assuming the datatypes
-        // don't change mid result.
-        AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
-        co_yield pair;
-      }
-    }(std::move(idTables()), varColMap, std::move(performCheck));
+    ad_utility::CachingTransformInputRange generator{
+        idTables(),
+        [varColMap = varColMap, performCheck = std::move(performCheck)](
+            Result::IdTableVocabPair& pair) {
+          // The lambda capture is only required when expensive checks are
+          // enabled.
+          (void)performCheck;
+          AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
+          return std::move(pair);
+        }};
     data_.emplace<GenContainer>(std::move(generator));
   }
 }
@@ -232,39 +247,38 @@ void Result::runOnNewChunkComputed(
         onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator = [](LazyResult original, auto onNewChunk,
-                      auto onGeneratorFinished) -> Generator {
-    // Call this within destructor to make sure it is also called when an
-    // operation stops iterating before reaching the end.
-    absl::Cleanup cleanup{
-        [&onGeneratorFinished]() { onGeneratorFinished(false); }};
+  auto inputAsGet = ad_utility::CachingTransformInputRange(
+      idTables(), [](auto& input) { return std::move(input); });
+  using namespace ad_utility::timer;
+  // We need the shared pointer, because we cannot easily have a lambda capture
+  // refer to another lambda capture.
+  auto sharedFinish = std::make_shared<decltype(onGeneratorFinished)>(
+      std::move(onGeneratorFinished));
+
+  // The main lambda that when being called processes the next chunk.
+  auto get =
+      [inputAsGet = std::move(inputAsGet), sharedFinish,
+       cleanup = absl::Cleanup{[&finish = *sharedFinish]() { finish(false); }},
+       onNewChunk =
+           std::move(onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
     try {
-      ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
-      for (IdTableVocabPair& pair : original) {
-        onNewChunk(pair, timer.value());
-        co_yield pair;
-        timer.start();
+      Timer timer{Timer::Started};
+      auto input = inputAsGet.get();
+      if (!input.has_value()) {
+        std::move(cleanup).Cancel();
+        (*sharedFinish)(false);
+        return std::nullopt;
       }
+      onNewChunk(input.value(), timer.value());
+      return input;
     } catch (...) {
       std::move(cleanup).Cancel();
-      onGeneratorFinished(true);
+      (*sharedFinish)(true);
       throw;
     }
-  }(std::move(idTables()), std::move(onNewChunk),
-                                                std::move(onGeneratorFinished));
-  data_.emplace<GenContainer>(std::move(generator));
-}
-
-// _____________________________________________________________________________
-void Result::assertSortOrderIsRespected(
-    const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy) {
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
-        return colIndex < idTable.numColumns();
-      }));
-
-  AD_EXPENSIVE_CHECK(
-      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+  };
+  data_.emplace<GenContainer>(
+      ad_utility::InputRangeFromGetCallable{std::move(get)});
 }
 
 // _____________________________________________________________________________
@@ -284,11 +298,11 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-Result::LazyResult& Result::idTables() const {
+Result::LazyResult Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);
   AD_CONTRACT_CHECK(!container.consumed_->exchange(true));
-  return container.generator_;
+  return std::move(container.generator_);
 }
 
 // _____________________________________________________________________________
@@ -304,7 +318,7 @@ void Result::cacheDuringConsumption(
     std::function<void(Result)> storeInCache) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   data_.emplace<GenContainer>(ad_utility::wrapGeneratorWithCache(
-      std::move(idTables()),
+      idTables(),
       [fitInCache = std::move(fitInCache)](
           std::optional<IdTableVocabPair>& aggregate,
           const IdTableVocabPair& newTablePair) {
@@ -314,8 +328,7 @@ void Result::cacheDuringConsumption(
             if (aggregate.has_value()) {
               auto& value = aggregate.value();
               value.idTable_.insertAtEnd(newTablePair.idTable_);
-              value.localVocab_.mergeWith(
-                  std::span{&newTablePair.localVocab_, 1});
+              value.localVocab_.mergeWith(newTablePair.localVocab_);
             } else {
               aggregate.emplace(newTablePair.idTable_.clone(),
                                 newTablePair.localVocab_.clone());

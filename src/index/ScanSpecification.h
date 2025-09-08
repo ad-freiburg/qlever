@@ -2,7 +2,9 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_SCANSPECIFICATION_H
+#define QLEVER_SRC_INDEX_SCANSPECIFICATION_H
+
 #include <optional>
 
 #include "engine/LocalVocab.h"
@@ -61,6 +63,14 @@ class ScanSpecification {
   const T& col1Id() const { return col1Id_; }
   const T& col2Id() const { return col2Id_; }
 
+  // Get the corresponding index to the first free `colXId_`.
+  size_t firstFreeColIndex() const {
+    if (!col0Id_) return 0;
+    if (!col1Id_) return 1;
+    if (!col2Id_) return 2;
+    return 3;
+  }
+
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
   // Only used in tests.
@@ -102,3 +112,5 @@ class ScanSpecificationAsTripleComponent {
   // Getter for testing.
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 };
+
+#endif  // QLEVER_SRC_INDEX_SCANSPECIFICATION_H

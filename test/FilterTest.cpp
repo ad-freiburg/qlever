@@ -14,6 +14,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -35,26 +36,30 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
   return result;
 }
 
+// Shorthand helper function
+ad_utility::triple_component::Iri iri(std::string_view string) {
+  return TripleComponent::Iri::fromIriref(string);
+}
+
 // _____________________________________________________________________________
 void checkSetPrefilterExpressionVariablePair(
     QueryExecutionContext* qec, const Permutation::Enum& permutation,
-    SparqlTriple triple,
+    SparqlTripleSimple triple,
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
-    std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
-    ColumnIndex columnIdx, bool prefilterIsApplicable) {
-  Filter filter{
-      qec,
-      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
-      {std::move(sparqlExpr), "Expression ?x"}};
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *prefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
-  if (prefilterIsApplicable) {
-    EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(os.str()));
+    bool prefilterIsApplicable, bool enablePrefilterForFilter = true) {
+  [[maybe_unused]] const auto& rtp =
+      setRuntimeParameterForTest<"enable-prefilter-on-index-scans">(
+          enablePrefilterForFilter);
+  auto subtree =
+      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
+  Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
+  const auto& optUpdatedSubtree = filter.getSubtree();
+  if (prefilterIsApplicable && enablePrefilterForFilter) {
+    EXPECT_NE(subtree, optUpdatedSubtree);
+    EXPECT_FALSE(optUpdatedSubtree->getRootOperation()->canResultBeCached());
   } else {
-    EXPECT_THAT(filter.getCacheKey(),
-                ::testing::Not(::testing::HasSubstr(os.str())));
+    EXPECT_EQ(subtree, optUpdatedSubtree);
+    EXPECT_TRUE(optUpdatedSubtree->getRootOperation()->canResultBeCached());
   }
 }
 
@@ -84,7 +89,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 
   auto result = filter.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
-  auto& generator = result->idTables();
+  auto generator = result->idTables();
 
   auto referenceTable1 =
       makeIdTableFromVector({{true}, {true}, {true}}, asBool);
@@ -173,26 +178,41 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   // assigned to the IndexScan child (prefiltering is possible) with Filter
   // construction.
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
+      ltSprql(Variable{"?z"}, IntId(10)), true);
+  // If the runtime parameter `enable-prefilter-on-index-scans` is set to
+  // false, we expect that no prefilter is set although it would be possible
+  // (last argument is set to false).
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
+      ltSprql(Variable{"?z"}, IntId(10)), true, false);
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
                    gtSprql(Variable{"?y"}, DoubleId(0))),
-      neq(IntId(10)), 1, true);
+      true);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::PSO,
-      {makeSparqlExpression::Iri::fromIriref("<a>"), "<p>", Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
+      {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
+       Variable{"?z"}},
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), true);
+  // If the runtime parameter `enable-prefilter-on-index-scans` is set to
+  // false, we expect that no prefilter is set although it would be possible
+  // (last argument is set to false).
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::PSO,
+      {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
+       Variable{"?z"}},
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), true, false);
 
   // We expect that no <PrefilterExpression, Variable> pair is assigned
   // (no prefilter procedure applicable) with Filter construction.
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::PSO, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 1, false);
+      qec, Permutation::PSO, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), false);
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
+      gtSprql(Variable{"?x"}, VocabId(10)), false);
 }
 
 // _____________________________________________________________________________

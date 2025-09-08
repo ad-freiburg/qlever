@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H
 
 #include <variant>
 
@@ -45,7 +46,7 @@ class ExistsExpression : public SparqlExpression {
   // been set up yet (because the query planning is not yet complete). Since we
   // cannot cache incomplete operations, we return a random cache key in this
   // case.
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     if (varColMap.contains(variable_)) {
       return absl::StrCat("ExistsExpression col# ",
@@ -64,7 +65,27 @@ class ExistsExpression : public SparqlExpression {
   // Used to extract `EXISTS` expressions from a general expression tree.
   bool isExistsExpression() const override { return true; }
 
+  // Return all the variables that are used in this expression.
+  ql::span<const Variable> getContainedVariablesNonRecursive() const override {
+    return argument_.selectClause().getSelectedVariables();
+  }
+
+  // Set the `SELECT` of the argument of this exists expression to all the
+  // variables that are visible in the argument AND contained in variables.
+  void selectVariables(ql::span<const Variable> variables) {
+    std::vector<parsedQuery::SelectClause::VarOrAlias> intersection;
+    const auto& visibleVariables = argument_.getVisibleVariables();
+    for (const auto& var : variables) {
+      if (ad_utility::contains(visibleVariables, var)) {
+        intersection.emplace_back(var);
+      }
+    }
+    argument_.selectClause().setSelected(intersection);
+  }
+
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<Ptr> childrenImpl() override { return {}; }
 };
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H

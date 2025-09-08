@@ -2,13 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
 #include <string>
 #include <string_view>
 
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
@@ -47,7 +47,7 @@ class VocabularyInMemoryBinSearch
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
@@ -74,7 +74,7 @@ class VocabularyInMemoryBinSearch
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than
     // all previous indices.
-    void operator()(std::string_view word, uint64_t idx);
+    uint64_t operator()(std::string_view word, uint64_t idx);
 
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
@@ -88,3 +88,5 @@ class VocabularyInMemoryBinSearch
   auto begin() const { return words_.begin(); }
   auto end() const { return words_.end(); }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

@@ -4,6 +4,8 @@
 
 #include "engine/Describe.h"
 
+#include <absl/strings/str_join.h>
+
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/ValuesForTesting.h"
@@ -26,7 +28,7 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 }
 
 // _____________________________________________________________________________
-string Describe::getCacheKeyImpl() const {
+std::string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` (the variables and IRIs of
   // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
   std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
@@ -50,7 +52,7 @@ string Describe::getCacheKeyImpl() const {
   // `subtree_`. However, the named graphs only determine the result for
   // `subtree_` (the resources to be described), whereas the default graphs
   // also determine which triples for these resources become part of the result.
-  const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
+  const auto& defaultGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
@@ -63,7 +65,7 @@ string Describe::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string Describe::getDescriptor() const { return "DESCRIBE"; }
+std::string Describe::getDescriptor() const { return "DESCRIBE"; }
 
 // _____________________________________________________________________________
 size_t Describe::getResultWidth() const { return 3; }
@@ -79,7 +81,7 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
@@ -96,9 +98,10 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
 // `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
+template <typename Allocator>
 static IdTable getNewBlankNodes(
-    const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    std::span<Id> input) {
+    const Allocator& allocator,
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
@@ -161,7 +164,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::SPO, triple,
-      describe_.datasetClauses_.defaultGraphs_);
+      describe_.datasetClauses_.activeDefaultGraphs());
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
   auto join = ad_utility::makeExecutionTree<Join>(
@@ -183,7 +186,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
 
   // The `indexScan` might have added some delta triples with local vocab IDs,
   // so make sure to merge them into the `localVocab`.
-  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  localVocab.mergeWith(result->localVocab());
 
   return resultTable;
 }
@@ -199,7 +202,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab));
+              vocab, localVocab, getIndex().encodedIriManager()));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.

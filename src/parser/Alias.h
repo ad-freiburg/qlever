@@ -2,14 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_ALIAS_H
+#define QLEVER_SRC_PARSER_ALIAS_H
 
 #include <string>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/data/Variable.h"
-
-using std::string;
+#include "rdfTypes/Variable.h"
 
 struct Alias {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -22,3 +21,5 @@ struct Alias {
            _target == other._target;
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_ALIAS_H

@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H
+#define QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H
 
 #include <string>
 
@@ -13,6 +14,10 @@
 // entities from the fulltext index that contain a certain word or prefix.
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
+// In detail, it retrieves all blocks the word or prefix touches. No filtering
+// happens why it is necessary to join this with a TextIndexScanForWord on the
+// textVar. During tests where this join doesn't happen, this can lead to
+// unexpected behavior.
 class TextIndexScanForEntity : public Operation {
   TextIndexScanForEntityConfiguration config_;
 
@@ -22,7 +27,7 @@ class TextIndexScanForEntity : public Operation {
 
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
                          std::variant<Variable, std::string> entity,
-                         string word);
+                         std::string word);
   ~TextIndexScanForEntity() override = default;
 
   bool hasFixedEntity() const {
@@ -43,9 +48,9 @@ class TextIndexScanForEntity : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -57,7 +62,7 @@ class TextIndexScanForEntity : public Operation {
 
   bool knownEmptyResult() override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -75,7 +80,9 @@ class TextIndexScanForEntity : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   void setVariableToColumnMap();
 };
+
+#endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H

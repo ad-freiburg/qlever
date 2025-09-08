@@ -4,12 +4,11 @@
 
 #include "util/Duration.h"
 
-#include <ctre.hpp>
-#include <iomanip>
+#include <absl/strings/str_format.h>
 
-#include "absl/strings/str_format.h"
+#include <ctre.hpp>
+
 #include "global/Constants.h"
-#include "util/CtreHelpers.h"
 
 //______________________________________________________________________________
 std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {

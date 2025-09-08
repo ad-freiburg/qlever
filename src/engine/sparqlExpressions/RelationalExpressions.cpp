@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "RelationalExpressions.h"
 
@@ -8,6 +10,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -194,7 +197,9 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   auto itB = generatorB.begin();
 
   for (size_t i = 0; i < resultSize; ++i) {
-    auto impl = [&]<typename X, typename Y>(const X& x, const Y& y) {
+    auto impl = [&](const auto& x, const auto& y) {
+      using X = std::decay_t<decltype(x)>;
+      using Y = std::decay_t<decltype(y)>;
       if constexpr (AreIncomparable<X, Y>) {
         result.push_back(Id::makeUndefined());
       } else {
@@ -274,7 +279,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-string RelationalExpression<Comp>::getCacheKey(
+std::string RelationalExpression<Comp>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   static_assert(std::tuple_size_v<decltype(children_)> == 2);
   return absl::StrCat(typeid(*this).name(),
@@ -284,7 +289,7 @@ string RelationalExpression<Comp>::getCacheKey(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
+ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
@@ -498,12 +503,13 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
+ql::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
   return children_;
 }
 
 // _____________________________________________________________________________
-string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
+std::string InExpression::getCacheKey(
+    const VariableToColumnMap& varColMap) const {
   std::stringstream result;
   result << "IN Expression with (";
   for (const auto& child : children_) {
@@ -511,6 +517,44 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
   }
   result << ')';
   return std::move(result).str();
+}
+
+// _____________________________________________________________________________
+// Brief explanation why we ignore the argument `isNegated` here.
+// (1) In the case of `isNegated = false`, the correct `IsInExpression` is
+// constructed by default here, since its default parameter for `isNegated` is
+// false as well.
+// (2) `isNegated = true` implies that a parent node is a NOT expression (see
+// `UnaryNegateExpressionImpl` in NumericUnaryExpressions.cpp). In this case,
+// the `UnaryNegateExpressionImpl` will subsequently correctly negate the here
+// returned `IsInExpression` by implicitly calling `->logicalComplement()` on
+// it (see `NotExpression` in PrefilterExpressionIndex.h).
+std::vector<PrefilterExprVariablePair>
+InExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  AD_CORRECTNESS_CHECK(children_.size() >= 1);
+  auto var = children_.front()->getVariableOrNullopt();
+  if (!var.has_value()) {
+    return {};
+  }
+
+  std::vector<prefilterExpressions::IdOrLocalVocabEntry> referenceValues;
+  referenceValues.reserve(children_.size());
+  for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
+    auto optReferenceValue =
+        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
+            expr.get());
+    if (!optReferenceValue.has_value()) {
+      return {};
+    }
+    referenceValues.push_back(optReferenceValue.value());
+  }
+
+  std::vector<PrefilterExprVariablePair> resPrefilter;
+  resPrefilter.emplace_back(
+      std::make_unique<prefilterExpressions::IsInExpression>(referenceValues),
+      var.value());
+  return resPrefilter;
 }
 
 // _____________________________________________________________________________
@@ -529,3 +573,60 @@ template class RelationalExpression<Comparison::NE>;
 template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
+
+namespace sparqlExpression {
+
+// _____________________________________________________________________________
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
+getGeoDistanceFilter(const SparqlExpression& expr) {
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * `geof:distance() < constant`
+  // * `constant > geof:distance()`
+  // * `constant >= geof:distance()`
+  // The supported patterns are documented in the header declaration of this
+  // function.
+
+  // Supported comparison operator
+  auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);
+  if (compareExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Left child must be distance function
+  auto children = compareExpr->children();
+  const auto& leftChild = *children[0];
+
+  // Right child must be constant
+  auto rightChild = children[1].get();
+  auto literalExpr =
+      dynamic_cast<detail::LiteralExpression<ValueId>*>(rightChild);
+  if (literalExpr == nullptr) {
+    return std::nullopt;
+  }
+  ValueId constant = literalExpr->value();
+  // Extract distance. Here we don't know the unit of this number yet. It is
+  // extracted from the function call in the next step.
+  double maxDistAnyUnit = 0;
+  if (constant.getDatatype() == Datatype::Double) {
+    maxDistAnyUnit = constant.getDouble();
+  } else if (constant.getDatatype() == Datatype::Int) {
+    maxDistAnyUnit = static_cast<double>(constant.getInt());
+  } else {
+    return std::nullopt;
+  }
+
+  // Extract variables and distance unit from function call
+  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
+  if (!geoFuncCall.has_value()) {
+    return std::nullopt;
+  }
+
+  // Convert unit to meters
+  double maxDist = ad_utility::detail::valueInUnitToKilometer(
+                       maxDistAnyUnit, geoFuncCall.value().unit_) *
+                   1000;
+
+  return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
+}
+
+}  // namespace sparqlExpression
