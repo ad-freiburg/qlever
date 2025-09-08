@@ -141,9 +141,9 @@ TextIndexBuilder::wordsInTextRecords(std::string contextFile,
                                      bool addWordsFromLiterals) const {
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
-  std::shared_ptr<LocaleManager> localeManager =
+  auto localeManager =
       std::make_shared<LocaleManager>(textVocab_.getLocaleManager());
-  std::shared_ptr<TextRecordIndex> nextContextId =
+  auto nextContextId =
       std::make_shared<TextRecordIndex>(TextRecordIndex::make(0));
 
   auto round_one = [localeManager, nextContextId, contextFile]() {
