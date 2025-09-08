@@ -263,6 +263,27 @@ class InputRangeMixin {
 // No details empty struct, the default for no details
 using cppcoro::NoDetails;
 
+template <typename Details>
+class DetailsProvider {
+ public:
+  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  CPP_member auto details() -> CPP_ret(Details&)(requires hasDetails) {
+    return std::holds_alternative<Details>(m_details)
+               ? std::get<Details>(m_details)
+               : *std::get<Details*>(m_details);
+  }
+
+  void setDetailsPointer(Details* pointer) requires hasDetails {
+    AD_CONTRACT_CHECK(pointer != nullptr);
+    m_details = pointer;
+  }
+
+  using DetailStorage =
+      std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
+  // If the `Details` type is empty, we don't need it to occupy any space.
+  [[no_unique_address]] DetailStorage m_details{};
+};
+
 // A similar mixin to the above, with slightly different characteristics:
 // 1. It only requires a single function `std::optional<ValueType> get()
 // override`
@@ -273,7 +294,7 @@ using cppcoro::NoDetails;
 // less efficient for very simple generators, because the compiler might be able
 // to optimize this mixin as well as the one above.
 template <typename ValueType, typename DetailsType = NoDetails>
-class InputRangeFromGet {
+class InputRangeFromGet : public DetailsProvider<DetailsType> {
  public:
   using Storage = std::optional<ValueType>;
   using Details = DetailsType;
@@ -293,23 +314,6 @@ class InputRangeFromGet {
 
   // Get the next value and store it.
   void getNextAndStore() { storage_ = get(); }
-
-  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
-  CPP_member auto details() -> CPP_ret(Details&)(requires hasDetails) {
-    return std::holds_alternative<Details>(m_details)
-               ? std::get<Details>(m_details)
-               : *std::get<Details*>(m_details);
-  }
-
-  void setDetailsPointer(Details* pointer) requires hasDetails {
-    AD_CONTRACT_CHECK(pointer != nullptr);
-    m_details = pointer;
-  }
-
-  using DetailStorage =
-      std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
-  // If the `Details` type is empty, we don't need it to occupy any space.
-  [[no_unique_address]] DetailStorage m_details{};
 
   struct Sentinel {};
   class Iterator {
@@ -423,7 +427,7 @@ class RangeToInputRangeFromGet
 // with the given `ValueType`). It internally uses the `InputRangeOptionalMixin`
 // from above as an implementation detail.
 template <typename ValueType, typename DetailsType = NoDetails>
-class InputRangeTypeErased {
+class InputRangeTypeErased : public DetailsProvider<DetailsType> {
   // Unique (and therefore owning) pointer to the virtual base class.
   std::unique_ptr<InputRangeFromGet<ValueType, DetailsType>> impl_;
 
@@ -470,15 +474,6 @@ class InputRangeTypeErased {
   decltype(auto) end() { return impl_->end(); }
   decltype(auto) get() { return impl_->get(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
-
-  static constexpr bool hasDetails = !std::is_same_v<DetailsType, NoDetails>;
-
-  void setDetailsPointer(DetailsType* pointer) requires hasDetails {
-    AD_CONTRACT_CHECK(pointer != nullptr);
-    impl_->setDetailsPointer(pointer);
-  }
-
-  DetailsType& details() { return impl_->details(); }
 };
 
 template <typename Range>
