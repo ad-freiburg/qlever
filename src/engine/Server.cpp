@@ -374,7 +374,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         [this] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          auto [counts, _] =
+          auto counts =
               this->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
                   [](auto& deltaTriples) {
                     deltaTriples.clear();

@@ -148,12 +148,9 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
     ad_utility::timer::TimeTracer& tracer) {
-  // Evaluate the WHERE clause.
-  tracer.beginTrace("where");
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   auto& graphUpdate = updateClause.op_;
-  tracer.endTrace("where");
 
   // Start the timer once the where clause has been evaluated.
   tracer.beginTrace("preparation");
