@@ -424,9 +424,20 @@ CompressedRelationReader::lazyScan(
     auto getIncompleteBlock(CompressedBlockMetadataIterator it) {
       auto result = reader->readPossiblyIncompleteBlock(
           scanSpec, config, *it, std::ref(details()), locatedTriplesPerBlock);
-      cancellationHandle->throwIfCancelled();
       return result;
     };
+
+    auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
+      auto block = getIncompleteBlock(it);
+
+      pruneBlock(block, limitOffset);
+
+      if (!block.empty()) {
+        details().numElementsYielded_ += block.numRows();
+      }
+
+      return block;
+    }
 
     std::optional<IdTable> get() override {
       switch (state_) {
@@ -434,8 +445,8 @@ CompressedRelationReader::lazyScan(
           start();
 
           // Get and yield the first block.
-          auto block = getIncompleteBlock(beginBlockMetadata);
-          pruneBlock(block, limitOffset);
+          auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata);
+
           if (beginBlockMetadata + 1 < endBlockMetadata) {
             state_ = State::createMiddleBlocksGenerator;
           } else {
@@ -443,7 +454,6 @@ CompressedRelationReader::lazyScan(
           }
 
           if (!block.empty()) {
-            details().numElementsYielded_ += block.numRows();
             return block;
           } else {
             // recursively go to next state because there is no data to yield
@@ -474,12 +484,10 @@ CompressedRelationReader::lazyScan(
 
         case State::yieldLastBlock: {
           {
-            auto block = getIncompleteBlock(endBlockMetadata - 1);
-            pruneBlock(block, limitOffset);
+            auto block = getPrunedBlockAndUpdateDetails(endBlockMetadata - 1);
             state_ = State::check;
 
             if (!block.empty()) {
-              details().numElementsYielded_ += block.numRows();
               return block;
             }
           }
