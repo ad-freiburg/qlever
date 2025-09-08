@@ -974,8 +974,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  ad_utility::timer::TimeTracer tracer =
-      ad_utility::timer::TimeTracer("update");
+  ad_utility::timer::TimeTracer tracer("update");
   tracer.beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));

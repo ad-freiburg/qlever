@@ -57,7 +57,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
             locatedTriples, tracer);
     cancellationHandle->throwIfCancelled();
     tracer.endTrace("addToLocatedTriples");
-    tracer.endTrace(std::string{Permutation::toString(permutation)});
+    tracer.endTrace(Permutation::toString(permutation));
   }
   tracer.beginTrace("transformHandles");
   std::vector<DeltaTriples::LocatedTripleHandles> handles{triples.size()};

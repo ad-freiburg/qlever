@@ -25,11 +25,9 @@ struct Trace {
     return end_.value() - begin_;
   }
 
-  /// Output as json. The signature of this function is mandated by the json
-  /// library to allow for implicit conversion.
+  // Output a finished tracer as json. The signature of this function is
+  // mandated by the json library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j, const Trace& trace) {
-    // TODO: deal with end not being present
-
     j = nlohmann::ordered_json{{"name", trace.name_},
                                {"begin", trace.begin_.count()},
                                {"end", trace.end_.value().count()},
@@ -43,6 +41,7 @@ struct Trace {
     }
   }
 
+  // Return a short json representation of a finished tracer.
   friend void to_json_short(nlohmann::ordered_json& j, const Trace& trace) {
     if (trace.children_.empty()) {
       j[trace.name_] = trace.duration().count();
@@ -57,24 +56,21 @@ struct Trace {
 };
 
 class TimeTracer {
-  Timer timer_;
+  Timer timer_ = Timer(Timer::Started);
   Trace rootTrace_;
   std::vector<std::reference_wrapper<Trace>> activeTraces_;
 
  public:
-  explicit TimeTracer(std::string name)
-      : timer_(Timer::Started),
-        rootTrace_{std::move(name), std::chrono::milliseconds::zero()},
+  explicit TimeTracer(const std::string& name)
+      : rootTrace_{name, std::chrono::milliseconds::zero()},
         activeTraces_({rootTrace_}){};
-  // TimeTracer(const TimeTracer&) = delete;
-  // TimeTracer& operator=(const TimeTracer&) = delete;
+  virtual ~TimeTracer() = default;
 
-  virtual void beginTrace(std::string name) {
+  virtual void beginTrace(const std::string& name) {
     if (activeTraces_.empty()) {
       throw std::runtime_error("The trace has ended.");
     }
-    activeTraces_.back().get().children_.emplace_back(std::move(name),
-                                                      timer_.msecs());
+    activeTraces_.back().get().children_.emplace_back(name, timer_.msecs());
     activeTraces_.emplace_back(activeTraces_.back().get().children_.back());
   }
 
@@ -117,9 +113,13 @@ class TimeTracer {
 // don't have to pass a TimeTracer to every method that uses one.
 class DefaultTimeTracer : public TimeTracer {
  public:
-  DefaultTimeTracer(std::string name) : TimeTracer(name) {}
-  void beginTrace(std::string) override {}
-  void endTrace(std::string_view) override {}
+  explicit DefaultTimeTracer(const std::string& name) : TimeTracer(name) {}
+  void beginTrace(const std::string&) override {
+    // `DefaultTimeTracer` does nothing.
+  }
+  void endTrace(std::string_view) override {
+    // `DefaultTimeTracer` does nothing.
+  }
   nlohmann::ordered_json getJSON() const override { return {}; }
   nlohmann::ordered_json getJSONShort() const override { return {}; }
 };
