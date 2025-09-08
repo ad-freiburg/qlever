@@ -31,6 +31,7 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
+namespace groupBy::detail {
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 class LazyGroupByRange : public ad_utility::InputRangeMixin<
                              LazyGroupByRange<IN_WIDTH, OUT_WIDTH>> {
@@ -236,6 +237,7 @@ class LazyGroupByRange : public ad_utility::InputRangeMixin<
   auto& get() { return *it_; }
   const auto& get() const { return *it_; }
 };
+}  // namespace groupBy::detail
 
 using groupBy::detail::VectorOfAggregationData;
 
@@ -736,10 +738,11 @@ Result::LazyResult GroupByImpl::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, bool singleIdTable) const {
-  return Result::LazyResult(LazyGroupByRange<IN_WIDTH, OUT_WIDTH>(
-      this, std::move(subresult), std::move(aggregates),
-      std::move(aggregateAliases), std::move(groupByCols), singleIdTable,
-      _subtree->getResultWidth()));
+  return Result::LazyResult(
+      groupBy::detail::LazyGroupByRange<IN_WIDTH, OUT_WIDTH>(
+          this, std::move(subresult), std::move(aggregates),
+          std::move(aggregateAliases), std::move(groupByCols), singleIdTable,
+          _subtree->getResultWidth()));
 }
 
 // _____________________________________________________________________________

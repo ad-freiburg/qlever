@@ -28,6 +28,11 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+namespace groupBy::detail {
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
+class LazyGroupByRange;
+}
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
@@ -166,7 +171,7 @@ class GroupByImpl : public Operation {
 
  public:
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  friend class LazyGroupByRange;
+  friend class groupBy::detail::LazyGroupByRange;
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
   // of tests to write.
 
