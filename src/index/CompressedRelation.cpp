@@ -368,6 +368,14 @@ CompressedRelationReader::lazyScan(
   }
 
   struct Generator : ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    enum class State {
+      yieldFirstBlocks,
+      createMiddleBlocksGenerator,
+      yieldMiddleBlocks,
+      yieldLastBlock,
+      check
+    };
+
     ScanSpecification scanSpec;
     std::vector<CompressedBlockMetadata> relevantBlockMetadata;
     ColumnIndices additionalColumns;
@@ -376,10 +384,7 @@ CompressedRelationReader::lazyScan(
     LimitOffsetClause limitOffset;
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
         blockGenerator{};
-    bool firstBlockYielded{false};
-    bool middleBlocksYielded{false};
-    bool lastBlockYielded{false};
-    bool generatorCreated{false};
+    State state_{State::yieldFirstBlocks};
     std::vector<CompressedBlockMetadata>::iterator beginBlockMetadata;
     std::vector<CompressedBlockMetadata>::iterator endBlockMetadata;
     const CompressedRelationReader* reader;
@@ -404,7 +409,9 @@ CompressedRelationReader::lazyScan(
           locatedTriplesPerBlock{locatedTriplesPerBlock_},
           limitOffset{limitOffset_},
           reader{reader_},
-          config{config_} {
+          config{config_} {}
+
+    void start() {
       beginBlockMetadata = ql::ranges::begin(relevantBlockMetadata);
       endBlockMetadata = ql::ranges::end(relevantBlockMetadata);
 
@@ -419,49 +426,71 @@ CompressedRelationReader::lazyScan(
     };
 
     std::optional<IdTable> get() override {
-      if (!firstBlockYielded) {
-        firstBlockYielded = true;
-        // Get and yield the first block.
-        if (beginBlockMetadata < endBlockMetadata) {
+      switch (state_) {
+        case State::yieldFirstBlocks: {
+          start();
+
+          // Get and yield the first block.
           auto block = getIncompleteBlock(beginBlockMetadata);
           pruneBlock(block, limitOffset);
-          details().numElementsYielded_ += block.numRows();
+          if (beginBlockMetadata + 1 < endBlockMetadata) {
+            state_ = State::createMiddleBlocksGenerator;
+          } else {
+            state_ = State::check;
+          }
+
           if (!block.empty()) {
+            details().numElementsYielded_ += block.numRows();
             return block;
+          } else {
+            // recursively go to next state
+            return get();
           }
         }
-      }
+        [[fallthrough]]
 
-      if (beginBlockMetadata + 1 < endBlockMetadata) {
-        if (!middleBlocksYielded) {
-          // Get and yield the remaining blocks.
-          if (!generatorCreated) {
-            generatorCreated = true;
-            middleBlocksGenerator = reader->asyncParallelBlockGenerator(
-                beginBlockMetadata + 1, endBlockMetadata - 1, config,
-                cancellationHandle, limitOffset);
-            middleBlocksGenerator.setDetailsPointer(&details());
-          }
+        case State::createMiddleBlocksGenerator: {
+          middleBlocksGenerator = reader->asyncParallelBlockGenerator(
+              beginBlockMetadata + 1, endBlockMetadata - 1, config,
+              cancellationHandle, limitOffset);
+          middleBlocksGenerator.setDetailsPointer(&details());
+          state_ = State::yieldMiddleBlocks;
+        }
+        [[fallthrough]]
 
+        case State::yieldMiddleBlocks: {
           auto block{middleBlocksGenerator.get()};
           if (block.has_value()) {
             return std::move(block.value());
           } else {
-            middleBlocksYielded = true;
+            state_ = State::yieldLastBlock;
           }
         }
+        [[fallthrough]]
 
-        if (!lastBlockYielded) {
-          lastBlockYielded = true;
-          auto block = getIncompleteBlock(endBlockMetadata - 1);
-          pruneBlock(block, limitOffset);
-          if (!block.empty()) {
-            details().numElementsYielded_ += block.numRows();
-            return block;
+        case State::yieldLastBlock: {
+          {
+            auto block = getIncompleteBlock(endBlockMetadata - 1);
+            pruneBlock(block, limitOffset);
+            state_ = State::check;
+
+            if (!block.empty()) {
+              details().numElementsYielded_ += block.numRows();
+              return block;
+            }
           }
         }
+        [[fallthrough]]
+
+        case State::check:
+          check();
+          return std::nullopt;
       }
 
+      return std::nullopt;
+    }
+
+    void check() {
       // Some sanity checks.
 
       const auto& limit = originalLimit._limit;
@@ -477,8 +506,6 @@ CompressedRelationReader::lazyScan(
             return absl::StrCat(numBlocksTotal, " ", d.numBlocksRead_, " ",
                                 d.numBlocksSkippedBecauseOfGraph_);
           });
-
-      return std::nullopt;
     }
   };
 
@@ -503,9 +530,10 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
     return triple.col0Id_;
   }
 
-  // Compute the following range: If the `scanSpec` specifies both `col0Id` and
-  // `col1Id`, the first and last `col2Id` of the blocks. If the `scanSpec`
-  // specifies only `col0Id`, the first and last `col1Id` of the blocks.
+  // Compute the following range: If the `scanSpec` specifies both `col0Id`
+  // and `col1Id`, the first and last `col2Id` of the blocks. If the
+  // `scanSpec` specifies only `col0Id`, the first and last `col1Id` of the
+  // blocks.
   auto [minId, maxId] = [&]() {
     const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
@@ -543,8 +571,8 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
   }
 
   // If the `col1Id` of the triple matches that of the `scanSpec`, return the
-  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or `maxId`
-  // (if it is larger).
+  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or
+  // `maxId` (if it is larger).
   return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(), minId,
                                maxId)
       .value_or(triple.col2Id_);
@@ -585,8 +613,8 @@ auto CompressedRelationReader::getBlocksForJoin(
   // `joinColumn`.
   auto& blockIdx = res.numHandledBlocks;
   while (true) {
-    // Skip all IDs in the `joinColumn` that are strictly smaller than any block
-    // that hasn't been handled so far.
+    // Skip all IDs in the `joinColumn` that are strictly smaller than any
+    // block that hasn't been handled so far.
     while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
       ++colIt;
     }
@@ -605,8 +633,8 @@ auto CompressedRelationReader::getBlocksForJoin(
     }
     // Now it holds that `*blockIt >= *colIt`. As the entries in the
     // `joinColumn` as well as the blocks are sorted, it suffices to
-    // additionally find the values where `*blockIt <= *colIt` to find possibly
-    // matching blocks.
+    // additionally find the values where `*blockIt <= *colIt` to find
+    // possibly matching blocks.
     while (blockIt != blockEnd && !idLessThanBlock(*colIt, *blockIt)) {
       res.matchingBlocks_.push_back(*blockIt);
       ++blockIt;
@@ -832,8 +860,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
                                       locatedTriplesPerBlock)
               .numRows();
     } else {
-      // If the first and last triple of the block match, then we know that the
-      // whole block belongs to the result.
+      // If the first and last triple of the block match, then we know that
+      // the whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
@@ -1244,9 +1272,9 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
   };
 
   // TODO:
-  // Optionally implement a free function like `equal_range(YourRangeType, key,
-  // comp)` that implements the equal range correctly.
-  // (1) Perform binary search on the inner blocks with respect to the first and
+  // Optionally implement a free function like `equal_range(YourRangeType,
+  // key, comp)` that implements the equal range correctly. (1) Perform binary
+  // search on the inner blocks with respect to the first and
   //     last triple.
   // (2) Perform binary search regarding the outer blocks.
   BlockMetadataRanges resultBlocks;
