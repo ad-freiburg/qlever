@@ -1019,7 +1019,7 @@ std::string_view raw(const std::integral auto& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
 
-auto isTrivial(Id id) {
+AD_ALWAYS_INLINE auto isTrivial(Id id) {
   auto datatype = id.getDatatype();
   return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
          datatype == Datatype::Int || datatype == Datatype::Double ||
@@ -1067,10 +1067,9 @@ Id ExportQueryExecutionTrees::StringMapping::stringToId(
 }
 
 // _____________________________________________________________________________
-Id ExportQueryExecutionTrees::toExportableId(Id originalId,
-                                             const QueryExecutionTree& qet,
-                                             const LocalVocab& localVocab,
-                                             StringMapping& stringMapping) {
+AD_ALWAYS_INLINE Id ExportQueryExecutionTrees::toExportableId(
+    Id originalId, const QueryExecutionTree& qet, const LocalVocab& localVocab,
+    StringMapping& stringMapping) {
   if (isTrivial(originalId)) {
     return originalId;
   }
