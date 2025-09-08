@@ -49,8 +49,8 @@ class VectorWithMemoryLimit
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
       requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<
-              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
+          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
+                                 Base>)
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
               CPP_and concepts::constructible_from<Base, Args&&...>)
       QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
@@ -298,7 +298,7 @@ template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
                                                 const Operands&... operands) {
   auto onPack = [&](auto&&... fs) constexpr {
-    return (... || fs.template areAllOperandsValid(operands...));
+    return (... || fs.areAllOperandsValid(operands...));
   };
 
   return std::apply(onPack, tup);

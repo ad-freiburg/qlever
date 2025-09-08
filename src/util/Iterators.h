@@ -6,10 +6,10 @@
 #define QLEVER_SRC_UTIL_ITERATORS_H
 
 #include <cstdint>
-#include <iterator>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
+#include "backports/type_traits.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/LambdaHelpers.h"
@@ -68,7 +68,7 @@ class IteratorForAccessOperator {
                          RandomAccessContainer&>,
       index_type>;
   using value_type = std::conditional_t<!std::is_void_v<ValueType>, ValueType,
-                                        std::remove_cvref_t<AccessorResult>>;
+                                        ql::remove_cvref_t<AccessorResult>>;
   using reference =
       std::conditional_t<!std::is_void_v<Reference>, Reference, AccessorResult>;
   using pointer = value_type*;

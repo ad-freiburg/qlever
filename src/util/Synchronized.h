@@ -99,7 +99,7 @@ class Synchronized {
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
   CPP_template(typename Arg, typename... Args)(
-      requires CPP_NOT(std::same_as<std::remove_cvref_t<Arg>, Synchronized>))
+      requires CPP_NOT(std::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
       QL_EXPLICIT(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
       : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 
