@@ -233,7 +233,7 @@ CPP_class_template(typename F)(
     : InputRangeFromGet<detail::ResFromFunction<F>> {
  private:
   using T = detail::ResFromFunction<F>;
-  F getFunction_;
+  [[no_unique_address]] F getFunction_;
   std::optional<InputRangeTypeErased<T>> innerRange_;
   using Res = detail::ResFromFunction<F>;
   static_assert(std::is_object_v<Res>,

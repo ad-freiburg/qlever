@@ -250,7 +250,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 Result::LazyResult IndexScan::chunkedIndexScan() const {
   auto generator = getLazyScan();
   auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(generator), [](auto&& table) {
+      std::move(generator), [](auto& table) {
         return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
       });
   return Result::LazyResult{std::move(transformedRange)};
@@ -625,7 +625,7 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
-      [state = std::move(innerState)]() mutable -> LoopControl {
+      [state = std::move(innerState)]() mutable {
         // Handle UNDEF case: pass through remaining input
         if (state->hasUndef()) {
           if (!state->iterator_.has_value()) {
@@ -672,16 +672,15 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
   // Handle UNDEF case using LoopControl pattern
   if (innerState->hasUndef()) {
-    auto range =
-        ad_utility::InputRangeFromLoopControlGet{[this]() -> LoopControl {
-          return LoopControl::breakWithYieldAll(chunkedIndexScan());
-        }};
+    auto range = ad_utility::InputRangeFromLoopControlGet{[this]() {
+      return LoopControl::breakWithYieldAll(chunkedIndexScan());
+    }};
     return Result::LazyResult{std::move(range)};
   }
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
-       metadata = LazyScanMetadata{}]() mutable -> LoopControl {
+       metadata = LazyScanMetadata{}]() mutable {
         auto& pendingBlocks = state->pendingBlocks_;
 
         while (true) {
@@ -701,7 +700,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
           // Transform the scan to Result::IdTableVocabPair and yield all
           auto transformedScan = ad_utility::CachingTransformInputRange(
-              std::move(scan), [](auto&& table) {
+              std::move(scan), [](auto& table) {
                 return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
               });
           return LoopControl::yieldAll(std::move(transformedScan));
@@ -721,7 +720,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     auto createEmptyRange = []() {
       using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
       return ad_utility::InputRangeFromLoopControlGet{
-          []() -> LoopControl { return LoopControl::makeBreak(); }};
+          []() { return LoopControl::makeBreak(); }};
     };
     return {Result::LazyResult{createEmptyRange()},
             Result::LazyResult{createEmptyRange()}};
