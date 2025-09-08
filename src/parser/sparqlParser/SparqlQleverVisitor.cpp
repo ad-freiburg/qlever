@@ -2205,7 +2205,7 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
   auto iri = ctx->iri() ? visit(ctx->iri()) : a;
   const std::string& text = ctx->getText();
-  AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
+  AD_CORRECTNESS_CHECK(iri == a || !(text == "a" || text == "^a"));
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
   if (text.starts_with("^")) {
     return PropertyPath::makeInverse(propertyPath);
