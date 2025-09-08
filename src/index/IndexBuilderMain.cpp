@@ -144,6 +144,7 @@ int main(int argc, char** argv) {
   bool addWordsFromLiterals = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
+  size_t nofWordPostingsPerTextBlock = NOF_WORD_POSTINGS_PER_TEXT_BLOCK;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
   std::optional<ad_utility::VocabularyType> vocabType;
@@ -196,6 +197,14 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
+  auto nofWordPostingsMessage = absl::StrCat(
+      "Sets the number of word postings in a text block. The default is: ",
+      NOF_WORD_POSTINGS_PER_TEXT_BLOCK,
+      ". A word posting is a combination of WordId, TextRecordId and Score. "
+      "The half-inverted text index uses those sorted by WordId to quickly "
+      "look up in which documents words occur.");
+  add("set-nof-word-postings-per-text-block,P",
+      po::value(&nofWordPostingsPerTextBlock), nofWordPostingsMessage.c_str());
   add("bm25-b", po::value(&bScoringParam),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
@@ -357,6 +366,8 @@ int main(int argc, char** argv) {
     auto textIndexBuilder = TextIndexBuilder(
         ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
 
+    textIndexBuilder.setNofWordPostingsPerTextBlock(
+        nofWordPostingsPerTextBlock);
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
       textIndexBuilder.buildTextIndexFile(
           wordsAndDocsFileSpecified
