@@ -6,13 +6,13 @@
 
 #include <vector>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"

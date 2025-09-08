@@ -6,7 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "ValuesForTesting.h"
+#include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"

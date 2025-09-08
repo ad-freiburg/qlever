@@ -7,7 +7,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "ValuesForTesting.h"
+#include "./ValuesForTesting.h"
 #include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 

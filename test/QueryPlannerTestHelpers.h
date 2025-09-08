@@ -11,6 +11,7 @@
 #include <optional>
 #include <variant>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -39,7 +40,6 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"

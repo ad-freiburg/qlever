@@ -8,6 +8,7 @@
 
 #include <cstdio>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -20,7 +21,6 @@
 #include "engine/Sort.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"

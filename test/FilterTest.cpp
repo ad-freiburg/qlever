@@ -5,9 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "./PrefilterExpressionTestHelpers.h"
+#include "./engine/ValuesForTesting.h"
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"

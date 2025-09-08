@@ -2,8 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
-#include "engine/ValuesForTesting.h"
 #include "gtest/gtest.h"
 #include "util/IndexTestHelpers.h"
 

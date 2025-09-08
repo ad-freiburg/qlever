@@ -8,7 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "ValuesForTesting.h"
+#include "./ValuesForTesting.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 

@@ -7,10 +7,10 @@
 
 #include <optional>
 
+#include "./engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/NamedQueryCache.h"
 #include "engine/NeutralElementOperation.h"
-#include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"

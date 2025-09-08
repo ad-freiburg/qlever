@@ -7,13 +7,13 @@
 #include <array>
 #include <vector>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Minus.h"
 #include "engine/MinusRowHandler.h"
-#include "engine/ValuesForTesting.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"

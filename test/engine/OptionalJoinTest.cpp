@@ -10,7 +10,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "ValuesForTesting.h"
+#include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
