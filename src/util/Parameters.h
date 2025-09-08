@@ -12,6 +12,7 @@
 #include <optional>
 #include <tuple>
 
+#include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprSmallString.h"
@@ -292,8 +293,8 @@ class Parameters {
 
  public:
   Parameters() = delete;
-  explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
-      : _parameters{std::move(ts)...} {}
+  QL_EXPLICIT(sizeof...(ParameterTypes) == 1)
+  Parameters(ParameterTypes... ts) : _parameters{std::move(ts)...} {}
 
   // Get value for parameter `Name` known at compile time.
   // The parameter is returned  by value, since
