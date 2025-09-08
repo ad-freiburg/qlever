@@ -762,17 +762,16 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
+    std::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          if (columnIndex.has_value()) {
-            co_yield std::string_view{
-                reinterpret_cast<const char*>(
-                    &pair.idTable_(i, columnIndex.value().columnIndex_)),
-                sizeof(Id)};
-          }
+          co_yield std::string_view{
+              reinterpret_cast<const char*>(
+                  &pair.idTable_(i, columnIndex.value().columnIndex_)),
+              sizeof(Id)};
         }
         cancellationHandle->throwIfCancelled();
       }
@@ -1124,14 +1123,10 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   StringMapping stringMapping;
 
   // Iterate over the result and yield the bindings.
-  bool isFirstRow = true;
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
-      if (!isFirstRow) [[likely]] {
-        co_yield ",";
-      }
       for (const auto& column : columns) {
         Id id = pair.idTable_(i, column->columnIndex_);
         co_yield raw(
@@ -1143,7 +1138,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         co_yield raw(static_cast<size_t>(0));
       }
       cancellationHandle->throwIfCancelled();
-      isFirstRow = false;
       stringMapping.nextRow();
     }
   }
