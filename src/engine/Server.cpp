@@ -989,7 +989,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, &tracer]() {
         tracer.endTrace("waitingForUpdateThread");
-        std::vector<UpdateMetadata> results;
+        json results = json::array();
         // TODO<qup42> We currently create a new snapshot after each update in
         // the chain, which is expensive. Instead, the updates could operate
         // directly on the `DeltaTriples` (we have an exclusive lock on them
@@ -1022,25 +1022,24 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     return res;
                   },
                   true, tracer);
-          results.push_back(updateMetadata);
           tracer.endTrace("execution");
+          tracer.endTrace("update");
+          results.push_back(createResponseMetadataForUpdate(
+              index_, index_.deltaTriplesManager().getCurrentSnapshot(),
+              *plannedUpdate, plannedUpdate->queryExecutionTree_,
+              updateMetadata, tracer));
+          tracer.reset();
         }
         return results;
       },
       cancellationHandle);
-  auto updateMetadata = co_await std::move(coroutine);
+  auto responses = co_await std::move(coroutine);
   tracer.endTrace("update");
-  AD_LOG(INFO) << "TimeTracer output: " << tracer.getJSONShort().dump()
-               << std::endl;
 
-  // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
+  // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
-  // TODO: display timings for all operations
-  auto response = createResponseMetadataForUpdate(
-      index_, index_.deltaTriplesManager().getCurrentSnapshot(), *plannedUpdate,
-      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer);
   co_await send(
-      ad_utility::httpUtils::createJsonResponse(std::move(response), request));
+      ad_utility::httpUtils::createJsonResponse(std::move(responses), request));
   co_return;
 }
 

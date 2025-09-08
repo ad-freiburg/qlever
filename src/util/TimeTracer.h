@@ -93,6 +93,17 @@ class TimeTracer {
     activeTraces_.pop_back();
   }
 
+  virtual void reset() {
+    if (!activeTraces_.empty()) {
+      throw std::runtime_error(
+          "Cannot reset a TimeTracer that has active traces.");
+    }
+
+    rootTrace_.begin_ = timer_.msecs();
+    rootTrace_.end_ = std::nullopt;
+    activeTraces_.emplace_back(rootTrace_);
+  }
+
   virtual nlohmann::ordered_json getJSON() const { return {rootTrace_}; }
   virtual nlohmann::ordered_json getJSONShort() const {
     nlohmann::ordered_json j;
