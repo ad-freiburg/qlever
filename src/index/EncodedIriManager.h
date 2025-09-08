@@ -64,6 +64,8 @@ class EncodedIriManagerImpl {
   // The prefixes of the IRIs that will be encoded.
   std::vector<std::string> prefixes_;
 
+  static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
+
   // By default, `prefixes_` is empty, so no IRI will be encoded.
   EncodedIriManagerImpl() = default;
 
@@ -86,13 +88,12 @@ class EncodedIriManagerImpl {
     prefixesWithoutAngleBrackets.erase(
         ::ranges::unique(prefixesWithoutAngleBrackets),
         prefixesWithoutAngleBrackets.end());
-    static constexpr auto maxNumPrefixes = 1ULL << NumBitsTags;
 
-    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes) {
+    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes_) {
       throw std::runtime_error(absl::StrCat(
           "Number of prefixes specified with `--encode-as-id` is ",
           prefixesWithoutAngleBrackets.size(), ", which is too many; ",
-          "the maximum is ", maxNumPrefixes));
+          "the maximum is ", maxNumPrefixes_));
     }
 
     // TODO<C++23> use `std::views::adjacent`.
