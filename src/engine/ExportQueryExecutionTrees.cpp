@@ -1014,16 +1014,18 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 }
 
 namespace {
-// Return
+// Return a `std::string_view` wrapping the passed value.
 std::string_view raw(const std::integral auto& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
 
+// Return true iff the value can be serialized without a vocab entry.
 AD_ALWAYS_INLINE auto isTrivial(Id id) {
   auto datatype = id.getDatatype();
   return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
          datatype == Datatype::Int || datatype == Datatype::Double ||
-         datatype == Datatype::Date || datatype == Datatype::GeoPoint;
+         datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
+         datatype == Datatype::EncodedVal;
 }
 }  // namespace
 
@@ -1095,8 +1097,19 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 
   // Magic bytes
   co_yield "QLEVER.EXPORT";
-  // Export format version
+  // Export format version.
   co_yield raw(static_cast<uint16_t>(0));
+
+  // Export encoded values.
+  const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
+  // Make sure the size matches the format.
+  static_assert(EncodedIriManager::maxNumPrefixes_ - 1 ==
+                std::numeric_limits<uint8_t>::max());
+  co_yield raw(static_cast<uint8_t>(prefixes.size()));
+  for (const auto& prefix : prefixes) {
+    co_yield raw(prefix.length());
+    co_yield prefix;
+  }
 
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
@@ -1106,7 +1119,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   // Export number of columns as a 16 bit unsigned int.
   co_yield raw(static_cast<uint16_t>(columns.size()));
 
-  // Export actual variable names
+  // Export actual variable names.
   for (const auto& optional : columns) {
     const auto& variableName = optional.value().variable_;
     co_yield raw(variableName.size());
@@ -1148,7 +1161,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     co_yield raw(static_cast<size_t>(0));
   }
 
-  // If there are no variables, just export the total number of rows
+  // If there are no variables, just export the total number of rows.
   if (columns.empty()) {
     co_yield raw(resultSize);
   }
