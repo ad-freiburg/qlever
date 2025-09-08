@@ -8,6 +8,9 @@
 #define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
+#include <iterator>
+#include <memory>
+#include <optional>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -29,38 +32,6 @@ CPP_requires(can_empty_, requires(const R& range)(ql::ranges::empty(range)));
 template <typename R>
 CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 }  // namespace detail
-
-// Takes a view of blocks and yields the elements of the same view, but removes
-// consecutive duplicates inside the blocks and across block boundaries.
-template <typename SortedBlockView,
-          typename ValueType = ql::ranges::range_value_t<
-              ql::ranges::range_value_t<SortedBlockView>>>
-cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
-    SortedBlockView view) {
-  size_t numInputs = 0;
-  size_t numUnique = 0;
-  std::optional<ValueType> lastValueFromPreviousBlock = std::nullopt;
-
-  for (auto& block : view) {
-    if (block.empty()) {
-      continue;
-    }
-    numInputs += block.size();
-    auto beg = lastValueFromPreviousBlock
-                   ? ql::ranges::find_if(
-                         block, [&p = lastValueFromPreviousBlock.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
-    lastValueFromPreviousBlock = *(block.end() - 1);
-    auto it = std::unique(beg, block.end());
-    block.erase(it, block.end());
-    block.erase(block.begin(), beg);
-    numUnique += block.size();
-    co_yield block;
-  }
-  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
-}
 
 // A view that owns its underlying storage. It is a replacement for
 // `ranges::owning_view` which is not yet supported by `GCC 11` and
@@ -140,6 +111,56 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::data(underlyingRange_);
   }
 };
+
+// Takes a view of blocks and yields the elements of the same view, but removes
+// consecutive duplicates inside the blocks and across block boundaries.
+template <typename SortedBlockView,
+          typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
+          typename ValueType = ql::ranges::range_value_t<BlockType>>
+InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
+  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
+    SortedBlockView view_;
+
+    decltype(ql::views::filter(view_,
+                               std::not_fn(ql::ranges::empty))) nonEmptyView_;
+    decltype(ql::ranges::begin(nonEmptyView_)) iter_;
+
+    std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
+    size_t numInputs_{0};
+    size_t numUnique_{0};
+
+    explicit UniqueBlockViewFromGet(SortedBlockView view)
+        : view_{std::move(view)},
+          nonEmptyView_(
+              ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
+          iter_{ql::ranges::begin(nonEmptyView_)} {}
+
+    std::optional<BlockType> get() override {
+      if (iter_ == ql::ranges::end(nonEmptyView_)) {
+        LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
+        LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
+        return std::nullopt;
+      }
+
+      auto block = std::move(*iter_);
+      ++iter_;
+      numInputs_ += block.size();
+      auto beg = lastValueFromPreviousBlock_
+                     ? ql::ranges::find_if(
+                           block, [&p = lastValueFromPreviousBlock_.value()](
+                                      const auto& el) { return el != p; })
+                     : block.begin();
+      lastValueFromPreviousBlock_ = block.back();
+      auto it = std::unique(beg, block.end());
+      block.erase(it, block.end());
+      block.erase(block.begin(), beg);
+      numUnique_ += block.size();
+      return block;
+    }
+  };
+  return InputRangeTypeErased{
+      std::make_unique<UniqueBlockViewFromGet>(std::move(view))};
+}
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
 // not exist. This is currently used in the `CompressedExternalIdTable.h`, where
@@ -485,95 +506,6 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 CPP_template(typename Int)(
     requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
-}
-
-// The implementation of `inPlaceTransformView`, see below for details.
-namespace detail {
-CPP_template(typename Range, typename Transformation)(
-    requires ad_utility::InvocableWithExactReturnType<
-        Transformation, void, ql::ranges::range_reference_t<Range>>
-        CPP_and ql::ranges::view<Range>
-            CPP_and ql::ranges::input_range<
-                Range>) auto inPlaceTransformViewImpl(Range range,
-                                                      Transformation
-                                                          transformation) {
-  // Take a range and yield pairs of [pointerToElementOfRange,
-  // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
-  // value is changed, that change will be stored until the next element is
-  // yielded. This is made use of further below.
-  // Note that instead of taking the element by pointer/reference we could also
-  // copy or move it. This implementation never takes a copy, but modifies the
-  // input.
-  auto makeElementPtrAndBool = [](auto range)
-      -> cppcoro::generator<
-          std::pair<decltype(std::addressof(*range.begin())), bool>> {
-    for (auto& el : range) {
-      auto pair = std::pair{std::addressof(el), false};
-      co_yield pair;
-    }
-  };
-
-  // Lift the transformation to work on the result of `makePtrAndBool` and to
-  // only apply the transformation once for each element.
-  // Note: This works because `ql::views::transform` calls the transformation
-  // each time an iterator is dereferenced, so the following lambda is called
-  // multiple times for the same element if the same iterator is dereferenced
-  // multiple times and we therefore have to remember whether the transformation
-  // was already applied, because it changes the element in place. See the unit
-  // tests in `ViewsTest.cpp` for examples.
-  auto actualTransformation = [transformation = std::move(transformation)](
-                                  auto& ptrAndBool) -> decltype(auto) {
-    auto& [ptr, alreadyTransformed] = ptrAndBool;
-    if (!alreadyTransformed) {
-      alreadyTransformed = true;
-      std::invoke(transformation, *ptr);
-    }
-    return *ptr;
-  };
-
-  // Combine everything to the actual result range.
-  return ql::views::transform(
-      ad_utility::OwningView{makeElementPtrAndBool(std::move(range))},
-      actualTransformation);
-}
-}  // namespace detail
-
-// Similar to `ql::views::transform` but for transformation functions that
-// transform a value in place. The result is always only an input range,
-// independent of the actual range category of the input.
-CPP_template(typename Range, typename Transformation)(
-    requires ql::ranges::input_range<Range> CPP_and
-        ad_utility::InvocableWithExactReturnType<
-            Transformation, void,
-            ql::ranges::range_reference_t<
-                Range>>) auto inPlaceTransformView(Range&& range,
-                                                   Transformation
-                                                       transformation) {
-  return detail::inPlaceTransformViewImpl(ql::views::all(AD_FWD(range)),
-                                          std::move(transformation));
-}
-
-/// Create a generator the consumes the input generator until it finds the given
-/// separator and the yields spans of the chunks of data received inbetween.
-CPP_template(typename Range, typename ElementType)(
-    requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<ql::span<ElementType>> reChunkAtSeparator(Range generator,
-                                                        ElementType separator) {
-  std::vector<ElementType> buffer;
-  for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
-       generator) {
-    for (ElementType c : chunk) {
-      if (c == separator) {
-        co_yield ql::span{buffer.data(), buffer.size()};
-        buffer.clear();
-      } else {
-        buffer.push_back(c);
-      }
-    }
-  }
-  if (!buffer.empty()) {
-    co_yield ql::span{buffer.data(), buffer.size()};
-  }
 }
 }  // namespace ad_utility
 
