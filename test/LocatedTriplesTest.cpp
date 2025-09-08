@@ -131,15 +131,15 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
       CBM(PT(5, 1, 1), PT(15, 1, 1)), CBM(PT(15, 1, 2), PT(25, 1, 1)),
       CBM(PT(25, 1, 2), PT(30, 1, 1)), CBM(PT(30, 1, 2), PT(35, 1, 1))};
   // Set up lists of located triples for three blocks.
-  auto LT1 = LT{1, IT(10, 1, 0), false};
-  auto LT2 = LT{1, IT(10, 2, 1), false};
-  auto LT3 = LT{1, IT(11, 3, 0), true};
-  auto LT4 = LT{2, IT(20, 4, 0), true};
-  auto LT5 = LT{2, IT(21, 5, 0), true};
-  auto LT6 = LT{4, IT(30, 6, 0), true};
-  auto LT7 = LT{4, IT(32, 7, 0), false};
-  auto LT8 = LT{3, IT(25, 5, 0), true};
-  auto LT9 = LT{4, IT(31, 6, 1), false};
+  auto LT1 = LT{0, IT(10, 1, 0), false};
+  auto LT2 = LT{0, IT(10, 2, 1), false};
+  auto LT3 = LT{0, IT(11, 3, 0), true};
+  auto LT4 = LT{1, IT(20, 4, 0), true};
+  auto LT5 = LT{1, IT(21, 5, 0), true};
+  auto LT6 = LT{3, IT(30, 6, 0), true};
+  auto LT7 = LT{3, IT(32, 7, 0), false};
+  auto LT8 = LT{2, IT(25, 5, 0), true};
+  auto LT9 = LT{3, IT(31, 6, 1), false};
   auto locatedTriplesPerBlock =
       makeLocatedTriplesPerBlock({LT1, LT2, LT3, LT4, LT5, LT6, LT7});
   locatedTriplesPerBlock.setOriginalMetadata(metadata);
@@ -147,11 +147,10 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
-              numTriplesBlockwise(
-                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {2, 2}}}));
+              numTriplesBlockwise({{0, {3, 3}}, {1, {2, 2}}, {3, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
-                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
+                  {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7}}}));
 
   auto handles = locatedTriplesPerBlock.add(std::vector{LT8, LT9});
 
@@ -159,25 +158,25 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {3, 3}}, {2, {2, 2}}, {3, {1, 1}}, {4, {3, 3}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {1, 1}}, {3, {3, 3}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
-              locatedTriplesAre({{1, {LT1, LT2, LT3}},
-                                 {2, {LT4, LT5}},
-                                 {3, {LT8}},
-                                 {4, {LT6, LT7, LT9}}}));
+              locatedTriplesAre({{0, {LT1, LT2, LT3}},
+                                 {1, {LT4, LT5}},
+                                 {2, {LT8}},
+                                 {3, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(3, handles[0]);
+  locatedTriplesPerBlock.erase(2, handles[0]);
   locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {3, 3}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
+          {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7, LT9}}}));
 
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
@@ -189,23 +188,23 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {3, 3}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
+          {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(4, handles[1]);
+  locatedTriplesPerBlock.erase(3, handles[1]);
   locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {2, 2}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
-                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
+                  {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7}}}));
 
   locatedTriplesPerBlock.clear();
 
@@ -829,12 +828,12 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
       CBM(PT1, PT1), CBM(PT2, PT3, std::vector<Id>{V(13)})};
   std::vector<CompressedBlockMetadata> expectedAugmentedMetadata{metadata};
 
-  auto T1 = IT(
-      1, 10, 10,
-      12);  // Before block 0 (because `12` is smaller than the default graph)
-  auto T2 = IT(1, 10, 10,
-               99999999);  // Becomes the lower bound of block 1, although it
-                           // only differs in the graph info.
+  // Before block0 (because `12` is smaller than the default graph)
+  auto T1 = IT(1, 10, 10, 12);
+
+  // Becomes the last triple of block 0, because it only differs in the graph
+  // info.
+  auto T2 = IT(1, 10, 10, 99999999);
   auto T3 = IT(2, 12, 10, 17);  // Inside block 1, add graph 17.
   auto T4 = IT(2, 12, 10, 18);  // Inside block 1, add graph 18.
 
@@ -853,8 +852,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
     // set to `true`.
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
 
@@ -872,10 +871,13 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
 
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
+    // Note: Although the graph `9999999` is added to block 0, the graph info
+    // remains unchanged, because it was set to `nullopt` which means "too many
+    // graphs to keep track of them manually".
     expectedAugmentedMetadata[1].graphInfo_.value() =
-        std::vector{V(13), V(17), V(18), V(99999999)};
+        std::vector{V(13), V(17), V(18)};
 
     // We have added a triple `T5` after the last block, so there now is an
     // additional block, which also stores the correct graph info.
