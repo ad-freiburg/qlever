@@ -676,11 +676,11 @@ class CompressedRelationReader {
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
   CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
-      ScanSpecification scanSpec,
+      const ScanSpecification& scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each

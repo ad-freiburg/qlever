@@ -152,7 +152,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     ad_utility::InputRangeTypeErased<
         std::optional<DecompressedBlockAndMetadata>>
         queue_;
-    bool needsStart{true};
+    bool needsStart_{true};
 
     Generator(T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
               CancellationHandle cancellationHandle,
@@ -220,9 +220,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     std::optional<IdTable> get() override {
       std::optional<std::optional<DecompressedBlockAndMetadata>> item{};
 
-      if (needsStart) {
+      if (needsStart_) {
         start();
-        needsStart = false;
+        needsStart_ = false;
       }
 
       // Yield the blocks (in the right order) as soon as they become
@@ -356,11 +356,11 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
 CompressedRelationReader::lazyScan(
-    ScanSpecification scanSpec,
+    const ScanSpecification& scanSpec,
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
   if (relevantBlockMetadata.empty()) {
@@ -379,58 +379,60 @@ CompressedRelationReader::lazyScan(
     using CompressedBlockMetadataIterator =
         std::vector<CompressedBlockMetadata>::iterator;
 
-    ScanSpecification scanSpec;
-    std::vector<CompressedBlockMetadata> relevantBlockMetadata;
-    ColumnIndices additionalColumns;
-    CancellationHandle cancellationHandle;
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock;
-    LimitOffsetClause limitOffset;
+    ScanSpecification scanSpec_;
+    std::vector<CompressedBlockMetadata> relevantBlockMetadata_;
+    ColumnIndices additionalColumns_;
+    CancellationHandle cancellationHandle_;
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
+    LimitOffsetClause limitOffset_;
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
-        blockGenerator{};
+        blockGenerator_{};
     State state_{State::yieldFirstBlocks};
-    CompressedBlockMetadataIterator beginBlockMetadata;
-    CompressedBlockMetadataIterator endBlockMetadata;
-    const CompressedRelationReader* reader;
-    ScanImplConfig config;
-    IdTableGeneratorInputRange middleBlocksGenerator{};
+    CompressedBlockMetadataIterator beginBlockMetadata_;
+    CompressedBlockMetadataIterator endBlockMetadata_;
+    const CompressedRelationReader* reader_;
+    ScanImplConfig config_;
+    IdTableGeneratorInputRange middleBlocksGenerator_{};
     // We will modify `limitOffset` as we go. We make a copy of the original
     // value for some sanity checks at the end of the function.
-    const LimitOffsetClause originalLimit{limitOffset};
-    std::size_t numBlocksTotal;
+    const LimitOffsetClause originalLimit_{limitOffset_};
+    std::size_t numBlocksTotal_;
 
-    Generator(ScanSpecification scanSpec_,
-              std::vector<CompressedBlockMetadata> relevantBlockMetadata_,
-              ColumnIndices additionalColumns_,
-              CancellationHandle cancellationHandle_,
-              const LocatedTriplesPerBlock& locatedTriplesPerBlock_,
-              LimitOffsetClause limitOffset_,
-              const CompressedRelationReader* reader_, ScanImplConfig config_)
-        : scanSpec{scanSpec_},
-          relevantBlockMetadata{std::move(relevantBlockMetadata_)},
-          additionalColumns{std::move(additionalColumns_)},
-          cancellationHandle{cancellationHandle_},
-          locatedTriplesPerBlock{locatedTriplesPerBlock_},
-          limitOffset{limitOffset_},
-          reader{reader_},
-          config{config_} {}
+    Generator(ScanSpecification scanSpec,
+              std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+              ColumnIndices additionalColumns,
+              CancellationHandle cancellationHandle,
+              const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+              LimitOffsetClause limitOffset,
+              const CompressedRelationReader* reader, ScanImplConfig config)
+        : scanSpec_{scanSpec},
+          relevantBlockMetadata_{std::move(relevantBlockMetadata)},
+          additionalColumns_{std::move(additionalColumns)},
+          cancellationHandle_{cancellationHandle},
+          locatedTriplesPerBlock_{locatedTriplesPerBlock},
+          limitOffset_{limitOffset},
+          reader_{reader},
+          config_{config} {}
 
     void start() {
-      beginBlockMetadata = ql::ranges::begin(relevantBlockMetadata);
-      endBlockMetadata = ql::ranges::end(relevantBlockMetadata);
+      beginBlockMetadata_ = ql::ranges::begin(relevantBlockMetadata_);
+      endBlockMetadata_ = ql::ranges::end(relevantBlockMetadata_);
 
-      numBlocksTotal = endBlockMetadata - beginBlockMetadata;
+      numBlocksTotal_ = endBlockMetadata_ - beginBlockMetadata_;
     }
 
     auto getIncompleteBlock(CompressedBlockMetadataIterator it) {
-      auto result = reader->readPossiblyIncompleteBlock(
-          scanSpec, config, *it, std::ref(details()), locatedTriplesPerBlock);
+      auto result = reader_->readPossiblyIncompleteBlock(
+          scanSpec_, config_, *it, std::ref(details()),
+          locatedTriplesPerBlock_);
+
       return result;
     };
 
     auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
       auto block = getIncompleteBlock(it);
 
-      pruneBlock(block, limitOffset);
+      pruneBlock(block, limitOffset_);
 
       if (!block.empty()) {
         details().numElementsYielded_ += block.numRows();
@@ -445,9 +447,9 @@ CompressedRelationReader::lazyScan(
           start();
 
           // Get and yield the first block.
-          auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata);
+          auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata_);
 
-          if (beginBlockMetadata + 1 < endBlockMetadata) {
+          if (beginBlockMetadata_ + 1 < endBlockMetadata_) {
             state_ = State::createMiddleBlocksGenerator;
           } else {
             state_ = State::check;
@@ -464,16 +466,16 @@ CompressedRelationReader::lazyScan(
           [[fallthrough]];
 
         case State::createMiddleBlocksGenerator: {
-          middleBlocksGenerator = reader->asyncParallelBlockGenerator(
-              beginBlockMetadata + 1, endBlockMetadata - 1, config,
-              cancellationHandle, limitOffset);
-          middleBlocksGenerator.setDetailsPointer(&details());
+          middleBlocksGenerator_ = reader_->asyncParallelBlockGenerator(
+              beginBlockMetadata_ + 1, endBlockMetadata_ - 1, config_,
+              cancellationHandle_, limitOffset_);
+          middleBlocksGenerator_.setDetailsPointer(&details());
           state_ = State::yieldMiddleBlocks;
         }
           [[fallthrough]];
 
         case State::yieldMiddleBlocks: {
-          auto block{middleBlocksGenerator.get()};
+          auto block{middleBlocksGenerator_.get()};
           if (block.has_value()) {
             return std::move(block.value());
           } else {
@@ -484,7 +486,7 @@ CompressedRelationReader::lazyScan(
 
         case State::yieldLastBlock: {
           {
-            auto block = getPrunedBlockAndUpdateDetails(endBlockMetadata - 1);
+            auto block = getPrunedBlockAndUpdateDetails(endBlockMetadata_ - 1);
             state_ = State::check;
 
             if (!block.empty()) {
@@ -504,17 +506,17 @@ CompressedRelationReader::lazyScan(
 
     void check() {
       // Some sanity checks.
-      const auto& limit = originalLimit._limit;
+      const auto& limit = originalLimit_._limit;
 
-      LazyScanMetadata& d{details()};
+      const LazyScanMetadata& d{details()};
       AD_CORRECTNESS_CHECK(!limit.has_value() ||
                            d.numElementsYielded_ <= limit.value());
       AD_CORRECTNESS_CHECK(
-          numBlocksTotal ==
+          numBlocksTotal_ ==
                   (d.numBlocksRead_ + d.numBlocksSkippedBecauseOfGraph_) ||
-              !limitOffset.isUnconstrained(),
+              !limitOffset_.isUnconstrained(),
           [&]() {
-            return absl::StrCat(numBlocksTotal, " ", d.numBlocksRead_, " ",
+            return absl::StrCat(numBlocksTotal_, " ", d.numBlocksRead_, " ",
                                 d.numBlocksSkippedBecauseOfGraph_);
           });
     }

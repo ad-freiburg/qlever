@@ -367,9 +367,9 @@ class InputRangeFromGet
                       DetailsType>::DetailStorage;
 
   // If the `Details` type is empty, we don't need it to occupy any space.
-  [[no_unique_address]] DetailStorage m_details{};
+  [[no_unique_address]] DetailStorage details_{};
 
-  DetailStorage& getDetails() { return m_details; }
+  DetailStorage& getDetails() { return details_; }
 };
 
 // A simple helper to define an `InputRangeFromGet` where the `get()` function
@@ -475,13 +475,8 @@ class InputRangeTypeErased
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 
-  InputRangeTypeErased() {
-    struct Empty : public InputRangeFromGet<ValueType, DetailsType> {
-      std::optional<ValueType> get() override { return std::nullopt; }
-    };
-
-    impl_ = std::make_unique<Empty>();
-  }
+  // Default constructor creates empty input range
+  InputRangeTypeErased() : impl_{std::make_unique<Empty>()} {}
 
   decltype(auto) begin() { return impl_->begin(); }
   decltype(auto) end() { return impl_->end(); }
@@ -492,6 +487,10 @@ class InputRangeTypeErased
       DetailsProvider<InputRangeTypeErased<ValueType, DetailsType>,
                       DetailsType>::DetailStorage;
   DetailStorage& getDetails() { return impl_->getDetails(); }
+
+  struct Empty : public InputRangeFromGet<ValueType, DetailsType> {
+    std::optional<ValueType> get() override { return std::nullopt; }
+  };
 };
 
 template <typename Range>
