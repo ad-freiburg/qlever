@@ -12,6 +12,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "./engine/ValuesForTesting.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -24,7 +25,6 @@
 #include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
