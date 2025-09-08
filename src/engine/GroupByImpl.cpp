@@ -110,6 +110,8 @@ class LazyGroupByRange
     return std::make_optional<IdTableVocabPair>(std::move(*(rangeIt_.value())));
   }
 
+  // This method is forwarded to GroupByImpl::searchBlockBoundaries() during
+  // process(). There is no reason to call this method outside of that use-case.
   void onBlockChange(size_t blockStart, size_t blockEnd,
                      sparqlExpression::EvaluationContext& evaluationContext) {
     if (groupSplitAcrossTables_) {
@@ -128,6 +130,9 @@ class LazyGroupByRange
     }
   }
 
+  // This method serves as the transformation for each IdTableVocabPair in the
+  // subresult_->idTables(), input range. It us called by the range_ member.
+  // There is no reason to call this method outside of that use-case.
   auto process(IdTableVocabPair& pair) {
     using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
     auto& idTable = pair.idTable_;
@@ -170,6 +175,8 @@ class LazyGroupByRange
     return LoopControl::makeContinue();
   }
 
+  // After range_ is finished, this method is called to yield the final value,
+  // which includes processing the last group if necessary.
   std::optional<Result::IdTableVocabPair> yieldFinalValue() {
     // No need for final commit when loop was never entered.
     if (!groupSplitAcrossTables_) {
