@@ -451,7 +451,7 @@ CompressedRelationReader::lazyScan(
             return get();
           }
         }
-        [[fallthrough]]
+          [[fallthrough]];
 
         case State::createMiddleBlocksGenerator: {
           middleBlocksGenerator = reader->asyncParallelBlockGenerator(
@@ -460,7 +460,7 @@ CompressedRelationReader::lazyScan(
           middleBlocksGenerator.setDetailsPointer(&details());
           state_ = State::yieldMiddleBlocks;
         }
-        [[fallthrough]]
+          [[fallthrough]];
 
         case State::yieldMiddleBlocks: {
           auto block{middleBlocksGenerator.get()};
@@ -470,7 +470,7 @@ CompressedRelationReader::lazyScan(
             state_ = State::yieldLastBlock;
           }
         }
-        [[fallthrough]]
+          [[fallthrough]];
 
         case State::yieldLastBlock: {
           {
@@ -484,7 +484,7 @@ CompressedRelationReader::lazyScan(
             }
           }
         }
-        [[fallthrough]]
+          [[fallthrough]];
 
         case State::check:
           check();
