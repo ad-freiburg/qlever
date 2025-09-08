@@ -113,7 +113,8 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
 // an explicit name. The format currently is `ql:named-cached-query/$query-id$`.
 // NOTE: This constant does not include the leading '<'.
 namespace string_constants::detail {
-constexpr inline std::string_view namedCachedQueryPrefix = "named-cached-query";
+constexpr inline std::string_view namedCachedQueryPrefix =
+    "named-cached-query-";
 }  // namespace string_constants::detail
 constexpr inline std::string_view NAMED_CACHED_QUERY_PREFIX =
     ad_utility::constexprStrCat<

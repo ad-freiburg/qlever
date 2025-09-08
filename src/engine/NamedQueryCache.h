@@ -3,8 +3,8 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 #pragma once
 
+#include "../../test/engine/ValuesForTesting.h"
 #include "engine/LocalVocab.h"
-#include "engine/ValuesForTesting.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
 
@@ -56,6 +56,6 @@ class NamedQueryCache {
   // Retrieve the query result with the given `key` and convert it into an
   // explicit `ValuesForTesting` operation that can be used as part of a
   // `QueryExecutionTree`.
-  std::shared_ptr<ValuesForTesting> getOperation(const Key& key,
-                                                 QueryExecutionContext* ctx);
+  std::shared_ptr<ExplicitIdTableOperation> getOperation(
+      const Key& key, QueryExecutionContext* ctx);
 };

@@ -5449,5 +5449,5 @@ TEST(QueryPlanner, NamedCachedQuery) {
   // We only check the size estimate (which in this case is exact), because
   // more detailed tests in `NamedQueryCacheTest.cpp` check the correct contents
   // etc. of cached queries.
-  h::expect(query, h::ValuesForTesting(3), qec);
+  h::expect(query, h::ExplicitIdTableOperation(3), qec);
 }

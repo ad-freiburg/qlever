@@ -5,13 +5,12 @@
 #include "engine/NamedQueryCache.h"
 
 // _____________________________________________________________________________
-std::shared_ptr<ValuesForTesting> NamedQueryCache ::getOperation(
+std::shared_ptr<ExplicitIdTableOperation> NamedQueryCache ::getOperation(
     const Key& key, QueryExecutionContext* ctx) {
   const auto& ptr = get(key);
   const auto& [table, map, sortedOn, localVocab] = *ptr;
-  auto res = std::make_shared<ValuesForTesting>(ctx, table, map, sortedOn,
-                                                localVocab.clone());
-  res->forceFullyMaterializedSingleTable() = true;
+  auto res = std::make_shared<ExplicitIdTableOperation>(
+      ctx, table, map, sortedOn, localVocab.clone());
   return res;
 }
 

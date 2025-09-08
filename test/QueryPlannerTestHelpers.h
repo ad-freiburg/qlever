@@ -487,11 +487,10 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
-// Match a `ValuesForTesting`.
-inline QetMatcher ValuesForTesting(size_t sizeEstimate) {
-  auto p = AD_PROPERTY(::ValuesForTesting, getSizeEstimateForTesting,
+inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
                        ::testing::Eq(sizeEstimate));
-  return RootOperation<::ValuesForTesting>(p);
+  return RootOperation<::ExplicitIdTableOperation>(p);
 }
 
 //

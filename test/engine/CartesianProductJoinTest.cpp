@@ -8,9 +8,9 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "ValuesForTesting.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ValuesForTesting.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
