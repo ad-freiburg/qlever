@@ -376,6 +376,9 @@ CompressedRelationReader::lazyScan(
       check
     };
 
+    using CompressedBlockMetadataIterator =
+        std::vector<CompressedBlockMetadata>::iterator;
+
     ScanSpecification scanSpec;
     std::vector<CompressedBlockMetadata> relevantBlockMetadata;
     ColumnIndices additionalColumns;
@@ -385,8 +388,8 @@ CompressedRelationReader::lazyScan(
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
         blockGenerator{};
     State state_{State::yieldFirstBlocks};
-    std::vector<CompressedBlockMetadata>::iterator beginBlockMetadata;
-    std::vector<CompressedBlockMetadata>::iterator endBlockMetadata;
+    CompressedBlockMetadataIterator beginBlockMetadata;
+    CompressedBlockMetadataIterator endBlockMetadata;
     const CompressedRelationReader* reader;
     ScanImplConfig config;
     IdTableGeneratorInputRange middleBlocksGenerator{};
@@ -418,7 +421,7 @@ CompressedRelationReader::lazyScan(
       numBlocksTotal = endBlockMetadata - beginBlockMetadata;
     }
 
-    auto getIncompleteBlock(std::vector<CompressedBlockMetadata>::iterator it) {
+    auto getIncompleteBlock(CompressedBlockMetadataIterator it) {
       auto result = reader->readPossiblyIncompleteBlock(
           scanSpec, config, *it, std::ref(details()), locatedTriplesPerBlock);
       cancellationHandle->throwIfCancelled();
@@ -443,7 +446,8 @@ CompressedRelationReader::lazyScan(
             details().numElementsYielded_ += block.numRows();
             return block;
           } else {
-            // recursively go to next state
+            // recursively go to next state because there is no data to yield
+            // from this call
             return get();
           }
         }
@@ -492,7 +496,6 @@ CompressedRelationReader::lazyScan(
 
     void check() {
       // Some sanity checks.
-
       const auto& limit = originalLimit._limit;
 
       LazyScanMetadata& d{details()};
