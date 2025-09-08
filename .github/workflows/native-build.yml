@@ -33,9 +33,9 @@ jobs:
         exclude:
           - compiler: gcc
             compiler-version: 8
-          - compiler: gcc
-            compiler-version: 12
-            isPr: true
+          #- compiler: gcc
+          #  compiler-version: 12
+          #  isPr: true
           - compiler: gcc
             compiler-version: 15
           - compiler: gcc
