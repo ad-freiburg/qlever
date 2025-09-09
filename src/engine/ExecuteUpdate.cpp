@@ -32,14 +32,12 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
-  metadata.deletionTime_ = timer.msecs();
   timer.start();
   if (!toInsert.idTriples_.empty()) {
     deltaTriples.insertTriples(cancellationHandle,
                                std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
-  metadata.insertionTime_ = timer.msecs();
   return metadata;
 }
 
@@ -199,7 +197,6 @@ ExecuteUpdate::computeGraphUpdateQuads(
   metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
-  metadata.triplePreparationTime_ = timer.msecs();
   tracer.endTrace("preparation");
 
   return {

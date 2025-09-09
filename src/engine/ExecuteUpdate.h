@@ -12,13 +12,9 @@
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
-// Metadata about the time spent on different parts of an update.
+// Metadata about the number of triples before and after an update as well as
+// changes by the update.
 struct UpdateMetadata {
-  using Milliseconds = std::chrono::milliseconds;
-  static constexpr Milliseconds Zero = Milliseconds::zero();
-  Milliseconds triplePreparationTime_ = Zero;
-  Milliseconds insertionTime_ = Zero;
-  Milliseconds deletionTime_ = Zero;
   std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
   std::optional<DeltaTriplesCount> countAfter_;
