@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 using Vocab = VocabularyInMemory;
 
@@ -13,9 +14,21 @@ namespace {
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  Vocab::Words w;
-  w.build(words);
-  return Vocab(std::move(w));
+  auto filename = "vocabInMemoryCreation.tmp";
+  {
+    Vocab v;
+    auto writerPtr = v.makeDiskWriterPtr(filename);
+    auto& writer = *writerPtr;
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      auto idx = writer(word, false);
+      EXPECT_EQ(idx, static_cast<uint64_t>(i));
+    }
+    writer.readableName() = "blubb";
+    EXPECT_EQ(writer.readableName(), "blubb");
+  }
+  Vocab v;
+  v.open(filename);
+  return v;
 }
 
 TEST(VocabularyInMemory, UpperLowerBound) {
@@ -46,4 +59,51 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
 TEST(VocabularyInMemory, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary);
 }
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
+  const std::string filename = "VocabInMemoryWordWriterDestructorBehavior.tmp";
+  Vocab v;
+  {
+    auto writerPtr = v.makeDiskWriterPtr(filename);
+    auto& writer = *writerPtr;
+    writer("alpha", false);
+  }
+  v.open(filename);
+  { auto writerPtr = v.makeDiskWriterPtr(filename); };
+  {
+    VocabularyInMemory vocab;
+    {
+      auto wwPtr = vocab.makeDiskWriterPtr(filename);
+      auto& ww = *wwPtr;
+      ww("alpha", false);
+    }
+    vocab.open(filename);
+    EXPECT_EQ(vocab[0], "alpha");
+  }
+  ad_utility::deleteFile(filename);
+  {
+    VocabularyInMemory vocab;
+    auto wwPtr = vocab.makeDiskWriterPtr(filename);
+    auto& ww = *wwPtr;
+    ww("beta", false);
+    ww.finish();
+    ww.finish();
+    vocab.open(filename);
+    EXPECT_EQ(vocab[0], "beta");
+  }
+  ad_utility::deleteFile(filename);
+
+  // This class doesn't automatically call `finish` in the destructor, so the
+  // base class terminates in this case.
+  struct WordWriter : WordWriterBase {
+    WordWriter() = default;
+    uint64_t operator()(std::string_view, bool) override { return 0; }
+    void finishImpl() override {}
+  };
+
+  auto f = []() { WordWriter w{}; };
+  EXPECT_DEATH(f(), "");
+}
+
 }  // namespace

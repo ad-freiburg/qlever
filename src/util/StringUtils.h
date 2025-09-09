@@ -5,14 +5,13 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
+#include <string>
 #include <string_view>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
-
-using std::string;
-using std::string_view;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -20,29 +19,29 @@ namespace ad_utility {
 //! std::string. However, it is not required so far.
 
 //! Returns the longest prefix that the two arguments have in common
-string_view commonPrefix(string_view a, string_view b);
+std::string_view commonPrefix(std::string_view a, std::string_view b);
 
 //! Case transformations. Should be thread safe.
-string getLowercase(const string& orig);
+std::string getLowercase(const std::string& orig);
 
-string getUppercase(const string& orig);
+std::string getUppercase(const std::string& orig);
 
 // Check if the given string `language tag` is `BPC47` conform.
 // Use the ICU library (unicode/uloc.h) for this procedure.
-bool strIsLangTag(const string& strLangTag);
+bool strIsLangTag(const std::string& strLangTag);
 
 // Implements a case insensitive `language-range` to `language-tag`comparison.
-bool isLanguageMatch(string& languageTag, string& languageRange);
+bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-string utf8ToLower(std::string_view s);
+std::string utf8ToLower(std::string_view s);
 
 // Get the uppercase value. For details see `utf8ToLower` above
-string utf8ToUpper(std::string_view s);
+std::string utf8ToUpper(std::string_view s);
 
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
@@ -52,12 +51,12 @@ string utf8ToUpper(std::string_view s);
  * behavior is consistent with std::string::substr, but working on UTF-8
  * characters that might have multiple bytes.
  */
-string_view getUTF8Substring(const std::string_view str, size_t start,
-                             size_t size);
+std::string_view getUTF8Substring(const std::string_view str, size_t start,
+                                  size_t size);
 
 // Overload for the above function that creates the substring from the
 // `start`-th codepoint to the end of the string.
-string_view getUTF8Substring(const std::string_view str, size_t start);
+std::string_view getUTF8Substring(const std::string_view str, size_t start);
 
 /**
  * @brief get a prefix of a utf-8 string of a specified length
@@ -80,10 +79,10 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
 
 // Overload for the above function that creates the substring from the
 // `start`-th codepoint to the end of the string.
-string_view getUTF8Substring(const std::string_view str, size_t start);
+std::string_view getUTF8Substring(const std::string_view str, size_t start);
 
 //! Gets the last part of a string that is somehow split by the given separator.
-string getLastPartOfString(const string& text, const char separator);
+std::string getLastPartOfString(const std::string& text, const char separator);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -104,7 +103,7 @@ of the range elements.
 */
 CPP_template(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and
-        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
+        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
                                        std::string_view separator);
 
@@ -112,7 +111,7 @@ CPP_template(typename Range)(
 // a string.
 CPP_template(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
-        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
@@ -190,7 +189,7 @@ constexpr bool constantTimeEquals(std::string_view view1,
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and_def
-        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
+        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
                                        std::string_view separator) {
   auto begin = std::begin(r);
@@ -216,7 +215,7 @@ CPP_template_def(typename Range)(
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
@@ -225,23 +224,18 @@ CPP_template_def(typename Range)(
 
 // The implementation of `constexprStrCat` below.
 namespace detail::constexpr_str_cat_impl {
-// We currently have a fixed upper bound of 100 characters on the inputs.
-// This can be changed once it becomes a problem. It would also be possible
-// to have flexible upper bounds, but this would make the implementation much
-// more complicated.
-using ConstexprString = ad_utility::ConstexprSmallString<100>;
 
 // Concatenate the elements of `arr` into a single array with an additional
 // zero byte at the end. `sz` must be the sum of the sizes in `arr`, else the
 // behavior is undefined.
 template <size_t sz, size_t numStrings>
 constexpr std::array<char, sz + 1> catImpl(
-    const std::array<ConstexprString, numStrings>& arr) {
+    const std::array<const std::string_view*, numStrings>& arr) {
   std::array<char, sz + 1> buf{};
   auto it = buf.begin();
   for (const auto& str : arr) {
-    for (size_t i = 0; i < str.size(); ++i) {
-      *it = str[i];
+    for (size_t i = 0; i < str->size(); ++i) {
+      *it = (*str)[i];
       ++it;
     }
   }
@@ -251,18 +245,18 @@ constexpr std::array<char, sz + 1> catImpl(
 // additional zero byte at the end.
 // TODO<joka921>: C++17 doesn't support template values. This needs some
 // refactoring
-template <ConstexprString... strings>
+template <const std::string_view&... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
-  constexpr auto innerResult =
-      catImpl<sz>(std::array<ConstexprString, sizeof...(strings)>{strings...});
+  constexpr auto innerResult = catImpl<sz>(
+      std::array<const std::string_view*, sizeof...(strings)>{&strings...});
   return innerResult;
 }
 
 // A constexpr variable that stores the concatenation of the `strings`.
 // TODO<C++26> This can be a `static constexpr` variable inside the
 // `constexprStrCatBufferImpl()` function above.
-template <ConstexprString... strings>
+template <const std::string_view&... strings>
 constexpr inline auto constexprStrCatBufferVar =
     constexprStrCatBufferImpl<strings...>();
 }  // namespace detail::constexpr_str_cat_impl
@@ -271,7 +265,7 @@ constexpr inline auto constexprStrCatBufferVar =
 // evaluated at compile time. The buffer that backs the returned `string_view`
 // will be zero-terminated, so it is safe to pass pointers into the result
 // into legacy C-APIs.
-template <detail::constexpr_str_cat_impl::ConstexprString... strings>
+template <const std::string_view&... strings>
 constexpr std::string_view constexprStrCat() {
   const auto& b =
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;

@@ -1,11 +1,12 @@
 // Copyright 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Authors: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
 #define QLEVER_SRC_PARSER_SPATIALQUERY_H
 
-#include "parser/GraphPattern.h"
+#include "engine/SpatialJoin.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
@@ -26,7 +27,7 @@ struct SpatialQuery : MagicServiceQuery {
 
   // The spatial join task definition: maximum distance and number of results.
   // One of both - or both - must be provided.
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
 
   // Optional further argument: a variable to which the distance between spatial
@@ -46,6 +47,10 @@ struct SpatialQuery : MagicServiceQuery {
   // Optional further argument: the join algorithm. If it is not given, the
   // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;
+
+  // Optional join type for libspatialjoin. If it is not given, INTERSECT
+  // is used implicitly.
+  std::optional<SpatialJoinType> joinType_;
 
   // Helper: if the spatial query was constructed from a special triple
   // <nearest-neighbors:...> for backward compatibility, we need to bypass the

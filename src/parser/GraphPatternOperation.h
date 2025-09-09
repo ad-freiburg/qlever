@@ -2,15 +2,16 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 #define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
 #include <limits>
 #include <memory>
+#include <vector>
 
 #include "engine/PathSearch.h"
-#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
@@ -18,8 +19,8 @@
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
-#include "util/Algorithm.h"
+#include "rdfTypes/Variable.h"
+#include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
 // First some forward declarations.
@@ -61,6 +62,13 @@ struct Service {
   // The body of the SPARQL query for the remote endpoint.
   std::string graphPatternAsString_;
   // The existence of the `SILENT`-keyword.
+  bool silent_;
+};
+
+/// An internal pattern used in the `LOAD` update operation.
+struct Load {
+ public:
+  TripleComponent::Iri iri_;
   bool silent_;
 };
 
@@ -170,10 +178,16 @@ struct Bind {
   Variable _target;  // the variable to which the expression will be bound
 
   // Return all the variables that are used in the BIND expression (the target
-  // variable as well as all variables from the expression).
-  cppcoro::generator<const Variable> containedVariables() const;
+  // variable as well as all variables from the expression). The lifetime of the
+  // resulting `view` is bound to the lifetime of this `Bind` instance.
+  auto containedVariables() const {
+    auto result = _expression.containedVariables();
+    result.push_back(&_target);
+    return ad_utility::OwningView{std::move(result)} |
+           ql::views::transform(ad_utility::dereference);
+  }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
@@ -181,7 +195,7 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe>;
+                 Minus, GroupGraphPattern, Describe, Load>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

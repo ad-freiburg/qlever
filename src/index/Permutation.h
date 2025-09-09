@@ -11,6 +11,7 @@
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
+#include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -24,10 +25,10 @@ class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
-// avoid code duplication. The first template parameter is a search functor for
-// STXXL.
+// avoid code duplication.
 class Permutation {
  public:
+  using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
@@ -46,6 +47,7 @@ class Permutation {
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -53,7 +55,7 @@ class Permutation {
 
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
-  static std::array<size_t, 3> toKeyOrder(Enum permutation);
+  static KeyOrder toKeyOrder(Enum permutation);
 
   explicit Permutation(Enum permutation, Allocator allocator);
 
@@ -66,13 +68,12 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(const ScanSpecification& scanSpec,
+  IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {},
-               std::optional<std::vector<CompressedBlockMetadata>> blocks =
-                   std::nullopt) const;
+               const LimitOffsetClause& limitOffset = {}) const;
+
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
@@ -93,53 +94,60 @@ class Permutation {
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
   // - The result is returned as a lazy generator of blocks.
-  // - The block metadata must be given manually. It can be obtained via the
-  // `getMetadataAndBlocks` function below
+  // - The join-specific prefiltered block metadata must be given manually. It
+  //   can be obtained via the `getMetadataAndBlocks` function below
   //   and then be prefiltered. The blocks must be given in ascending order
   //   and must only contain blocks that contain the given `col0Id` (combined
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
+  // - In all other cases, the block metadata (optionally generally prefiltered
+  //   via `PrefilterExpression`) is already contained as `BlockMetadataRanges`
+  //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
+  //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
+  //   join-specific prefiltered block metadata.
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
-      const ScanSpecification& scanSpec,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
+
+  // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
+  // with relevant `BlockMetadataRanges`.
+  ScanSpecAndBlocks getScanSpecAndBlocks(
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(
       Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
-  // along with the metadata for all the blocks that are relevant for this scan.
-  // If there are no matching blocks (meaning that the scan result will be
-  // empty) return `nullopt`.
+  // along with the metadata for all the blocks that are relevant for this
+  // scan. If there are no matching blocks (meaning that the scan result will
+  // be empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      const ScanSpecification& scanSpec,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Get the exact size of the result of a scan, taking into account the
-  // given located triples. This requires an exact location of the delta triples
-  // within the respective blocks.
+  // given located triples. This requires an exact location of the delta
+  // triples within the respective blocks.
   size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
   // each delta triple know to which block it belongs.
   std::pair<size_t, size_t> getSizeEstimateForScan(
-      const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // _______________________________________________________
-  void setKbName(const string& name) { meta_.setName(name); }
+  void setKbName(const std::string& name) { meta_.setName(name); }
 
   // _______________________________________________________
   const std::string& getKbName() const { return meta_.getName(); }
@@ -151,7 +159,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const array<size_t, 3>& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; };
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -169,8 +177,7 @@ class Permutation {
 
   // From the given snapshot, get the augmented block metadata for this
   // permutation.
-  const std::vector<CompressedBlockMetadata>&
-  getAugmentedMetadataForPermutation(
+  BlockMetadataRanges getAugmentedMetadataForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
@@ -184,12 +191,12 @@ class Permutation {
   std::string fileSuffix_;
   // The order of the three components (S=0, P=1, O=2) in this permutation,
   // e.g., `{1, 0, 2}` for `PSO`.
-  array<size_t, 3> keyOrder_;
+  KeyOrder keyOrder_;
   // The metadata for this permutation.
   MetaData meta_;
 
-  // This member is `optional` because we initialize it in a deferred way in the
-  // `loadFromDisk` method.
+  // This member is `optional` because we initialize it in a deferred way in
+  // the `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
 

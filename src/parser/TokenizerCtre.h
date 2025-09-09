@@ -155,6 +155,8 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
    */
   explicit TokenizerCtre(std::string_view data) : _data(data) {}
 
+  static constexpr bool UseRelaxedParsing = true;
+
   /// iterator to the next character that we have not yet consumed
   [[nodiscard]] auto begin() const { return _data.begin(); }
 

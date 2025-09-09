@@ -1,10 +1,14 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "backports/keywords.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/jthread.h"
@@ -20,6 +24,9 @@ using ::testing::HasSubstr;
 using namespace std::chrono_literals;
 
 ad_utility::source_location location = ad_utility::source_location::current();
+const int expectedLocationLine = __LINE__ - 1;
+const auto expectedLocation =
+    absl::StrCat("CancellationHandleTest.cpp:", expectedLocationLine);
 
 template <typename CancellationHandle>
 struct CancellationHandleFixture : public ::testing::Test {
@@ -305,7 +312,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
   EXPECT_THAT(
       std::move(testStream).str(),
-      AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
+      AllOf(HasSubstr(expectedLocation),
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
             // Check for small miss window
@@ -335,8 +342,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              HasSubstr("CancellationHandleTest.cpp:22"));
+  EXPECT_THAT(std::move(testStream).str(), HasSubstr(expectedLocation));
 
   testStream.str("");
 
@@ -345,8 +351,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:22")));
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr(expectedLocation)));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
@@ -355,8 +360,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.pleaseWatchDog(WAITING_FOR_CHECK, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:22")));
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr(expectedLocation)));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
@@ -366,8 +370,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
-                    HasSubstr(printSomething())));
+              AllOf(HasSubstr(expectedLocation), HasSubstr(printSomething())));
 
   testStream.str("");
 
@@ -375,9 +378,9 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, printSomething);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
-                        HasSubstr(printSomething()))));
+  EXPECT_THAT(
+      std::move(testStream).str(),
+      Not(AllOf(HasSubstr(expectedLocation), HasSubstr(printSomething()))));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
@@ -386,9 +389,9 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.pleaseWatchDog(WAITING_FOR_CHECK, location, printSomething);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
-                        HasSubstr(printSomething()))));
+  EXPECT_THAT(
+      std::move(testStream).str(),
+      Not(AllOf(HasSubstr(expectedLocation), HasSubstr(printSomething()))));
 }
 
 // _____________________________________________________________________________
@@ -424,8 +427,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   handle.isCancelled(location);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              HasSubstr("CancellationHandleTest.cpp:22"));
+  EXPECT_THAT(std::move(testStream).str(), HasSubstr(expectedLocation));
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   testStream.str("");
@@ -433,8 +435,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   handle.isCancelled(location);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:22")));
+  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr(expectedLocation)));
 }
 
 // _____________________________________________________________________________
@@ -464,8 +465,9 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
-consteval bool isMemberFunction([[maybe_unused]] auto funcPtr) {
-  return std::is_member_function_pointer_v<decltype(funcPtr)>;
+template <typename T>
+QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
+  return std::is_member_function_pointer_v<T>;
 }
 
 // Make sure member functions still exist when no watch dog functionality

@@ -1,6 +1,8 @@
 //  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/charconv.h>
@@ -135,7 +137,8 @@ inline const auto castStringToDateTimeValueId = [](OptStringOrDate input) {
 
   using DYD = DateYearOrDuration;
   std::optional<DYD> optValueId = std::visit(
-      [&]<typename T>(const T& value) {
+      [&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
         if constexpr (ad_utility::isSimilar<T, DYD>) {
           return ToJustXsdDate ? DYD::convertToXsdDate(value)
                                : DYD::convertToXsdDatetime(value);

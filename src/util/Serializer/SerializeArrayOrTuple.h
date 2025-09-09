@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 //                 Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
@@ -8,6 +10,7 @@
 #include <array>
 #include <tuple>
 
+#include "backports/keywords.h"
 #include "util/ConstexprUtils.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -24,11 +27,18 @@ CPP_template(typename T, typename U)(
 // A helper function to figure out whether all types contained in a tuple are
 // trivially seraizliable.
 namespace detail {
+struct IsTriviallySerializable {
+  bool& result;
+  template <typename U>
+  constexpr void operator()() const {
+    result = result && TriviallySerializable<U>;
+  };
+};
+
 template <typename T>
-consteval bool tupleTriviallySerializableImpl() {
+QL_CONSTEVAL bool tupleTriviallySerializableImpl() {
   bool result = true;
-  ad_utility::forEachTypeInTemplateType<T>(
-      [&result]<typename U>() { result = result && TriviallySerializable<U>; });
+  ad_utility::forEachTypeInTemplateType<T>(IsTriviallySerializable{result});
   return result;
 }
 template <typename T>
@@ -50,9 +60,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       return;
     }
   }
-  ad_utility::ConstexprForLoop(
+  ad_utility::ConstexprForLoopVi(
       std::make_index_sequence<std::tuple_size_v<Arr>>(),
-      [&serializer, &arg]<size_t I> { serializer | std::get<I>(arg); });
+      [&serializer, &arg](auto i) { serializer | std::get<i>(arg); });
 }
 }  // namespace ad_utility::serialization
 

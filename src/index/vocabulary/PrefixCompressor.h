@@ -69,7 +69,7 @@ class PrefixCompressor {
     if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
       return prefixToCode_[idx] + compressedWord.substr(1);
     } else {
-      return string(compressedWord.substr(1));
+      return std::string(compressedWord.substr(1));
     }
   }
 

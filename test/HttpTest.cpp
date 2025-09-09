@@ -23,7 +23,7 @@ using ::testing::HasSubstr;
 namespace {
 
 /// Join all of the bytes into a big string.
-std::string toString(cppcoro::generator<std::span<std::byte>> generator) {
+std::string toString(cppcoro::generator<ql::span<std::byte>> generator) {
   std::string result;
   for (std::byte byte : generator | ql::ranges::views::join) {
     result.push_back(static_cast<char>(byte));
@@ -311,7 +311,8 @@ TEST(HttpServer, RequestBodySizeLimit) {
 
   httpServer.runInOwnThread();
 
-  auto ResponseMetadata = [](const status status, string_view content_type) {
+  auto ResponseMetadata = [](const status status,
+                             std::string_view content_type) {
     return AllOf(
         AD_FIELD(HttpOrHttpsResponse, status_, testing::Eq(status)),
         AD_FIELD(HttpOrHttpsResponse, contentType_, testing::Eq(content_type)));

@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <limits>
 #include <string>
@@ -90,7 +92,8 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 
 // Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
 // `VectorWithMemoryLimit` of any of those types.
-auto liftToValueId = []<typename T>(const T& t) {
+auto liftToValueId = [](const auto& t) {
+  using T = std::decay_t<decltype(t)>;
   if constexpr (SingleExpressionResult<T>) {
     if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
       return t.clone();
@@ -349,6 +352,29 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   testUndefHelper(doubleVec.clone(), stringVec.clone());
 }
 
+namespace {
+template <typename T, typename U>
+struct ExpressionEvaluator {
+  T& leftValue;
+  U& rightValue;
+  sparqlExpression::EvaluationContext* context;
+
+  template <auto comp>
+  auto operator()() const {
+    auto expression =
+        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
+    auto resultAsVariant = expression.evaluate(context);
+    auto expressionInverted =
+        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
+    auto resultAsVariantInverted = expressionInverted.evaluate(context);
+    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
+    auto& resultInverted =
+        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
+    return std::pair{std::move(result), std::move(resultInverted)};
+  }
+};
+}  // namespace
+
 // At least one of `leftValue`, `rightValue` must be a vector, the other one may
 // be a constant or also a vector. The vectors must have 9 elements each. When
 // comparing the `leftValue` and `rightValue` elementwise, the following has to
@@ -366,18 +392,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
   context->_beginIndex = 0;
   context->_endIndex = 9;
 
-  auto m = [&]<auto comp>() {
-    auto expression =
-        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(context);
-    auto expressionInverted =
-        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted = expressionInverted.evaluate(context);
-    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-    auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
-    return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
@@ -443,8 +458,9 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 // converted to a ValueID before the call. `rightValue` "" both values ""
 // Requires that both `leftValue` and `rightValue` are either numeric constants
 // or numeric vectors, and that at least one of them is a vector.
+template <typename T1, typename T2>
 void testLessThanGreaterThanEqualMultipleValues(
-    auto leftValue, auto rightValue,
+    T1 leftValue, T2 rightValue,
     source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
@@ -486,18 +502,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   context._beginIndex = 0;
   context._endIndex = 5;
 
-  auto m = [&]<auto comp>() {
-    auto expression =
-        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(&context);
-    auto expressionInverted =
-        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted = expressionInverted.evaluate(&context);
-    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-    auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
-    return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, &context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
@@ -634,8 +639,9 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // is actually supported.
 }
 
-void testInExpressionVector(auto leftValue, auto rightValue, auto& ctx,
-                            const auto& expected) {
+template <typename T1, typename T2, typename Ctx, typename E>
+void testInExpressionVector(T1 leftValue, T2 rightValue, Ctx& ctx,
+                            const E& expected) {
   auto expression =
       makeInExpression(liftToValueId(leftValue), liftToValueId(rightValue));
   auto check = [&]() {
@@ -659,8 +665,8 @@ void testInExpressionVector(auto leftValue, auto rightValue, auto& ctx,
 // Assert that the expression `leftValue Comparator rightValue`, when evaluated
 // on the `TestContext` (see above), yields the `expected` result.
 
-template <Comparison Comp>
-void testWithExplicitIdResult(auto leftValue, auto rightValue,
+template <Comparison Comp, typename T1, typename T2>
+void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
                               std::vector<Id> expected,
                               source_location l = source_location::current()) {
   static TestContext ctx;
@@ -676,8 +682,8 @@ void testWithExplicitIdResult(auto leftValue, auto rightValue,
   }
 }
 
-template <Comparison Comp>
-void testWithExplicitResult(auto leftValue, auto rightValue,
+template <Comparison Comp, typename T1, typename T2>
+void testWithExplicitResult(T1 leftValue, T2 rightValue,
                             std::vector<bool> expectedAsBool,
                             source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -780,9 +786,9 @@ TEST(RelationalExpression, VariableAndVariable) {
 // yields the `expected` result. The type of `expected`, `SetOfIntervals`
 // indicates that the expression was evaluated using binary search on the sorted
 // table.
-template <Comparison Comp>
+template <Comparison Comp, typename T>
 void testSortedVariableAndConstant(
-    Variable leftValue, auto rightValue, ad_utility::SetOfIntervals expected,
+    Variable leftValue, T rightValue, ad_utility::SetOfIntervals expected,
     source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
@@ -898,7 +904,7 @@ TEST(RelationalExpression, InExpressionFilterEstimates) {
 
 namespace {
 template <typename T>
-constexpr std::type_identity<T> TI{};
+constexpr ql::type_identity<T> TI{};
 }
 TEST(RelationalExpression, FilterEstimates) {
   auto makeInt = [](int i) {
@@ -912,9 +918,11 @@ TEST(RelationalExpression, FilterEstimates) {
   };
   // Implementation for testing the size estimates of different relational
   // expressions.
-  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
-                                  ad_utility::source_location l =
-                                      source_location::current()) {
+  auto testImpl = [&](auto ti, size_t expectedSize,
+                      ad_utility::source_location l =
+                          source_location::current()) {
+    using T = typename decltype(ti)::type;
+
     auto tr = generateLocationTrace(l);
 
     auto first = makeVar("?x");
@@ -932,7 +940,7 @@ TEST(RelationalExpression, FilterEstimates) {
     EXPECT_EQ(x.sizeEstimate, expectedSize);
   };
 
-  using std::type_identity;
+  using ql::type_identity;
   // Less is estimated to leave 1/50 of the initial 200'000 values.
   testImpl(TI<LessThanExpression>, 4000);
   // Equal is estimated to leave 1/1000 of the initial 200'000 values.

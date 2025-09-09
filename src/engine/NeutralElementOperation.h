@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 #define QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 
-#include <engine/Operation.h>
+#include "engine/Operation.h"
 
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
 /// variables (which means it has 0 columns).
@@ -18,12 +18,12 @@ class NeutralElementOperation : public Operation {
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] string getCacheKeyImpl() const override {
+  [[nodiscard]] std::string getCacheKeyImpl() const override {
     return "Neutral Element";
   };
 
  public:
-  [[nodiscard]] string getDescriptor() const override {
+  [[nodiscard]] std::string getDescriptor() const override {
     return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
@@ -41,7 +41,7 @@ class NeutralElementOperation : public Operation {
   }
 
  protected:
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
     return {};
   };
 

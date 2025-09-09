@@ -1,5 +1,5 @@
 
-// Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
+// Generated from SparqlAutomatic.g4 by ANTLR 4.13.2
 
 #ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICPARSER_H
 #define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICPARSER_H
@@ -188,163 +188,162 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   enum {
-    RuleQueryOrUpdate = 0,
-    RuleQuery = 1,
-    RulePrologue = 2,
-    RuleBaseDecl = 3,
-    RulePrefixDecl = 4,
-    RuleSelectQuery = 5,
-    RuleSubSelect = 6,
-    RuleSelectClause = 7,
-    RuleVarOrAlias = 8,
-    RuleAlias = 9,
-    RuleAliasWithoutBrackets = 10,
-    RuleConstructQuery = 11,
-    RuleDescribeQuery = 12,
-    RuleAskQuery = 13,
-    RuleDatasetClause = 14,
-    RuleDefaultGraphClause = 15,
-    RuleNamedGraphClause = 16,
-    RuleSourceSelector = 17,
-    RuleWhereClause = 18,
-    RuleSolutionModifier = 19,
-    RuleGroupClause = 20,
-    RuleGroupCondition = 21,
-    RuleHavingClause = 22,
-    RuleHavingCondition = 23,
-    RuleOrderClause = 24,
-    RuleOrderCondition = 25,
-    RuleLimitOffsetClauses = 26,
-    RuleLimitClause = 27,
-    RuleOffsetClause = 28,
-    RuleTextLimitClause = 29,
-    RuleValuesClause = 30,
-    RuleUpdate = 31,
-    RuleUpdate1 = 32,
-    RuleLoad = 33,
-    RuleClear = 34,
-    RuleDrop = 35,
-    RuleCreate = 36,
-    RuleAdd = 37,
-    RuleMove = 38,
-    RuleCopy = 39,
-    RuleInsertData = 40,
-    RuleDeleteData = 41,
-    RuleDeleteWhere = 42,
-    RuleModify = 43,
-    RuleDeleteClause = 44,
-    RuleInsertClause = 45,
-    RuleUsingClause = 46,
-    RuleGraphOrDefault = 47,
-    RuleGraphRef = 48,
-    RuleGraphRefAll = 49,
-    RuleQuadPattern = 50,
-    RuleQuadData = 51,
-    RuleQuads = 52,
-    RuleQuadsNotTriples = 53,
-    RuleTriplesTemplate = 54,
-    RuleGroupGraphPattern = 55,
-    RuleGroupGraphPatternSub = 56,
-    RuleGraphPatternNotTriplesAndMaybeTriples = 57,
-    RuleTriplesBlock = 58,
-    RuleGraphPatternNotTriples = 59,
-    RuleOptionalGraphPattern = 60,
-    RuleGraphGraphPattern = 61,
-    RuleServiceGraphPattern = 62,
-    RuleBind = 63,
-    RuleInlineData = 64,
-    RuleDataBlock = 65,
-    RuleInlineDataOneVar = 66,
-    RuleInlineDataFull = 67,
-    RuleDataBlockSingle = 68,
-    RuleDataBlockValue = 69,
-    RuleMinusGraphPattern = 70,
-    RuleGroupOrUnionGraphPattern = 71,
-    RuleFilterR = 72,
-    RuleConstraint = 73,
-    RuleFunctionCall = 74,
-    RuleArgList = 75,
-    RuleExpressionList = 76,
-    RuleConstructTemplate = 77,
-    RuleConstructTriples = 78,
-    RuleTriplesSameSubject = 79,
-    RulePropertyList = 80,
-    RulePropertyListNotEmpty = 81,
-    RuleVerb = 82,
-    RuleObjectList = 83,
-    RuleObjectR = 84,
-    RuleTriplesSameSubjectPath = 85,
-    RulePropertyListPath = 86,
-    RulePropertyListPathNotEmpty = 87,
-    RuleVerbPath = 88,
-    RuleVerbSimple = 89,
-    RuleTupleWithoutPath = 90,
-    RuleTupleWithPath = 91,
-    RuleVerbPathOrSimple = 92,
-    RuleObjectListPath = 93,
-    RuleObjectPath = 94,
-    RulePath = 95,
-    RulePathAlternative = 96,
-    RulePathSequence = 97,
-    RulePathElt = 98,
-    RulePathEltOrInverse = 99,
-    RulePathMod = 100,
-    RulePathPrimary = 101,
-    RulePathNegatedPropertySet = 102,
-    RulePathOneInPropertySet = 103,
-    RuleInteger = 104,
-    RuleTriplesNode = 105,
-    RuleBlankNodePropertyList = 106,
-    RuleTriplesNodePath = 107,
-    RuleBlankNodePropertyListPath = 108,
-    RuleCollection = 109,
-    RuleCollectionPath = 110,
-    RuleGraphNode = 111,
-    RuleGraphNodePath = 112,
-    RuleVarOrTerm = 113,
-    RuleVarOrIri = 114,
-    RuleVar = 115,
-    RuleGraphTerm = 116,
-    RuleExpression = 117,
-    RuleConditionalOrExpression = 118,
-    RuleConditionalAndExpression = 119,
-    RuleValueLogical = 120,
-    RuleRelationalExpression = 121,
-    RuleNumericExpression = 122,
-    RuleAdditiveExpression = 123,
-    RuleMultiplicativeExpressionWithSign = 124,
-    RulePlusSubexpression = 125,
-    RuleMinusSubexpression = 126,
-    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 127,
-    RuleMultiplicativeExpression = 128,
-    RuleMultiplyOrDivideExpression = 129,
-    RuleMultiplyExpression = 130,
-    RuleDivideExpression = 131,
-    RuleUnaryExpression = 132,
-    RulePrimaryExpression = 133,
-    RuleBrackettedExpression = 134,
-    RuleBuiltInCall = 135,
-    RuleRegexExpression = 136,
-    RuleLangExpression = 137,
-    RuleSubstringExpression = 138,
-    RuleStrReplaceExpression = 139,
-    RuleExistsFunc = 140,
-    RuleNotExistsFunc = 141,
-    RuleAggregate = 142,
-    RuleIriOrFunction = 143,
-    RuleRdfLiteral = 144,
-    RuleNumericLiteral = 145,
-    RuleNumericLiteralUnsigned = 146,
-    RuleNumericLiteralPositive = 147,
-    RuleNumericLiteralNegative = 148,
-    RuleBooleanLiteral = 149,
-    RuleString = 150,
-    RuleIri = 151,
-    RulePrefixedName = 152,
-    RuleBlankNode = 153,
-    RuleIriref = 154,
-    RulePnameLn = 155,
-    RulePnameNs = 156
+    RuleQuery = 0,
+    RulePrologue = 1,
+    RuleBaseDecl = 2,
+    RulePrefixDecl = 3,
+    RuleSelectQuery = 4,
+    RuleSubSelect = 5,
+    RuleSelectClause = 6,
+    RuleVarOrAlias = 7,
+    RuleAlias = 8,
+    RuleAliasWithoutBrackets = 9,
+    RuleConstructQuery = 10,
+    RuleDescribeQuery = 11,
+    RuleAskQuery = 12,
+    RuleDatasetClause = 13,
+    RuleDefaultGraphClause = 14,
+    RuleNamedGraphClause = 15,
+    RuleSourceSelector = 16,
+    RuleWhereClause = 17,
+    RuleSolutionModifier = 18,
+    RuleGroupClause = 19,
+    RuleGroupCondition = 20,
+    RuleHavingClause = 21,
+    RuleHavingCondition = 22,
+    RuleOrderClause = 23,
+    RuleOrderCondition = 24,
+    RuleLimitOffsetClauses = 25,
+    RuleLimitClause = 26,
+    RuleOffsetClause = 27,
+    RuleTextLimitClause = 28,
+    RuleValuesClause = 29,
+    RuleUpdate = 30,
+    RuleUpdate1 = 31,
+    RuleLoad = 32,
+    RuleClear = 33,
+    RuleDrop = 34,
+    RuleCreate = 35,
+    RuleAdd = 36,
+    RuleMove = 37,
+    RuleCopy = 38,
+    RuleInsertData = 39,
+    RuleDeleteData = 40,
+    RuleDeleteWhere = 41,
+    RuleModify = 42,
+    RuleDeleteClause = 43,
+    RuleInsertClause = 44,
+    RuleUsingClause = 45,
+    RuleGraphOrDefault = 46,
+    RuleGraphRef = 47,
+    RuleGraphRefAll = 48,
+    RuleQuadPattern = 49,
+    RuleQuadData = 50,
+    RuleQuads = 51,
+    RuleQuadsNotTriples = 52,
+    RuleTriplesTemplate = 53,
+    RuleGroupGraphPattern = 54,
+    RuleGroupGraphPatternSub = 55,
+    RuleGraphPatternNotTriplesAndMaybeTriples = 56,
+    RuleTriplesBlock = 57,
+    RuleGraphPatternNotTriples = 58,
+    RuleOptionalGraphPattern = 59,
+    RuleGraphGraphPattern = 60,
+    RuleServiceGraphPattern = 61,
+    RuleBind = 62,
+    RuleInlineData = 63,
+    RuleDataBlock = 64,
+    RuleInlineDataOneVar = 65,
+    RuleInlineDataFull = 66,
+    RuleDataBlockSingle = 67,
+    RuleDataBlockValue = 68,
+    RuleMinusGraphPattern = 69,
+    RuleGroupOrUnionGraphPattern = 70,
+    RuleFilterR = 71,
+    RuleConstraint = 72,
+    RuleFunctionCall = 73,
+    RuleArgList = 74,
+    RuleExpressionList = 75,
+    RuleConstructTemplate = 76,
+    RuleConstructTriples = 77,
+    RuleTriplesSameSubject = 78,
+    RulePropertyList = 79,
+    RulePropertyListNotEmpty = 80,
+    RuleVerb = 81,
+    RuleObjectList = 82,
+    RuleObjectR = 83,
+    RuleTriplesSameSubjectPath = 84,
+    RulePropertyListPath = 85,
+    RulePropertyListPathNotEmpty = 86,
+    RuleVerbPath = 87,
+    RuleVerbSimple = 88,
+    RuleTupleWithoutPath = 89,
+    RuleTupleWithPath = 90,
+    RuleVerbPathOrSimple = 91,
+    RuleObjectListPath = 92,
+    RuleObjectPath = 93,
+    RulePath = 94,
+    RulePathAlternative = 95,
+    RulePathSequence = 96,
+    RulePathElt = 97,
+    RulePathEltOrInverse = 98,
+    RulePathMod = 99,
+    RulePathPrimary = 100,
+    RulePathNegatedPropertySet = 101,
+    RulePathOneInPropertySet = 102,
+    RuleInteger = 103,
+    RuleTriplesNode = 104,
+    RuleBlankNodePropertyList = 105,
+    RuleTriplesNodePath = 106,
+    RuleBlankNodePropertyListPath = 107,
+    RuleCollection = 108,
+    RuleCollectionPath = 109,
+    RuleGraphNode = 110,
+    RuleGraphNodePath = 111,
+    RuleVarOrTerm = 112,
+    RuleVarOrIri = 113,
+    RuleVar = 114,
+    RuleGraphTerm = 115,
+    RuleExpression = 116,
+    RuleConditionalOrExpression = 117,
+    RuleConditionalAndExpression = 118,
+    RuleValueLogical = 119,
+    RuleRelationalExpression = 120,
+    RuleNumericExpression = 121,
+    RuleAdditiveExpression = 122,
+    RuleMultiplicativeExpressionWithSign = 123,
+    RulePlusSubexpression = 124,
+    RuleMinusSubexpression = 125,
+    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 126,
+    RuleMultiplicativeExpression = 127,
+    RuleMultiplyOrDivideExpression = 128,
+    RuleMultiplyExpression = 129,
+    RuleDivideExpression = 130,
+    RuleUnaryExpression = 131,
+    RulePrimaryExpression = 132,
+    RuleBrackettedExpression = 133,
+    RuleBuiltInCall = 134,
+    RuleRegexExpression = 135,
+    RuleLangExpression = 136,
+    RuleSubstringExpression = 137,
+    RuleStrReplaceExpression = 138,
+    RuleExistsFunc = 139,
+    RuleNotExistsFunc = 140,
+    RuleAggregate = 141,
+    RuleIriOrFunction = 142,
+    RuleRdfLiteral = 143,
+    RuleNumericLiteral = 144,
+    RuleNumericLiteralUnsigned = 145,
+    RuleNumericLiteralPositive = 146,
+    RuleNumericLiteralNegative = 147,
+    RuleBooleanLiteral = 148,
+    RuleString = 149,
+    RuleIri = 150,
+    RulePrefixedName = 151,
+    RuleBlankNode = 152,
+    RuleIriref = 153,
+    RulePnameLn = 154,
+    RulePnameNs = 155
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -364,7 +363,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
-  class QueryOrUpdateContext;
   class QueryContext;
   class PrologueContext;
   class BaseDeclContext;
@@ -522,29 +520,13 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class PnameLnContext;
   class PnameNsContext;
 
-  class QueryOrUpdateContext : public antlr4::ParserRuleContext {
-   public:
-    QueryOrUpdateContext(antlr4::ParserRuleContext* parent,
-                         size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode* EOF();
-    QueryContext* query();
-    UpdateContext* update();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
-  };
-
-  QueryOrUpdateContext* queryOrUpdate();
-
   class QueryContext : public antlr4::ParserRuleContext {
    public:
     QueryContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrologueContext* prologue();
     ValuesClauseContext* valuesClause();
+    antlr4::tree::TerminalNode* EOF();
     SelectQueryContext* selectQuery();
     ConstructQueryContext* constructQuery();
     DescribeQueryContext* describeQuery();
@@ -552,8 +534,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QueryContext* query();
@@ -569,8 +549,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PrologueContext* prologue();
@@ -584,8 +562,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BaseDeclContext* baseDecl();
@@ -600,8 +576,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PrefixDeclContext* prefixDecl();
@@ -618,8 +592,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SelectQueryContext* selectQuery();
@@ -635,8 +607,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SubSelectContext* subSelect();
@@ -655,8 +625,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SelectClauseContext* selectClause();
@@ -670,8 +638,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VarOrAliasContext* varOrAlias();
@@ -684,8 +650,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AliasContext* alias();
@@ -701,8 +665,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AliasWithoutBracketsContext* aliasWithoutBrackets();
@@ -723,8 +685,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConstructQueryContext* constructQuery();
@@ -744,8 +704,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DescribeQueryContext* describeQuery();
@@ -762,8 +720,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AskQueryContext* askQuery();
@@ -779,8 +735,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DatasetClauseContext* datasetClause();
@@ -794,8 +748,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DefaultGraphClauseContext* defaultGraphClause();
@@ -810,8 +762,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NamedGraphClauseContext* namedGraphClause();
@@ -825,8 +775,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SourceSelectorContext* sourceSelector();
@@ -840,8 +788,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   WhereClauseContext* whereClause();
@@ -858,8 +804,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SolutionModifierContext* solutionModifier();
@@ -874,8 +818,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GroupClauseContext* groupClause();
@@ -893,8 +835,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GroupConditionContext* groupCondition();
@@ -910,8 +850,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   HavingClauseContext* havingClause();
@@ -925,8 +863,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   HavingConditionContext* havingCondition();
@@ -944,8 +880,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   OrderClauseContext* orderClause();
@@ -963,8 +897,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   OrderConditionContext* orderCondition();
@@ -980,8 +912,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   LimitOffsetClausesContext* limitOffsetClauses();
@@ -995,8 +925,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   LimitClauseContext* limitClause();
@@ -1011,8 +939,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   OffsetClauseContext* offsetClause();
@@ -1027,8 +953,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TextLimitClauseContext* textLimitClause();
@@ -1043,8 +967,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ValuesClauseContext* valuesClause();
@@ -1055,13 +977,12 @@ class SparqlAutomaticParser : public antlr4::Parser {
     virtual size_t getRuleIndex() const override;
     std::vector<PrologueContext*> prologue();
     PrologueContext* prologue(size_t i);
+    antlr4::tree::TerminalNode* EOF();
     std::vector<Update1Context*> update1();
     Update1Context* update1(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   UpdateContext* update();
@@ -1084,8 +1005,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   Update1Context* update1();
@@ -1102,8 +1021,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   LoadContext* load();
@@ -1118,8 +1035,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ClearContext* clear();
@@ -1134,8 +1049,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DropContext* drop();
@@ -1150,8 +1063,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   CreateContext* create();
@@ -1168,8 +1079,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AddContext* add();
@@ -1186,8 +1095,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MoveContext* move();
@@ -1204,8 +1111,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   CopyContext* copy();
@@ -1220,8 +1125,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   InsertDataContext* insertData();
@@ -1236,8 +1139,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DeleteDataContext* deleteData();
@@ -1252,8 +1153,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DeleteWhereContext* deleteWhere();
@@ -1273,8 +1172,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ModifyContext* modify();
@@ -1289,8 +1186,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DeleteClauseContext* deleteClause();
@@ -1305,8 +1200,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   InsertClauseContext* insertClause();
@@ -1321,8 +1214,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   UsingClauseContext* usingClause();
@@ -1338,8 +1229,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphOrDefaultContext* graphOrDefault();
@@ -1353,8 +1242,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphRefContext* graphRef();
@@ -1370,8 +1257,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphRefAllContext* graphRefAll();
@@ -1384,8 +1269,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QuadPatternContext* quadPattern();
@@ -1398,8 +1281,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QuadDataContext* quadData();
@@ -1415,8 +1296,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QuadsContext* quads();
@@ -1432,8 +1311,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QuadsNotTriplesContext* quadsNotTriples();
@@ -1448,8 +1325,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesTemplateContext* triplesTemplate();
@@ -1464,8 +1339,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GroupGraphPatternContext* groupGraphPattern();
@@ -1483,8 +1356,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GroupGraphPatternSubContext* groupGraphPatternSub();
@@ -1500,8 +1371,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphPatternNotTriplesAndMaybeTriplesContext*
@@ -1517,8 +1386,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesBlockContext* triplesBlock();
@@ -1539,8 +1406,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphPatternNotTriplesContext* graphPatternNotTriples();
@@ -1555,8 +1420,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   OptionalGraphPatternContext* optionalGraphPattern();
@@ -1572,8 +1435,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphGraphPatternContext* graphGraphPattern();
@@ -1590,8 +1451,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ServiceGraphPatternContext* serviceGraphPattern();
@@ -1607,8 +1466,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BindContext* bind();
@@ -1622,8 +1479,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   InlineDataContext* inlineData();
@@ -1637,8 +1492,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DataBlockContext* dataBlock();
@@ -1654,8 +1507,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   InlineDataOneVarContext* inlineDataOneVar();
@@ -1673,8 +1524,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   InlineDataFullContext* inlineDataFull();
@@ -1690,8 +1539,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DataBlockSingleContext* dataBlockSingle();
@@ -1709,8 +1556,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DataBlockValueContext* dataBlockValue();
@@ -1725,8 +1570,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MinusGraphPatternContext* minusGraphPattern();
@@ -1743,8 +1586,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GroupOrUnionGraphPatternContext* groupOrUnionGraphPattern();
@@ -1758,8 +1599,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   FilterRContext* filterR();
@@ -1774,8 +1613,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConstraintContext* constraint();
@@ -1790,8 +1627,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   FunctionCallContext* functionCall();
@@ -1807,8 +1642,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ArgListContext* argList();
@@ -1824,8 +1657,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ExpressionListContext* expressionList();
@@ -1839,8 +1670,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConstructTemplateContext* constructTemplate();
@@ -1855,8 +1684,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConstructTriplesContext* constructTriples();
@@ -1873,8 +1700,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesSameSubjectContext* triplesSameSubject();
@@ -1888,8 +1713,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PropertyListContext* propertyList();
@@ -1906,8 +1729,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PropertyListNotEmptyContext* propertyListNotEmpty();
@@ -1920,8 +1741,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VerbContext* verb();
@@ -1935,8 +1754,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ObjectListContext* objectList();
@@ -1949,8 +1766,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ObjectRContext* objectR();
@@ -1967,8 +1782,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesSameSubjectPathContext* triplesSameSubjectPath();
@@ -1982,8 +1795,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PropertyListPathContext* propertyListPath();
@@ -1999,8 +1810,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PropertyListPathNotEmptyContext* propertyListPathNotEmpty();
@@ -2013,8 +1822,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VerbPathContext* verbPath();
@@ -2027,8 +1834,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VerbSimpleContext* verbSimple();
@@ -2043,8 +1848,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TupleWithoutPathContext* tupleWithoutPath();
@@ -2059,8 +1862,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TupleWithPathContext* tupleWithPath();
@@ -2075,8 +1876,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VerbPathOrSimpleContext* verbPathOrSimple();
@@ -2091,8 +1890,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ObjectListPathContext* objectListPath();
@@ -2105,8 +1902,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ObjectPathContext* objectPath();
@@ -2119,8 +1914,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathContext* path();
@@ -2135,8 +1928,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathAlternativeContext* pathAlternative();
@@ -2151,8 +1942,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathSequenceContext* pathSequence();
@@ -2166,8 +1955,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathEltContext* pathElt();
@@ -2182,8 +1969,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathEltOrInverseContext* pathEltOrInverse();
@@ -2195,8 +1980,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathModContext* pathMod();
@@ -2211,8 +1994,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathPrimaryContext* pathPrimary();
@@ -2227,8 +2008,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathNegatedPropertySetContext* pathNegatedPropertySet();
@@ -2242,8 +2021,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PathOneInPropertySetContext* pathOneInPropertySet();
@@ -2256,8 +2033,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   IntegerContext* integer();
@@ -2271,8 +2046,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesNodeContext* triplesNode();
@@ -2286,8 +2059,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BlankNodePropertyListContext* blankNodePropertyList();
@@ -2302,8 +2073,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TriplesNodePathContext* triplesNodePath();
@@ -2317,8 +2086,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BlankNodePropertyListPathContext* blankNodePropertyListPath();
@@ -2332,8 +2099,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   CollectionContext* collection();
@@ -2348,8 +2113,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   CollectionPathContext* collectionPath();
@@ -2363,8 +2126,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphNodeContext* graphNode();
@@ -2379,8 +2140,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphNodePathContext* graphNodePath();
@@ -2394,8 +2153,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VarOrTermContext* varOrTerm();
@@ -2409,8 +2166,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VarOrIriContext* varOrIri();
@@ -2424,8 +2179,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   VarContext* var();
@@ -2443,8 +2196,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   GraphTermContext* graphTerm();
@@ -2457,8 +2208,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ExpressionContext* expression();
@@ -2473,8 +2222,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConditionalOrExpressionContext* conditionalOrExpression();
@@ -2489,8 +2236,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ConditionalAndExpressionContext* conditionalAndExpression();
@@ -2504,8 +2249,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ValueLogicalContext* valueLogical();
@@ -2524,8 +2267,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   RelationalExpressionContext* relationalExpression();
@@ -2539,8 +2280,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NumericExpressionContext* numericExpression();
@@ -2558,8 +2297,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AdditiveExpressionContext* additiveExpression();
@@ -2577,8 +2314,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MultiplicativeExpressionWithSignContext* multiplicativeExpressionWithSign();
@@ -2592,8 +2327,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PlusSubexpressionContext* plusSubexpression();
@@ -2607,8 +2340,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MinusSubexpressionContext* minusSubexpression();
@@ -2627,8 +2358,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
@@ -2646,8 +2375,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MultiplicativeExpressionContext* multiplicativeExpression();
@@ -2662,8 +2389,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MultiplyOrDivideExpressionContext* multiplyOrDivideExpression();
@@ -2677,8 +2402,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MultiplyExpressionContext* multiplyExpression();
@@ -2692,8 +2415,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   DivideExpressionContext* divideExpression();
@@ -2707,8 +2428,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   UnaryExpressionContext* unaryExpression();
@@ -2728,8 +2447,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PrimaryExpressionContext* primaryExpression();
@@ -2743,8 +2460,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BrackettedExpressionContext* brackettedExpression();
@@ -2816,8 +2531,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BuiltInCallContext* builtInCall();
@@ -2833,8 +2546,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   RegexExpressionContext* regexExpression();
@@ -2849,8 +2560,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   LangExpressionContext* langExpression();
@@ -2866,8 +2575,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SubstringExpressionContext* substringExpression();
@@ -2883,8 +2590,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   StrReplaceExpressionContext* strReplaceExpression();
@@ -2898,8 +2603,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ExistsFuncContext* existsFunc();
@@ -2915,8 +2618,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NotExistsFuncContext* notExistsFunc();
@@ -2940,8 +2641,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AggregateContext* aggregate();
@@ -2956,8 +2655,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   IriOrFunctionContext* iriOrFunction();
@@ -2972,8 +2669,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   RdfLiteralContext* rdfLiteral();
@@ -2989,8 +2684,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NumericLiteralContext* numericLiteral();
@@ -3006,8 +2699,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NumericLiteralUnsignedContext* numericLiteralUnsigned();
@@ -3023,8 +2714,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NumericLiteralPositiveContext* numericLiteralPositive();
@@ -3040,8 +2729,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   NumericLiteralNegativeContext* numericLiteralNegative();
@@ -3054,8 +2741,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BooleanLiteralContext* booleanLiteral();
@@ -3071,8 +2756,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   StringContext* string();
@@ -3087,8 +2770,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   IriContext* iri();
@@ -3103,8 +2784,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PrefixedNameContext* prefixedName();
@@ -3118,8 +2797,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   BlankNodeContext* blankNode();
@@ -3132,8 +2809,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   IrirefContext* iriref();
@@ -3146,8 +2821,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PnameLnContext* pnameLn();
@@ -3160,8 +2833,6 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
-
-    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   PnameNsContext* pnameNs();

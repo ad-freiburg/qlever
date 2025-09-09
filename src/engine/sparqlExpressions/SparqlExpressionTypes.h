@@ -1,5 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Several helper types needed for the SparqlExpression module
 
@@ -8,10 +10,11 @@
 
 #include <vector>
 
+#include "backports/keywords.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
@@ -46,18 +49,17 @@ class VectorWithMemoryLimit
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
       requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<
-              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
+          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
+                                 Base>)
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<
-                  Base, Args&&...>) explicit(sizeof...(Args) == 1)
-      VectorWithMemoryLimit(Args&&... args)
+              CPP_and concepts::constructible_from<Base, Args&&...>)
+      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
       : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
   VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc){};
+      : Base(init, alloc) {}
 
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
@@ -121,9 +123,10 @@ CPP_template(typename ResultT)(
     requires ad_utility::SimilarTo<ResultT,
                                    ExpressionResult>) inline ExpressionResult
     copyExpressionResult(ResultT&& result) {
-  auto copyIfCopyable =
-      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
-                                     requires SingleExpressionResult<R>) {
+  auto copyIfCopyable = [](const auto& x)
+      -> CPP_ret(ExpressionResult)(
+          requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
+    using R = std::decay_t<decltype(x)>;
     if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
@@ -142,7 +145,7 @@ constexpr static bool isConstantResult =
 template <typename T>
 constexpr static bool isVectorResult =
     ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
-    ad_utility::isSimilar<T, std::span<const ValueId>>;
+    ad_utility::isSimilar<T, ql::span<const ValueId>>;
 
 /// All the additional information which is needed to evaluate a SPARQL
 /// expression.
@@ -169,7 +172,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
+  LocalVocab& _localVocab;
 
   // If the expression is part of a GROUP BY then this member has to be set to
   // the variables by which the input is grouped. These variables will then be
@@ -205,7 +208,7 @@ struct EvaluationContext {
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab,
+                    LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
 
@@ -232,7 +235,8 @@ CPP_template(typename T, typename LocalVocabT)(
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
-        [&localVocab]<typename R>(R&& el) mutable {
+        [&localVocab](auto&& el) mutable {
+          using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
@@ -294,7 +298,7 @@ template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
                                                 const Operands&... operands) {
   auto onPack = [&](auto&&... fs) constexpr {
-    return (... || fs.template areAllOperandsValid(operands...));
+    return (... || fs.areAllOperandsValid(operands...));
   };
 
   return std::apply(onPack, tup);

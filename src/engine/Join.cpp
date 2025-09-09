@@ -3,17 +3,20 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Join.h"
 
 #include <functional>
 #include <sstream>
-#include <type_traits>
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -21,83 +24,20 @@
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+
+using namespace qlever::joinHelpers;
 
 using std::endl;
 using std::string;
 
-namespace {
-using OptionalPermutation = Join::OptionalPermutation;
-void applyPermutation(IdTable& idTable,
-                      const OptionalPermutation& permutation) {
-  if (permutation.has_value()) {
-    idTable.setColumnSubset(permutation.value());
-  }
-}
-
-using LazyInputView =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>;
-// Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
-// more efficient access in the join columns below and apply the given
-// permutation to each table.
-CPP_template(typename Input)(
-    requires ad_utility::SameAsAny<Input, Result::Generator,
-                                   Result::LazyResult>) LazyInputView
-    convertGenerator(Input gen, OptionalPermutation permutation = {}) {
-  for (auto& [table, localVocab] : gen) {
-    applyPermutation(table, permutation);
-    // Make sure to actually move the table into the wrapper so that the tables
-    // live as long as the wrapper.
-    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
-    co_yield t;
-  }
-}
-
-using MaterializedInputView =
-    std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
-// Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
-// then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
-// lazy join algorithms. Note: The `convertGenerator` function above
-// conceptually does exactly the same for lazy inputs.
-MaterializedInputView asSingleTableView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return std::array{ad_utility::IdTableAndFirstCol{
-      result.idTable().asColumnSubsetView(permutation),
-      result.getCopyOfLocalVocab()}};
-}
-
-// Wrap a result either in an array with a single element or in a range wrapping
-// the lazy result generator. Note that the lifetime of the view is coupled to
-// the lifetime of the result.
-std::variant<LazyInputView, MaterializedInputView> resultToView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
-  if (result.isFullyMaterialized()) {
-    return asSingleTableView(result, permutation);
-  }
-  return convertGenerator(std::move(result.idTables()), permutation);
-}
-
-using GeneratorWithDetails =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                       CompressedRelationReader::LazyScanMetadata>;
-// Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
-// efficient access in the join columns below.
-GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
-  gen.setDetailsPointer(&co_await cppcoro::getDetails);
-  for (auto& table : gen) {
-    // IndexScans don't have a local vocabulary, so we can just use an empty one
-    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
-    co_yield t;
-  }
-}
-}  // namespace
-
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec) {
+           ColumnIndex t2JoinCol, bool keepJoinColumn,
+           bool allowSwappingChildrenOnlyForTesting)
+    : Operation(qec), keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
@@ -146,6 +86,7 @@ string Join::getCacheKeyImpl() const {
      << _left->getCacheKey() << " join-column: [" << _leftJoinCol << "]\n";
   os << "|X|\n"
      << _right->getCacheKey() << " join-column: [" << _rightJoinCol << "]";
+  os << "keep join Col " << keepJoinColumn_;
   return std::move(os).str();
 }
 
@@ -238,19 +179,25 @@ Result Join::computeResult(bool requestLaziness) {
 VariableToColumnMap Join::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
-      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
-      _left->getResultWidth());
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join, _left->getResultWidth(),
+      keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
-  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1;
-  AD_CONTRACT_CHECK(res > 0);
-  return res;
+  auto sumOfChildWidths = _left->getResultWidth() + _right->getResultWidth();
+  AD_CORRECTNESS_CHECK(sumOfChildWidths >= 2);
+  return sumOfChildWidths - 1 - static_cast<size_t>(!keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
+std::vector<ColumnIndex> Join::resultSortedOn() const {
+  if (keepJoinColumn_) {
+    return {_leftJoinCol};
+  } else {
+    return {};
+  }
+}
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
@@ -258,7 +205,7 @@ float Join::getMultiplicity(size_t col) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }
-  return _multiplicities[col];
+  return _multiplicities.at(col);
 }
 
 // _____________________________________________________________________________
@@ -323,7 +270,9 @@ void Join::computeSizeEstimateAndMultiplicities() {
       double newDist = std::min(oldDist, adaptSizeLeft);
       m = (_sizeEstimate / corrFactor) / newDist;
     }
-    _multiplicities.emplace_back(m);
+    if (i != _leftJoinCol || keepJoinColumn_) {
+      _multiplicities.emplace_back(m);
+    }
   }
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol) {
@@ -364,7 +313,8 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_);
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
+      keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -398,19 +348,11 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
     ad_utility::gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{},
                               addRow, {}, cancellationCallback);
   } else {
-    auto findSmallerUndefRangeLeft =
-        [undefRangeA](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
-      for (auto it = undefRangeA.first; it != undefRangeA.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeLeft = [undefRangeA](auto&&...) {
+      return ad_utility::IteratorRange{undefRangeA.first, undefRangeA.second};
     };
-    auto findSmallerUndefRangeRight =
-        [undefRangeB](
-            auto&&...) -> cppcoro::generator<decltype(undefRangeB.first)> {
-      for (auto it = undefRangeB.first; it != undefRangeB.second; ++it) {
-        co_yield it;
-      }
+    auto findSmallerUndefRangeRight = [undefRangeB](auto&&...) {
+      return ad_utility::IteratorRange{undefRangeB.first, undefRangeB.second};
     };
 
     auto numOutOfOrder = [&]() {
@@ -442,38 +384,7 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>)
-    Result::Generator Join::runLazyJoinAndConvertToGenerator(
-        ActionT runLazyJoin, OptionalPermutation permutation) const {
-  return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
-      [runLazyJoin = std::move(runLazyJoin),
-       permutation = std::move(permutation)](
-          std::function<void(Result::IdTableVocabPair)> callback) {
-        auto yieldValue = [&permutation,
-                           &callback](Result::IdTableVocabPair value) {
-          applyPermutation(value.idTable_, permutation);
-          callback(std::move(value));
-        };
-
-        // The lazy join implementation calls its callback for each but the last
-        // block. The last block (which also is the only block in case the
-        // result is to be fully materialized)
-        auto lastBlock = runLazyJoin(
-            [&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
-              if (idTable.size() < CHUNK_SIZE) {
-                return;
-              }
-              yieldValue({std::move(idTable), std::move(localVocab)});
-            });
-        yieldValue(std::move(lastBlock));
-      });
-}
-
-// _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
+CPP_template_def(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>>)
@@ -543,10 +454,10 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = []<typename Table>(const Table& table,
-                                             const ColumnIndex jc) {
+  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
+    using Table = std::decay_t<decltype(table)>;
     ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
@@ -568,40 +479,38 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
    * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
    *  of the tables
    */
-  auto performHashJoin = [&idTableToHashMap,
-                          &result]<bool leftIsLarger, typename LargerTableType,
-                                   typename SmallerTableType>(
-                             const LargerTableType& largerTable,
-                             const ColumnIndex largerTableJoinColumn,
-                             const SmallerTableType& smallerTable,
-                             const ColumnIndex smallerTableJoinColumn) {
-    // Put the smaller table into the hash table.
-    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+  auto performHashJoin = ad_utility::ApplyAsValueIdentity{
+      [&idTableToHashMap, &result](auto leftIsLarger, const auto& largerTable,
+                                   const ColumnIndex largerTableJoinColumn,
+                                   const auto& smallerTable,
+                                   const ColumnIndex smallerTableJoinColumn) {
+        // Put the smaller table into the hash table.
+        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
 
-    // Create cross product by going through the larger table.
-    for (size_t i = 0; i < largerTable.size(); i++) {
-      // Skip, if there is no matching entry for the join column.
-      auto entry = map.find(largerTable(i, largerTableJoinColumn));
-      if (entry == map.end()) {
-        continue;
-      }
+        // Create cross product by going through the larger table.
+        for (size_t i = 0; i < largerTable.size(); i++) {
+          // Skip, if there is no matching entry for the join column.
+          auto entry = map.find(largerTable(i, largerTableJoinColumn));
+          if (entry == map.end()) {
+            continue;
+          }
 
-      for (const auto& row : entry->second) {
-        // Based on which table was larger, the arguments of
-        // addCombinedRowToIdTable are different.
-        // However this information is known at compile time, so the other
-        // branch gets discarded at compile time, which makes this
-        // condition have constant runtime.
-        if constexpr (leftIsLarger) {
-          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
-                                  &result);
-        } else {
-          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
-                                  &result);
+          for (const auto& row : entry->second) {
+            // Based on which table was larger, the arguments of
+            // addCombinedRowToIdTable are different.
+            // However this information is known at compile time, so the other
+            // branch gets discarded at compile time, which makes this
+            // condition have constant runtime.
+            if constexpr (leftIsLarger) {
+              addCombinedRowToIdTable(largerTable[i], row,
+                                      smallerTableJoinColumn, &result);
+            } else {
+              addCombinedRowToIdTable(row, largerTable[i],
+                                      largerTableJoinColumn, &result);
+            }
+          }
         }
-      }
-    }
-  };
+      }};
 
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
@@ -683,10 +592,6 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
         rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
 
-        AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
-                             rightBlocks.details().numElementsRead_);
-        AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
-                             leftBlocks.details().numElementsRead_);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
@@ -733,8 +638,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
             AD_CORRECTNESS_CHECK(
                 !indexScanResult.value()->isFullyMaterialized());
-            return convertGenerator(
-                std::move(indexScanResult.value()->idTables()));
+            return convertGenerator(indexScanResult.value()->idTables());
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
@@ -789,8 +693,8 @@ Result Join::computeResultForIndexScanAndLazyOperation(
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto [joinSide, indexScanSide] = scan->prefilterTables(
-            std::move(resultWithIdTable->idTables()), _leftJoinCol);
+        auto [joinSide, indexScanSide] =
+            scan->prefilterTables(resultWithIdTable->idTables(), _leftJoinCol);
 
         // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
         // switches to a more efficient implementation if there are no UNDEF
@@ -829,15 +733,20 @@ Result Join::createEmptyResult() const {
 ad_utility::JoinColumnMapping Join::getJoinColumnMapping() const {
   return ad_utility::JoinColumnMapping{{{_leftJoinCol, _rightJoinCol}},
                                        _left->getResultWidth(),
-                                       _right->getResultWidth()};
+                                       _right->getResultWidth(),
+                                       keepJoinColumn_};
 }
 
 // _____________________________________________________________________________
 ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
     std::function<void(IdTable&, LocalVocab&)> callback) const {
   return ad_utility::AddCombinedRowToIdTable{
-      1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-      CHUNK_SIZE, std::move(callback)};
+      1,
+      IdTable{getResultWidth(), allocator()},
+      cancellationHandle_,
+      keepJoinColumn_,
+      CHUNK_SIZE,
+      std::move(callback)};
 }
 
 // _____________________________________________________________________________
@@ -846,4 +755,36 @@ std::unique_ptr<Operation> Join::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join column we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (variable == _joinVar) {
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+  }
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  const auto* vars = &variables;
+  if (!variables.contains(_joinVar)) {
+    newVariables = variables;
+    newVariables.insert(_joinVar);
+    vars = &newVariables;
+  }
+
+  // TODO<joka921> Code duplication including a former copy-paste bug.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+  auto leftCol = left->getVariableColumn(_joinVar);
+  auto rightCol = right->getVariableColumn(_joinVar);
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), std::move(left), std::move(right), leftCol,
+      rightCol, variables.contains(_joinVar));
 }

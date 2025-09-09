@@ -3,11 +3,11 @@
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <sstream>
 #include <string>
 
+#include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
@@ -44,6 +44,11 @@ TestWords getTestCollectionOfWords(size_t size) {
         LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)));
   }
   return testCollectionOfWords;
+}
+
+// _____________________________________________________________________________
+auto lit(std::string_view s) {
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
 }
 }  // namespace
 
@@ -209,7 +214,10 @@ TEST(LocalVocab, propagation) {
   // not `const`.
   auto checkLocalVocab =
       [&](Operation& operation,
-          const std::vector<std::string>& expectedWordsAsStrings) -> void {
+          const std::vector<std::string>& expectedWordsAsStrings,
+          ad_utility::source_location loc =
+              ad_utility::source_location::current()) -> void {
+    auto t = generateLocationTrace(loc);
     TestWords expectedWords;
     auto toLitOrIri = [](const auto& word) {
       using namespace ad_utility::triple_component;
@@ -331,12 +339,16 @@ TEST(LocalVocab, propagation) {
                 separator),
             "GROUP_CONCAT"};
   };
+  Values values1b(
+      testQec, {{Variable{"?x"}, Variable{"?y"}},
+                {{TripleComponent{lit("xN1")}, TripleComponent{lit("yN1")}},
+                 {TripleComponent{lit("xN1")}, TripleComponent{lit("yN2")}}}});
   GroupBy groupBy(
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
-      qet(values1));
-  checkLocalVocab(
-      groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>", "yN1|yN2"});
+      qet(values1b));
+  checkLocalVocab(groupBy,
+                  std::vector<std::string>{"xN1", "yN1", "yN2", "yN1|yN2"});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
@@ -356,7 +368,7 @@ TEST(LocalVocab, propagation) {
   Minus minus1(testQec, qet(values1), qet(values2));
   checkLocalVocab(minus1, localVocab1);
   Minus minus2(testQec, qet(values1), qet(values3));
-  checkLocalVocab(minus2, localVocab13);
+  checkLocalVocab(minus2, localVocab1);
 
   // FILTER operation (the third argument is an expression; which one doesn't
   // matter for this test).
@@ -391,8 +403,8 @@ TEST(LocalVocab, propagation) {
   Values valuesPatternTrick(
       testQec,
       {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}},
-        {TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}}}});
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}},
+        {TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}}}});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(valuesPatternTrick), 0, Variable{"?y"}, Variable{"?count"});
   checkLocalVocab(countAvailablePredictes, {"<xN1>"});
@@ -454,4 +466,72 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   EXPECT_EQ(clone3.size(), 1);
   EXPECT_THAT(clone3.getAllWordsForTesting(),
               UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
+  using ad_utility::triple_component::LiteralOrIri;
+  auto literal = LiteralOrIri::literalWithoutQuotes("test");
+  auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
+  {
+    LocalVocab original;
+    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    (void)original.clone();
+    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::nullopt);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
+        ad_utility::Exception);
+    EXPECT_EQ(original.size(), 1);
+  }
+  {
+    LocalVocab original;
+    LocalVocab other;
+    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    other.mergeWith(original);
+    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::nullopt);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
+        ad_utility::Exception);
+    EXPECT_EQ(original.size(), 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
+  using ad_utility::triple_component::LiteralOrIri;
+  auto literal = LiteralOrIri::literalWithoutQuotes("test");
+  auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
+  std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;
+  LocalVocabIndex encodedTest;
+  LocalVocabIndex encodedOther;
+  {
+    LocalVocab original;
+    encodedTest =
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    extender = original.getLifetimeExtender();
+
+    EXPECT_EQ(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::optional{encodedTest});
+
+    EXPECT_EQ(original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+              encodedTest);
+    EXPECT_EQ(original.size(), 1);
+
+    encodedOther =
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral});
+    EXPECT_EQ(original.size(), 2);
+  }
+  // The `extender` keeps the `LocalVocabIndex`es valid even though the
+  // corresponding `LocalVocab` has already been destroyed.
+  (void)extender;
+  EXPECT_EQ(*encodedTest, literal);
+  EXPECT_EQ(*encodedOther, otherLiteral);
 }

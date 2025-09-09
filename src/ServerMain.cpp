@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -16,7 +18,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
+#include "util/ReadableNumberFacet.h"
 
 using std::size_t;
 using std::string;
@@ -25,6 +27,9 @@ namespace po = boost::program_options;
 
 // Main function.
 int main(int argc, char** argv) {
+  // TODO<joka921> This is a hack, because the unit tests currently don't work
+  // with the strip-columns feature.
+  RuntimeParameters().set<"strip-columns">(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();
@@ -47,6 +52,7 @@ int main(int argc, char** argv) {
   bool noPatterns;
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
+  bool persistUpdates;
 
   ad_utility::MemorySize memoryMaxSize;
 
@@ -54,8 +60,8 @@ int main(int argc, char** argv) {
       &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
-  auto add = [&options]<typename... Args>(Args&&... args) {
-    options.add_options()(std::forward<Args>(args)...);
+  auto add = [&options](auto&&... args) {
+    options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   // TODO<joka921> Can we output the "required" automatically?
@@ -126,6 +132,34 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"request-body-limit">(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
+  add("cache-service-results",
+      optionFactory.getProgramOption<"cache-service-results">(),
+      "SERVICE is not cached because we have to assume that any remote "
+      "endpoint might change at any point in time. If you control the "
+      "endpoints, you can override this setting. This will disable the sibling "
+      "optimization where VALUES are dynamically pushed into `SERVICE`.");
+  add("persist-updates", po::bool_switch(&persistUpdates),
+      "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
+      "will be lost when the engine is stopped");
+  add("syntax-test-mode", optionFactory.getProgramOption<"syntax-test-mode">(),
+      "Make several query patterns that are syntactially valid, but otherwise "
+      "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
+      "nonexisting endpoints). This mode should only be used for running the "
+      "syntax tests from the W3C SPARQL 1.1 test suite.");
+  add("enable-prefilter-on-index-scans",
+      optionFactory.getProgramOption<"enable-prefilter-on-index-scans">(),
+      "If set to false, the prefilter procedures for FILTER expressions are "
+      "disabled.");
+  add("spatial-join-max-num-threads",
+      optionFactory.getProgramOption<"spatial-join-max-num-threads">(),
+      "The maximum number of threads to be used for spatial join processing. "
+      "If this option is set to `0`, the number of CPU threads will be used.");
+  add("spatial-join-prefilter-max-size",
+      optionFactory.getProgramOption<"spatial-join-prefilter-max-size">(),
+      "The maximum size in square coordinates of the aggregated bounding box "
+      "of the smaller join partner in a spatial join, such that prefiltering "
+      "will be employed. To disable prefiltering for non-point geometries, set "
+      "this option to 0.");
   po::variables_map optionsMap;
 
   try {
@@ -148,7 +182,8 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), !noPatternTrick);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
+    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
+               persistUpdates);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

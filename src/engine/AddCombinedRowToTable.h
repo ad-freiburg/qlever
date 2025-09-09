@@ -1,6 +1,9 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023-2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR/QL
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// QL =  QLeverize AG
 
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
@@ -11,21 +14,13 @@
 
 #include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-
-namespace detail::concepts {
-template <typename T>
-CPP_requires(HasAsStaticView,
-             requires(T& table)(table.template asStaticView<0>()));
-
-template <typename T>
-CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
-}  // namespace detail::concepts
 
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
@@ -36,11 +31,16 @@ CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
+  // If set to false, then the join columns will not be written to the output.
+  // The result table will also have no columns corresponding to the join
+  // columns, but will only consist of the remaining payload columns.
+  bool keepJoinColumns_ = true;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
   LocalVocab mergedVocab_{};
   std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
+ public:
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
   // `targetIndex_`-th row in the output, you have to combine
@@ -88,10 +88,11 @@ class AddCombinedRowToIdTable {
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
       IdTable output, CancellationHandle cancellationHandle,
-      size_t bufferSize = 100'000,
+      bool keepJoinColumns = true, size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
+        keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
@@ -101,16 +102,19 @@ class AddCombinedRowToIdTable {
     checkNumColumns();
     indexBuffer_.reserve(bufferSize);
   }
+
   // Similar to the previous constructor, but the inputs are not given.
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTable output,
-      CancellationHandle cancellationHandle, size_t bufferSize = 100'000,
+      CancellationHandle cancellationHandle, bool keepJoinColumns = true,
+      size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
+        keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
@@ -133,19 +137,42 @@ class AddCombinedRowToIdTable {
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
     ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
+    if (nextIndex_ >= bufferSize_) {
       flush();
     }
   }
 
-  // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
-  // `IdTableView<0>`. Identity for `IdTableView<0>`.
-  template <typename T>
-  static IdTableView<0> toView(const T& table) {
-    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
-      return table.template asStaticView<0>();
+  // Concept for the `addRows` function below for a `sized_range` that has
+  // unsigned integral values as its `value_type`.
+  template <typename R>
+  static constexpr bool sizedRangeOfUnsigned =
+      ql::ranges::sized_range<R> &&
+      ql::concepts::unsigned_integral<ql::ranges::range_value_t<R>>;
+
+  // Same as calling `addRow` for each element in the Cartesian product of
+  // `rowIndicesA` and `rowIndicesB` with an optimization for the special case
+  // that the `resultTable` has zero columns.
+  CPP_template(typename R1, typename R2)(
+      requires sizedRangeOfUnsigned<R1> CPP_and
+          sizedRangeOfUnsigned<R2>) void addRows(const R1& rowIndicesA,
+                                                 const R2& rowIndicesB) {
+    size_t total =
+        ql::ranges::size(rowIndicesA) * ql::ranges::size(rowIndicesB);
+    if (resultTable_.numColumns() == 0) {
+      while (total > 0) {
+        auto chunkSz = std::min(bufferSize_ - nextIndex_, total);
+        nextIndex_ += chunkSz;
+        total -= chunkSz;
+        if (nextIndex_ >= bufferSize_) {
+          flush();
+        }
+      }
     } else {
-      return table;
+      for (auto a : rowIndicesA) {
+        for (auto b : rowIndicesB) {
+          addRow(a, b);
+        }
+      }
     }
   }
 
@@ -153,11 +180,7 @@ class AddCombinedRowToIdTable {
   // passed pointer reference to that vocab.
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
-    AD_CORRECTNESS_CHECK(currentVocab == nullptr);
-    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
-      currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(table.getLocalVocab());
-    }
+    detail::mergeVocabInto(table, currentVocab, mergedVocab_);
   }
 
   // Flush remaining pending entries before changing the input.
@@ -184,25 +207,31 @@ class AddCombinedRowToIdTable {
   // inputs. The arguments to `inputLeft` and `inputRight` can either be
   // `IdTable` or `IdTableView<0>`, or any other type that has a
   // `asStaticView<0>` method that returns an `IdTableView<0>`.
-  void setInput(const auto& inputLeft, const auto& inputRight) {
+  template <typename L, typename R>
+  void setInput(const L& inputLeft, const R& inputRight) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
-    inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
+    inputLeftAndRight_ =
+        std::array{detail::toView(inputLeft), detail::toView(inputRight)};
     checkNumColumns();
   }
 
   // Only set the left input. After this it is only allowed to call
   // `addOptionalRow` and not `addRow` until `setInput` has been called again.
-  void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
+  template <typename L>
+  void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
+    using namespace ad_utility::memory_literals;
     inputLeftAndRight_ = std::array{
-        toView(inputLeft),
-        IdTableView<0>{resultTable_.numColumns() -
-                           toView(inputLeft).numColumns() + numJoinColumns_,
-                       ad_utility::makeUnlimitedAllocator<Id>()}};
+        detail::toView(inputLeft),
+        IdTableView<0>{
+            resultTable_.numColumns() +
+                (static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_) -
+                detail::toView(inputLeft).numColumns() + numJoinColumns_,
+            ad_utility::makeAllocatorWithLimit<Id>(0_B)}};
   }
 
   // The next free row in the output will be created from
@@ -213,7 +242,7 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
     ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
+    if (nextIndex_ >= bufferSize_) {
       flush();
     }
   }
@@ -243,8 +272,9 @@ class AddCombinedRowToIdTable {
     cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
-    AD_CORRECTNESS_CHECK(nextIndex_ ==
-                         indexBuffer_.size() + optionalIndexBuffer_.size());
+    AD_CORRECTNESS_CHECK(nextIndex_ == indexBuffer_.size() +
+                                           optionalIndexBuffer_.size() ||
+                         result.numColumns() == 0);
     // Sometimes the left input and right input are not valid anymore, because
     // the `IdTable`s they point to have already been destroyed. This case is
     // okay, as long as there was a manual call to `flush` (after which
@@ -304,44 +334,47 @@ class AddCombinedRowToIdTable {
     // Note: There is quite some code duplication between this lambda and the
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
-    auto writeNonJoinColumn = [&result, oldSize, this]<bool isColFromLeft>(
-                                  size_t colIdx, size_t resultColIdx) {
-      decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
-                                         : inputRight().getColumn(colIdx);
-      // TODO<joka921> Implement prefetching.
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+    auto writeNonJoinColumn = ad_utility::ApplyAsValueIdentity{
+        [&result, oldSize, this](auto isColFromLeft, size_t colIdx,
+                                 size_t resultColIdx) {
+          decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
+                                             : inputRight().getColumn(colIdx);
+          // TODO<joka921> Implement prefetching.
+          decltype(auto) resultCol = result.getColumn(resultColIdx);
+          size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
 
-      // Write the matching rows.
-      static constexpr size_t idx = isColFromLeft ? 0 : 1;
-      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = col[sourceIndices[idx]];
-        numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
-        resultCol[oldSize + targetIndex] = resultId;
-      }
-
-      // Write the optional rows. For the right input those are always
-      // undefined.
-      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = [&col, sourceIndex = sourceIndex]() {
-          if constexpr (isColFromLeft) {
-            return col[sourceIndex];
-          } else {
-            (void)col;
-            (void)sourceIndex;
-            return Id::makeUndefined();
+          // Write the matching rows.
+          static constexpr size_t idx = isColFromLeft ? 0 : 1;
+          for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+            auto resultId = col[sourceIndices[idx]];
+            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
+            resultCol[oldSize + targetIndex] = resultId;
           }
-        }();
-        resultCol[oldSize + targetIndex] = id;
-        numUndef += static_cast<size_t>(id.isUndefined());
-      }
-    };
+
+          // Write the optional rows. For the right input those are always
+          // undefined.
+          for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
+              if constexpr (isColFromLeft) {
+                return col[sourceIndex];
+              } else {
+                (void)col;
+                (void)sourceIndex;
+                return Id::makeUndefined();
+              }
+            }();
+            resultCol[oldSize + targetIndex] = id;
+            numUndef += static_cast<size_t>(id.isUndefined());
+          }
+        }};
 
     size_t nextResultColIdx = 0;
     // First write all the join columns.
     for (size_t col = 0; col < numJoinColumns_; col++) {
-      writeJoinColumn(col, nextResultColIdx);
-      ++nextResultColIdx;
+      if (keepJoinColumns_) {
+        writeJoinColumn(col, nextResultColIdx);
+        ++nextResultColIdx;
+      }
     }
 
     // Then the remaining columns from the left input.
@@ -380,11 +413,13 @@ class AddCombinedRowToIdTable {
   }
 
   void checkNumColumns() const {
+    AD_CONTRACT_CHECK(bufferSize_ > 0);
     AD_CONTRACT_CHECK(inputLeft().numColumns() >= numJoinColumns_);
     AD_CONTRACT_CHECK(inputRight().numColumns() >= numJoinColumns_);
-    AD_CONTRACT_CHECK(resultTable_.numColumns() ==
-                      inputLeft().numColumns() + inputRight().numColumns() -
-                          numJoinColumns_);
+    AD_CONTRACT_CHECK(
+        resultTable_.numColumns() ==
+        inputLeft().numColumns() + inputRight().numColumns() - numJoinColumns_ -
+            numJoinColumns_ * static_cast<size_t>(!keepJoinColumns_));
   }
 };
 }  // namespace ad_utility

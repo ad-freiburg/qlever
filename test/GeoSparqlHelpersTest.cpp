@@ -1,20 +1,30 @@
-// Copyright 2022, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <string>
 
-#include "../src/util/GeoSparqlHelpers.h"
-#include "parser/GeoPoint.h"
+#include "engine/SpatialJoinConfig.h"
+#include "global/Constants.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Iri.h"
+#include "util/GTestHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
+namespace {
+
+using ad_utility::source_location;
 using ad_utility::WktDistGeoPoints;
+using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
 
+// _____________________________________________________________________________
 TEST(GeoSparqlHelpers, ParseWktPoint) {
   // Test that the given WKT point parses correctly (with all three of
   // parseWktPoint, wktLatitude, and wktLongitude).
@@ -67,6 +77,7 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("POINT(42e3 7.8)");
 }
 
+// _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktDist) {
   // Equal longitude, latitudes with diff 3.0 and mean zero.
   ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
@@ -80,5 +91,96 @@ TEST(GeoSparqlHelpers, WktDist) {
   // according to the distance measurement of Google Maps).
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
+  using enum UnitOfMeasurement;
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, KILOMETERS), 421.098,
+              0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, METERS), 421098, 1);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, MILES), 261.658,
+              0.01);
+  ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
+              421098, 1);
+
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, eiffeltower, METERS), 0, 0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, eiffeltower, MILES), 0, 0.01);
 }
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, KmToUnit) {
+  using namespace ad_utility::detail;
+  using enum UnitOfMeasurement;
+  auto kmToUnit = kilometerToUnit;
+
+  ASSERT_NEAR(kmToUnit(0.0, std::nullopt), 0.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(0.0, KILOMETERS), 0.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(0.0, METERS), 0.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(0.0, MILES), 0.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(-500.0, KILOMETERS), -500.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(-500.0, std::nullopt), -500.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(500.0, METERS), 500000.0, 0.0001);
+  ASSERT_NEAR(kmToUnit(500.0, MILES), 310.685595, 0.0001);
+  ASSERT_NEAR(kmToUnit(1.0, MILES), 0.62137119, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(kmToUnit(1.0, UNKNOWN),
+                               ::testing::HasSubstr("Unsupported unit"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, UnitToKm) {
+  using namespace ad_utility::detail;
+  using enum UnitOfMeasurement;
+  auto toKm = valueInUnitToKilometer;
+
+  ASSERT_NEAR(toKm(0.0, std::nullopt), 0.0, 0.0001);
+  ASSERT_NEAR(toKm(0.0, KILOMETERS), 0.0, 0.0001);
+  ASSERT_NEAR(toKm(0.0, METERS), 0.0, 0.0001);
+  ASSERT_NEAR(toKm(0.0, MILES), 0.0, 0.0001);
+  ASSERT_NEAR(toKm(-500.0, KILOMETERS), -500.0, 0.0001);
+  ASSERT_NEAR(toKm(-500.0, std::nullopt), -500.0, 0.0001);
+  ASSERT_NEAR(toKm(500000.0, METERS), 500.0, 0.0001);
+  ASSERT_NEAR(toKm(310.685595, MILES), 500.0, 0.0001);
+  ASSERT_NEAR(toKm(0.62137119, MILES), 1.0, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(toKm(1.0, UNKNOWN),
+                               ::testing::HasSubstr("Unsupported unit"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, IriToUnit) {
+  using namespace ad_utility::detail;
+  using enum UnitOfMeasurement;
+  auto iriToUnit = iriToUnitOfMeasurement;
+
+  ASSERT_EQ(iriToUnit(""), UNKNOWN);
+  ASSERT_EQ(iriToUnit("http://example.com"), UNKNOWN);
+  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/"), UNKNOWN);
+  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/M"), METERS);
+  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/KiloM"), KILOMETERS);
+  ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/MI"), MILES);
+}
+
+// _____________________________________________________________________________
+template <SpatialJoinType SJType>
+void checkGeoRelationDummyImpl(
+    source_location sourceLocation = source_location::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  const auto geoRelationFunction = WktGeometricRelation<SJType>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktGeometricRelation) {
+  // Currently the geometric relation functions are only a dummy implementation
+  using enum SpatialJoinType;
+  checkGeoRelationDummyImpl<INTERSECTS>();
+  checkGeoRelationDummyImpl<CONTAINS>();
+  checkGeoRelationDummyImpl<COVERS>();
+  checkGeoRelationDummyImpl<CROSSES>();
+  checkGeoRelationDummyImpl<TOUCHES>();
+  checkGeoRelationDummyImpl<EQUALS>();
+  checkGeoRelationDummyImpl<OVERLAPS>();
+  checkGeoRelationDummyImpl<WITHIN>();
+}
+
+}  // namespace

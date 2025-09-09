@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
+#include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
@@ -27,23 +28,25 @@ class Join : public Operation {
   bool _sizeEstimateComputed;
   size_t _sizeEstimate;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
+
+  // If set to false, the join column will not be part of the result.
+  bool keepJoinColumn_ = true;
 
  public:
   // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting = true);
+       ColumnIndex t2JoinCol, bool keepJoinColumn = true,
+       bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  static constexpr size_t CHUNK_SIZE = 100'000;
+  std::string getDescriptor() const override;
 
-  virtual string getDescriptor() const override;
+  size_t getResultWidth() const override;
 
-  virtual size_t getResultWidth() const override;
-
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -65,9 +68,12 @@ class Join : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins IdTables a and b on join column jc2, returning
@@ -86,21 +92,6 @@ class Join : public Operation {
    **/
   void join(const IdTable& a, const IdTable& b, IdTable* result) const;
 
- private:
-  // Part of the implementation of `createResult`. This function is called when
-  // the result should be yielded lazily.
-  // Action is a lambda that itself runs the join operation in a blocking
-  // manner. It is passed a special function that is supposed to be the callback
-  // being passed to the `AddCombinedRowToIdTable` so that the partial results
-  // can be yielded during execution. This is achieved by spawning a separate
-  // thread.
-  CPP_template_2(typename ActionT)(
-      requires ad_utility::InvocableWithExactReturnType<
-          ActionT, Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
-      runLazyJoinAndConvertToGenerator(ActionT action,
-                                       OptionalPermutation permutation) const;
-
  public:
   // Helper function to compute the result of a join operation and conditionally
   // return a lazy or fully materialized result depending on `requestLaziness`.
@@ -113,7 +104,7 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  CPP_template_2(typename ActionT)(
+  CPP_template(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>>) Result
@@ -143,7 +134,7 @@ class Join : public Operation {
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -151,6 +142,10 @@ class Join : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the

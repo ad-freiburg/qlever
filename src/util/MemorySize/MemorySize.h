@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
 #define QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
@@ -15,9 +17,10 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/keywords.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -154,15 +157,15 @@ Note that user defined literals only allow very specific types for function
 arguments, so I couldn't use more fitting types.
 */
 namespace memory_literals {
-consteval MemorySize operator""_B(unsigned long long int bytes);
-consteval MemorySize operator""_kB(long double kilobytes);
-consteval MemorySize operator""_kB(unsigned long long int kilobytes);
-consteval MemorySize operator""_MB(long double megabytes);
-consteval MemorySize operator""_MB(unsigned long long int megabytes);
-consteval MemorySize operator""_GB(long double gigabytes);
-consteval MemorySize operator""_GB(unsigned long long int gigabytes);
-consteval MemorySize operator""_TB(long double terabytes);
-consteval MemorySize operator""_TB(unsigned long long int terabytes);
+QL_CONSTEVAL MemorySize operator""_B(unsigned long long int bytes);
+QL_CONSTEVAL MemorySize operator""_kB(long double kilobytes);
+QL_CONSTEVAL MemorySize operator""_kB(unsigned long long int kilobytes);
+QL_CONSTEVAL MemorySize operator""_MB(long double megabytes);
+QL_CONSTEVAL MemorySize operator""_MB(unsigned long long int megabytes);
+QL_CONSTEVAL MemorySize operator""_GB(long double gigabytes);
+QL_CONSTEVAL MemorySize operator""_GB(unsigned long long int gigabytes);
+QL_CONSTEVAL MemorySize operator""_TB(long double terabytes);
+QL_CONSTEVAL MemorySize operator""_TB(unsigned long long int terabytes);
 }  // namespace memory_literals
 
 /*
@@ -174,11 +177,12 @@ consteval MemorySize operator""_TB(unsigned long long int terabytes);
 // Helper functions.
 namespace detail {
 // Just the number of bytes per memory unit.
+using MapPair = ConstexprMapPair<std::string_view, size_t>;
 constexpr ConstexprMap<std::string_view, size_t, 5> numBytesPerUnit(
-    {std::pair{"B", 1uL}, std::pair{"kB", ad_utility::pow<size_t>(10, 3)},
-     std::pair{"MB", ad_utility::pow<size_t>(10, 6)},
-     std::pair{"GB", ad_utility::pow<size_t>(10, 9)},
-     std::pair{"TB", ad_utility::pow<size_t>(10, 12)}});
+    {MapPair{"B", 1uL}, MapPair{"kB", ad_utility::pow<size_t>(10, 3)},
+     MapPair{"MB", ad_utility::pow<size_t>(10, 6)},
+     MapPair{"GB", ad_utility::pow<size_t>(10, 9)},
+     MapPair{"TB", ad_utility::pow<size_t>(10, 12)}});
 
 /*
 Helper function for dividing two instances of `size_t`.
@@ -198,12 +202,13 @@ constexpr static double sizeTDivision(const size_t dividend,
 static constexpr size_t size_t_max = std::numeric_limits<size_t>::max();
 
 // The maximal amount of a memory unit, that a `MemorySize` can remember.
-constexpr ConstexprMap<std::string_view, double, 5> maxAmountOfUnit(
-    {std::pair{"B", sizeTDivision(size_t_max, numBytesPerUnit.at("B"))},
-     std::pair{"kB", sizeTDivision(size_t_max, numBytesPerUnit.at("kB"))},
-     std::pair{"MB", sizeTDivision(size_t_max, numBytesPerUnit.at("MB"))},
-     std::pair{"GB", sizeTDivision(size_t_max, numBytesPerUnit.at("GB"))},
-     std::pair{"TB", sizeTDivision(size_t_max, numBytesPerUnit.at("TB"))}});
+static constexpr auto maxAmountOfUnit = []() {
+  auto p = [](std::string_view unitName) {
+    return ConstexprMapPair<std::string_view, double>{
+        unitName, sizeTDivision(size_t_max, numBytesPerUnit.at(unitName))};
+  };
+  return ConstexprMap{std::array{p("B"), p("kB"), p("MB"), p("GB"), p("TB")}};
+}();
 
 // Converts a given number to `size_t`. Rounds up, if needed.
 CPP_template(typename T)(requires Arithmetic<T>) constexpr size_t
@@ -462,8 +467,10 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   `magicImpl`.
   */
   return detail::magicImplForDivAndMul(
-      *this, c,
-      []<typename DivisionType>(const DivisionType& a, const DivisionType& b) {
+      *this, c, [](const auto& a, const auto& b) {
+        static_assert(std::is_same_v<decltype(a), decltype(b)>,
+                      "Arguments shall be of the same type");
+        using DivisionType = std::decay_t<decltype(a)>;
         if constexpr (std::is_floating_point_v<DivisionType>) {
           return a / b;
         } else {
@@ -483,47 +490,47 @@ CPP_template_def(typename T)(
 
 namespace memory_literals {
 // _____________________________________________________________________________
-consteval MemorySize operator""_B(unsigned long long int bytes) {
+QL_CONSTEVAL MemorySize operator""_B(unsigned long long int bytes) {
   return MemorySize::bytes(bytes);
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_kB(long double kilobytes) {
+QL_CONSTEVAL MemorySize operator""_kB(long double kilobytes) {
   return MemorySize::kilobytes(static_cast<double>(kilobytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_kB(unsigned long long int kilobytes) {
+QL_CONSTEVAL MemorySize operator""_kB(unsigned long long int kilobytes) {
   return MemorySize::kilobytes(static_cast<size_t>(kilobytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_MB(long double megabytes) {
+QL_CONSTEVAL MemorySize operator""_MB(long double megabytes) {
   return MemorySize::megabytes(static_cast<double>(megabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_MB(unsigned long long int megabytes) {
+QL_CONSTEVAL MemorySize operator""_MB(unsigned long long int megabytes) {
   return MemorySize::megabytes(static_cast<size_t>(megabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_GB(long double gigabytes) {
+QL_CONSTEVAL MemorySize operator""_GB(long double gigabytes) {
   return MemorySize::gigabytes(static_cast<double>(gigabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_GB(unsigned long long int gigabytes) {
+QL_CONSTEVAL MemorySize operator""_GB(unsigned long long int gigabytes) {
   return MemorySize::gigabytes(static_cast<size_t>(gigabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_TB(long double terabytes) {
+QL_CONSTEVAL MemorySize operator""_TB(long double terabytes) {
   return MemorySize::terabytes(static_cast<double>(terabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_TB(unsigned long long int terabytes) {
+QL_CONSTEVAL MemorySize operator""_TB(unsigned long long int terabytes) {
   return MemorySize::terabytes(static_cast<size_t>(terabytes));
 }
 }  // namespace memory_literals

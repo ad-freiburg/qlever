@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -22,7 +24,8 @@ namespace ad_utility {
 // _____________________________________________________________________________
 std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
-  auto toString = []<typename T>(const T number, std::string_view unitName) {
+  auto toString = [](const auto number, std::string_view unitName) {
+    using T = std::decay_t<decltype(number)>;
     if constexpr (std::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
@@ -39,11 +42,12 @@ std::string MemorySize::asString() const {
   // NOTE: the lower bound for `kB` is `100'000` instead of `1'000` because we
   // want exact values below `100'000` bytes (for example, block or page sizes
   // are often larger than 1'000 bytes but below 100'000 bytes).
-  constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
-      {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
-       std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
-       std::pair<char, size_t>{'G', detail::numBytesPerUnit.at("GB")},
-       std::pair<char, size_t>{'T', detail::numBytesPerUnit.at("TB")}});
+  using P = ad_utility::ConstexprMapPair<char, size_t>;
+  constexpr static ad_utility::ConstexprMap<char, size_t, 4>
+      memoryUnitLowerBound({P{'k', ad_utility::pow(10, 5)},
+                            P{'M', detail::numBytesPerUnit.at("MB")},
+                            P{'G', detail::numBytesPerUnit.at("GB")},
+                            P{'T', detail::numBytesPerUnit.at("TB")}});
 
   // Go through the units from top to bottom, in terms of size, and choose the
   // first one, that is smaller/equal to `memoryInBytes_`.
@@ -67,8 +71,9 @@ MemorySize MemorySize::parse(std::string_view str) {
       "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
   if (auto matcher = ctre::match<regex>(str)) {
     auto amountString = matcher.get<"amount">().to_view();
-    // Versions after CTRE v3.8.1 should support to_number()
-    // with double values if the compilers support it.
+    // Even though CTRE supports to_number() with double values, this relies on
+    // `std::from_chars` which is currently not supported by the standard
+    // library used by our macOS build.
     double amount;
     absl::from_chars(amountString.begin(), amountString.end(), amount);
     auto unitString = matcher.get<"unit">().to_view();

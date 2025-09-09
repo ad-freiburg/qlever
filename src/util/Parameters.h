@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_PARAMETERS_H
 #define QLEVER_SRC_UTIL_PARAMETERS_H
@@ -9,8 +11,9 @@
 #include <concepts>
 #include <optional>
 #include <tuple>
-#include <type_traits>
 
+#include "backports/keywords.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprSmallString.h"
 #include "util/HashMap.h"
@@ -151,16 +154,26 @@ namespace detail::parameterShortNames {
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
 struct fl {
-  float operator()(const auto& s) const { return std::stof(s); }
+  template <typename T>
+  float operator()(const T& s) const {
+    return std::stof(s);
+  }
 };
 struct dbl {
-  double operator()(const auto& s) const { return std::stod(s); }
+  template <typename T>
+  double operator()(const T& s) const {
+    return std::stod(s);
+  }
 };
 struct szt {
-  size_t operator()(const auto& s) const { return std::stoull(s); }
+  template <typename T>
+  size_t operator()(const T& s) const {
+    return std::stoull(s);
+  }
 };
 struct bl {
-  bool operator()(const auto& s) const {
+  template <typename T>
+  bool operator()(const T& s) const {
     if (s == "true") return true;
     if (s == "false") return false;
     AD_THROW(
@@ -169,7 +182,10 @@ struct bl {
 };
 
 struct toString {
-  std::string operator()(const auto& s) const { return std::to_string(s); }
+  template <typename T>
+  std::string operator()(const T& s) const {
+    return std::to_string(s);
+  }
 };
 struct boolToString {
   std::string operator()(const bool& v) const { return v ? "true" : "false"; }
@@ -251,11 +267,11 @@ class Parameters {
   static constexpr auto _nameToIndex = []() {
     size_t i = 0;
     // {firstName, 0}, {secondName, 1}, {thirdName, 2}...
-    auto arr = std::array{std::pair{ParameterTypes::name, i++}...};
+    auto arr = std::array{boost::hana::pair{ParameterTypes::name, i++}...};
 
     // Assert that the indices are in fact correct.
     for (size_t k = 0; k < arr.size(); ++k) {
-      if (arr[k].second != k) {
+      if (boost::hana::second(arr[k]) != k) {
         throw std::runtime_error{
             "Wrong order in parameter array, this should never happen."};
       }
@@ -277,8 +293,8 @@ class Parameters {
 
  public:
   Parameters() = delete;
-  explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
-      : _parameters{std::move(ts)...} {}
+  QL_EXPLICIT(sizeof...(ParameterTypes) == 1)
+  Parameters(ParameterTypes... ts) : _parameters{std::move(ts)...} {}
 
   // Get value for parameter `Name` known at compile time.
   // The parameter is returned  by value, since
@@ -336,7 +352,8 @@ class Parameters {
   [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const {
     ad_utility::HashMap<std::string, std::string> result;
 
-    auto insert = [&]<typename T>(const T& synchronizedParameter) {
+    auto insert = [&](const auto& synchronizedParameter) {
+      using T = std::decay_t<decltype(synchronizedParameter)>;
       std::string name{T::value_type::name};
       result[std::move(name)] = synchronizedParameter.rlock()->toString();
     };
@@ -349,7 +366,8 @@ class Parameters {
     static ad_utility::HashSet<std::string> value = [this]() {
       ad_utility::HashSet<std::string> result;
 
-      auto insert = [&result]<typename T>(const T&) {
+      auto insert = [&result](const auto& t) {
+        using T = std::decay_t<decltype(t)>;
         result.insert(std::string{T::value_type::name});
       };
       ad_utility::forEachInTuple(_parameters, insert);

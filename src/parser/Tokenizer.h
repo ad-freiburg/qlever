@@ -9,10 +9,8 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
-#include <regex>
-
 #include "parser/TurtleTokenId.h"
-#include "util/Exception.h"
+#include "util/CompilerWarnings.h"
 #include "util/Log.h"
 
 using re2::RE2;
@@ -24,6 +22,7 @@ using namespace std::string_literals;
  */
 struct TurtleToken {
   using string = std::string;
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
       // them
@@ -67,6 +66,8 @@ struct TurtleToken {
         WsMultiple(grp(WsMultipleString)),
         Anon(grp(AnonString)),
         Comment(grp(CommentString)) {}
+
+  GCC_REENABLE_WARNINGS
 
   TurtleToken(const TurtleToken& other) : TurtleToken() { (void)other; }
   TurtleToken& operator=([[maybe_unused]] const TurtleToken& other) {
@@ -242,7 +243,7 @@ struct SkipWhitespaceAndCommentsMixin {
     auto v = self().view();
     if (v.starts_with('#')) {
       auto pos = v.find('\n');
-      if (pos == string::npos) {
+      if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.
         LOG(INFO) << "Warning, unfinished comment found while parsing"
                   << std::endl;
@@ -274,6 +275,8 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   // Construct from a std::string_view;
   Tokenizer(std::string_view input)
       : _tokens(), _data(input.data(), input.size()) {}
+
+  static constexpr bool UseRelaxedParsing = false;
 
   // if a prefix of the input stream matches the regex argument,
   // return true and that prefix and move the input stream forward

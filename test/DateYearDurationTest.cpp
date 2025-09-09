@@ -24,6 +24,11 @@ ad_utility::SlowRandomIntGenerator hourGenerator{0, 23};
 ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
+
+auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
 }  // namespace
 
 TEST(Date, Size) {
@@ -273,14 +278,15 @@ TEST(Date, OrderRandomValues) {
 }
 
 namespace {
+
 // Test that `parseFunction(input)` results in a `DateOrLargeYear` object that
 // stores a `Date` with the given xsd `type` and the given `year, month, ... ,
 // timeZone`. Also test that the result of this parsing, when converted back to
 // a string, yields `input` again.
-auto testDatetimeImpl(auto parseFunction, std::string_view input,
-                      const char* type, int year, int month, int day, int hour,
-                      int minute = 0, double second = 0.0,
-                      Date::TimeZone timeZone = 0) {
+template <typename F>
+auto testDatetimeImpl(F parseFunction, std::string_view input, const char* type,
+                      int year, int month, int day, int hour, int minute = 0,
+                      double second = 0.0, Date::TimeZone timeZone = 0) {
   ASSERT_NO_THROW(std::invoke(parseFunction, input));
   DateYearOrDuration dateLarge = std::invoke(parseFunction, input);
   EXPECT_TRUE(dateLarge.isDate());
@@ -300,7 +306,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString();
+  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);
@@ -357,6 +363,8 @@ TEST(Date, parseDateTime) {
                Date::NoTimeZone{});
   testDatetime("-2034-12-24T02:12:42Z", -2034, 12, 24, 2, 12, 42.0,
                Date::TimeZoneZ{});
+  testDatetime("-0100-12-31T02:12:42Z", -100, 12, 31, 2, 12, 42.0,
+               Date::TimeZoneZ{});
 }
 
 TEST(Date, parseDate) {
@@ -365,6 +373,7 @@ TEST(Date, parseDate) {
   testDate("2034-12-24Z", 2034, 12, 24, Date::TimeZoneZ{});
   testDate("2034-12-24", 2034, 12, 24, Date::NoTimeZone{});
   testDate("-2034-12-24", -2034, 12, 24, Date::NoTimeZone{});
+  testDate("-0100-12-31", -100, 12, 31, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYearMonth) {
@@ -373,6 +382,7 @@ TEST(Date, parseYearMonth) {
   testYearMonth("2034-12Z", 2034, 12, Date::TimeZoneZ{});
   testYearMonth("2034-12", 2034, 12, Date::NoTimeZone{});
   testYearMonth("-2034-12", -2034, 12, Date::NoTimeZone{});
+  testYearMonth("-0100-12", -100, 12, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYear) {
@@ -381,6 +391,7 @@ TEST(Date, parseYear) {
   testYear("2034Z", 2034, Date::TimeZoneZ{});
   testYear("2034", 2034, Date::NoTimeZone{});
   testYear("-2034", -2034, Date::NoTimeZone{});
+  testYear("-0100", -100, Date::NoTimeZone{});
 }
 
 TEST(Date, timeZoneWithMinutes) {
@@ -394,7 +405,8 @@ namespace {
 // stores a large year with the given xsd `type` and the given `year. Also test
 // that the result of this parsing, when converted back to a string, yields
 // `input` again.
-auto testLargeYearImpl(auto parseFunction, std::string_view input,
+template <typename F>
+auto testLargeYearImpl(F parseFunction, std::string_view input,
                        const char* type, DateYearOrDuration::Type typeEnum,
                        int64_t year,
                        std::optional<std::string> actualOutput = std::nullopt) {
@@ -414,7 +426,7 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString();
+  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);

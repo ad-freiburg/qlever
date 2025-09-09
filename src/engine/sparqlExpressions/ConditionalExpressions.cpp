@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -11,17 +13,19 @@
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
-[[maybe_unused]] auto ifImpl =
-    []<typename T, typename U>(EffectiveBooleanValueGetter::Result condition,
-                               T&& i, U&& e)
+[[maybe_unused]] auto ifImpl = [](EffectiveBooleanValueGetter::Result condition,
+                                  auto&& i, auto&& e)
     -> CPP_ret(IdOrLiteralOrIri)(
-        requires SingleExpressionResult<T>&& SingleExpressionResult<U>&&
-            std::is_rvalue_reference_v<T&&>&& std::is_rvalue_reference_v<U&&>) {
+        requires SingleExpressionResult<decltype(i)>&& SingleExpressionResult<
+            decltype(e)>&& std::is_rvalue_reference_v<decltype(i)&&>&&
+            std::is_rvalue_reference_v<decltype(e)&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
-  } else {
+  } else if (condition == EffectiveBooleanValueGetter::Result::False) {
     return AD_FWD(e);
   }
+  AD_CORRECTNESS_CHECK(condition == EffectiveBooleanValueGetter::Result::Undef);
+  return IdOrLiteralOrIri{Id::makeUndefined()};
 };
 NARY_EXPRESSION(IfExpression, 3,
                 FV<decltype(ifImpl), EffectiveBooleanValueGetter,
@@ -87,7 +91,7 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    ENABLE_UNINITIALIZED_WARNINGS
+    GCC_REENABLE_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,

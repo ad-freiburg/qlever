@@ -1,8 +1,12 @@
-// Copyright 2023 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -72,6 +76,8 @@ auto numTriplesBlockwise =
       });
   return testing::AllOfArray(blockMatchers);
 };
+
+const qlever::KeyOrder keyOrder{0, 1, 2, 3};
 }  // namespace
 
 // Fixture with helper functions.
@@ -125,15 +131,15 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
       CBM(PT(5, 1, 1), PT(15, 1, 1)), CBM(PT(15, 1, 2), PT(25, 1, 1)),
       CBM(PT(25, 1, 2), PT(30, 1, 1)), CBM(PT(30, 1, 2), PT(35, 1, 1))};
   // Set up lists of located triples for three blocks.
-  auto LT1 = LT{1, IT(10, 1, 0), false};
-  auto LT2 = LT{1, IT(10, 2, 1), false};
-  auto LT3 = LT{1, IT(11, 3, 0), true};
-  auto LT4 = LT{2, IT(20, 4, 0), true};
-  auto LT5 = LT{2, IT(21, 5, 0), true};
-  auto LT6 = LT{4, IT(30, 6, 0), true};
-  auto LT7 = LT{4, IT(32, 7, 0), false};
-  auto LT8 = LT{3, IT(25, 5, 0), true};
-  auto LT9 = LT{4, IT(31, 6, 1), false};
+  auto LT1 = LT{0, IT(10, 1, 0), false};
+  auto LT2 = LT{0, IT(10, 2, 1), false};
+  auto LT3 = LT{0, IT(11, 3, 0), true};
+  auto LT4 = LT{1, IT(20, 4, 0), true};
+  auto LT5 = LT{1, IT(21, 5, 0), true};
+  auto LT6 = LT{3, IT(30, 6, 0), true};
+  auto LT7 = LT{3, IT(32, 7, 0), false};
+  auto LT8 = LT{2, IT(25, 5, 0), true};
+  auto LT9 = LT{3, IT(31, 6, 1), false};
   auto locatedTriplesPerBlock =
       makeLocatedTriplesPerBlock({LT1, LT2, LT3, LT4, LT5, LT6, LT7});
   locatedTriplesPerBlock.setOriginalMetadata(metadata);
@@ -141,11 +147,10 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
-              numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+              numTriplesBlockwise({{0, {3, 3}}, {1, {2, 2}}, {3, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
-                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
+                  {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7}}}));
 
   auto handles = locatedTriplesPerBlock.add(std::vector{LT8, LT9});
 
@@ -153,50 +158,53 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {1, 1}}, {3, {3, 3}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
-              locatedTriplesAre({{1, {LT1, LT2, LT3}},
-                                 {2, {LT4, LT5}},
-                                 {3, {LT8}},
-                                 {4, {LT6, LT7, LT9}}}));
+              locatedTriplesAre({{0, {LT1, LT2, LT3}},
+                                 {1, {LT4, LT5}},
+                                 {2, {LT8}},
+                                 {3, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(3, handles[0]);
+  locatedTriplesPerBlock.erase(2, handles[0]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
+          {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7, LT9}}}));
 
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
                ad_utility::Exception);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   // Nothing changed.
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
-          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
+          {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(4, handles[1]);
+  locatedTriplesPerBlock.erase(3, handles[1]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+                  {{0, {3, 3}}, {1, {2, 2}}, {2, {0, 0}}, {3, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
-                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
+                  {{0, {LT1, LT2, LT3}}, {1, {LT4, LT5}}, {3, {LT6, LT7}}}));
 
   locatedTriplesPerBlock.clear();
 
@@ -642,7 +650,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         triplesToLocate,
         Span{CBM(PT1, PT1), CBM(PT2, PT2), CBM(PT3, PT3), CBM(PT4, PT4),
              CBM(PT5, PT5), CBM(PT6, PT6), CBM(PT7, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false, handle);
+        keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
@@ -660,7 +668,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         triplesToLocate,
         Span{CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
              CBM(PT8, PT8)},
-        {0, 1, 2}, true, handle);
+        keyOrder, true, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
                                            LT(1, T3, true), LT(1, T4, true),
@@ -672,7 +680,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // The relations (identical first column) are in a block each.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate, Span{CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false, handle);
+        keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
@@ -686,7 +694,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // is supported.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocateReverse,
-        Span{CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)}, {0, 1, 2}, false,
+        Span{CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)}, keyOrder, false,
         handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
@@ -698,7 +706,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   {
     // All triples are in one block.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        triplesToLocate, Span{CBM(PT1, PT8)}, {0, 1, 2}, false, handle);
+        triplesToLocate, Span{CBM(PT1, PT8)}, keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
@@ -742,14 +750,14 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Adding no triples does no changed the augmented metadata.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{}, metadata, {0, 1, 2}, true, handle));
+        Span{}, metadata, keyOrder, true, handle));
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T1 is before block 0. The beginning of block 0 changes.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{T1}, metadata, {0, 1, 2}, false, handle));
+        Span{T1}, metadata, keyOrder, false, handle));
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
@@ -759,7 +767,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // T2 is inside block 1. Borders don't change.
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{T2}, metadata, {0, 1, 2}, true, handle));
+        Span{T2}, metadata, keyOrder, true, handle));
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -768,7 +776,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // delete) add to the block borders. Borders don't change.
     expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{T3}, metadata, {0, 1, 2}, false, handle));
+        Span{T3}, metadata, keyOrder, false, handle));
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -776,7 +784,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // T4 is before block 4. The beginning of block 4 changes.
     auto handles =
         locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-            Span{T4}, metadata, {0, 1, 2}, true, handle));
+            Span{T4}, metadata, keyOrder, true, handle));
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
@@ -785,6 +793,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Erasing the update of T4 restores the beginning of block 4.
     locatedTriplesPerBlock.erase(4, handles[0]);
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(PT8, PT8);
     // The block 4 has no more updates, so we restore the info about the block
@@ -819,12 +828,12 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
       CBM(PT1, PT1), CBM(PT2, PT3, std::vector<Id>{V(13)})};
   std::vector<CompressedBlockMetadata> expectedAugmentedMetadata{metadata};
 
-  auto T1 = IT(
-      1, 10, 10,
-      12);  // Before block 0 (because `12` is smaller than the default graph)
-  auto T2 = IT(1, 10, 10,
-               99999999);  // Becomes the lower bound of block 1, although it
-                           // only differs in the graph info.
+  // Before block0 (because `12` is smaller than the default graph)
+  auto T1 = IT(1, 10, 10, 12);
+
+  // Becomes the last triple of block 0, because it only differs in the graph
+  // info.
+  auto T2 = IT(1, 10, 10, 99999999);
   auto T3 = IT(2, 12, 10, 17);  // Inside block 1, add graph 17.
   auto T4 = IT(2, 12, 10, 18);  // Inside block 1, add graph 18.
 
@@ -839,12 +848,12 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Delete the located triples {T1 ... T4}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{T1, T2, T3, T4}, metadata, {0, 1, 2}, false, handle));
+        Span{T1, T2, T3, T4}, metadata, keyOrder, false, handle));
 
     // All the blocks have updates, so their value of `containsDuplicates..` is
     // set to `true`.
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
 
@@ -860,12 +869,15 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Add the located triples {T1 ... T5}
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        Span{T1, T2, T3, T4, T5}, metadata, {0, 1, 2}, true, handle));
+        Span{T1, T2, T3, T4, T5}, metadata, keyOrder, true, handle));
 
-    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
-    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0] =
+        CBM(T1.toPermutedTriple(), T2.toPermutedTriple());
+    // Note: Although the graph `9999999` is added to block 0, the graph info
+    // remains unchanged, because it was set to `nullopt` which means "too many
+    // graphs to keep track of them manually".
     expectedAugmentedMetadata[1].graphInfo_.value() =
-        std::vector{V(13), V(17), V(18), V(99999999)};
+        std::vector{V(13), V(17), V(18)};
 
     // We have added a triple `T5` after the last block, so there now is an
     // additional block, which also stores the correct graph info.
@@ -899,7 +911,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     for (size_t i = 30; i < 30 + 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
          ++i) {
       auto tr = T3;
-      tr.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
+      tr.ids().at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
       triples.push_back(tr);
     }
 
@@ -910,15 +922,15 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Add the exact amount of graphs such that we are at the maximum number of
     // stored graphs.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        std::span{triples}.subspan(0, numGraphsToMax), metadata, {0, 1, 2},
-        true, handle));
+        ql::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
+        handle));
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
     // Adding one more graph will exceed the maximum.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        std::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1),
-        metadata, {0, 1, 2}, true, handle));
+        ql::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1), metadata,
+        keyOrder, true, handle));
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }

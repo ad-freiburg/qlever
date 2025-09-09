@@ -5,35 +5,25 @@
 #ifndef QLEVER_SRC_INDEX_INDEXMETADATA_H
 #define QLEVER_SRC_INDEX_INDEXMETADATA_H
 
-#include <stdio.h>
-
-#include <array>
 #include <cmath>
 #include <exception>
 #include <limits>
 #include <utility>
-#include <vector>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
-#include "util/HashMap.h"
 #include "util/MmapVector.h"
-#include "util/ReadableNumberFact.h"
 #include "util/Serializer/Serializer.h"
-
-using std::array;
-using std::pair;
-using std::vector;
 
 // An exception is thrown when we want to construct mmap meta data from hmap
 // meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
-  WrongFormatException(std::string msg) : msg_(std::move(msg)) {}
-  const char* what() const throw() { return msg_.c_str(); }
+  explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
+  const char* what() const noexcept override { return msg_.c_str(); }
 
  private:
   std::string msg_;
@@ -81,8 +71,8 @@ class IndexMetaData {
  private:
   off_t offsetAfter_ = 0;
 
-  string name_;
-  string filename_;
+  std::string name_;
+  std::string filename_;
 
   // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
@@ -98,7 +88,7 @@ class IndexMetaData {
 
   // Public methods.
  public:
-  // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
+  // Some instantiations of `MapType` (the dense ones using mmap)
   // require additional calls to setup() before being fully initialized.
   IndexMetaData() = default;
 
@@ -166,11 +156,11 @@ class IndexMetaData {
 
   // The number of distinct Col0Ids has to be passed in manually, as it cannot
   // be computed.
-  string statistics() const;
+  std::string statistics() const;
 
-  void setName(const string& name) { name_ = name; }
+  void setName(const std::string& name) { name_ = name; }
 
-  const string& getName() const { return name_; }
+  const std::string& getName() const { return name_; }
 
   size_t getVersion() const { return version_; }
 

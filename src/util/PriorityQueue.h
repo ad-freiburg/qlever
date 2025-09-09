@@ -28,8 +28,6 @@
 #include "backports/algorithm.h"
 
 namespace ad_utility {
-using std::make_shared;
-using std::shared_ptr;
 
 class EmptyPopException : public std::exception {
  public:
@@ -66,7 +64,7 @@ class TreeBasedPQ {
   // we have to store Score-Value pairs in the tree, use a named struct for this
   struct Handle {
     Score mScore;
-    shared_ptr<Value> mValue;
+    std::shared_ptr<Value> mValue;
     const Score& score() const { return mScore; }
     Score& score() { return mScore; }
     const Value& value() const { return *mValue; }
@@ -229,10 +227,10 @@ class HeapBasedPQ {
    * clear). They need to be passed in for the updateKey operation
    */
   class Handle {
-    shared_ptr<PqNode> mData;  // correctly handle lifetime/ownership
+    std::shared_ptr<PqNode> mData;  // correctly handle lifetime/ownership
    public:
     /// Take ownership of content
-    explicit Handle(shared_ptr<PqNode>&& content) noexcept
+    explicit Handle(std::shared_ptr<PqNode>&& content) noexcept
         : mData(std::move(content)) {}
     /// default constructor currently needed for the Cache
     Handle() = default;
@@ -334,7 +332,7 @@ class HeapBasedPQ {
   /// Insert with a score and a value, return a handle that can be later used to
   /// change the score
   Handle insert(Score s, Value v) {
-    Handle handle{make_shared<PqNode>(s, std::move(v))};
+    Handle handle{std::make_shared<PqNode>(s, std::move(v))};
     auto entry = PqEntry(std::move(s), handle);
     _pq.emplace(std::move(entry));
     mSize++;
