@@ -19,6 +19,7 @@
 #include <string>
 
 #include "backports/algorithm.h"
+#include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
@@ -156,15 +157,15 @@ Note that user defined literals only allow very specific types for function
 arguments, so I couldn't use more fitting types.
 */
 namespace memory_literals {
-consteval MemorySize operator""_B(unsigned long long int bytes);
-consteval MemorySize operator""_kB(long double kilobytes);
-consteval MemorySize operator""_kB(unsigned long long int kilobytes);
-consteval MemorySize operator""_MB(long double megabytes);
-consteval MemorySize operator""_MB(unsigned long long int megabytes);
-consteval MemorySize operator""_GB(long double gigabytes);
-consteval MemorySize operator""_GB(unsigned long long int gigabytes);
-consteval MemorySize operator""_TB(long double terabytes);
-consteval MemorySize operator""_TB(unsigned long long int terabytes);
+QL_CONSTEVAL MemorySize operator""_B(unsigned long long int bytes);
+QL_CONSTEVAL MemorySize operator""_kB(long double kilobytes);
+QL_CONSTEVAL MemorySize operator""_kB(unsigned long long int kilobytes);
+QL_CONSTEVAL MemorySize operator""_MB(long double megabytes);
+QL_CONSTEVAL MemorySize operator""_MB(unsigned long long int megabytes);
+QL_CONSTEVAL MemorySize operator""_GB(long double gigabytes);
+QL_CONSTEVAL MemorySize operator""_GB(unsigned long long int gigabytes);
+QL_CONSTEVAL MemorySize operator""_TB(long double terabytes);
+QL_CONSTEVAL MemorySize operator""_TB(unsigned long long int terabytes);
 }  // namespace memory_literals
 
 /*
@@ -489,47 +490,47 @@ CPP_template_def(typename T)(
 
 namespace memory_literals {
 // _____________________________________________________________________________
-consteval MemorySize operator""_B(unsigned long long int bytes) {
+QL_CONSTEVAL MemorySize operator""_B(unsigned long long int bytes) {
   return MemorySize::bytes(bytes);
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_kB(long double kilobytes) {
+QL_CONSTEVAL MemorySize operator""_kB(long double kilobytes) {
   return MemorySize::kilobytes(static_cast<double>(kilobytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_kB(unsigned long long int kilobytes) {
+QL_CONSTEVAL MemorySize operator""_kB(unsigned long long int kilobytes) {
   return MemorySize::kilobytes(static_cast<size_t>(kilobytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_MB(long double megabytes) {
+QL_CONSTEVAL MemorySize operator""_MB(long double megabytes) {
   return MemorySize::megabytes(static_cast<double>(megabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_MB(unsigned long long int megabytes) {
+QL_CONSTEVAL MemorySize operator""_MB(unsigned long long int megabytes) {
   return MemorySize::megabytes(static_cast<size_t>(megabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_GB(long double gigabytes) {
+QL_CONSTEVAL MemorySize operator""_GB(long double gigabytes) {
   return MemorySize::gigabytes(static_cast<double>(gigabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_GB(unsigned long long int gigabytes) {
+QL_CONSTEVAL MemorySize operator""_GB(unsigned long long int gigabytes) {
   return MemorySize::gigabytes(static_cast<size_t>(gigabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_TB(long double terabytes) {
+QL_CONSTEVAL MemorySize operator""_TB(long double terabytes) {
   return MemorySize::terabytes(static_cast<double>(terabytes));
 }
 
 // _____________________________________________________________________________
-consteval MemorySize operator""_TB(unsigned long long int terabytes) {
+QL_CONSTEVAL MemorySize operator""_TB(unsigned long long int terabytes) {
   return MemorySize::terabytes(static_cast<size_t>(terabytes));
 }
 }  // namespace memory_literals

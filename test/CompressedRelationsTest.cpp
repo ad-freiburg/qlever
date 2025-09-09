@@ -1091,7 +1091,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     // std::nullopt matches all graphs.
     spec =
         ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
-    std::array additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    std::array additionalColumns{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
         additionalColumns, handle, emptyLocatedTriples);
@@ -1166,4 +1166,29 @@ TEST(ScanSpecAndBlocks, removePrefix) {
     specAndBlocks.removePrefix(12);
     EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 0);
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedBlockMetadata, invariantChecks) {
+  std::vector<CompressedBlockMetadata> blocks;
+  blocks.emplace_back();
+  blocks.back().firstTriple_ = {V(1), V(2), V(3), V(13)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(13)};
+  blocks.emplace_back();
+  // Violates the precondition, the first triple of the second block is not
+  // larger than the last triple of the first block.
+  blocks.back().firstTriple_ = {V(1), V(2), V(3), V(13)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(13)};
+
+  EXPECT_FALSE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
+
+  // The blocks are correctly sorted, but there are duplicates (when
+  // disregarding the graph) across blocks.
+  blocks.back().firstTriple_ = {V(1), V(2), V(4), V(14)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(15)};
+  EXPECT_FALSE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
+
+  // Now everything is consistent and the check should work.
+  blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
+  EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }
