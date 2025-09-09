@@ -309,7 +309,7 @@ TEST(QueryPlanner, joinOfFullScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
-  using enum ::OrderBy::AscOrDesc;
+  QL_USING_ENUM_NAMESPACE(OrderByEnum, AscOrDesc);
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -4080,7 +4080,7 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
-  using enum ::OrderBy::AscOrDesc;
+  QL_USING_ENUM_NAMESPACE(OrderByEnum, AscOrDesc);
   // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",
@@ -4211,7 +4211,7 @@ TEST(QueryPlanner, Exists) {
 TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
   h::expect("SELECT * { SELECT ?s { ?s <a> [] } ORDER BY RAND() }",
             h::OrderBy({std::pair{Var{"?_QLever_internal_variable_1"},
-                                  OrderBy::AscOrDesc::Asc}},
+                                  ::OrderBy::AscOrDesc::Asc}},
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));

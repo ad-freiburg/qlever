@@ -9,8 +9,13 @@
 #include <utility>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+
+namespace OrderByEnum {
+QL_DEFINE_ENUM(AscOrDesc, Asc, Desc);
+}
 
 // The implementation of the SPARQL `ORDER BY` operation.
 //
@@ -25,6 +30,7 @@ class OrderBy : public Operation {
   // TODO<joka921> This should be `pair<ColumnIndex, IsAscending>`
   // The bool means "isDescending"
   using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
+  using AscOrDesc = OrderByEnum::AscOrDesc;
 
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
@@ -47,7 +53,6 @@ class OrderBy : public Operation {
 
   // Expose the variables on which this OrderBy is performed. Currently mostly
   // used for testing.
-  enum class AscOrDesc { Asc, Desc };
   using SortedVariables = std::vector<std::pair<Variable, AscOrDesc>>;
   SortedVariables getSortedVariables() const;
 

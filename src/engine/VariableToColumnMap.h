@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 #define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
+#include "backports/usingEnum.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
@@ -78,7 +79,7 @@ copySortedByColumnIndex(VariableToColumnMap map);
 // scoping). If `keepJoinColumns` is `false`, then the join columns will not be
 // included in the result, and all columns that would have a column index `>=`
 // any of the join columns are shifted to the left accordingly.
-enum class BinOpType { Join, OptionalJoin };
+QL_DEFINE_ENUM(BinOpType, Join, OptionalJoin);
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,

@@ -11,6 +11,7 @@
 #include <string_view>
 #include <variant>
 
+#include "backports/usingEnum.h"
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
@@ -21,17 +22,8 @@
 // The supported spatial join types (geometry predicates). When updating this
 // enum, also add a case in `getGeoFunctionExpressionParameters` in
 // `GeoExpression.cpp`.
-enum class SpatialJoinType {
-  INTERSECTS,
-  CONTAINS,
-  COVERS,
-  CROSSES,
-  TOUCHES,
-  EQUALS,
-  OVERLAPS,
-  WITHIN,
-  WITHIN_DIST
-};
+QL_DEFINE_ENUM(SpatialJoinType, INTERSECTS, CONTAINS, COVERS, CROSSES, TOUCHES,
+               EQUALS, OVERLAPS, WITHIN, WITHIN_DIST);
 
 // String representation of the `SpatialJoinType` values.
 inline constexpr std::array<std::string_view, 9> SpatialJoinTypeString{
@@ -61,12 +53,8 @@ using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
                                      LibSpatialJoinConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm {
-  BASELINE,
-  S2_GEOMETRY,
-  BOUNDING_BOX,
-  LIBSPATIALJOIN
-};
+QL_DEFINE_ENUM(SpatialJoinAlgorithm, BASELINE, S2_GEOMETRY, BOUNDING_BOX,
+               LIBSPATIALJOIN);
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 

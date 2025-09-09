@@ -14,19 +14,23 @@
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
+#include "backports/usingEnum.h"
+
+namespace HasPredicate {
+QL_DEFINE_ENUM(ScanType,
+               // Given a constant predicate, return all subjects
+               FREE_S,
+               // Given a constant subject, return all predicates
+               FREE_O,
+               // For all subjects return their predicates
+               FULL_SCAN,
+               // For a given subset of subjects return their predicates
+               SUBQUERY_S);
+}  // namespace HasPredicate
 
 class HasPredicateScan : public Operation {
  public:
-  enum class ScanType {
-    // Given a constant predicate, return all subjects
-    FREE_S,
-    // Given a constant subject, return all predicates
-    FREE_O,
-    // For all subjects return their predicates
-    FULL_SCAN,
-    // For a given subset of subjects return their predicates
-    SUBQUERY_S
-  };
+  using ScanType = HasPredicate::ScanType;
 
   struct SubtreeAndColumnIndex {
     std::shared_ptr<QueryExecutionTree> subtree_;

@@ -10,12 +10,36 @@
 #include <boost/optional.hpp>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+
+namespace QueryPlannerEnum {
+// Configure the behavior of the `applyFiltersIfPossible` function below.
+QL_DEFINE_ENUM(
+    FilterMode,
+    // Only apply matching filters, that is filters are only added to plans that
+    // already bind all the variables that are used in the filter. The plans
+    // with the added filters are added to the candidate set. This mode is used
+    // in the dynamic programming approach, where we don't apply the filters
+    // greedily. Applying filter substitutes is permitted in this mode.
+    KeepUnfiltered,
+    // Only apply matching filters (see above), but the plans with added filters
+    // replace the plans without filters. This is used in the greedy approach,
+    // where filters are always applied as early as possible. Applying filter
+    // substitutes is permitted in this mode.
+    ReplaceUnfiltered,
+    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    ReplaceUnfilteredNoSubstitutes,
+    // Apply all filters (also the nonmatching ones) and replace the unfiltered
+    // plans. This has to be called at the end of parsing a group graph pattern
+    // where we have to make sure that all filters are applied.
+    ApplyAllFiltersAndReplaceUnfiltered);
+}  // namespace QueryPlannerEnum
 
 class QueryPlanner {
   using TextLimitMap =
@@ -35,6 +59,7 @@ class QueryPlanner {
 
  public:
   using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+  using FilterMode = QueryPlannerEnum::FilterMode;
 
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
@@ -478,26 +503,6 @@ class QueryPlanner {
   std::string getPruningKey(const SubtreePlan& plan,
                             const vector<ColumnIndex>& orderedOnColumns) const;
 
-  // Configure the behavior of the `applyFiltersIfPossible` function below.
-  enum class FilterMode {
-    // Only apply matching filters, that is filters are only added to plans that
-    // already bind all the variables that are used in the filter. The plans
-    // with the added filters are added to the candidate set. This mode is used
-    // in the dynamic programming approach, where we don't apply the filters
-    // greedily. Applying filter substitutes is permitted in this mode.
-    KeepUnfiltered,
-    // Only apply matching filters (see above), but the plans with added filters
-    // replace the plans without filters. This is used in the greedy approach,
-    // where filters are always applied as early as possible. Applying filter
-    // substitutes is permitted in this mode.
-    ReplaceUnfiltered,
-    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
-    ReplaceUnfilteredNoSubstitutes,
-    // Apply all filters (also the nonmatching ones) and replace the unfiltered
-    // plans. This has to be called at the end of parsing a group graph pattern
-    // where we have to make sure that all filters are applied.
-    ApplyAllFiltersAndReplaceUnfiltered,
-  };
   template <FilterMode mode = FilterMode::KeepUnfiltered>
   void applyFiltersIfPossible(
       std::vector<SubtreePlan>& row,

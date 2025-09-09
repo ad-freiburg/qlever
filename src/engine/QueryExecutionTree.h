@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
@@ -21,7 +22,7 @@
 // stored as stripped in this class, or completely hidden. (this is used to
 // distinguish between subqueries and "ordinary" operations that just strip
 // columns for efficiency reasons.
-enum class HideStrippedColumns { False, True };
+QL_DEFINE_ENUM(HideStrippedColumns, False, True);
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.

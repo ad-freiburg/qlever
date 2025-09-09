@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/usingEnum.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
@@ -28,9 +29,16 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+// Used to store the kind of aggregate.
+namespace GroupByImplEnum {
+QL_DEFINE_ENUM(HashMapAggregateType, AVG, COUNT, MIN, MAX, SUM, GROUP_CONCAT,
+               SAMPLE);
+}
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
+  using HashMapAggregateType = GroupByImplEnum::HashMapAggregateType;
 
  private:
   using string = std::string;
@@ -244,17 +252,6 @@ class GroupByImpl : public Operation {
     }
   };
 
-  // Used to store the kind of aggregate.
-  enum class HashMapAggregateType {
-    AVG,
-    COUNT,
-    MIN,
-    MAX,
-    SUM,
-    GROUP_CONCAT,
-    SAMPLE
-  };
-
   // `GROUP_CONCAT` requires additional data.
   struct HashMapAggregateTypeWithData {
     HashMapAggregateType type_;
@@ -354,7 +351,7 @@ class GroupByImpl : public Operation {
         : numOfGroupedColumns_{numOfGroupedColumns},
           alloc_{alloc},
           map_{alloc} {
-      using enum HashMapAggregateType;
+      QL_USING_ENUM_NAMESPACE(GroupByImplEnum, HashMapAggregateType);
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;

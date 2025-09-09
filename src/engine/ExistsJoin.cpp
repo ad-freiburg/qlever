@@ -4,6 +4,7 @@
 
 #include "engine/ExistsJoin.h"
 
+#include "backports/usingEnum.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
@@ -316,6 +317,8 @@ bool ExistsJoin::columnOriginatesFromGraphOrUndef(
 }
 
 namespace {
+// Helper enum to indicate if we can avoid expensive checks.
+QL_DEFINE_ENUM(FastForwardState, Unknown, Yes, No);
 
 // Implementation to add the `EXISTS` column to the result of a child operation
 // of this class. Works with lazy and non-lazy results.
@@ -341,9 +344,6 @@ struct LazyExistsJoinImpl
       std::nullopt;
   // Store the current index in the right child that was last being checked.
   size_t currentRightIndex_ = 0;
-
-  // Helper enum to indicate if we can avoid expensive checks.
-  enum class FastForwardState { Unknown, Yes, No };
 
   // If we found undef values on the right, or the right ranges have been
   // consumed, we can fast-forward and skip expensive checks.

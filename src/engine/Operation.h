@@ -11,6 +11,7 @@
 
 #include <memory>
 
+#include "backports/usingEnum.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -25,11 +26,8 @@
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
-enum class ComputationMode {
-  FULLY_MATERIALIZED,
-  ONLY_IF_CACHED,
-  LAZY_IF_SUPPORTED
-};
+QL_DEFINE_ENUM(ComputationMode, FULLY_MATERIALIZED, ONLY_IF_CACHED,
+               LAZY_IF_SUPPORTED);
 
 class Operation {
  private:

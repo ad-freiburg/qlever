@@ -8,18 +8,24 @@
 #include <array>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace MinusEnum {
+QL_DEFINE_ENUM(RowComparison, EQUAL, LEFT_SMALLER, RIGHT_SMALLER);
+}
+
 class Minus : public Operation {
+ public:
+  using RowComparison = MinusEnum::RowComparison;
+
  private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
   std::vector<float> _multiplicities;
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
-
-  enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,

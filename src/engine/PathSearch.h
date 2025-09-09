@@ -11,11 +11,12 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "backports/usingEnum.h"
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 
-enum class PathSearchAlgorithm { ALL_PATHS };
+QL_DEFINE_ENUM(PathSearchAlgorithm, ALL_PATHS);
 
 /**
  * @brief Represents the source or target side of a PathSearch.
