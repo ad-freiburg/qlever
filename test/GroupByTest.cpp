@@ -2276,6 +2276,7 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
 // _____________________________________________________________________________
 TEST(GroupBy, countDistinctGraph) {
   // Regression test for https://github.com/ad-freiburg/qlever/issues/2284
+  // retrospectively adjusted for new correct behaviour.
   using V = Variable;
   auto* qec = ad_utility::testing::getQec();
   auto subtree = ad_utility::makeExecutionTree<IndexScan>(
@@ -2292,7 +2293,7 @@ TEST(GroupBy, countDistinctGraph) {
                   std::move(subtree)};
 
   auto result = groupBy.computeResultOnlyForTesting(false);
-  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
+  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(0)}}));
 }
 
 namespace {
