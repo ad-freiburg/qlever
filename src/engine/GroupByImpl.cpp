@@ -88,7 +88,7 @@ class LazyGroupByRange
     rangeIt_ = ql::ranges::begin(range_.value());
   }
 
-  std::optional<IdTableVocabPair> get() {
+  std::optional<IdTableVocabPair> get() override {
     if (isFinished_) {
       return std::nullopt;
     }
