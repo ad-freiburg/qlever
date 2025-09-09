@@ -77,7 +77,7 @@ struct IndexBuilderConfig : CommonConfig {
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.
   //
-  // NOTE: The practically most relevant key, for which a non-default valie is
+  // NOTE: The practically most relevant key, for which a non-default value is
   // often needed, is `num-triples-per-batch`. In determines the number of
   // triples processed at once during index building by a single thread. If this
   // batch size is too small, there is an overhead of merging the related
@@ -162,7 +162,7 @@ struct EngineConfig : CommonConfig {
   bool persistUpdates_ = true;
 };
 
-// Class to use QLever as an embedded datbase, without the HTTP server. See
+// Class to use QLever as an embedded database, without the HTTP server. See
 // `src/engine/LibQleverExample.cpp` for an example use.
 class Qlever {
  private:
