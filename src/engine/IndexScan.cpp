@@ -38,6 +38,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
+      additionalColumns_{triple.additionalScanColumns_ |
+                         ql::views::transform(ad_utility::first) |
+                         ::ranges::to<std::vector>()},
+      additionalVariables_{triple.additionalScanColumns_ |
+                           ql::views::transform(ad_utility::second) |
+                           ::ranges::to<std::vector>()},
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
@@ -45,10 +51,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
-  for (auto& [idx, variable] : triple.additionalScanColumns_) {
-    additionalColumns_.push_back(idx);
-    additionalVariables_.push_back(variable);
-  }
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
 
   // Check the following invariant: All the variables must be at the end of the
@@ -78,11 +80,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
+      additionalColumns_(std::move(additionalColumns)),
+      additionalVariables_(std::move(additionalVariables)),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
-      additionalColumns_(std::move(additionalColumns)),
-      additionalVariables_(std::move(additionalVariables)),
       varsToKeep_{std::move(varsToKeep)} {
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
@@ -347,7 +349,8 @@ ScanSpecification IndexScan::getScanSpecification() const {
 ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
   auto permutedTriple = getPermutedTriple();
   return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2],
-          graphsToFilter_};
+          graphsToFilter_,
+          ad_utility::contains(additionalColumns_, ADDITIONAL_COLUMN_GRAPH_ID)};
 }
 
 // _____________________________________________________________________________

@@ -105,9 +105,9 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(col0Id);
   return p.reader().getDistinctCol1IdsAndCounts(
-      getScanSpecAndBlocks(ScanSpecification{col0Id, std::nullopt, std::nullopt,
-                                             Id::makeUndefined()},
-                           locatedTriplesSnapshot),
+      getScanSpecAndBlocks(
+          ScanSpecification{col0Id, std::nullopt, std::nullopt, std::nullopt},
+          locatedTriplesSnapshot),
       cancellationHandle,
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
@@ -117,7 +117,7 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt,
-                             Id::makeUndefined()};
+                             std::nullopt};
   return reader().getDistinctCol0IdsAndCounts(
       getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
       cancellationHandle,
@@ -172,9 +172,9 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     return p.meta_.getMetaData(col0Id);
   }
   return p.reader().getMetadataForSmallRelation(
-      getScanSpecAndBlocks(ScanSpecification{col0Id, std::nullopt, std::nullopt,
-                                             Id::makeUndefined()},
-                           locatedTriplesSnapshot),
+      getScanSpecAndBlocks(
+          ScanSpecification{col0Id, std::nullopt, std::nullopt, std::nullopt},
+          locatedTriplesSnapshot),
       col0Id, p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
@@ -236,7 +236,7 @@ const Permutation& Permutation::getActualPermutation(
 // ______________________________________________________________________
 const Permutation& Permutation::getActualPermutation(Id id) const {
   return getActualPermutation(
-      ScanSpecification{id, std::nullopt, std::nullopt, Id::makeUndefined()});
+      ScanSpecification{id, std::nullopt, std::nullopt, std::nullopt});
 }
 
 // TODO<joka921> The following two functions always assume that there were no

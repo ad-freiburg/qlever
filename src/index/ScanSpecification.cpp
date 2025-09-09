@@ -7,11 +7,16 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 
-// ____________________________________________________________________________
-ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
-    const Index& index) const {
-  return toScanSpecification(index.getImpl());
+namespace {
+
+// Helper function to turn a triple component into a `ValueId`.
+Id getNonOptionalId(TripleComponent tripleComponent, const IndexImpl& index,
+                    LocalVocab& localVocab) {
+  return std::move(tripleComponent)
+      .toValueId(index.getVocab(), localVocab, index.encodedIriManager());
 }
+
+}  // namespace
 
 // ____________________________________________________________________________
 ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
@@ -24,16 +29,18 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     if (!tc.has_value()) {
       return std::nullopt;
     }
-    return TripleComponent{tc.value()}.toValueId(index.getVocab(), localVocab,
-                                                 index.encodedIriManager());
+    return getNonOptionalId(tc.value(), index, localVocab);
   };
   std::optional<Id> col0Id = getId(col0_);
   std::optional<Id> col1Id = getId(col1_);
   std::optional<Id> col2Id = getId(col2_);
-  Id defaultGraph =
-      getId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI)})
-          .value();
+  std::optional<Id> defaultGraph =
+      filterDefaultGraph_
+          ? std::optional{getNonOptionalId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index, localVocab)}
+          : std::nullopt;
 
   ScanSpecification::Graphs graphsToFilter = std::nullopt;
   if (graphsToFilter_.has_value()) {
@@ -52,8 +59,9 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
 
 // ____________________________________________________________________________
 ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(
-    T col0, T col1, T col2, Graphs graphsToFilter)
-    : graphsToFilter_{std::move(graphsToFilter)} {
+    T col0, T col1, T col2, Graphs graphsToFilter, bool filterDefaultGraph)
+    : graphsToFilter_{std::move(graphsToFilter)},
+      filterDefaultGraph_{filterDefaultGraph} {
   auto toNulloptIfVariable = [](T& tc) -> std::optional<TripleComponent> {
     if (tc.has_value() && tc.value().isVariable()) {
       return std::nullopt;

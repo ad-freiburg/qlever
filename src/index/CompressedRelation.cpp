@@ -236,11 +236,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 // _____________________________________________________________________________
 auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
     const {
-  AD_CORRECTNESS_CHECK(!defaultGraph_.isUndefined());
   return [this](Id graph) {
-    return desiredGraphs_.has_value()
-               ? desiredGraphs_.value().contains(graph)
-               : (deleteGraphColumn_ || graph != defaultGraph_);
+    return desiredGraphs_.has_value() ? desiredGraphs_.value().contains(graph)
+                                      : graph != defaultGraph_;
   };
 }
 
@@ -248,7 +246,7 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
   if (!desiredGraphs_.has_value()) {
-    return !deleteGraphColumn_;
+    return defaultGraph_.has_value();
   }
   if (!metadata.graphInfo_.has_value()) {
     return true;
@@ -1182,7 +1180,7 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
-    const CompressedRelationReader::ScanSpecAndBlocks& metadataAndBlocks,
+    const ScanSpecAndBlocks& metadataAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
   if (metadataAndBlocks.sizeBlockMetadata_ == 0) {

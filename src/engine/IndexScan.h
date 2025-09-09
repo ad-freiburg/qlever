@@ -23,18 +23,19 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  ScanSpecAndBlocks scanSpecAndBlocks_;
-  bool scanSpecAndBlocksIsPrefiltered_;
-  size_t numVariables_;
-  size_t sizeEstimate_;
-  bool sizeEstimateIsExact_;
-  std::vector<float> multiplicity_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
   // the "ordinary" subjects, predicates, or objects, as well as the variables
   // that they are bound to.
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
+
+  ScanSpecAndBlocks scanSpecAndBlocks_;
+  bool scanSpecAndBlocksIsPrefiltered_;
+  size_t numVariables_;
+  size_t sizeEstimate_;
+  bool sizeEstimateIsExact_;
+  std::vector<float> multiplicity_;
 
   // If set, then only the specified variables will be part of the result.
   // Can be used to strip some columns that are not needed by the remainder
