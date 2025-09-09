@@ -313,10 +313,13 @@ template <typename T, typename Details>
 generator<T, Details> fromInputRangeWithDetails(
     ad_utility::InputRangeTypeErasedWithDetails<T, Details> rangeWithDetails) {
   Details& outerDetails = co_await getDetails;
-  // Copy the details from the input range to the generator's details
+  // Copy the initial details
   outerDetails = rangeWithDetails.details();
 
   for (auto& value : rangeWithDetails) {
+    // Update details before each yield to keep them in sync during lazy
+    // iteration
+    outerDetails = rangeWithDetails.details();
     co_yield std::move(value);
   }
 }
