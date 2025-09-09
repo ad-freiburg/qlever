@@ -57,8 +57,6 @@ class LazyGroupByRange
   std::optional<Result::LazyResult> range_;
   std::optional<Result::LazyResult::iterator> rangeIt_;
 
-  // InputRangeFromGet
-
  public:
   LazyGroupByRange(
       const GroupByImpl* parent, std::shared_ptr<const Result> subresult,
