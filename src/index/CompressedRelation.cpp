@@ -238,9 +238,9 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
     const {
   AD_CORRECTNESS_CHECK(!defaultGraph_.isUndefined());
   return [this](Id graph) {
-    return (!desiredGraphs_.has_value() ||
-            desiredGraphs_.value().contains(graph)) &&
-           graph != defaultGraph_;
+    return desiredGraphs_.has_value()
+               ? desiredGraphs_.value().contains(graph)
+               : (deleteGraphColumn_ || graph != defaultGraph_);
   };
 }
 
