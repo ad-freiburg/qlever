@@ -105,7 +105,7 @@ class LazyGroupByRange
       return yieldFinalValue();
     }
 
-    return std::make_optional<IdTableVocabPair>(std::move(*(rangeIt_.value())));
+    return std::optional(std::move(*(rangeIt_.value())));
   }
 
   // This method is forwarded to GroupByImpl::searchBlockBoundaries() during
