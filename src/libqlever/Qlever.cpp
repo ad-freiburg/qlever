@@ -20,8 +20,8 @@ Qlever::Qlever(const EngineConfig& config)
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES))}},
       index_{allocator_},
       enablePatternTrick_{!config.noPatterns_} {
-  // This also directly triggers the update functions and propagates the
-  // values of the parameters to the cache.
+  // Set runtime parameters relevant for caching and propagate them to the
+  // cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   RuntimeParameters().setOnUpdateAction<"cache-max-size">(
@@ -30,15 +30,16 @@ Qlever::Qlever(const EngineConfig& config)
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+
+  // Load the index from disk.
   index_.usePatterns() = enablePatternTrick_;
   index_.loadAllPermutations() = !config.onlyPsoAndPos_;
-
-  // Initialize the index.
   index_.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index_.addTextFromOnDiskIndex();
   }
 
+  // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
@@ -48,6 +49,7 @@ Qlever::Qlever(const EngineConfig& config)
 void Qlever::buildIndex(IndexBuilderConfig config) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
+  // Set memory limit and parser buffer size if specified.
   if (config.memoryLimit_.has_value()) {
     index.memoryLimitIndexBuilding() = config.memoryLimit_.value();
   }
@@ -62,6 +64,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         ad_utility::getLastPartOfString(config.wordsfile_, '/');
   }
 
+  // Set all other configuration options.
   index.setKbName(config.kbIndexName_);
   index.setTextName(config.textIndexName_);
   index.usePatterns() = !config.noPatterns_;
@@ -72,14 +75,13 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
 
+  // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
     index.createFromFiles(config.inputFiles_);
   }
-
   auto textIndexBuilder = TextIndexBuilder(
       ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
-
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
     textIndexBuilder.buildTextIndexFile(
         config.wordsAndDocsFileSpecified()
@@ -88,7 +90,6 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         config.addWordsFromLiterals_, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
   }
-
   if (!config.docsfile_.empty()) {
     textIndexBuilder.buildDocsDB(config.docsfile_);
   }
@@ -105,6 +106,7 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
                           ad_utility::MediaType mediaType) const {
   const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
+
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
