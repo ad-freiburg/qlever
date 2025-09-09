@@ -113,7 +113,7 @@ class TimeTracer {
 // don't have to pass a TimeTracer to every method that uses one.
 class DefaultTimeTracer : public TimeTracer {
  public:
-  explicit DefaultTimeTracer(const std::string& name) : TimeTracer(name) {}
+  using TimeTracer::TimeTracer;
   void beginTrace(const std::string&) override {
     // `DefaultTimeTracer` does nothing.
   }

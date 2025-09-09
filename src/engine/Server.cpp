@@ -947,14 +947,6 @@ UpdateMetadata Server::processUpdateImpl(
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
-  // TODO<qup42>: move this log out to processUpdate after the modify is
-  // finished.
-  LOG(INFO) << "Done processing update"
-            << ", total time was " << requestTimer.msecs().count() << " ms"
-            << std::endl;
-  LOG(DEBUG) << "Runtime Info:\n"
-             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
-
   tracer.beginTrace("clearCache");
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
@@ -1022,12 +1014,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                   },
                   true, tracer);
           tracer.endTrace("execution");
+
           tracer.endTrace("update");
           results.push_back(createResponseMetadataForUpdate(
               index_, index_.deltaTriplesManager().getCurrentSnapshot(),
               *plannedUpdate, plannedUpdate->queryExecutionTree_,
               updateMetadata, tracer));
           tracer.reset();
+
+          LOG(INFO) << "Done processing update"
+                    << ", total time was " << requestTimer.msecs().count()
+                    << " ms" << std::endl;
+          LOG(DEBUG) << "Runtime Info:\n"
+                     << plannedUpdate->queryExecutionTree_.getRootOperation()
+                            ->runtimeInfo()
+                            .toString()
+                     << std::endl;
         }
         return results;
       },
