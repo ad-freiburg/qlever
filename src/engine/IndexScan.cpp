@@ -384,24 +384,22 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-
-  // Get the base lazy scan from the permutation
-  auto baseScan = getScanPermutation().lazyScan(
+  auto lazyScanAllCols = getScanPermutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
   // Check if we need to apply column subset
   auto applySubset = makeApplyColumnSubset();
   if (!varsToKeep_.has_value()) {
-    return baseScan;
+    return lazyScanAllCols;
   }
 
   // Extract details from the original generator
-  auto originalDetails = baseScan.details();
+  auto originalDetails = lazyScanAllCols.details();
 
   // Apply transformation using CachingTransformInputRange and preserve details
   auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(baseScan), std::move(applySubset));
+      std::move(lazyScanAllCols), std::move(applySubset));
 
   // Create InputRangeTypeErasedWithDetails to preserve the details
   auto rangeWithDetails =
@@ -464,7 +462,6 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
       metaBlocks1.value(), metaBlocks2.value());
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
-
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
   result[1].details().numBlocksAll_ = metaBlocks2.value().sizeBlockMetadata_;
   return result;
@@ -484,7 +481,6 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks.value());
   auto result = getLazyScan(std::move(blocks.matchingBlocks_));
-
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
@@ -542,20 +538,18 @@ struct IndexScan::SharedGeneratorState {
   // if the first table is undefined. Also set `doneFetching_` if the generator
   // has been fully consumed.
   void advanceInputToNextNonEmptyTable() {
-    const bool firstStep = !iterator_.has_value();
-    // Initialize or advance the iterator.
+    bool firstStep = !iterator_.has_value();
     if (iterator_.has_value()) {
       ++iterator_.value();
     } else {
       iterator_ = generator_.begin();
     }
     auto& iterator = iterator_.value();
-    // Skip empty tables.
     while (iterator != generator_.end() && iterator->idTable_.empty()) {
       ++iterator;
     }
     doneFetching_ = iterator_ == generator_.end();
-    // Set the undef flag if the very first non-empty table starts with UNDEF.
+    // Set the undef flag if the first table is undefined.
     if (firstStep) {
       hasUndef_ =
           !doneFetching_ && iterator->idTable_.at(0, joinColumn_).isUndefined();
