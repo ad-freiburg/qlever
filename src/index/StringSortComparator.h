@@ -20,9 +20,27 @@
 #include <memory_resource>
 
 #include "backports/algorithm.h"
+#include "backports/usingEnum.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
+
+namespace LocaleManagerEnum {
+/// The five collation levels supported by icu, forwarded in a typesafe manner
+QL_DEFINE_ENUM_MANUAL(Level, PRIMARY = 0, SECONDARY = 1, TERTIARY = 2,
+                      QUARTERNARY = 3, IDENTICAL = 4, TOTAL = 5)
+QL_ENUM_ALIAS(Level, PRIMARY)
+QL_ENUM_ALIAS(Level, SECONDARY)
+QL_ENUM_ALIAS(Level, TERTIARY)
+QL_ENUM_ALIAS(Level, QUARTERNARY)
+QL_ENUM_ALIAS(Level, IDENTICAL)
+QL_ENUM_ALIAS(
+    Level,
+    TOTAL)  // if the identical level returns equal, we take the language  tag
+            // into account and then the result by strcmp. that way two strings
+            // that have a different byte representation never compare equal
+QL_DEFINE_ENUM_END();
+}  // namespace LocaleManagerEnum
 
 /**
  * @brief This class wraps all calls to the ICU library that are required by
@@ -31,18 +49,7 @@
  */
 class LocaleManager {
  public:
-  /// The five collation levels supported by icu, forwarded in a typesafe manner
-  enum class Level : uint8_t {
-    PRIMARY = 0,
-    SECONDARY = 1,
-    TERTIARY = 2,
-    QUARTERNARY = 3,
-    IDENTICAL = 4,
-    TOTAL =
-        5  // if the identical level returns equal, we take the language  tag
-           // into account and then the result by strcmp. that way two strings
-           // that have a different byte representation never compare equal
-  };
+  using Level = LocaleManagerEnum::Level;
 
   /**
    * A strong typedef for a string that contains unicode collation weights for

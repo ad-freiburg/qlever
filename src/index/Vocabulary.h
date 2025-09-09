@@ -16,12 +16,18 @@
 #include <string_view>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+
+namespace VocabularyEnum {
+// The different type of data that is stored in the vocabulary
+QL_DEFINE_ENUM(Datatypes, Literal, Iri, Float, Date);
+}  // namespace VocabularyEnum
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -74,9 +80,6 @@ class Vocabulary {
   };
 
  private:
-  // The different type of data that is stored in the vocabulary
-  enum class Datatypes { Literal, Iri, Float, Date };
-
   // If a literal uses one of these language tags or starts with one of these
   // prefixes, it will be externalized. By default, everything is externalized.
   // Both of these settings can be overridden using the `settings.json` file.

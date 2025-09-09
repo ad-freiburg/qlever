@@ -7,10 +7,13 @@
 
 #include <optional>
 #include <string>
+
+#include "backports/usingEnum.h"
+
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
-enum class Filetype { Turtle, NQuad };
+QL_DEFINE_ENUM(Filetype, Turtle, NQuad);
 
 // Specify a single input file or stream for the index builder.
 struct InputFileSpecification {
