@@ -54,7 +54,15 @@ struct Query {
   std::string query_;
   std::vector<DatasetClause> datasetClauses_;
 
-  bool operator==(const Query& rhs) const = default;
+  bool operator==(const Query& otherRhs) const {
+    if (!(query_ == otherRhs.query_)) {
+      return false;
+    }
+    if (!(datasetClauses_ == otherRhs.datasetClauses_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A SPARQL 1.1 Update
@@ -62,20 +70,33 @@ struct Update {
   std::string update_;
   std::vector<DatasetClause> datasetClauses_;
 
-  bool operator==(const Update& rhs) const = default;
+  bool operator==(const Update& otherRhs) const {
+    if (!(update_ == otherRhs.update_)) {
+      return false;
+    }
+    if (!(datasetClauses_ == otherRhs.datasetClauses_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A Graph Store HTTP Protocol operation. We only store the graph on which the
 // operation acts. The actual operation is extracted later.
 struct GraphStoreOperation {
   GraphOrDefault graph_;
-  bool operator==(const GraphStoreOperation& rhs) const = default;
+  bool operator==(const GraphStoreOperation& otherRhs) const {
+    if (!(graph_ == otherRhs.graph_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // No operation. This can happen for QLever's custom operations (e.g.
 // `cache-stats`). These requests have no operation but are still valid.
 struct None {
-  bool operator==(const None& rhs) const = default;
+  bool operator==(const None&) const { return true; };
 };
 
 using Operation = std::variant<Query, Update, GraphStoreOperation, None>;

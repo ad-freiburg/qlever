@@ -64,7 +64,21 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  bool operator==(const LimitOffsetClause&) const = default;
+  bool operator==(const LimitOffsetClause& otherRhs) const {
+    if (!(_limit == otherRhs._limit)) {
+      return false;
+    }
+    if (!(_offset == otherRhs._offset)) {
+      return false;
+    }
+    if (!(textLimit_ == otherRhs.textLimit_)) {
+      return false;
+    }
+    if (!(exportLimit_ == otherRhs.exportLimit_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Merge two clauses together. This adds the offsets and takes the minimum of
   // both limits. If the other limit is not set, the current limit is kept.

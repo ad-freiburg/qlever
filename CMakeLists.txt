@@ -29,6 +29,8 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 
+option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
+
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
@@ -432,9 +434,11 @@ set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h sr
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
-target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
-target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+endif()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
@@ -455,7 +459,9 @@ qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Bo
 
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+if (USE_PRECOMPILED_HEADERS)
 target_precompile_headers(ServerMain REUSE_FROM engine)
+endif()
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})

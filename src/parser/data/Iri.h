@@ -30,7 +30,12 @@ class Iri {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _string; }
 
-  bool operator==(const Iri& other) const = default;
+  bool operator==(const Iri& otherRhs) const {
+    if (!(_string == otherRhs._string)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_IRI_H

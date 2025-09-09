@@ -60,7 +60,42 @@ class MemorySize {
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
   // Default comparison operator.
-  constexpr auto operator<=>(const MemorySize&) const = default;
+  bool operator==(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return false;
+    }
+    return true;
+  }
+  bool operator<(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return memoryInBytes_ < otherRhs.memoryInBytes_;
+    }
+    return false;
+  }
+  bool operator<=(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return memoryInBytes_ <= otherRhs.memoryInBytes_;
+    }
+    return true;
+  }
+  bool operator>(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return memoryInBytes_ > otherRhs.memoryInBytes_;
+    }
+    return false;
+  }
+  bool operator>=(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return memoryInBytes_ >= otherRhs.memoryInBytes_;
+    }
+    return true;
+  }
+  bool operator!=(const MemorySize& otherRhs) const {
+    if (!(memoryInBytes_ == otherRhs.memoryInBytes_)) {
+      return true;
+    }
+    return false;
+  };
 
   // Hashing.
   template <typename H>

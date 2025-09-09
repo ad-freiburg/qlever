@@ -44,7 +44,12 @@ class QueryId {
   }
 
   // Starting with gcc 12 and clang 15 this can be constexpr
-  bool operator==(const QueryId&) const noexcept = default;
+  bool operator==(const QueryId& otherRhs) const {
+    if (!(id_ == otherRhs.id_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 /// This class is similar to QueryId, but it's instances are all unique within

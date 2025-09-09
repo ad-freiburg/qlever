@@ -74,7 +74,21 @@ class Url {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 
-  bool operator==(const Url&) const = default;
+  bool operator==(const Url& otherRhs) const {
+    if (!(protocol_ == otherRhs.protocol_)) {
+      return false;
+    }
+    if (!(host_ == otherRhs.host_)) {
+      return false;
+    }
+    if (!(port_ == otherRhs.port_)) {
+      return false;
+    }
+    if (!(target_ == otherRhs.target_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A concept for `http::request`

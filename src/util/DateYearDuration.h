@@ -139,7 +139,42 @@ class DateYearOrDuration {
 
   // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
-  auto operator<=>(const DateYearOrDuration&) const = default;
+  bool operator==(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return false;
+    }
+    return true;
+  }
+  bool operator<(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return bits_ < otherRhs.bits_;
+    }
+    return false;
+  }
+  bool operator<=(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return bits_ <= otherRhs.bits_;
+    }
+    return true;
+  }
+  bool operator>(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return bits_ > otherRhs.bits_;
+    }
+    return false;
+  }
+  bool operator>=(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return bits_ >= otherRhs.bits_;
+    }
+    return true;
+  }
+  bool operator!=(const DateYearOrDuration& otherRhs) const {
+    if (!(bits_ == otherRhs.bits_)) {
+      return true;
+    }
+    return false;
+  };
 
   // Bitwise hashing.
   template <typename H>

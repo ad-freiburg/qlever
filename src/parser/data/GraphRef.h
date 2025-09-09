@@ -14,18 +14,18 @@ using GraphRef = ad_utility::triple_component::Iri;
 // graph.
 struct DEFAULT {
   // For testing
-  bool operator==(const DEFAULT&) const = default;
+  bool operator==(const DEFAULT&) const { return true; };
 };
 // Denotes the target graphs for an operation. Here the target are all named
 // graphs.
 struct NAMED {
   // For testing
-  bool operator==(const NAMED&) const = default;
+  bool operator==(const NAMED&) const { return true; };
 };
 // Denotes the target graphs for an operation. Here the target are all graphs.
 struct ALL {
   // For testing
-  bool operator==(const ALL&) const = default;
+  bool operator==(const ALL&) const { return true; };
 };
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;

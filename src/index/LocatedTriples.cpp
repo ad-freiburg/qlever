@@ -72,7 +72,7 @@ namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
-template <typename Row, template <typename, size_t...> typename Tp, size_t... I>
+template <typename Row, template <typename, auto...> typename Tp, auto... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
 };
@@ -86,9 +86,13 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieIdTableRow(T& row) {
+  // TODO<joka921> Fix the compilation on the clang trunk...
+  return std::tie(row[0]);
+  /*
   return tieHelper(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
+                                    */
 }
 
 // Return a `std::tie` of the relevant entries of a located triple,
@@ -114,7 +118,11 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
     return a;
   }();
   auto& ids = lt->triple_.ids();
-  return tieHelper(ids, ad_utility::toIntegerSequence<indices>());
+  // TODO<joka921> The following line doesn't compile on clang-trunk currently,
+  // figure out whether this is a bug. This line is now wrong, but what are we
+  // gonna do about it...
+  return std::tie(ids[indices[0]]);
+  // return tieHelper(ids, ad_utility::toIntegerSequence<indices>());
 }
 
 // ____________________________________________________________________________

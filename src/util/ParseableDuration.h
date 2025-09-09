@@ -16,6 +16,7 @@
 
 #include "backports/keywords.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -53,7 +54,12 @@ class ParseableDuration {
            CommonType{other.duration_}.count();
   }
 
-  bool operator==(const ParseableDuration&) const noexcept = default;
+  bool operator==(const ParseableDuration& otherRhs) const {
+    if (!(duration_ == otherRhs.duration_)) {
+      return false;
+    }
+    return true;
+  };
 
   // ___________________________________________________________________________
   template <typename CharT>

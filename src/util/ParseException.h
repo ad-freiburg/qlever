@@ -31,7 +31,24 @@ struct ExceptionMetadata {
   size_t line_;
   size_t charPositionInLine_;
 
-  bool operator==(const ExceptionMetadata& rhs) const = default;
+  bool operator==(const ExceptionMetadata& otherRhs) const {
+    if (!(query_ == otherRhs.query_)) {
+      return false;
+    }
+    if (!(startIndex_ == otherRhs.startIndex_)) {
+      return false;
+    }
+    if (!(stopIndex_ == otherRhs.stopIndex_)) {
+      return false;
+    }
+    if (!(line_ == otherRhs.line_)) {
+      return false;
+    }
+    if (!(charPositionInLine_ == otherRhs.charPositionInLine_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.

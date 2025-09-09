@@ -35,7 +35,18 @@ struct TripleWithPropertyPath {
   VarOrPath predicate_;
   GraphTerm object_;
 
-  bool operator==(const TripleWithPropertyPath&) const = default;
+  bool operator==(const TripleWithPropertyPath& otherRhs) const {
+    if (!(subject_ == otherRhs.subject_)) {
+      return false;
+    }
+    if (!(predicate_ == otherRhs.predicate_)) {
+      return false;
+    }
+    if (!(object_ == otherRhs.object_)) {
+      return false;
+    }
+    return true;
+  };
 };
 using PathObjectPairsAndTriples =
     std::pair<PathObjectPairs, std::vector<TripleWithPropertyPath>>;

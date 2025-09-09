@@ -167,10 +167,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    bool operator==(const NoTimeZone&) const = default;
+    bool operator==(const NoTimeZone&) const { return true; };
   };
   struct TimeZoneZ {
-    bool operator==(const TimeZoneZ&) const = default;
+    bool operator==(const TimeZoneZ&) const { return true; };
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
