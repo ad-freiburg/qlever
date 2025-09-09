@@ -167,11 +167,12 @@ class GroupByImpl : public Operation {
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
+  friend class groupBy::detail::LazyGroupByRange;
+
   FRIEND_TEST(GroupByTest, doGroupBy);
 
  public:
-  template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  friend class groupBy::detail::LazyGroupByRange;
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
   // of tests to write.
 
