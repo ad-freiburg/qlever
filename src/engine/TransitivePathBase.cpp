@@ -209,70 +209,105 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  auto copyColumnsFor =
-      [this, startSideCol = startSideCol, targetSideCol = targetSideCol](
-          const NodeWithTargets& nodeWithTargets,
-          IdTableStatic<OUTPUT_WIDTH>& table, size_t& outputRow) {
-        const auto& [node, graph, linkedNodes, _, idTable, inputRow] =
-            nodeWithTargets;
-        // As an optimization nodes without any linked nodes should not get
-        // yielded in the first place.
-        AD_CONTRACT_CHECK(!linkedNodes.empty());
+  // auto copyColumnsFor =
+  //     [this, startSideCol = startSideCol, targetSideCol = targetSideCol](
+  //         const NodeWithTargets& nodeWithTargets,
+  //         IdTableStatic<OUTPUT_WIDTH>& table, size_t& outputRow) {
+  //       const auto& [node, graph, linkedNodes, _, idTable, inputRow] =
+  //           nodeWithTargets;
+  //       // As an optimization nodes without any linked nodes should not get
+  //       // yielded in the first place.
+  //       AD_CONTRACT_CHECK(!linkedNodes.empty());
 
-        std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-        if (idTable.has_value()) {
-          inputView = idTable->template asStaticView<INPUT_WIDTH>();
+  //       std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+  //       if (idTable.has_value()) {
+  //         inputView = idTable->template asStaticView<INPUT_WIDTH>();
+  //       }
+  //       for (Id linkedNode : linkedNodes) {
+  //         table.emplace_back();
+  //         table(outputRow, startSideCol) = node;
+  //         table(outputRow, targetSideCol) = linkedNode;
+  //         if (inputView.has_value()) {
+  //           this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
+  //               inputView.value(), table, inputRow, outputRow);
+  //         }
+  //         if (this->graphVariable_.has_value()) {
+  //           table(outputRow, table.numColumns() - 1) = graph;
+  //         }
+  //         outputRow++;
+  //       }
+  //     };
+
+  return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
+      [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+       hull = std::move(hull),
+       hullIt = std::optional<NodeGenerator::iterator>(),
+       startSideCol = startSideCol, targetSideCol = targetSideCol,
+       yieldOnce =
+           yieldOnce]() mutable -> std::optional<Result::IdTableVocabPair> {
+        if (!hullIt.has_value()) {
+          hullIt = hull.begin();
         }
-        for (Id linkedNode : linkedNodes) {
-          table.emplace_back();
-          table(outputRow, startSideCol) = node;
-          table(outputRow, targetSideCol) = linkedNode;
-          if (inputView.has_value()) {
-            this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
-                inputView.value(), table, inputRow, outputRow);
+
+        size_t outputRow = 0;
+        IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
+        LocalVocab mergedVocab{};
+
+        // this while loop will return a value when yieldOnce is false and
+        // finish when yieldOnce is true
+        while (hullIt.value() != hull.end()) {
+          auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] =
+              *(hullIt.value());
+
+          timer.cont();
+          // As an optimization nodes without any linked nodes should not get
+          // yielded in the first place.
+          AD_CONTRACT_CHECK(!linkedNodes.empty());
+          if (!yieldOnce) {
+            table.reserve(linkedNodes.size());
           }
-          if (this->graphVariable_.has_value()) {
-            table(outputRow, table.numColumns() - 1) = graph;
+          std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+          if (idTable.has_value()) {
+            inputView = idTable->template asStaticView<INPUT_WIDTH>();
           }
-          outputRow++;
+          for (Id linkedNode : linkedNodes) {
+            table.emplace_back();
+            table(outputRow, startSideCol) = node;
+            table(outputRow, targetSideCol) = linkedNode;
+
+            if (inputView.has_value()) {
+              copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                     inputRow, outputRow);
+            }
+            if (graphVariable_.has_value()) {
+              table(outputRow, table.numColumns() - 1) = graph;
+            }
+
+            outputRow++;
+          }
+
+          if (yieldOnce) {
+            mergedVocab.mergeWith(localVocab);
+          } else {
+            ++(hullIt.value());
+            timer.stop();
+            runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+            return Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                            std::move(localVocab)};
+          }
+          ++(hullIt.value());
+          timer.stop();
         }
-      };
-
-  if (yieldOnce) {
-    return Result::LazyResult{ad_utility::lazySingleValueRange(
-        [this, copyColumnsFor = std::move(copyColumnsFor),
-         table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()},
-         timer = ad_utility::Timer{ad_utility::Timer::Stopped},
-         hull = std::move(hull)]() mutable {
-          size_t outputRow{0};
-          LocalVocab mergedVocab{};
-          for (auto& nodeWithTargets : hull) {
-            copyColumnsFor(nodeWithTargets, table, outputRow);
-            mergedVocab.mergeWith(nodeWithTargets.localVocab_);
-          }
-
+        if (yieldOnce) {
+          timer.start();
+          // make sure we dont yield another value after this
+          yieldOnce = false;
           runtimeInfo().addDetail("IdTable fill time", timer.msecs());
           return Result::IdTableVocabPair{std::move(table).toDynamic(),
                                           std::move(mergedVocab)};
-        })};
-  }
-
-  return Result::LazyResult{ad_utility::CachingTransformInputRange(
-      std::move(hull), [this, copyColumnsFor = std::move(copyColumnsFor),
-                        timer = ad_utility::Timer{ad_utility::Timer::Stopped}](
-                           auto& nodeWithTargets) mutable {
-        IdTableStatic<OUTPUT_WIDTH> table{this->getResultWidth(),
-                                          this->allocator()};
-        timer.cont();
-
-        size_t outputRow{0};
-        table.reserve(nodeWithTargets.targets_.size());
-        copyColumnsFor(nodeWithTargets, table, outputRow);
-
-        timer.stop();
-        runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-        return Result::IdTableVocabPair{std::move(table).toDynamic(),
-                                        std::move(nodeWithTargets.localVocab_)};
+        } else {
+          return std::nullopt;
+        }
       })};
 }
 
