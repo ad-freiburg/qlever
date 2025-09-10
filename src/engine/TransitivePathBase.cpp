@@ -272,7 +272,7 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
           auto result = makeResult(
               std::move(table), std::move(hullIt->localVocab_), timer.msecs());
           ++hullIt;
-          return std::move(result);
+          return result;
         }
 
         if (yieldOnce) {
