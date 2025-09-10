@@ -209,29 +209,30 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  auto copyColumnsFor =
-      [this, startSideCol = startSideCol, targetSideCol = targetSideCol](
-          const NodeWithTargets& node, IdTableStatic<OUTPUT_WIDTH>& table,
-          size_t& outputRow) {
-        const auto& [node, graph, targets, _, idTable, inputRow] = node;
-        std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-        if (idTable.has_value()) {
-          inputView = idTable->template asStaticView<INPUT_WIDTH>();
-        }
-        for (Id linkedNode : targets) {
-          table.emplace_back();
-          table(outputRow, startSideCol) = node;
-          table(outputRow, targetSideCol) = linkedNode;
-          if (inputView.has_value()) {
-            this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
-                inputView.value(), table, inputRow, outputRow);
-          }
-          if (this->graphVariable_.has_value()) {
-            table(outputRow, table.numColumns() - 1) = graph;
-          }
-          outputRow++;
-        }
-      };
+  auto copyColumnsFor = [this, startSideCol = startSideCol,
+                         targetSideCol = targetSideCol](
+                            const NodeWithTargets& nodeWithTargets,
+                            IdTableStatic<OUTPUT_WIDTH>& table,
+                            size_t& outputRow) {
+    const auto& [node, graph, targets, _, idTable, inputRow] = nodeWithTargets;
+    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+    if (idTable.has_value()) {
+      inputView = idTable->template asStaticView<INPUT_WIDTH>();
+    }
+    for (Id linkedNode : targets) {
+      table.emplace_back();
+      table(outputRow, startSideCol) = node;
+      table(outputRow, targetSideCol) = linkedNode;
+      if (inputView.has_value()) {
+        this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                     inputRow, outputRow);
+      }
+      if (this->graphVariable_.has_value()) {
+        table(outputRow, table.numColumns() - 1) = graph;
+      }
+      outputRow++;
+    }
+  };
 
   auto makeResult = [this](IdTableStatic<OUTPUT_WIDTH>&& table,
                            LocalVocab&& localVocab,
