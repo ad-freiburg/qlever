@@ -14,6 +14,7 @@
 
 #include <optional>
 #include <ranges>
+#include <string_view>
 
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -26,11 +27,11 @@
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-constexpr char ExceptionMessagePrefix[] =
+static std::string_view ExceptionMessagePrefix{
     "\n !!!!>># An error has occurred while exporting the query result."
     " Unfortunately due to limitations in the HTTP 1.1 protocol, "
     "there is no better way to report this than to append it to the incomplete "
-    "result. The error message was:\n ";
+    "result. The error message was:\n "};
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -1136,7 +1137,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           exceptionMessage = "A very strange exception, please report this";
         }
 
-        return ExceptionMessagePrefix;
+        return std::string(ExceptionMessagePrefix);
       }));
 }
 
