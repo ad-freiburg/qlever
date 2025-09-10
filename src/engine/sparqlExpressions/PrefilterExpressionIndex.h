@@ -190,7 +190,7 @@ class PrefixRegexExpression : public PrefilterExpression {
 // Helper struct for a compact class implementation regarding the logical
 // operations `AND` and `OR`. `NOT` is implemented separately given that the
 // expression is unary (single child expression).
-enum struct LogicalOperator { AND, OR };
+QL_DEFINE_ENUM(LogicalOperator, AND, OR);
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
@@ -224,7 +224,7 @@ class LogicalExpression : public PrefilterExpression {
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
 // SPARQL expressions. Supported by the following prefilter
 // `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
-enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+QL_DEFINE_ENUM(IsDatatype, IRI, BLANK, LITERAL, NUMERIC);
 
 //______________________________________________________________________________
 // The specialized `PrefilterExpression` class that actually applies the

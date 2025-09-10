@@ -14,13 +14,12 @@ namespace detail {
 // _____________________________________________________________________________
 // Unary negation.
 inline auto unaryNegate = [](TernaryBool a) {
-  using enum TernaryBool;
   switch (a) {
-    case True:
+    case TernaryBool::True:
       return Id::makeFromBool(false);
-    case False:
+    case TernaryBool::False:
       return Id::makeFromBool(true);
-    case Undef:
+    case TernaryBool::Undef:
       return Id::makeUndefined();
   }
   AD_FAIL();

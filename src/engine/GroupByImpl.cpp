@@ -1166,7 +1166,7 @@ GroupByImpl::findAggregates(sparqlExpression::SparqlExpression* expr) {
 // _____________________________________________________________________________
 std::optional<GroupByImpl::HashMapAggregateTypeWithData>
 GroupByImpl::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using enum HashMapAggregateType;
+  QL_USING_SCOPED_ENUM_NAMESPACE(GroupByImpl, HashMapAggregateType);
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate

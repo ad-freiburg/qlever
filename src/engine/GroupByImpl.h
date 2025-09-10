@@ -33,9 +33,14 @@ template <size_t IN_WIDTH, size_t OUT_WIDTH>
 class LazyGroupByRange;
 }
 
+// Used to store the kind of aggregate.
+QL_DEFINE_SCOPED_ENUM(GroupByImpl, HashMapAggregateType, AVG, COUNT, MIN, MAX,
+                      SUM, GROUP_CONCAT, SAMPLE);
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
+  QL_USING_SCOPED_ENUM(GroupByImpl, HashMapAggregateType);
 
  private:
   using string = std::string;
@@ -252,17 +257,6 @@ class GroupByImpl : public Operation {
     }
   };
 
-  // Used to store the kind of aggregate.
-  enum class HashMapAggregateType {
-    AVG,
-    COUNT,
-    MIN,
-    MAX,
-    SUM,
-    GROUP_CONCAT,
-    SAMPLE
-  };
-
   // `GROUP_CONCAT` requires additional data.
   struct HashMapAggregateTypeWithData {
     HashMapAggregateType type_;
@@ -362,7 +356,7 @@ class GroupByImpl : public Operation {
         : numOfGroupedColumns_{numOfGroupedColumns},
           alloc_{alloc},
           map_{alloc} {
-      using enum HashMapAggregateType;
+      QL_USING_SCOPED_ENUM_NAMESPACE(GroupByImpl, HashMapAggregateType);
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;

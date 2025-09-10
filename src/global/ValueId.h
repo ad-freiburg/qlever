@@ -14,6 +14,7 @@
 #include <functional>
 #include <limits>
 
+#include "backports/usingEnum.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -23,7 +24,35 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
+// TODO: VocabIndex and LocalVocabIndex collide with some global definitions
+// that have the exact same name! src/global/VocabIndex.h
+// src/global/IndexTypes.h
+
 /// The different Datatypes that a `ValueId` (see below) can encode.
+// QL_DEFINE_ENUM_STRUCT_MANUAL(
+//     Datatype, Undefined = 0, Bool, Int, Double, VocabIndex, LocalVocabIndex,
+//     TextRecordIndex, Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
+//     EncodedVal, MaxValue = EncodedVal
+//     // Note: Unfortunately we cannot easily get the size of an enum.
+//     // If members are added to this enum, then the `MaxValue`
+//     // alias must always be equal to the last member,
+//     // else other code breaks with out-of-bounds accesses.
+// )
+// QL_ENUM_ALIAS(Datatype, Undefined)
+// QL_ENUM_ALIAS(Datatype, Bool)
+// QL_ENUM_ALIAS(Datatype, Int)
+// QL_ENUM_ALIAS(Datatype, Double)
+// QL_ENUM_ALIAS(Datatype, VocabIndex)
+// QL_ENUM_ALIAS(Datatype, LocalVocabIndex)
+// QL_ENUM_ALIAS(Datatype, TextRecordIndex)
+// QL_ENUM_ALIAS(Datatype, Date)
+// QL_ENUM_ALIAS(Datatype, GeoPoint)
+// QL_ENUM_ALIAS(Datatype, WordVocabIndex)
+// QL_ENUM_ALIAS(Datatype, BlankNodeIndex)
+// QL_ENUM_ALIAS(Datatype, EncodedVal)
+// QL_ENUM_ALIAS(Datatype, MaxValue)
+// QL_DEFINE_ENUM_END();
+
 enum struct Datatype {
   Undefined = 0,
   Bool,

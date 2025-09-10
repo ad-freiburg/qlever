@@ -5,13 +5,14 @@
 #ifndef QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
 #define QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
 
+#include "backports/usingEnum.h"
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
-enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
+QL_DEFINE_TYPED_ENUM(PositionInTriple, int, SUBJECT, PREDICATE, OBJECT);
 
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {

@@ -73,7 +73,7 @@ ad_utility::streams::stream_generator computeResultForAsk(
   };
 
   // Return the result in the requested format.
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   switch (mediaType) {
     case sparqlXml:
       co_yield getXmlResult();
@@ -199,7 +199,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
                                           qet.getVariableColumns(),
                                           qet.getQec()->getIndex(),
                                           rowOffset};
-      using enum PositionInTriple;
+      QL_USING_ENUM(PositionInTriple);
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
         auto predicate = triple[1].evaluate(context, PREDICATE);
@@ -1125,7 +1125,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
 
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};

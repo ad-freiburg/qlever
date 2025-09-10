@@ -8,6 +8,7 @@
 #include <cmath>
 #include <string>
 
+#include "backports/usingEnum.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
@@ -172,7 +173,7 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  QL_USING_ENUM(SpatialJoinType);
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();

@@ -7,6 +7,7 @@
 
 #include "./PrefilterExpressionTestHelpers.h"
 #include "./printers/VariablePrinters.h"
+#include "backports/usingEnum.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -20,7 +21,7 @@ namespace queryRewriteUtilTestHelpers {
 using namespace makeSparqlExpression;
 using Loc = ad_utility::source_location;
 using V = Variable;
-using enum SpatialJoinType;
+QL_USING_ENUM(SpatialJoinType);
 using enum UnitOfMeasurement;
 using ad_utility::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;

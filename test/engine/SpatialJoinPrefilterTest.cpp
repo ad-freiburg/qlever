@@ -5,12 +5,13 @@
 #include <gmock/gmock.h>
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
+#include "backports/usingEnum.h"
 
 // _____________________________________________________________________________
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+QL_USING_ENUM(SpatialJoinType);
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various literals carefully selected literals. It

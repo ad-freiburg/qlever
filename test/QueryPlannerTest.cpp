@@ -9,6 +9,7 @@
 #include "./printers/PayloadVariablePrinters.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "parser/GraphPatternOperation.h"
@@ -308,8 +309,8 @@ TEST(QueryPlanner, joinOfFullScans) {
 }
 
 TEST(QueryPlanner, testActorsBornInEurope) {
+  QL_USING_SCOPED_ENUM_NAMESPACE(OrderBy, AscOrDesc);
   auto scan = h::IndexScanFromStrings;
-  using enum ::OrderBy::AscOrDesc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -2837,7 +2838,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  using enum SpatialJoinType;
+  QL_USING_ENUM(SpatialJoinType);
 
   std::vector<std::pair<std::string, SpatialJoinType>>
       geofFunctionNameAndSJType{

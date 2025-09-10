@@ -33,6 +33,14 @@
     QL_DEFINE_ENUM_ALIASES(EnumName, __VA_ARGS__) \
   }
 
+#define QL_DEFINE_SCOPED_ENUM(ScopeName, EnumName, ...) \
+  namespace ql_scoped_namespace_##ScopeName {           \
+    enum class EnumName { __VA_ARGS__ };                \
+    namespace ql_using_enum_namespace_##EnumName {      \
+      QL_DEFINE_ENUM_ALIASES(EnumName, __VA_ARGS__)     \
+    }                                                   \
+  }
+
 #define QL_DEFINE_TYPED_ENUM(EnumName, EnumType, ...) \
   enum class EnumName : EnumType { __VA_ARGS__ };     \
   namespace ql_using_enum_namespace_##EnumName {      \
@@ -85,5 +93,12 @@
 // Replacement for `QL_USING_ENUM` when using an enum for a different namespace.
 #define QL_USING_ENUM_NAMESPACE(Namespace, EnumName) \
   using namespace Namespace::ql_using_enum_namespace_##EnumName;
+
+#define QL_USING_SCOPED_ENUM_NAMESPACE(ScopeName, EnumName) \
+  using namespace ql_scoped_namespace_##ScopeName::         \
+      ql_using_enum_namespace_##EnumName;
+
+#define QL_USING_SCOPED_ENUM(ScopeName, EnumName) \
+  using EnumName = ql_scoped_namespace_##ScopeName::EnumName;
 
 #endif  // USINGENUM_H

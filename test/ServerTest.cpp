@@ -98,7 +98,7 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");
   auto constructQuery = parseQuery("CONSTRUCT WHERE {}");
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
 
   auto choose = &Server::chooseBestFittingMediaType;
 
@@ -268,7 +268,7 @@ TEST(ServerTest, createResponseMetadata) {
 }
 
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     QueryExecutionTree qet =

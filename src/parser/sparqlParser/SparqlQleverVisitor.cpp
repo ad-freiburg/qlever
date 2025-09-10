@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -216,7 +217,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
       {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
-  using enum SpatialJoinType;
+  QL_USING_ENUM(SpatialJoinType);
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       // Geometric relation functions
