@@ -140,7 +140,7 @@ TEST(Vocabulary, PrefixFilter) {
 // _____________________________________________________________________________
 TEST(Vocabulary, IsGeoInfoAvailable) {
   using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(ad_utility::VocabularyType, Enum);
 
   RdfsVocabulary v1;
   v1.resetToType(VocabularyType{OnDiskCompressed});

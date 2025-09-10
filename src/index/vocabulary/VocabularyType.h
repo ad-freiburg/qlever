@@ -10,8 +10,14 @@
 #include <array>
 #include <string_view>
 
+#include "backports/usingEnum.h"
 #include "util/Random.h"
 #include "util/json.h"
+
+// The different vocabulary implementations;
+QL_DEFINE_SCOPED_ENUM(ad_utility::VocabularyType, Enum, InMemoryUncompressed,
+                      OnDiskUncompressed, InMemoryCompressed, OnDiskCompressed,
+                      OnDiskCompressedGeoSplit);
 
 namespace ad_utility {
 
@@ -22,14 +28,7 @@ namespace ad_utility {
 // enums, especially such used in command-line interfaces.
 class VocabularyType {
  public:
-  // The different vocabulary implementations;
-  enum struct Enum {
-    InMemoryUncompressed,
-    OnDiskUncompressed,
-    InMemoryCompressed,
-    OnDiskCompressed,
-    OnDiskCompressedGeoSplit
-  };
+  QL_USING_SCOPED_ENUM(ad_utility::VocabularyType, Enum);
 
  private:
   Enum value_ = Enum::InMemoryUncompressed;

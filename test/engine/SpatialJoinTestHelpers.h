@@ -423,7 +423,7 @@ inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
   std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
   if (useGeoVocab) {
-    using enum ad_utility::VocabularyType::Enum;
+    QL_USING_SCOPED_ENUM_NAMESPACE(ad_utility::VocabularyType, Enum);
     vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
   }
   config.vocabularyType = vocabType;

@@ -220,7 +220,7 @@ std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
-  using enum prefilterExpressions::IsDatatype;
+  QL_USING_ENUM_NAMESPACE(prefilterExpressions, IsDatatype);
   auto childExpr = std::visit(getExpr, std::move(child));
   if constexpr (Datatype == IRI) {
     return makeIsIriExpression(std::move(childExpr));

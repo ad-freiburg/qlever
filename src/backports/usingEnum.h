@@ -20,7 +20,7 @@
   namespace ql_using_enum_namespace_##EnumName {
 
 #define QL_DEFINE_TYPED_ENUM_MANUAL(EnumName, EnumType, ...) \
-  enum class EnumName : EnumType { __VA_ARGS__ };             \
+  enum class EnumName : EnumType { __VA_ARGS__ };            \
   namespace ql_using_enum_namespace_##EnumName {
 
 // Add this after QL_DEFINE_ENUM_MANUAL for each enum value

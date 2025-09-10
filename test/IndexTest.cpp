@@ -553,7 +553,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  using enum qlever::Filetype;
+  QL_USING_ENUM_NAMESPACE(qlever, Filetype);
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
   std::vector<qlever::InputFileSpecification> twoFilesSpec = {

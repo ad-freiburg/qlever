@@ -11,6 +11,7 @@
 #include <ranges>
 
 #include "./util/GTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
@@ -411,15 +412,11 @@ struct RunQueueManagerTest {
 };
 
 // ________________________________________________________________
+QL_DEFINE_ENUM(TestType, producerThrows, consumerThrows, normalExecution,
+               consumerFinishesEarly, bothThrowImmediately);
+
 TEST(ThreadSafeQueue, queueManager) {
-  enum class TestType {
-    producerThrows,
-    consumerThrows,
-    normalExecution,
-    consumerFinishesEarly,
-    bothThrowImmediately
-  };
-  using enum TestType;
+  QL_USING_ENUM(TestType);
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
   runWithBothQueueTypes(
