@@ -75,7 +75,8 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
         testing::HasSubstr(
             "Mediatype \"application/sparql-results+xml\" is not supported for "
             "SPARQL Graph Store HTTP Protocol in QLever."));
-
+    // This results in an HTTP status 204 which must have an empty response
+    // body.
     AD_EXPECT_THROW_WITH_MESSAGE(transform(ad_utility::testing::makePostRequest(
                                                "/?default", "text/turtle", ""),
                                            DEFAULT{}),

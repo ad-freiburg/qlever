@@ -176,10 +176,10 @@ class GraphStoreProtocol {
     Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
-    ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
-    res._originalString = stringRepresentation;
-    return {std::move(drop), std::move(res)};
+    ParsedQuery insertData;
+    insertData._clause = parsedQuery::UpdateClause{std::move(up)};
+    insertData._originalString = stringRepresentation;
+    return {std::move(drop), std::move(insertData)};
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPut);
 
