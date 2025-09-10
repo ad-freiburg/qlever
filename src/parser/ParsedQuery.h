@@ -38,7 +38,15 @@ class SparqlPrefix {
 
   [[nodiscard]] std::string asString() const;
 
-  bool operator==(const SparqlPrefix&) const = default;
+  bool operator==(const SparqlPrefix& otherRhs) const {
+    if (!(_prefix == otherRhs._prefix)) {
+      return false;
+    }
+    if (!(_uri == otherRhs._uri)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // Forward declaration

@@ -5,9 +5,12 @@
 #ifndef QLEVER_SRC_PARSER_DATA_LITERAL_H
 #define QLEVER_SRC_PARSER_DATA_LITERAL_H
 
+#include <optional>
 #include <sstream>
 #include <string>
 
+#include "backports/type_traits.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
 
 class Literal {
@@ -58,7 +61,12 @@ class Literal {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
-  bool operator==(const Literal& other) const = default;
+  bool operator==(const Literal& otherRhs) const {
+    if (!(_stringRepresentation == otherRhs._stringRepresentation)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

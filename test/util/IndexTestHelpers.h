@@ -83,7 +83,52 @@ struct TestIndexConfig {
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
                       c.indexType, c.encodedIriManager);
   }
-  bool operator==(const TestIndexConfig&) const = default;
+  constexpr bool operator==(const TestIndexConfig& otherRhs) const {
+    if (!(turtleInput == otherRhs.turtleInput)) {
+      return false;
+    }
+    if (!(loadAllPermutations == otherRhs.loadAllPermutations)) {
+      return false;
+    }
+    if (!(usePatterns == otherRhs.usePatterns)) {
+      return false;
+    }
+    if (!(usePrefixCompression == otherRhs.usePrefixCompression)) {
+      return false;
+    }
+    if (!(blocksizePermutations == otherRhs.blocksizePermutations)) {
+      return false;
+    }
+    if (!(createTextIndex == otherRhs.createTextIndex)) {
+      return false;
+    }
+    if (!(addWordsFromLiterals == otherRhs.addWordsFromLiterals)) {
+      return false;
+    }
+    if (!(contentsOfWordsFileAndDocsfile ==
+          otherRhs.contentsOfWordsFileAndDocsfile)) {
+      return false;
+    }
+    if (!(parserBufferSize == otherRhs.parserBufferSize)) {
+      return false;
+    }
+    if (!(scoringMetric == otherRhs.scoringMetric)) {
+      return false;
+    }
+    if (!(bAndKParam == otherRhs.bAndKParam)) {
+      return false;
+    }
+    if (!(indexType == otherRhs.indexType)) {
+      return false;
+    }
+    if (!(vocabularyType == otherRhs.vocabularyType)) {
+      return false;
+    }
+    if (!(encodedIriManager == otherRhs.encodedIriManager)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

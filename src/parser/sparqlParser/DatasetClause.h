@@ -13,7 +13,15 @@ struct DatasetClause {
   bool isNamed_;
 
   // For testing
-  bool operator==(const DatasetClause& other) const = default;
+  bool operator==(const DatasetClause& otherRhs) const {
+    if (!(dataset_ == otherRhs.dataset_)) {
+      return false;
+    }
+    if (!(isNamed_ == otherRhs.isNamed_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H

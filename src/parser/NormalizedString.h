@@ -10,7 +10,42 @@
 
 struct NormalizedChar {
   char c_;
-  auto operator<=>(const NormalizedChar&) const = default;
+  bool operator==(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return false;
+    }
+    return true;
+  }
+  bool operator<(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return c_ < otherRhs.c_;
+    }
+    return false;
+  }
+  bool operator<=(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return c_ <= otherRhs.c_;
+    }
+    return true;
+  }
+  bool operator>(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return c_ > otherRhs.c_;
+    }
+    return false;
+  }
+  bool operator>=(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return c_ >= otherRhs.c_;
+    }
+    return true;
+  }
+  bool operator!=(const NormalizedChar& otherRhs) const {
+    if (!(c_ == otherRhs.c_)) {
+      return true;
+    }
+    return false;
+  };
 };
 
 // A bespoke string representation that ensures the content

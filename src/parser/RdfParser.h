@@ -44,7 +44,21 @@ struct TurtleTriple {
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
-  bool operator==(const TurtleTriple&) const = default;
+  bool operator==(const TurtleTriple& otherRhs) const {
+    if (!(subject_ == otherRhs.subject_)) {
+      return false;
+    }
+    if (!(predicate_ == otherRhs.predicate_)) {
+      return false;
+    }
+    if (!(object_ == otherRhs.object_)) {
+      return false;
+    }
+    if (!(graphIri_ == otherRhs.graphIri_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A base class for all the different turtle and N-Quad parsers.
@@ -549,8 +563,8 @@ class RdfStreamParser : public Parser {
       TripleComponent defaultGraphIri =
           qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : Parser{ev, std::move(defaultGraphIri)} {
-    LOG(DEBUG) << "Initialize RDF parsing from uncompressed file or stream "
-               << filename << std::endl;
+    AD_LOG_DEBUG << "Initialize RDF parsing from uncompressed file or stream "
+                 << filename << std::endl;
     initialize(filename, bufferSize);
   }
 
@@ -612,7 +626,7 @@ class RdfParallelParser : public Parser {
       std::chrono::milliseconds sleepTimeForTesting =
           std::chrono::milliseconds{0})
       : Parser{ev}, sleepTimeForTesting_(sleepTimeForTesting) {
-    LOG(DEBUG)
+    AD_LOG_DEBUG
         << "Initialize parallel Turtle Parsing from uncompressed file or "
            "stream "
         << filename << std::endl;
@@ -635,7 +649,7 @@ class RdfParallelParser : public Parser {
   std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   void printAndResetQueueStatistics() override {
-    LOG(TIMING) << parallelParser_.getTimeStatistics() << '\n';
+    AD_LOG_TIMING << parallelParser_.getTimeStatistics() << '\n';
     parallelParser_.resetTimers();
   }
 

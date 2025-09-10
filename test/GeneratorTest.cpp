@@ -9,7 +9,15 @@
 struct Details {
   bool begin_ = false;
   bool end_ = false;
-  bool operator==(const Details&) const = default;
+  constexpr bool operator==(const Details& otherRhs) const {
+    if (!(begin_ == otherRhs.begin_)) {
+      return false;
+    }
+    if (!(end_ == otherRhs.end_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A simple generator that first yields three numbers and then adds a detail

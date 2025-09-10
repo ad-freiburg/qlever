@@ -91,7 +91,15 @@ class GeoPoint {
 
   std::pair<std::string, const char*> toStringAndType() const;
 
-  bool operator==(const GeoPoint& other) const = default;
+  bool operator==(const GeoPoint& otherRhs) const {
+    if (!(lat_ == otherRhs.lat_)) {
+      return false;
+    }
+    if (!(lng_ == otherRhs.lng_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 #endif  // QLEVER_SRC_PARSER_GEOPOINT_H

@@ -25,7 +25,12 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  constexpr bool operator==(const TypedIndex&) const = default;
+  bool operator==(const TypedIndex& otherRhs) const {
+    if (!(_value == otherRhs._value)) {
+      return false;
+    }
+    return true;
+  };
   constexpr auto operator<=>(const TypedIndex&) const = default;
 
   static constexpr TypedIndex max() {

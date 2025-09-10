@@ -48,7 +48,15 @@ class Literal {
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-  bool operator==(const Literal&) const = default;
+  bool operator==(const Literal& otherRhs) const {
+    if (!(content_ == otherRhs.content_)) {
+      return false;
+    }
+    if (!(beginOfSuffix_ == otherRhs.beginOfSuffix_)) {
+      return false;
+    }
+    return true;
+  };
 
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();

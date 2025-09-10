@@ -79,7 +79,12 @@ class Variable {
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
-  bool operator==(const Variable&) const = default;
+  bool operator==(const Variable& otherRhs) const {
+    if (!(_name == otherRhs._name)) {
+      return false;
+    }
+    return true;
+  };
 
   // The construction of PrefilterExpressions requires a defined < order.
   bool operator<(const Variable& other) const { return _name < other._name; };

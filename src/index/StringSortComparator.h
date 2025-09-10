@@ -69,7 +69,42 @@ class LocaleManager {
       return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
     }
 
-    auto operator<=>(const SortKeyImpl&) const = default;
+    bool operator==(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return false;
+      }
+      return true;
+    }
+    bool operator<(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return sortKey_ < otherRhs.sortKey_;
+      }
+      return false;
+    }
+    bool operator<=(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return sortKey_ <= otherRhs.sortKey_;
+      }
+      return true;
+    }
+    bool operator>(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return sortKey_ > otherRhs.sortKey_;
+      }
+      return false;
+    }
+    bool operator>=(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return sortKey_ >= otherRhs.sortKey_;
+      }
+      return true;
+    }
+    bool operator!=(const SortKeyImpl& otherRhs) const {
+      if (!(sortKey_ == otherRhs.sortKey_)) {
+        return true;
+      }
+      return false;
+    };
 
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.

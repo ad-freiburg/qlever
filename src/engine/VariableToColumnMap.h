@@ -37,7 +37,15 @@ struct ColumnIndexAndTypeInfo {
   UndefStatus mightContainUndef_;
 
   // Equality comparison, mostly used for testing.
-  bool operator==(const ColumnIndexAndTypeInfo&) const = default;
+  bool operator==(const ColumnIndexAndTypeInfo& otherRhs) const {
+    if (!(columnIndex_ == otherRhs.columnIndex_)) {
+      return false;
+    }
+    if (!(mightContainUndef_ == otherRhs.mightContainUndef_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is

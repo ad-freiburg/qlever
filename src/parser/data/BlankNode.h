@@ -32,7 +32,15 @@ class BlankNode {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const;
 
-  bool operator==(const BlankNode& other) const = default;
+  bool operator==(const BlankNode& otherRhs) const {
+    if (!(_generated == otherRhs._generated)) {
+      return false;
+    }
+    if (!(_label == otherRhs._label)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

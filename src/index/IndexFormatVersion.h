@@ -31,7 +31,15 @@ struct IndexFormatVersion {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
     version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
-  bool operator==(const IndexFormatVersion&) const = default;
+  bool operator==(const IndexFormatVersion& otherRhs) const {
+    if (!(prNumber_ == otherRhs.prNumber_)) {
+      return false;
+    }
+    if (!(date_ == otherRhs.date_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // The actual index version. Change it once the binary format of the index

@@ -102,7 +102,12 @@ class VocabularyType {
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 
-  bool operator==(const VocabularyType&) const = default;
+  bool operator==(const VocabularyType& otherRhs) const {
+    if (!(value_ == otherRhs.value_)) {
+      return false;
+    }
+    return true;
+  };
 };
 }  // namespace ad_utility
 

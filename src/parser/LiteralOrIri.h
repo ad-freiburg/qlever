@@ -66,7 +66,12 @@ class alignas(16) LiteralOrIri {
       AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }
-  bool operator==(const LiteralOrIri&) const = default;
+  bool operator==(const LiteralOrIri& otherRhs) const {
+    if (!(data_ == otherRhs.data_)) {
+      return false;
+    }
+    return true;
+  };
 
   std::strong_ordering operator<=>(const LiteralOrIri& rhs) const;
 

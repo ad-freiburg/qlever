@@ -36,7 +36,12 @@ class Iri {
       AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
-  bool operator==(const Iri&) const = default;
+  bool operator==(const Iri& otherRhs) const {
+    if (!(iri_ == otherRhs.iri_)) {
+      return false;
+    }
+    return true;
+  };
   static Iri fromStringRepresentation(std::string s);
 
   const std::string& toStringRepresentation() const;

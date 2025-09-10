@@ -38,7 +38,15 @@ class PropertyPath {
     std::vector<PropertyPath> children_;
     Modifier modifier_;
 
-    bool operator==(const ModifiedPath&) const = default;
+    bool operator==(const ModifiedPath& otherRhs) const {
+      if (!(children_ == otherRhs.children_)) {
+        return false;
+      }
+      if (!(modifier_ == otherRhs.modifier_)) {
+        return false;
+      }
+      return true;
+    };
 
     void writeToStream(std::ostream& out) const;
   };
@@ -116,7 +124,12 @@ class PropertyPath {
   // before the negation.
   static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
-  bool operator==(const PropertyPath& other) const = default;
+  bool operator==(const PropertyPath& otherRhs) const {
+    if (!(path_ == otherRhs.path_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Serialize this object into an output stream.
   void writeToStream(std::ostream& out) const;

@@ -194,7 +194,12 @@ class EncodedIriManagerImpl {
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  bool operator==(const EncodedIriManagerImpl&) const = default;
+  bool operator==(const EncodedIriManagerImpl& otherRhs) const {
+    if (!(prefixes_ == otherRhs.prefixes_)) {
+      return false;
+    }
+    return true;
+  };
 
  private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit

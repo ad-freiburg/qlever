@@ -59,7 +59,15 @@ struct CompressedBlockMetadataNoBlockIndex {
   struct OffsetAndCompressedSize {
     off_t offsetInFile_;
     size_t compressedSize_;
-    bool operator==(const OffsetAndCompressedSize&) const = default;
+    bool operator==(const OffsetAndCompressedSize& otherRhs) const {
+      if (!(offsetInFile_ == otherRhs.offsetInFile_)) {
+        return false;
+      }
+      if (!(compressedSize_ == otherRhs.compressedSize_)) {
+        return false;
+      }
+      return true;
+    };
   };
 
   using GraphInfo = std::optional<std::vector<Id>>;
@@ -87,7 +95,96 @@ struct CompressedBlockMetadataNoBlockIndex {
     Id col1Id_;
     Id col2Id_;
     Id graphId_;
-    auto operator<=>(const PermutedTriple&) const = default;
+    bool operator==(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return false;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return false;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return false;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return false;
+      }
+      return true;
+    }
+    bool operator<(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return col0Id_ < otherRhs.col0Id_;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return col1Id_ < otherRhs.col1Id_;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return col2Id_ < otherRhs.col2Id_;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return graphId_ < otherRhs.graphId_;
+      }
+      return false;
+    }
+    bool operator<=(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return col0Id_ <= otherRhs.col0Id_;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return col1Id_ <= otherRhs.col1Id_;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return col2Id_ <= otherRhs.col2Id_;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return graphId_ <= otherRhs.graphId_;
+      }
+      return true;
+    }
+    bool operator>(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return col0Id_ > otherRhs.col0Id_;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return col1Id_ > otherRhs.col1Id_;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return col2Id_ > otherRhs.col2Id_;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return graphId_ > otherRhs.graphId_;
+      }
+      return false;
+    }
+    bool operator>=(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return col0Id_ >= otherRhs.col0Id_;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return col1Id_ >= otherRhs.col1Id_;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return col2Id_ >= otherRhs.col2Id_;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return graphId_ >= otherRhs.graphId_;
+      }
+      return true;
+    }
+    bool operator!=(const PermutedTriple& otherRhs) const {
+      if (!(col0Id_ == otherRhs.col0Id_)) {
+        return true;
+      }
+      if (!(col1Id_ == otherRhs.col1Id_)) {
+        return true;
+      }
+      if (!(col2Id_ == otherRhs.col2Id_)) {
+        return true;
+      }
+      if (!(graphId_ == otherRhs.graphId_)) {
+        return true;
+      }
+      return false;
+    };
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -128,7 +225,28 @@ struct CompressedBlockMetadataNoBlockIndex {
                         size_t columnIndex) const;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
+  bool operator==(const CompressedBlockMetadataNoBlockIndex& otherRhs) const {
+    if (!(offsetsAndCompressedSize_ == otherRhs.offsetsAndCompressedSize_)) {
+      return false;
+    }
+    if (!(numRows_ == otherRhs.numRows_)) {
+      return false;
+    }
+    if (!(firstTriple_ == otherRhs.firstTriple_)) {
+      return false;
+    }
+    if (!(lastTriple_ == otherRhs.lastTriple_)) {
+      return false;
+    }
+    if (!(graphInfo_ == otherRhs.graphInfo_)) {
+      return false;
+    }
+    if (!(containsDuplicatesWithDifferentGraphs_ ==
+          otherRhs.containsDuplicatesWithDifferentGraphs_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -156,7 +274,16 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   size_t blockIndex_;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadata&) const = default;
+  bool operator==(const CompressedBlockMetadata& otherRhs) const {
+    if (!(static_cast<const CompressedBlockMetadataNoBlockIndex&>(*this) ==
+          static_cast<const CompressedBlockMetadataNoBlockIndex&>(otherRhs))) {
+      return false;
+    }
+    if (!(blockIndex_ == otherRhs.blockIndex_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -237,7 +364,24 @@ struct CompressedRelationMetadata {
   bool isFunctional() const { return multiplicityCol1_ == 1.0f; }
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedRelationMetadata&) const = default;
+  bool operator==(const CompressedRelationMetadata& otherRhs) const {
+    if (!(col0Id_ == otherRhs.col0Id_)) {
+      return false;
+    }
+    if (!(numRows_ == otherRhs.numRows_)) {
+      return false;
+    }
+    if (!(multiplicityCol1_ == otherRhs.multiplicityCol1_)) {
+      return false;
+    }
+    if (!(multiplicityCol2_ == otherRhs.multiplicityCol2_)) {
+      return false;
+    }
+    if (!(offsetInBlock_ == otherRhs.offsetInBlock_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // Serialization of the compressed "relation" meta data.

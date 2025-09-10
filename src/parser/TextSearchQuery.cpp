@@ -7,6 +7,7 @@
 #include <absl/strings/str_split.h>
 
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/SparqlTriple.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
 // ____________________________________________________________________________

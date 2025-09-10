@@ -42,7 +42,15 @@ class Index {
     size_t normal{};
     size_t internal{};
     size_t normalAndInternal_() const { return normal + internal; }
-    bool operator==(const NumNormalAndInternal&) const = default;
+    bool operator==(const NumNormalAndInternal& otherRhs) const {
+      if (!(normal == otherRhs.normal)) {
+        return false;
+      }
+      if (!(internal == otherRhs.internal)) {
+        return false;
+      }
+      return true;
+    };
     static NumNormalAndInternal fromNormalAndTotal(size_t normal,
                                                    size_t total) {
       AD_CONTRACT_CHECK(total >= normal);

@@ -24,7 +24,12 @@ struct SetOfIntervals {
   constexpr static size_t upperBound = std::numeric_limits<size_t>::max();
 
   // _________________________________________________________________________
-  bool operator==(const SetOfIntervals&) const = default;
+  bool operator==(const SetOfIntervals& otherRhs) const {
+    if (!(_intervals == otherRhs._intervals)) {
+      return false;
+    }
+    return true;
+  };
 
   /// Sort the intervals in ascending order and assert that they are indeed
   /// disjoint and nonempty.

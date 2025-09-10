@@ -29,7 +29,21 @@ class SparqlTripleBase {
         o_(std::move(o)),
         additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  bool operator==(const SparqlTripleBase& other) const = default;
+  bool operator==(const SparqlTripleBase& otherRhs) const {
+    if (!(s_ == otherRhs.s_)) {
+      return false;
+    }
+    if (!(p_ == otherRhs.p_)) {
+      return false;
+    }
+    if (!(o_ == otherRhs.o_)) {
+      return false;
+    }
+    if (!(additionalScanColumns_ == otherRhs.additionalScanColumns_)) {
+      return false;
+    }
+    return true;
+  };
   TripleComponent s_;
   Predicate p_;
   TripleComponent o_;
@@ -59,7 +73,16 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
+  bool operator==(const SparqlTripleSimpleWithGraph& otherRhs) const {
+    if (!(static_cast<const SparqlTripleSimple&>(*this) ==
+          static_cast<const SparqlTripleSimple&>(otherRhs))) {
+      return false;
+    }
+    if (!(g_ == otherRhs.g_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.

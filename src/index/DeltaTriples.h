@@ -59,7 +59,15 @@ struct DeltaTriplesCount {
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
                                      const DeltaTriplesCount& rhs);
 
-  bool operator==(const DeltaTriplesCount& other) const = default;
+  bool operator==(const DeltaTriplesCount& otherRhs) const {
+    if (!(triplesInserted_ == otherRhs.triplesInserted_)) {
+      return false;
+    }
+    if (!(triplesDeleted_ == otherRhs.triplesDeleted_)) {
+      return false;
+    }
+    return true;
+  };
 };
 
 // A class for maintaining triples that are inserted or deleted after index

@@ -32,7 +32,25 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  bool operator==(const InputFileSpecification&) const = default;
+  bool operator==(const InputFileSpecification& otherRhs) const {
+    if (!(filename_ == otherRhs.filename_)) {
+      return false;
+    }
+    if (!(filetype_ == otherRhs.filetype_)) {
+      return false;
+    }
+    if (!(defaultGraph_ == otherRhs.defaultGraph_)) {
+      return false;
+    }
+    if (!(parseInParallel_ == otherRhs.parseInParallel_)) {
+      return false;
+    }
+    if (!(parseInParallelSetExplicitly_ ==
+          otherRhs.parseInParallelSetExplicitly_)) {
+      return false;
+    }
+    return true;
+  };
 };
 }  // namespace qlever
 

@@ -25,7 +25,15 @@ struct Quads {
   using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
                                 ad_utility::sparql_types::Triples>;
 
-  bool operator==(const Quads&) const = default;
+  bool operator==(const Quads& otherRhs) const {
+    if (!(freeTriples_ == otherRhs.freeTriples_)) {
+      return false;
+    }
+    if (!(graphTriples_ == otherRhs.graphTriples_)) {
+      return false;
+    }
+    return true;
+  };
 
   // Free triples are outside a `GRAPH ...` clause.
   ad_utility::sparql_types::Triples freeTriples_{};

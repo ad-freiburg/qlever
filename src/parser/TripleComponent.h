@@ -47,7 +47,7 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    bool operator==(const UNDEF&) const = default;
+    bool operator==(const UNDEF&) const { return true; };
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>
@@ -125,7 +125,12 @@ class TripleComponent {
   }
 
   /// Equality comparison between two `TripleComponent`s.
-  bool operator==(const TripleComponent&) const = default;
+  bool operator==(const TripleComponent& otherRhs) const {
+    if (!(_variant == otherRhs._variant)) {
+      return false;
+    }
+    return true;
+  };
 
   /// Hash value for `TripleComponent` object.
   /// Note: It is important to use `std::same_as` because otherwise this

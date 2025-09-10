@@ -69,7 +69,12 @@ class Vocabulary {
     PrefixRanges() = default;
     explicit PrefixRanges(const Ranges& ranges);
     const Ranges& ranges() const { return ranges_; }
-    bool operator==(const PrefixRanges& ranges) const = default;
+    bool operator==(const PrefixRanges& otherRhs) const {
+      if (!(ranges_ == otherRhs.ranges_)) {
+        return false;
+      }
+      return true;
+    };
     bool contain(IndexT index) const;
   };
 

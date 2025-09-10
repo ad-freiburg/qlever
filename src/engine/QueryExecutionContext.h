@@ -73,7 +73,16 @@ struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
 
-  bool operator==(const QueryCacheKey&) const = default;
+  bool operator==(const QueryCacheKey& otherRhs) const {
+    if (!(key_ == otherRhs.key_)) {
+      return false;
+    }
+    if (!(locatedTriplesSnapshotIndex_ ==
+          otherRhs.locatedTriplesSnapshotIndex_)) {
+      return false;
+    }
+    return true;
+  };
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {

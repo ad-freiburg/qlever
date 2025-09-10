@@ -82,7 +82,22 @@ struct DatasetClauses {
   // implicitly allowed.
   bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
-  bool operator==(const DatasetClauses& other) const = default;
+  bool operator==(const DatasetClauses& otherRhs) const {
+    if (!(defaultGraphs_ == otherRhs.defaultGraphs_)) {
+      return false;
+    }
+    if (!(namedGraphs_ == otherRhs.namedGraphs_)) {
+      return false;
+    }
+    if (!(emptyDummy_ == otherRhs.emptyDummy_)) {
+      return false;
+    }
+    if (!(defaultGraphSpecifiedUsingWith_ ==
+          otherRhs.defaultGraphSpecifiedUsingWith_)) {
+      return false;
+    }
+    return true;
+  };
 };
 }  // namespace parsedQuery
 

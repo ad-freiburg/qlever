@@ -25,7 +25,60 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  bool operator<=>(const NumAddedAndDeleted&) const = default;
+  bool operator==(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return false;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return false;
+    }
+    return true;
+  }
+  bool operator<(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return numAdded_ < otherRhs.numAdded_;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return numDeleted_ < otherRhs.numDeleted_;
+    }
+    return false;
+  }
+  bool operator<=(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return numAdded_ <= otherRhs.numAdded_;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return numDeleted_ <= otherRhs.numDeleted_;
+    }
+    return true;
+  }
+  bool operator>(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return numAdded_ > otherRhs.numAdded_;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return numDeleted_ > otherRhs.numDeleted_;
+    }
+    return false;
+  }
+  bool operator>=(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return numAdded_ >= otherRhs.numAdded_;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return numDeleted_ >= otherRhs.numDeleted_;
+    }
+    return true;
+  }
+  bool operator!=(const NumAddedAndDeleted& otherRhs) const {
+    if (!(numAdded_ == otherRhs.numAdded_)) {
+      return true;
+    }
+    if (!(numDeleted_ == otherRhs.numDeleted_)) {
+      return true;
+    }
+    return false;
+  };
   friend std::ostream& operator<<(std::ostream& str,
                                   const NumAddedAndDeleted& n) {
     str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
@@ -53,7 +106,18 @@ struct LocatedTriple {
       ql::span<const CompressedBlockMetadata> blockMetadata,
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
-  bool operator==(const LocatedTriple&) const = default;
+  bool operator==(const LocatedTriple& otherRhs) const {
+    if (!(blockIndex_ == otherRhs.blockIndex_)) {
+      return false;
+    }
+    if (!(triple_ == otherRhs.triple_)) {
+      return false;
+    }
+    if (!(insertOrDelete_ == otherRhs.insertOrDelete_)) {
+      return false;
+    }
+    return true;
+  };
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
