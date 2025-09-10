@@ -238,26 +238,22 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
   //       }
   //     };
 
+  auto hullIt = hull.begin();
   return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
       [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
-       hull = std::move(hull),
-       hullIt = std::optional<NodeGenerator::iterator>(),
+       hull = std::move(hull), hullIt = std::move(hullIt),
        startSideCol = startSideCol, targetSideCol = targetSideCol,
        yieldOnce =
            yieldOnce]() mutable -> std::optional<Result::IdTableVocabPair> {
-        if (!hullIt.has_value()) {
-          hullIt = hull.begin();
-        }
-
         size_t outputRow = 0;
         IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
         LocalVocab mergedVocab{};
 
         // this while loop will return a value when yieldOnce is false and
         // finish when yieldOnce is true
-        while (hullIt.value() != hull.end()) {
+        while (hullIt != hull.end()) {
           auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] =
-              *(hullIt.value());
+              *hullIt;
 
           timer.cont();
           // As an optimization nodes without any linked nodes should not get
@@ -289,13 +285,13 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
           if (yieldOnce) {
             mergedVocab.mergeWith(localVocab);
           } else {
-            ++(hullIt.value());
+            ++hullIt;
             timer.stop();
             runtimeInfo().addDetail("IdTable fill time", timer.msecs());
             return Result::IdTableVocabPair{std::move(table).toDynamic(),
                                             std::move(localVocab)};
           }
-          ++(hullIt.value());
+          ++hullIt;
           timer.stop();
         }
         if (yieldOnce) {
