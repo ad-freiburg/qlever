@@ -86,7 +86,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   for (std::size_t i : ad_utility::integerRange(numFiles)) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(0, absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
+    idMaps_.emplace_back(0,
+                         absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
   std::vector<QueueWord> sortedBuffer;

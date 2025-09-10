@@ -54,7 +54,8 @@ constexpr inline size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 // ________________________________________________________________
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
-constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX = ".partial-vocab.idmap.tmp.";
+constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
+    ".partial-vocab.idmap.tmp.";
 
 // ________________________________________________________________
 constexpr inline std::string_view TMP_BASENAME_COMPRESSION =

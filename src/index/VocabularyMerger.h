@@ -23,29 +23,48 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
-// Stores pairs of (partial ID, global ID) and serializes them to a file on destruction
+// Writes pairs of (partial ID, global ID) incrementally to a file
 class IdMap {
  private:
-  std::vector<std::pair<Id, Id>> data_;
+  uint64_t count_ = 0;
   std::string filename_;
+  std::unique_ptr<ad_utility::serialization::FileWriteSerializer> serializer_;
+  bool headerWritten_ = false;
 
  public:
   explicit IdMap(const std::string& filename) : filename_(filename) {
-    // Start with empty vector, will be serialized to file on destruction
+    serializer_ =
+        std::make_unique<ad_utility::serialization::FileWriteSerializer>(
+            filename);
   }
 
-  IdMap(size_t, const std::string& filename)
-      : IdMap(filename) {}
+  IdMap(size_t, const std::string& filename) : IdMap(filename) {}
 
-  void push_back(const std::pair<Id, Id>& pair) { data_.push_back(pair); }
+  void push_back(const std::pair<Id, Id>& pair) {
+    // Write header (vector size) on first push_back - we'll update it in
+    // destructor
+    if (!headerWritten_) {
+      // Reserve space for size, will be updated in destructor
+      uint64_t placeholder = 0;
+      *serializer_ << placeholder;
+      headerWritten_ = true;
+    }
+    // Write the pair directly to file
+    *serializer_ << pair;
+    ++count_;
+  }
 
   ~IdMap() {
-    // Write the vector to file on destruction
-    try {
-      ad_utility::serialization::FileWriteSerializer serializer(filename_);
-      serializer << data_;
-    } catch (...) {
-      // Handle errors gracefully in destructor
+    if (serializer_) {
+      try {
+        // Update the size at the beginning of the file
+        auto currentPos = serializer_->getSerializationPosition();
+        serializer_->setSerializationPosition(0);
+        *serializer_ << count_;
+        serializer_->setSerializationPosition(currentPos);
+      } catch (...) {
+        // Handle errors gracefully in destructor
+      }
     }
   }
 
@@ -54,8 +73,26 @@ class IdMap {
   IdMap& operator=(const IdMap&) = delete;
 
   // Allow move operations
-  IdMap(IdMap&& other) noexcept = default;
-  IdMap& operator=(IdMap&& other) noexcept = default;
+  IdMap(IdMap&& other) noexcept
+      : count_(other.count_),
+        filename_(std::move(other.filename_)),
+        serializer_(std::move(other.serializer_)),
+        headerWritten_(other.headerWritten_) {
+    other.headerWritten_ = false;
+    other.count_ = 0;
+  }
+
+  IdMap& operator=(IdMap&& other) noexcept {
+    if (this != &other) {
+      count_ = other.count_;
+      filename_ = std::move(other.filename_);
+      serializer_ = std::move(other.serializer_);
+      headerWritten_ = other.headerWritten_;
+      other.headerWritten_ = false;
+      other.count_ = 0;
+    }
+    return *this;
+  }
 };
 
 // Read-only view of pairs of (partial ID, global ID) deserialized from a file
