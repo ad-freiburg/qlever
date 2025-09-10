@@ -209,42 +209,38 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  // auto copyColumnsFor =
-  //     [this, startSideCol = startSideCol, targetSideCol = targetSideCol](
-  //         const NodeWithTargets& nodeWithTargets,
-  //         IdTableStatic<OUTPUT_WIDTH>& table, size_t& outputRow) {
-  //       const auto& [node, graph, linkedNodes, _, idTable, inputRow] =
-  //           nodeWithTargets;
-  //       // As an optimization nodes without any linked nodes should not get
-  //       // yielded in the first place.
-  //       AD_CONTRACT_CHECK(!linkedNodes.empty());
-
-  //       std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-  //       if (idTable.has_value()) {
-  //         inputView = idTable->template asStaticView<INPUT_WIDTH>();
-  //       }
-  //       for (Id linkedNode : linkedNodes) {
-  //         table.emplace_back();
-  //         table(outputRow, startSideCol) = node;
-  //         table(outputRow, targetSideCol) = linkedNode;
-  //         if (inputView.has_value()) {
-  //           this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(
-  //               inputView.value(), table, inputRow, outputRow);
-  //         }
-  //         if (this->graphVariable_.has_value()) {
-  //           table(outputRow, table.numColumns() - 1) = graph;
-  //         }
-  //         outputRow++;
-  //       }
-  //     };
+  auto copyColumnsFor = [this, startSideCol = startSideCol,
+                         targetSideCol = targetSideCol](
+                            const NodeWithTargets& nodeWithTargets,
+                            IdTableStatic<OUTPUT_WIDTH>& table,
+                            size_t& outputRow) {
+    const auto& [node, graph, targets, _, idTable, inputRow] = nodeWithTargets;
+    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+    if (idTable.has_value()) {
+      inputView = idTable->template asStaticView<INPUT_WIDTH>();
+    }
+    for (Id linkedNode : targets) {
+      table.emplace_back();
+      table(outputRow, startSideCol) = node;
+      table(outputRow, targetSideCol) = linkedNode;
+      if (inputView.has_value()) {
+        this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                     inputRow, outputRow);
+      }
+      if (this->graphVariable_.has_value()) {
+        table(outputRow, table.numColumns() - 1) = graph;
+      }
+      outputRow++;
+    }
+  };
 
   auto hullIt = hull.begin();
   return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
       [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
        hull = std::move(hull), hullIt = std::move(hullIt),
-       startSideCol = startSideCol, targetSideCol = targetSideCol,
-       yieldOnce =
-           yieldOnce]() mutable -> std::optional<Result::IdTableVocabPair> {
+       yieldOnce = yieldOnce,
+       copyColumnsFor = std::move(copyColumnsFor)]() mutable
+      -> std::optional<Result::IdTableVocabPair> {
         size_t outputRow = 0;
         IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
         LocalVocab mergedVocab{};
@@ -252,44 +248,23 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
         // this while loop will return a value when yieldOnce is false and
         // finish when yieldOnce is true
         while (hullIt != hull.end()) {
-          auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] =
-              *hullIt;
-
           timer.cont();
           // As an optimization nodes without any linked nodes should not get
           // yielded in the first place.
-          AD_CONTRACT_CHECK(!linkedNodes.empty());
+          AD_CONTRACT_CHECK(!hullIt->targets_.empty());
           if (!yieldOnce) {
-            table.reserve(linkedNodes.size());
+            table.reserve(hullIt->targets_.size());
           }
-          std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-          if (idTable.has_value()) {
-            inputView = idTable->template asStaticView<INPUT_WIDTH>();
-          }
-          for (Id linkedNode : linkedNodes) {
-            table.emplace_back();
-            table(outputRow, startSideCol) = node;
-            table(outputRow, targetSideCol) = linkedNode;
-
-            if (inputView.has_value()) {
-              copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                                     inputRow, outputRow);
-            }
-            if (graphVariable_.has_value()) {
-              table(outputRow, table.numColumns() - 1) = graph;
-            }
-
-            outputRow++;
-          }
+          copyColumnsFor(*hullIt, table, outputRow);
 
           if (yieldOnce) {
-            mergedVocab.mergeWith(localVocab);
+            mergedVocab.mergeWith(hullIt->localVocab_);
           } else {
             ++hullIt;
             timer.stop();
             runtimeInfo().addDetail("IdTable fill time", timer.msecs());
             return Result::IdTableVocabPair{std::move(table).toDynamic(),
-                                            std::move(localVocab)};
+                                            std::move(hullIt->localVocab_)};
           }
           ++hullIt;
           timer.stop();
