@@ -12,6 +12,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
@@ -571,7 +572,7 @@ struct GroupByOptimizations : ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.

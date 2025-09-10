@@ -16,6 +16,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/IndexScan.h"
@@ -306,7 +307,7 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
   return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
 }
 
-using enum Permutation::Enum;
+QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 auto I = ad_utility::testing::IntId;
 using Var = Variable;
 }  // namespace

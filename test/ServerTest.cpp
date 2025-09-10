@@ -16,8 +16,6 @@
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 
-using nlohmann::json;
-
 namespace {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -163,6 +161,7 @@ TEST(ServerTest, getQueryId) {
 }
 
 TEST(ServerTest, composeStatsJson) {
+  using nlohmann::json;
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
@@ -217,6 +216,7 @@ TEST(ServerTest, createMessageSender) {
 }
 
 TEST(ServerTest, createResponseMetadata) {
+  using nlohmann::json;
   // Setup the datastructures
   const ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();

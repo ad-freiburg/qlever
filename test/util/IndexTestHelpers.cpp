@@ -6,6 +6,7 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
@@ -114,12 +115,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
+    QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
     checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
     checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
+    QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
     checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };

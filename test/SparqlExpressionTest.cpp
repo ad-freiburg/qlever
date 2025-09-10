@@ -13,6 +13,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -1395,7 +1396,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           sfGeoType("Polygon"), U});
 
   // Bounding coordinate expressions
-  using enum ad_utility::BoundingCoordinate;
+  QL_USING_ENUM_NAMESPACE(ad_utility, BoundingCoordinate);
   auto checkMinX =
       testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
   auto checkMinY =

@@ -11,6 +11,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/IndexScan.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
@@ -600,7 +601,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using ad_utility::MemorySize;
   using V = Variable;
   using I = TripleComponent::Iri;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   auto qec = getQecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");

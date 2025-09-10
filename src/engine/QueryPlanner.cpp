@@ -18,6 +18,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
+#include "backports/usingEnum.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
@@ -628,7 +629,7 @@ template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan) const {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   if (triple.s_.isVariable()) {
     addIndexScan(POS);
@@ -644,7 +645,7 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   // Replace the position of the `triple` that is specified by the
   // `rewritePosition` with a new variable, and add a filter, that checks the
@@ -696,7 +697,7 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
@@ -815,7 +816,7 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    using enum Permutation::Enum;
+    QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));

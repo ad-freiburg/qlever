@@ -134,17 +134,18 @@ class GraphStoreProtocol {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     auto method = rawRequest.method();
-    if (method == boost::beast::http::verb::get) {
+    using namespace boost::beast::http;
+    if (method == verb::get) {
       return {transformGet(operation.graph_, &index.encodedIriManager())};
-    } else if (method == boost::beast::http::verb::put) {
+    } else if (method == verb::put) {
       throwNotYetImplementedHTTPMethod("PUT");
-    } else if (method == boost::beast::http::verb::delete_) {
+    } else if (method == verb::delete_) {
       throwNotYetImplementedHTTPMethod("DELETE");
-    } else if (method == boost::beast::http::verb::post) {
+    } else if (method == verb::post) {
       return {transformPost(rawRequest, operation.graph_, index)};
-    } else if (method == boost::beast::http::verb::head) {
+    } else if (method == verb::head) {
       throwNotYetImplementedHTTPMethod("HEAD");
-    } else if (method == boost::beast::http::verb::patch) {
+    } else if (method == verb::patch) {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {
       throw std::runtime_error(

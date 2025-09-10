@@ -126,7 +126,7 @@ std::string BoundingBox::asWkt() const {
 // ____________________________________________________________________________
 template <BoundingCoordinate RequestedCoordinate>
 double BoundingBox::getBoundingCoordinate() const {
-  using enum BoundingCoordinate;
+  QL_USING_ENUM(BoundingCoordinate);
   if constexpr (RequestedCoordinate == MIN_X) {
     return lowerLeft_.getLng();
   } else if constexpr (RequestedCoordinate == MIN_Y) {

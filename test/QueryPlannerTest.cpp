@@ -225,7 +225,7 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
@@ -239,7 +239,7 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
@@ -257,7 +257,7 @@ TEST(QueryPlanner, indexScanOneVariable) {
 
 TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -268,7 +268,7 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
@@ -374,7 +374,7 @@ TEST(QueryPlanner, testFilterAfterJoin) {
 
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -638,7 +638,7 @@ TEST(QueryPlanner, testSimpleOptional) {
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
@@ -650,7 +650,7 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   // In the following tests we need the query planner to be aware that the index
   // contains the entities `<s> <p> <o>` that are used below, otherwise it will
@@ -690,7 +690,7 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
 
   // Fixed predicate.
   // Don't care about the sorting.

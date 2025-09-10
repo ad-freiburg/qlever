@@ -14,6 +14,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
@@ -299,7 +300,7 @@ TEST(IndexTest, indexIdAndGitHash) {
 
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
-    using enum Permutation::Enum;
+    QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
     std::string kb =
         "<a>  <b>  <c>  . \n"
         "<a>  <b>  <c2> . \n"
@@ -531,7 +532,7 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
 }
 
 TEST(IndexTest, getPermutation) {
-  using enum Permutation::Enum;
+  QL_USING_SCOPED_ENUM_NAMESPACE(Permutation, Enum);
   const IndexImpl& index = getQec()->getIndex().getImpl();
   EXPECT_EQ(&index.PSO(), &index.getPermutation(PSO));
   EXPECT_EQ(&index.POS(), &index.getPermutation(POS));

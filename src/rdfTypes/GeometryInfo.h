@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/usingEnum.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -32,7 +33,7 @@ struct Centroid {
 };
 
 // The individual coordinates describing the bounding box.
-enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
+QL_DEFINE_ENUM(BoundingCoordinate, MIN_X, MIN_Y, MAX_X, MAX_Y);
 
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
