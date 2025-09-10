@@ -1497,8 +1497,9 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   }
 
   // Write the remaining triples from the buffer.
-  if (bufferedBlock.has_value() && !bufferedBlock->empty()) {
-    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
+  if (bufferedBlock.has_value()) {
+    AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
+    addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
@@ -1672,7 +1673,8 @@ auto CompressedRelationWriter::createPermutationPair(
       // 1. The relation buffer is at the block size limit, AND
       // 2. The current triple has different first three columns than the last
       //    triple in the buffer (to ensure equal triples stay in same block)
-      if (relation.size() >= blocksize && !relation.empty()) {
+      AD_CORRECTNESS_CHECK(blocksize > 0);
+      if (relation.size() >= blocksize) {
         // Compare first three columns of current triple with last buffered
         // triple
         const auto& lastBufferedRow = relation.back();

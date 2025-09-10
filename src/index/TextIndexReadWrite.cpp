@@ -6,6 +6,7 @@
 
 #include "index/TextScoringEnum.h"
 
+using qlever::TextScoringMetric;
 namespace textIndexReadWrite::detail {
 
 // _____________________________________________________________________________

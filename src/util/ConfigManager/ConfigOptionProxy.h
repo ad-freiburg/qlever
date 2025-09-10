@@ -10,6 +10,7 @@
 #include <concepts>
 #include <stdexcept>
 
+#include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
@@ -57,12 +58,14 @@ CPP_template(typename T, typename ConfigOptionType)(
   }
 
   // (Implicit) conversion to `ConfigOptionType&`.
-  explicit(false) operator ConfigOptionType&() const
+  QL_EXPLICIT(false)
+  operator ConfigOptionType&() const
       QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 
-  explicit(false) operator ConfigOptionType&()
+  QL_EXPLICIT(false)
+  operator ConfigOptionType&()
       QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
@@ -102,7 +105,7 @@ class ConfigOptionProxy
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.
-  explicit(false) operator ConstConfigOptionProxy<T>() {
+  QL_EXPLICIT(false) operator ConstConfigOptionProxy<T>() {
     return ConstConfigOptionProxy<T>(Base::getConfigOption());
   }
 };

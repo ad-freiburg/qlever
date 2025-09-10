@@ -439,6 +439,7 @@ add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
+add_subdirectory(src/libqlever)
 add_subdirectory(benchmark)
 
 enable_testing()
@@ -451,11 +452,14 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 target_precompile_headers(ServerMain REUSE_FROM engine)
+
+add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
