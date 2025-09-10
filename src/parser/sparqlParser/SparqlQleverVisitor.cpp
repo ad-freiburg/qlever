@@ -1318,17 +1318,17 @@ parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
   auto varOrIri = visit(ctx->varOrIri());
   auto group = visit(ctx->groupGraphPattern());
-  return std::visit(ad_utility::OverloadCallOperator{
-                        [this, &group](const Variable& graphVar) {
-                          addVisibleVariable(graphVar);
-                          return parsedQuery::GroupGraphPattern{
-                              std::move(group), graphVar, true};
-                        },
-                        [&group](const TripleComponent::Iri& graphIri) {
-                          return parsedQuery::GroupGraphPattern{
-                              std::move(group), graphIri};
-                        }},
-                    varOrIri);
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [this, &group](const Variable& graphVar) {
+            addVisibleVariable(graphVar);
+            return parsedQuery::GroupGraphPattern{std::move(group), graphVar,
+                                                  true};
+          },
+          [&group](const TripleComponent::Iri& graphIri) {
+            return parsedQuery::GroupGraphPattern{std::move(group), graphIri};
+          }},
+      varOrIri);
 }
 
 // Parsing for the `expression` rule.
