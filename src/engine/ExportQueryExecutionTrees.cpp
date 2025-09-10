@@ -1101,43 +1101,35 @@ ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     ad_utility::streams::stream_generator streamGenerator) {
   using namespace ad_utility;
+  using LoopControl = ad_utility::LoopControl<std::string>;
   // Immediately throw any exceptions that occur during the computation of the
   // first block outside the actual generator. That way we get a proper HTTP
   // response with error status codes etc. at least for those exceptions.
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
-  return InputRangeTypeErased(InputRangeFromGetCallable(
+  return InputRangeTypeErased(InputRangeFromLoopControlGet(
       [it = std::move(it), streamGenerator = std::move(streamGenerator),
-       isException = bool{false},
-       exceptionMessage = std::optional<std::string>(
-           std::nullopt)]() mutable -> std::optional<std::string> {
+       exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
         // TODO<joka921, RobinTF> Think of a better way to propagate and log
         // those errors. We can additionally send them via the
         // websocketconnection,but that doesn't solve the problem for users of
         // the plain HTTP 1.1 endpoint.
-        if (exceptionMessage.has_value()) {
-          // Set the early exit flag so we dont yield any more
-          // after this exception message.
-          isException = true;
-          std::string exception = std::move(exceptionMessage.value());
-          exceptionMessage.reset();
-          return exception;
-        }
-        if (it == streamGenerator.end() || isException) {
-          return std::nullopt;
+        if (it == streamGenerator.end()) {
+          return LoopControl::makeBreak();
         }
 
         try {
           std::string output{*it};
           ++it;
-          return output;
+          return LoopControl::yieldValue(std::move(output));
         } catch (const std::exception& e) {
           exceptionMessage = e.what();
         } catch (...) {
           exceptionMessage = "A very strange exception, please report this";
         }
 
-        return std::string(ExceptionMessagePrefix);
+        return LoopControl::breakWithValue(absl::StrCat(
+            std::string(ExceptionMessagePrefix), exceptionMessage.value()));
       }));
 }
 
