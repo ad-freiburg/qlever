@@ -389,7 +389,7 @@ addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
-addLinkAndDiscoverTest(GeneratorTest)
+addLinkAndDiscoverTestNoLibs(GeneratorTest)
 
 addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
