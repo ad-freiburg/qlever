@@ -904,7 +904,7 @@ TEST(RelationalExpression, InExpressionFilterEstimates) {
 
 namespace {
 template <typename T>
-constexpr std::type_identity<T> TI{};
+constexpr ql::type_identity<T> TI{};
 }
 TEST(RelationalExpression, FilterEstimates) {
   auto makeInt = [](int i) {
@@ -940,7 +940,7 @@ TEST(RelationalExpression, FilterEstimates) {
     EXPECT_EQ(x.sizeEstimate, expectedSize);
   };
 
-  using std::type_identity;
+  using ql::type_identity;
   // Less is estimated to leave 1/50 of the initial 200'000 values.
   testImpl(TI<LessThanExpression>, 4000);
   // Equal is estimated to leave 1/1000 of the initial 200'000 values.

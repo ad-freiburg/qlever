@@ -5,12 +5,12 @@
 #ifndef QLEVER_BYTEBUFFERSERIALIZER_H
 #define QLEVER_BYTEBUFFERSERIALIZER_H
 
-#include <type_traits>
 #include <vector>
 
 #include "../Exception.h"
 #include "./Serializer.h"
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 
 namespace ad_utility::serialization {
 /**

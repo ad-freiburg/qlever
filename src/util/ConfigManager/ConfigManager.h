@@ -17,11 +17,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"

@@ -14,10 +14,10 @@
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
-#include <type_traits>
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
@@ -580,7 +580,8 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+  static EncodedIriManager ev;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
                     .parseTypesafe(&SparqlAutomaticParser::filterR)
                     .resultOfParse_;
 
@@ -2203,16 +2204,18 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // Test if one of `a` or `b` is a transitive path to which we can bind the
+  // other one.
+  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+  }
+
   if (jcs.size() >= 2) {
-    // If there are two or more join columns and we are not using the
-    // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
-    try {
-      SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
-      mergeSubtreePlanIds(plan, a, b);
-      return {plan};
-    } catch (const std::exception& e) {
-      return {};
-    }
+    // If there are two or more join columns use a multiColumnJoin.
+    SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    candidates.push_back(plan);
+    return candidates;
   }
 
   // CASE: JOIN ON ONE COLUMN ONLY.
@@ -2229,12 +2232,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // applied individually.
   for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
     candidates.push_back(std::move(plan));
-  }
-
-  // Test if one of `a` or `b` is a transitive path to which we can bind the
-  // other one.
-  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
   }
 
   // "NORMAL" CASE:
@@ -2348,24 +2345,6 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
-
-// Check if an unbound transitive path is somewhere in the tree. This is because
-// the optimization with `Union` currently only makes sense if there is a
-// transitive path in the tree that benefits from directly applying the join.
-bool hasUnboundTransitivePathInTree(const Operation& operation) {
-  if (auto* transitivePath =
-          dynamic_cast<const TransitivePathBase*>(&operation)) {
-    return !transitivePath->isBoundOrId();
-  }
-  // Only check `UNION`s for children.
-  if (!dynamic_cast<const Union*>(&operation)) {
-    return false;
-  }
-  return ql::ranges::any_of(
-      operation.getChildren(), [](const QueryExecutionTree* child) {
-        return hasUnboundTransitivePathInTree(*child->getRootOperation());
-      });
-}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2377,15 +2356,16 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
+  // Disable this optimization.
+  if (!RuntimeParameters().get<"enable-distributive-union">()) {
+    return candidates;
+  }
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
                                                   const SubtreePlan& other,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
-    // TODO<joka921> This changes the behavior to consider applying the
-    // distribution to ALL unions. Evaluate the impact and make sure that the
-    // documentation is correct.
     if (!unionOperation) {
       return;
     }
@@ -2421,6 +2401,54 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
   return candidates;
 }
 
+// _____________________________________________________________________________
+std::optional<std::tuple<size_t, size_t>>
+QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
+                                              bool leftSideTransitivePath) {
+  // If there are more than two pairs of join columns, we have a graph
+  // variable. In that case, we compute the full transitive hull (followed by a
+  // multi-column join).
+  if (jcs.size() > 2) {
+    return std::nullopt;
+  }
+
+  // The index in `jcs` of the transitive path side and the other side.
+  auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
+  auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
+
+  // If there is one pair of join columns, then either exactly one side of the
+  // transitive path can be bound (and we return that pair), or the graph
+  // variable is bound (in which case we return `std::nullopt`).
+  auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
+  if (jcs.size() == 1) {
+    size_t transitiveCol = jcs[0][transitivePathIndex];
+    size_t otherCol = jcs[0][otherIndex];
+    if (transitiveCol >= graphColIndex) {
+      return std::nullopt;
+    }
+    return std::tuple{transitiveCol, otherCol};
+  }
+
+  // At this point, we know that we have exactly two pairs of join columns,
+  // where one pertains to the graph variable and the other to one side of the
+  // transitive path operation. Return the pair that does not pertain to the
+  // graph variable.
+  size_t transitiveColA = jcs[0][transitivePathIndex];
+  size_t otherColA = jcs[0][otherIndex];
+  size_t transitiveColB = jcs[1][transitivePathIndex];
+  size_t otherColB = jcs[1][otherIndex];
+  if (transitiveColA < graphColIndex) {
+    if (transitiveColB == graphColIndex) {
+      return std::tuple{transitiveColA, otherColA};
+    }
+    // We currently don't support binding two regular columns at once
+    return std::nullopt;
+  }
+  AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
+  AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
+  return std::tuple{transitiveColB, otherColB};
+}
+
 // __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
@@ -2434,25 +2462,26 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   if (!(aTransPath || bTransPath)) {
     return std::nullopt;
   }
-  std::shared_ptr<QueryExecutionTree> otherTree = aTransPath ? b._qet : a._qet;
-  auto transPathOperation = aTransPath ? aTransPath : bTransPath;
+  const auto& otherTree = aTransPath ? b._qet : a._qet;
+  const auto& transPathOperation = aTransPath ? aTransPath : bTransPath;
 
-  // TODO: Handle the case of two or more common variables
-  if (jcs.size() > 1) {
-    AD_THROW(
-        "Transitive Path operation with more than"
-        " two common variables is not supported");
-  }
-  const size_t otherCol = aTransPath ? jcs[0][1] : jcs[0][0];
-  const size_t thisCol = aTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
   if (transPathOperation->isBoundOrId()) {
     return std::nullopt;
   }
-  // An unbound transitive path has at most two columns.
+
+  // Do not bind the side of a path twice and don't bind on graph variable.
+  auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
+  if (!joinCols.has_value()) {
+    return std::nullopt;
+  }
+
+  // An unbound transitive path has at most two columns we can bind to.
+  const auto& [thisCol, otherCol] = joinCols.value();
   AD_CONTRACT_CHECK(thisCol <= 1);
-  // The left or right side is a TRANSITIVE_PATH and its join column
-  // corresponds to the left side of its input.
+
+  // The left or right side is a transitive path and its join column corresponds
+  // to the left side of its input.
   SubtreePlan plan = [&]() {
     if (thisCol == 0) {
       return makeSubtreePlan(
@@ -3018,14 +3047,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
-    if (planner_.activeGraphVariable_.has_value()) {
-      throw std::runtime_error{
-          "Property paths inside a GRAPH clause with a graph variable are not "
-          "yet supported."};
-    }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.activeDefaultGraphs());
+        planner_.activeDatasetClauses_.activeDefaultGraphs(),
+        planner_.activeGraphVariable_);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3035,8 +3060,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  const auto& vocab = planner_._qec->getIndex().getVocab();
-  auto config = pathQuery.toPathSearchConfiguration(vocab);
+  const auto& index = planner_._qec->getIndex();
+  const auto& vocab = index.getVocab();
+  auto config =
+      pathQuery.toPathSearchConfiguration(vocab, index.encodedIriManager());
 
   // The path search requires a child graph pattern
   AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
@@ -3162,7 +3189,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
     if (RuntimeParameters().get<"strip-columns">()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
-          std::move(plan._qet), selectedVariables);
+          std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
           select.getSelectedVariables());

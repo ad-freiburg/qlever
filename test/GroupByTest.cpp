@@ -2104,9 +2104,10 @@ TEST(GroupBy, AddedHavingRows) {
       "SELECT ?x (COUNT(?y) as ?count) WHERE {"
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
-  auto pq = SparqlParser::parseQuery(query);
-  QueryPlanner qp{ad_utility::testing::getQec(),
-                  std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto qec = ad_utility::testing::getQec();
+  auto pq =
+      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
   auto res = tree.getResult();
@@ -2270,6 +2271,28 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     subtree};
     EXPECT_NO_THROW(groupBy.computeResultOnlyForTesting(false));
   }
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, countDistinctGraph) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2284
+  using V = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}});
+
+  auto expr0 = std::make_unique<VariableExpression>(Variable{"?g"});
+  auto expr1 = std::make_unique<CountExpression>(true, std::move(expr0));
+  GroupBy groupBy{qec,
+                  {},
+                  {{SparqlExpressionPimpl{std::move(expr1),
+                                          "COUNT(DISTINCT ?g) AS ?gCount"},
+                    Variable{"?gCount"}}},
+                  std::move(subtree)};
+
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
 }
 
 namespace {

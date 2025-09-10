@@ -224,8 +224,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   }
 
   // The added column only contains Boolean values, and adds no new words to the
-  // local vocabulary, so we can simply copy the local vocab from `leftRes`.
-  return {std::move(result), resultSortedOn(), leftRes->getCopyOfLocalVocab()};
+  // local vocabulary, so we can use the local vocab from `leftRes`.
+  return {std::move(result), resultSortedOn(), leftRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________

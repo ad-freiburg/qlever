@@ -24,7 +24,8 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     if (!tc.has_value()) {
       return std::nullopt;
     }
-    return TripleComponent{tc.value()}.toValueId(index.getVocab(), localVocab);
+    return TripleComponent{tc.value()}.toValueId(index.getVocab(), localVocab,
+                                                 index.encodedIriManager());
   };
   std::optional<Id> col0Id = getId(col0_);
   std::optional<Id> col1Id = getId(col1_);

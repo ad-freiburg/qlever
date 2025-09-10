@@ -22,7 +22,6 @@
 #include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
-#include "util/http/HttpUtils.h"
 
 // First some forward declarations.
 // TODO<joka921> More stuff should consistently be in the `parsedQuery`

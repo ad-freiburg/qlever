@@ -627,7 +627,6 @@ string
     : STRING_LITERAL1
     | STRING_LITERAL2
     | STRING_LITERAL_LONG1 | STRING_LITERAL_LONG2
-    /* | STRING_LITERAL_LONG('0'..'9') | STRING_LITERAL_LONG('0'..'9')*/
     ;
 
 iri
@@ -772,7 +771,7 @@ SEPARATOR : S E P A R A T O R;
 // LEXER RULES
 
 IRI_REF
-    : '<'  ~('<' | '>' | '"' | '{' | '}' | '|' | '^' | '\\' | '`'| '\u0000'..'\u0020')* '>'
+    : '<'  ~[<>"{}|^\\`\u0000-\u0020]* '>'
     ;
 
 PNAME_NS
@@ -794,7 +793,7 @@ VAR2
     ;
 
 LANGTAG
-    : '@' ('a'..'z' | 'A' .. 'Z')+ ('-' ('a'..'z' | 'A' .. 'Z' | DIGIT)+)*
+    : '@' ([a-zA-Z])+ ('-' ([a-zA-Z] | DIGIT)+)*
     ;
 
 // The PREFIX_LANGTAG is an extension of the SPARQL standard that allows IRIs
@@ -879,7 +878,7 @@ PN_CHARS_U
     ;
 
 VARNAME
-    : ( PN_CHARS_U | DIGIT ) ( PN_CHARS_U | DIGIT | '\u00B7' | ('\u0300'..'\u036F') | ('\u203F'..'\u2040') )*
+    : ( PN_CHARS_U | DIGIT ) ( PN_CHARS_U | DIGIT | '\u00B7' | [\u0300-\u036F] | [\u203F-\u2040] )*
     ;
 
 fragment
@@ -888,8 +887,8 @@ PN_CHARS
     | '-'
     | DIGIT
     | '\u00B7'
-    | '\u0300'..'\u036F'
-    | '\u203F'..'\u2040'
+    | [\u0300-\u036F]
+    | [\u203F-\u2040]
     ;
 
 PN_PREFIX
@@ -907,7 +906,7 @@ PERCENT :
     '%' HEX HEX;
 
 HEX:
-  DIGIT | 'A'..'F' | 'a'..'f';
+  DIGIT | [A-F] | [a-f];
 
 PN_LOCAL_ESC :
     '\\' ( '_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%' );
@@ -935,7 +934,7 @@ PN_CHARS_BASE
 
 fragment
 DIGIT
-    : '0'..'9'
+    : [0-9]
     ;
 
 WS
@@ -948,15 +947,6 @@ WS
 COMMENTS
     : '#' ~( '\r' | '\n')* ->skip
     ;
-
-
-
-
-
-
-
-
-// todo: builtin call
 
 fragment A : ('a' | 'A');
 fragment B : ('b' | 'B');

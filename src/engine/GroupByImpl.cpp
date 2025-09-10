@@ -650,9 +650,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  // Distinct counts are only supported for triples with three variables.
+  // Distinct counts are only supported for triples with three variables without
+  // a GRAPH variable.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
-  if (countIsDistinct && indexScan->numVariables() != 3) {
+  if (countIsDistinct && (indexScan->numVariables() != 3 ||
+                          !indexScan->additionalVariables().empty())) {
     return std::nullopt;
   }
 
@@ -688,8 +690,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
-  std::optional<Id> col0Id = permutedTriple[0]->toValueId(vocabulary);
+  const auto& vocabulary = getIndex().getVocab();
+  std::optional<Id> col0Id =
+      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }
