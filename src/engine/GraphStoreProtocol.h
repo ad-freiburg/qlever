@@ -67,8 +67,8 @@ class GraphStoreProtocol {
   // empty.
   static void throwIfRequestBodyEmpty(const auto& request) {
     if (request.body().empty()) {
-      throw HttpError(boost::beast::http::status::no_content,
-                      "Request body is empty.");
+      // HTTP requires the response body to be empty for this status code.
+      throw HttpError(boost::beast::http::status::no_content, "");
     }
   }
 
