@@ -31,13 +31,15 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     bool filterDefaultGraph)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
+      filterDefaultGraph_{filterDefaultGraph},
       additionalColumns_{triple.additionalScanColumns_ |
                          ql::views::transform(ad_utility::first) |
                          ::ranges::to<std::vector>()},
@@ -73,13 +75,15 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     bool filterDefaultGraph)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
+      filterDefaultGraph_(filterDefaultGraph),
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
@@ -242,7 +246,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks), true, varsToKeep_);
+      std::move(scanSpecAndBlocks), true, varsToKeep_, filterDefaultGraph_);
 }
 
 // _____________________________________________________________________________
@@ -348,9 +352,11 @@ ScanSpecification IndexScan::getScanSpecification() const {
 // _____________________________________________________________________________
 ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
   auto permutedTriple = getPermutedTriple();
-  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2],
-          graphsToFilter_,
-          ad_utility::contains(additionalColumns_, ADDITIONAL_COLUMN_GRAPH_ID)};
+  return {
+      *permutedTriple[0], *permutedTriple[1], *permutedTriple[2],
+      graphsToFilter_,
+      ad_utility::contains(additionalColumns_, ADDITIONAL_COLUMN_GRAPH_ID) &&
+          filterDefaultGraph_};
 }
 
 // _____________________________________________________________________________
@@ -678,7 +684,8 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_,
+      filterDefaultGraph_);
 }
 
 // _____________________________________________________________________________
@@ -703,7 +710,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, filterDefaultGraph_);
 }
 
 // _____________________________________________________________________________

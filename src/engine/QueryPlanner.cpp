@@ -915,7 +915,8 @@ auto QueryPlanner::seedWithScansAndText(
       }
 
       pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple),
-                                          relevantGraphs));
+                                          relevantGraphs, std::nullopt,
+                                          filterDefaultGraph_));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
@@ -2893,6 +2894,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
+    bool filterDefaultGraphBackup = planner_.filterDefaultGraph_;
     auto& activeDatasets = planner_.activeDatasetClauses_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (const auto* graphIri =
@@ -2908,6 +2910,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
 
         // We already have backed up the `activeGraphVariable_`.
         planner_.activeGraphVariable_ = *graphVar;
+        planner_.filterDefaultGraph_ = arg.skipDefaultGraph_;
       } else {
         AD_CORRECTNESS_CHECK(
             std::holds_alternative<std::monostate>(arg.graphSpec_));
@@ -2925,6 +2928,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
     planner_.activeGraphVariable_ = std::move(graphVariableBackup);
+    planner_.filterDefaultGraph_ = filterDefaultGraphBackup;
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
