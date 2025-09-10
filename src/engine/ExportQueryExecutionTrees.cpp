@@ -166,7 +166,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
         AD_CORRECTNESS_CHECK(effectiveLimit > 0);
 
-        // Compute the range of rows to be exported (can by zero) and to be
+        // Compute the range of rows to be exported (can be zero) and to be
         // counted (always non-zero at this point).
         uint64_t rangeBegin = effectiveOffset;
         uint64_t numRowsToBeExported =
