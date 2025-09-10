@@ -11,24 +11,23 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/usingEnum.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
+
+// Enum representing the different modifiers that can be applied to a property
+// path.
+QL_DEFINE_SCOPED_TYPED_ENUM(PropertyPath, Modifier, std::uint8_t, SEQUENCE,
+                            ALTERNATIVE, INVERSE, NEGATED);
 
 // Class representing property paths. This includes simple IRIs as a baseline,
 // alternative paths, sequence paths, inverse paths, negated paths, and paths
 // with minimum and maximum lengths.
 class PropertyPath {
  public:
-  // Enum representing the different modifiers that can be applied to a property
-  // path.
-  enum class Modifier : std::uint8_t {
-    SEQUENCE,
-    ALTERNATIVE,
-    INVERSE,
-    NEGATED
-  };
+  QL_USING_SCOPED_ENUM(PropertyPath, Modifier);
 
  private:
   // Represent a modified path that can have multiple children and a modifier.

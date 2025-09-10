@@ -177,7 +177,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         });
   } else {
     auto& rti = runtimeInfo();
-    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
     rti.totalTime_ = timer.msecs();
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
@@ -211,7 +211,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         },
         [this](bool failed) {
           if (failed) {
-            runtimeInfo().status_ = RuntimeInformation::failed;
+            runtimeInfo().status_ = RuntimeInformation::Status::failed;
           }
           signalQueryUpdate();
         });

@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "backports/usingEnum.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
@@ -17,7 +18,7 @@
 namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
-enum struct Comparison { LT, LE, EQ, NE, GE, GT };
+QL_DEFINE_ENUM(Comparison, LT, LE, EQ, NE, GE, GT);
 
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
@@ -31,30 +32,30 @@ enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 // will be smaller than all IDs with a type different from `Undefined`. This
 // behavior is used e.g. in `ORDER BY` expressions where we need a consistent
 // partial ordering on all possible IDs.
-enum struct ComparisonForIncompatibleTypes { CompareByType, AlwaysUndef };
+QL_DEFINE_ENUM(ComparisonForIncompatibleTypes, CompareByType, AlwaysUndef);
 
 // The result of the comparisons is actually ternary because we sometimes
 // distinguish between "false" and "type mismatch" (see the comment directly
 // above for details).
-enum struct ComparisonResult { False, True, Undef };
+QL_DEFINE_ENUM(ComparisonResult, False, True, Undef);
 
 // Convert the comparison result to a boolean value, assuming that it is not
 // `Undef`.
 inline bool toBoolNotUndef(ComparisonResult comparisonResult) {
-  using enum ComparisonResult;
+  QL_USING_ENUM(ComparisonResult);
   AD_EXPENSIVE_CHECK(comparisonResult != Undef);
   return comparisonResult == True;
 }
 
 // Convert a bool to a ternary `ComparisonResult`.
 inline ComparisonResult fromBool(bool b) {
-  using enum ComparisonResult;
+  QL_USING_ENUM(ComparisonResult);
   return b ? True : False;
 }
 
 // Convert a `ComparisonResult` to a `ValueId`.
 inline ValueId toValueId(ComparisonResult comparisonResult) {
-  using enum ComparisonResult;
+  QL_USING_ENUM(ComparisonResult);
   switch (comparisonResult) {
     case False:
       return ValueId::makeFromBool(false);
@@ -497,9 +498,8 @@ template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
 ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
-  using enum ComparisonResult;
   if (!areTypesCompatible(typeA, typeB)) {
-    using enum ComparisonForIncompatibleTypes;
+    QL_USING_ENUM(ComparisonForIncompatibleTypes);
     if constexpr (comparisonForIncompatibleTypes == CompareByType) {
       return fromBool(comparator(a.getDatatype(), b.getDatatype()));
     } else {
@@ -577,7 +577,7 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
     }
   };
 
-  using enum Comparison;
+  QL_USING_ENUM(Comparison);
   switch (comparison) {
     case LT:
       return compare(std::less{});
@@ -619,7 +619,7 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
                a, bBegin, std::greater_equal<>())) &&
            toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
   };
-  using enum Comparison;
+  QL_USING_ENUM(Comparison);
   switch (comparison) {
     case LT:
       return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());

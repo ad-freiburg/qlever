@@ -225,7 +225,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   AD_CONTRACT_CHECK(!lastRow.empty());
   if (pq._rootGraphPattern._optional) {
     for (auto& plan : lastRow) {
-      plan.type = SubtreePlan::OPTIONAL;
+      plan.type = SubtreePlan::Type::OPTIONAL;
     }
   }
 
@@ -946,7 +946,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
-        using enum PropertyPath::Modifier;
+        QL_USING_SCOPED_ENUM_NAMESPACE(PropertyPath, Modifier);
         switch (modifier) {
           case ALTERNATIVE:
             return seedFromAlternative(left, children, right);
@@ -2129,7 +2129,8 @@ size_t QueryPlanner::findSmallestExecutionTree(
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     boost::optional<const TripleGraph&> tg) const {
-  bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
+  bool swapForTesting = isInTestMode() &&
+                        bin.type != SubtreePlan::Type::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
@@ -2151,7 +2152,8 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     const JoinColumns& jcs) const {
-  bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
+  bool swapForTesting = isInTestMode() &&
+                        bin.type != SubtreePlan::Type::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
@@ -2180,7 +2182,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  if (a.type == SubtreePlan::MINUS) {
+  if (a.type == SubtreePlan::Type::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
         " another graph pattern.");
@@ -2189,13 +2191,13 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // This case shouldn't happen. If the first pattern is OPTIONAL, it
   // is made non optional earlier. If a minus occurs after an optional
   // further into the query that optional should be resolved by now.
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
-  if (b.type == SubtreePlan::MINUS) {
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::Type::OPTIONAL);
+  if (b.type == SubtreePlan::Type::MINUS) {
     return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
   }
 
   // OPTIONAL JOINS are not symmetric!
-  if (b.type == SubtreePlan::OPTIONAL) {
+  if (b.type == SubtreePlan::Type::OPTIONAL) {
     // Join the two optional columns using an optional join
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
@@ -2354,8 +2356,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   const JoinColumns& jcs) const
     -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
-  AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
-                       b.type == SubtreePlan::BASIC);
+  AD_CORRECTNESS_CHECK(a.type == SubtreePlan::Type::BASIC &&
+                       b.type == SubtreePlan::Type::BASIC);
   std::vector<SubtreePlan> candidates{};
   // Disable this optimization.
   if (!RuntimeParameters().get<"enable-distributive-union">()) {
@@ -2772,7 +2774,7 @@ void QueryPlanner::checkCancellation(
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
-  using enum SubtreePlan::Type;
+  QL_USING_SCOPED_ENUM_NAMESPACE(QueryPlanner::SubtreePlan, Type);
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
       [this](const Variable& var) { return !boundVariables_.contains(var); });
@@ -2830,7 +2832,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // If our input is not OPTIONAL and not a MINUS, this means that we can still
   // arbitrarily optimize among our candidates and just append our new
   // candidates.
-  if (candidates[0].type == SubtreePlan::BASIC) {
+  if (candidates[0].type == SubtreePlan::Type::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
 
     // We have finished a nested GroupGraphPattern, reset the filter and text
@@ -2918,7 +2920,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     auto candidates = planner_.optimize(&arg._child);
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
-        c.type = SubtreePlan::OPTIONAL;
+        c.type = SubtreePlan::Type::OPTIONAL;
       }
     }
     visitGroupOptionalOrMinus(std::move(candidates));
@@ -2946,7 +2948,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Minus>) {
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
-      c.type = SubtreePlan::MINUS;
+      c.type = SubtreePlan::Type::MINUS;
     }
     visitGroupOptionalOrMinus(std::move(candidates));
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {

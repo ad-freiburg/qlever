@@ -35,16 +35,18 @@
 
 #define QL_DEFINE_SCOPED_ENUM(ScopeName, EnumName, ...) \
   namespace ql_scoped_namespace_##ScopeName {           \
-    enum class EnumName { __VA_ARGS__ };                \
-    namespace ql_using_enum_namespace_##EnumName {      \
-      QL_DEFINE_ENUM_ALIASES(EnumName, __VA_ARGS__)     \
-    }                                                   \
+    QL_DEFINE_ENUM(EnumName, __VA_ARGS__)               \
   }
 
 #define QL_DEFINE_TYPED_ENUM(EnumName, EnumType, ...) \
   enum class EnumName : EnumType { __VA_ARGS__ };     \
   namespace ql_using_enum_namespace_##EnumName {      \
     QL_DEFINE_ENUM_ALIASES(EnumName, __VA_ARGS__)     \
+  }
+
+#define QL_DEFINE_SCOPED_TYPED_ENUM(ScopeName, EnumName, EnumType, ...) \
+  namespace ql_scoped_namespace_##ScopeName {                           \
+    QL_DEFINE_TYPED_ENUM(EnumName, EnumType, __VA_ARGS__)               \
   }
 
 // Alias generation for simple cases

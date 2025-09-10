@@ -5,6 +5,7 @@
 #include "SparqlExpressionValueGetters.h"
 
 #include "backports/type_traits.h"
+#include "backports/usingEnum.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
@@ -46,7 +47,7 @@ NumericValue NumericValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum Result;
+  QL_USING_SCOPED_ENUM_NAMESPACE(EffectiveBooleanValueGetter, Result);
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();

@@ -9,6 +9,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "parser/ParsedQuery.h"
@@ -69,7 +70,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ("\"the test on friday was really hard\"",
             h::getEntityFromResultTable(qec, result, 2));
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?entityVar2"}, {1, AlwaysDefined}},
@@ -89,7 +90,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
   VariableToColumnMap expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
       {Variable{

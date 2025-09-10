@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 #define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
+#include "backports/usingEnum.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
@@ -13,14 +14,18 @@
 // `VariableToColumnMap.h`.
 using ColumnIndex = uint64_t;
 
+// A strong enum for the status of a column. For some columns we know that
+// they will always be defined, while others might contain UNDEF values when
+// computing the result.
+QL_DEFINE_SCOPED_ENUM(ColumnIndexAndTypeInfo, UndefStatus, AlwaysDefined,
+                      PossiblyUndefined);
+
 // Store an index of a column together with additional information about that
 // column which can be inferred from the `QueryExecutionTree` without actually
 // computing the result.
 struct ColumnIndexAndTypeInfo {
-  // A strong enum for the status of a column. For some columns we know that
-  // they will always be defined, while others might contain UNDEF values when
-  // computing the result.
-  enum struct UndefStatus { AlwaysDefined, PossiblyUndefined };
+  QL_USING_SCOPED_ENUM(ColumnIndexAndTypeInfo, UndefStatus);
+
   // In GCC there is a bug in the `using enum` feature, so we manually export
   // the values
   static constexpr auto AlwaysDefined = UndefStatus::AlwaysDefined;

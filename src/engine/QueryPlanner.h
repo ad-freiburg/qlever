@@ -10,12 +10,15 @@
 #include <boost/optional.hpp>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+
+QL_DEFINE_SCOPED_ENUM(QueryPlanner::SubtreePlan, Type, BASIC, OPTIONAL, MINUS);
 
 class QueryPlanner {
   using TextLimitMap =
@@ -144,7 +147,7 @@ class QueryPlanner {
 
   class SubtreePlan {
    public:
-    enum Type { BASIC, OPTIONAL, MINUS };
+    QL_USING_SCOPED_ENUM(QueryPlanner::SubtreePlan, Type);
 
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(std::make_shared<QueryExecutionTree>(qec)) {}

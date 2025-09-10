@@ -14,6 +14,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForWord.h"
 #include "parser/ParsedQuery.h"
@@ -186,7 +187,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   s2.getExternallyVisibleVariableColumns();
 
   // Test if all columns are there and correct
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},

@@ -10,10 +10,16 @@
 #include <string>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/ConcurrentCache.h"
 #include "util/json.h"
+
+/// The computation status of an operation.
+QL_DEFINE_SCOPED_ENUM(RuntimeInformation, Status, notStarted, inProgress,
+                      fullyMaterialized, lazilyMaterialized, optimizedOut,
+                      failed, failedBecauseChildFailed, cancelled);
 
 /// A class to store information about the status of an operation (result size,
 /// time to compute, status, etc.). Also contains the functionality to print
@@ -23,23 +29,12 @@ class RuntimeInformation {
   using Milliseconds = std::chrono::milliseconds;
 
  public:
+  QL_USING_SCOPED_ENUM(RuntimeInformation, Status);
+
   // Ideally we'd use `using namespace std::chrono_literals;` here,
   // but C++ forbids using this within a class, and we don't want
   // to clutter the global namespace.
   static constexpr auto ZERO = Milliseconds::zero();
-
-  /// The computation status of an operation.
-  enum struct Status {
-    notStarted,
-    inProgress,
-    fullyMaterialized,
-    lazilyMaterialized,
-    optimizedOut,
-    failed,
-    failedBecauseChildFailed,
-    cancelled
-  };
-  using enum Status;
 
   // Public members
 

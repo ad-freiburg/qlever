@@ -8,6 +8,7 @@
 #include "Union.h"
 
 #include "backports/span.h"
+#include "backports/usingEnum.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -147,7 +148,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
        &nextColumnIndex](const VarAndTypeInfo& varAndIndex) {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
-          using enum ColumnIndexAndTypeInfo::UndefStatus;
+          QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
           variableColumns[variable] = ColumnIndexAndTypeInfo{
               nextColumnIndex,
               mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
