@@ -79,7 +79,7 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
     AD_EXPECT_THROW_WITH_MESSAGE(transform(ad_utility::testing::makePostRequest(
                                                "/?default", "text/turtle", ""),
                                            DEFAULT{}),
-                                 testing::HasSubstr("Request body is empty."));
+                                 testing::StrEq(""));
     AD_EXPECT_THROW_WITH_MESSAGE(
         transform(ad_utility::testing::makePostRequest(
                       "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
