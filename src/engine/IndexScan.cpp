@@ -248,12 +248,10 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::chunkedIndexScan() const {
-  auto generator = getLazyScan();
-  auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(generator), [](auto& table) {
+  return Result::LazyResult{
+      ad_utility::CachingTransformInputRange(getLazyScan(), [](auto& table) {
         return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
-      });
-  return Result::LazyResult{std::move(transformedRange)};
+      })};
 }
 
 // _____________________________________________________________________________
@@ -625,36 +623,28 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
           if (!state->iterator_.has_value()) {
             state->iterator_ = state->generator_.begin();
           }
-          auto& it = state->iterator_.value();
-          if (it == state->generator_.end()) {
-            return LoopControl::makeBreak();
-          }
-          auto result = std::move(*it);
-          ++it;
-          return LoopControl::yieldValue(std::move(result));
+          return LoopControl::breakWithYieldAll(std::move(ql::ranges::subrange(
+              state->iterator_.value(), state->generator_.end())));
         }
 
         auto& prefetched = state->prefetchedValues_;
-        while (true) {
-          if (prefetched.empty()) {
-            if (state->doneFetching_) {
-              return LoopControl::makeBreak();
-            }
-            state->fetch();
-            AD_CORRECTNESS_CHECK(!prefetched.empty() || state->doneFetching_);
-            if (prefetched.empty()) {
-              return LoopControl::makeBreak();
-            }
-          }
 
-          // Make a defensive copy of the values to avoid modification during
-          // iteration when yielding.
-          auto copy = std::move(prefetched);
-          prefetched.clear();
-
-          // Yield all values from the copy, then break to fetch more
-          return LoopControl::yieldAll(std::move(copy));
+        if (prefetched.empty() && !state->doneFetching_) {
+          state->fetch();
         }
+
+        if (prefetched.empty()) {
+          AD_CORRECTNESS_CHECK(state->doneFetching_);
+          return LoopControl::makeBreak();
+        }
+
+        // Make a defensive copy of the values to avoid modification during
+        // iteration when yielding.
+        auto copy = std::move(prefetched);
+        prefetched.clear();
+
+        // Yield all values from the copy, then break to fetch more
+        return LoopControl::yieldAll(std::move(copy));
       }};
   return Result::LazyResult{std::move(range)};
 }
@@ -664,41 +654,47 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
 
-  // Handle UNDEF case using LoopControl pattern
-  if (innerState->hasUndef()) {
-    auto range = ad_utility::InputRangeFromLoopControlGet{[this]() {
-      return LoopControl::breakWithYieldAll(chunkedIndexScan());
-    }};
-    return Result::LazyResult{std::move(range)};
-  }
-
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
        metadata = LazyScanMetadata{}]() mutable {
+        // Handle UNDEF case using LoopControl pattern
+        if (state->hasUndef()) {
+          return LoopControl::breakWithYieldAll(chunkedIndexScan());
+        }
+
         auto& pendingBlocks = state->pendingBlocks_;
 
-        while (true) {
-          if (pendingBlocks.empty()) {
-            if (state->doneFetching_) {
-              metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-              updateRuntimeInfoForLazyScan(metadata);
-              return LoopControl::makeBreak();
-            }
-            state->fetch();
-            continue;
+        while (pendingBlocks.empty()) {
+          if (state->doneFetching_) {
+            metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+            updateRuntimeInfoForLazyScan(metadata);
+            return LoopControl::makeBreak();
           }
-
-          auto scan = getLazyScan(std::move(pendingBlocks));
-          AD_CORRECTNESS_CHECK(pendingBlocks.empty());
-          metadata.aggregate(scan.details());
-
-          // Transform the scan to Result::IdTableVocabPair and yield all
-          auto transformedScan = ad_utility::CachingTransformInputRange(
-              std::move(scan), [](auto& table) {
-                return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
-              });
-          return LoopControl::yieldAll(std::move(transformedScan));
+          state->fetch();
         }
+
+        // We now have non-empty pending blocks
+        auto scan = getLazyScan(std::move(pendingBlocks));
+        AD_CORRECTNESS_CHECK(pendingBlocks.empty());
+
+        // Capture scan details before moving the scan
+        auto scanDetails = scan.details();
+
+        // Transform the scan to Result::IdTableVocabPair and yield all
+        auto transformedScan = ad_utility::CachingTransformInputRange(
+            std::move(scan), [](auto& table) {
+              return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+            });
+
+        // Use CallbackOnEndView to aggregate metadata after scan is consumed
+        auto callback = ad_utility::makeAssignableLambda(
+            [&metadata, scanDetails]() mutable {
+              metadata.aggregate(scanDetails);
+            });
+
+        auto scanWithCallback = ad_utility::CallbackOnEndView{
+            std::move(transformedScan), std::move(callback)};
+        return LoopControl::yieldAll(std::move(scanWithCallback));
       }};
   return Result::LazyResult{std::move(range)};
 }
