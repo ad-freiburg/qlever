@@ -207,10 +207,7 @@ TEST(SparqlParser, Clear) {
 
   expectClear("CLEAR ALL", m::Clear(Variable("?g")));
   expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectClear("CLEAR NAMED", m::Clear(Variable("?g"),
-                                      "?g != "
-                                      "<http://qlever.cs.uni-freiburg.de/"
-                                      "builtin-functions/default-graph>"));
+  expectClear("CLEAR NAMED", m::Clear(Variable("?g")));
   expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
@@ -224,10 +221,7 @@ TEST(SparqlParser, Drop) {
 
   expectDrop("DROP ALL", m::Clear(Variable("?g")));
   expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectDrop("DROP NAMED", m::Clear(Variable("?g"),
-                                    "?g != "
-                                    "<http://qlever.cs.uni-freiburg.de/"
-                                    "builtin-functions/default-graph>"));
+  expectDrop("DROP NAMED", m::Clear(Variable("?g")));
   expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
