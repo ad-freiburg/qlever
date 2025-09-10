@@ -155,7 +155,7 @@ auto getQecWithTextIndex(
 }
 
 TEST(TextIndexScanForWord, TextScoringMetric) {
-  using enum TextScoringMetric;
+  QL_USING_ENUM_NAMESPACE(qlever, TextScoringMetric);
   using namespace qlever;
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");

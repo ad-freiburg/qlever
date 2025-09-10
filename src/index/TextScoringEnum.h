@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_TEXTSCORINGENUM_H
 #define QLEVER_SRC_INDEX_TEXTSCORINGENUM_H
 
+#include "backports/usingEnum.h"
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "util/HashMap.h"
@@ -17,7 +18,7 @@ using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
 using DocLengthMap = ad_utility::HashMap<DocumentIndex, size_t>;
 
 namespace qlever {
-enum struct TextScoringMetric { EXPLICIT, TFIDF, BM25 };
+QL_DEFINE_ENUM(TextScoringMetric, EXPLICIT, TFIDF, BM25);
 
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 

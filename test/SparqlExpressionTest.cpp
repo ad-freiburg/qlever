@@ -1749,7 +1749,7 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   using namespace sparqlExpression;
   IdExpression idExpr(ValueId::makeFromInt(42));
 
-  using enum SparqlExpression::AggregateStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(SparqlExpression, AggregateStatus);
 
   ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
   ASSERT_FALSE(idExpr.isInsideAggregate());

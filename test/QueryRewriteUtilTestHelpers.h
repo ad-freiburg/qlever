@@ -22,7 +22,7 @@ using namespace makeSparqlExpression;
 using Loc = ad_utility::source_location;
 using V = Variable;
 QL_USING_ENUM(SpatialJoinType);
-using enum UnitOfMeasurement;
+QL_USING_ENUM(UnitOfMeasurement);
 using ad_utility::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;
 

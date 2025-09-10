@@ -46,11 +46,11 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 
 // ______________________________________________________________________________________________________
 const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
+  QL_USING_ENUM(TurtleTokenId);
   switch (reg) {
-    using enum TurtleTokenId;
     case TurtlePrefix:
       return _tokens.TurtlePrefix;
-    case SparqlPrefix:
+    case TurtleTokenId::SparqlPrefix:
       return _tokens.SparqlPrefix;
     case TurtleBase:
       return _tokens.TurtleBase;

@@ -9,14 +9,15 @@
 #include <gmock/gmock.h>
 
 #include "backports/keywords.h"
+#include "backports/usingEnum.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/jthread.h"
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
-using enum ad_utility::CancellationState;
-using enum ad_utility::detail::CancellationMode;
+QL_USING_ENUM_NAMESPACE(ad_utility, CancellationState);
+QL_USING_ENUM_NAMESPACE(ad_utility::detail, CancellationMode);
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;
