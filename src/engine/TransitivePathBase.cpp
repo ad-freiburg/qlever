@@ -234,11 +234,20 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     }
   };
 
+  auto makeResult = [this](IdTableStatic<OUTPUT_WIDTH>&& table,
+                           LocalVocab&& localVocab,
+                           ad_utility::timer::chr::milliseconds time)
+      -> std::optional<Result::IdTableVocabPair> {
+    runtimeInfo().addDetail("IdTable fill time", time);
+    return Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                    std::move(localVocab)};
+  };
+
   auto hullIt = hull.begin();
   return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
       [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
        hull = std::move(hull), hullIt = std::move(hullIt),
-       yieldOnce = yieldOnce,
+       yieldOnce = yieldOnce, makeResult = std::move(makeResult),
        copyColumnsFor = std::move(copyColumnsFor)]() mutable
       -> std::optional<Result::IdTableVocabPair> {
         size_t outputRow = 0;
@@ -262,9 +271,8 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
           } else {
             ++hullIt;
             timer.stop();
-            runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-            return Result::IdTableVocabPair{std::move(table).toDynamic(),
-                                            std::move(hullIt->localVocab_)};
+            return makeResult(std::move(table), std::move(hullIt->localVocab_),
+                              timer.msecs());
           }
           ++hullIt;
           timer.stop();
@@ -273,9 +281,8 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
           timer.start();
           // make sure we dont yield another value after this
           yieldOnce = false;
-          runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-          return Result::IdTableVocabPair{std::move(table).toDynamic(),
-                                          std::move(mergedVocab)};
+          return makeResult(std::move(table), std::move(mergedVocab),
+                            timer.msecs());
         } else {
           return std::nullopt;
         }
