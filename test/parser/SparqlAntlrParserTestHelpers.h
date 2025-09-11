@@ -704,13 +704,16 @@ inline auto Optional =
 };
 }  // namespace detail
 
-inline auto Group =
-    [](auto&& subMatcher,
-       p::GroupGraphPattern::GraphSpec graphSpec =
-           std::monostate{}) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Group = [](auto&& subMatcher,
+                       p::GroupGraphPattern::GraphSpec graphSpec =
+                           std::monostate{},
+                       bool skipDefaultGraph =
+                           false) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::GroupGraphPattern>(::testing::AllOf(
       AD_FIELD(p::GroupGraphPattern, _child, subMatcher),
-      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec))));
+      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec)),
+      AD_FIELD(p::GroupGraphPattern, skipDefaultGraph_,
+               ::testing::Eq(skipDefaultGraph))));
 };
 
 inline auto Union =
@@ -1162,24 +1165,26 @@ inline auto ExistsFilter =
 
 // A helper matcher for a graph pattern that targets all triples in `graph`.
 inline auto SelectAllPattern =
-    [](parsedQuery::GroupGraphPattern::GraphSpec graph)
-    -> Matcher<const parsedQuery::GraphPattern&> {
+    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
+       bool skipDefaultGraph =
+           false) -> Matcher<const parsedQuery::GraphPattern&> {
   return GraphPattern(
       false, std::vector<std::string>{},
       Group(GraphPattern(Triples(
                 {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
-            std::move(graph)));
+            std::move(graph), skipDefaultGraph));
 };
 
 // Matcher for a `ParsedQuery` with a clear of `graph`.
-inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph) {
+inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
+                       bool skipDefaultGraph = false) {
   // The `GraphSpec` type is the same variant as
   // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
   return UpdateClause(
       GraphUpdate(
           {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
           {}),
-      SelectAllPattern(graph));
+      SelectAllPattern(graph, skipDefaultGraph));
 };
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.

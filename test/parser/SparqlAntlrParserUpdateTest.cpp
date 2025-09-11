@@ -205,9 +205,9 @@ TEST(SparqlParser, Clear) {
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
   auto Iri = TripleComponent::Iri::fromIriref;
 
-  expectClear("CLEAR ALL", m::Clear(Variable("?g")));
+  expectClear("CLEAR ALL", m::Clear(Variable("?g"), false));
   expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectClear("CLEAR NAMED", m::Clear(Variable("?g")));
+  expectClear("CLEAR NAMED", m::Clear(Variable("?g"), true));
   expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
@@ -219,9 +219,9 @@ TEST(SparqlParser, Drop) {
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
   auto Iri = TripleComponent::Iri::fromIriref;
 
-  expectDrop("DROP ALL", m::Clear(Variable("?g")));
+  expectDrop("DROP ALL", m::Clear(Variable("?g"), false));
   expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectDrop("DROP NAMED", m::Clear(Variable("?g")));
+  expectDrop("DROP NAMED", m::Clear(Variable("?g"), true));
   expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 

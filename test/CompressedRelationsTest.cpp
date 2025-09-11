@@ -1124,9 +1124,31 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
         << "Failed with blocksize " << blocksize.getBytes();
+
+    // std::nullopt matches all graphs, but the default graph ('0' in this test)
+    // should be filtered out.
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt,
+                             V(0),  {},           std::nullopt};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res,
+                matchesIdTableFromVector({{8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
+        << "Failed with blocksize " << blocksize.getBytes();
+
+    // std::nullopt matches only the default graph, so the directive to filter
+    // out the default graph should be ignored.
+    graphs.insert(V(0));
+    spec =
+        ScanSpecification{V(42), std::nullopt, std::nullopt, V(0), {}, graphs};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res,
+                matchesIdTableFromVector(
+                    {{3, 4, 0}, {3, 4, 1}, {7, 4, 0}, {8, 4, 0}, {8, 5, 0}}))
+        << "Failed with blocksize " << blocksize.getBytes();
   }
-  // TODO<RobinTF> add tests that check if the default graph is filtered out
-  // properly.
 }
 
 // _____________________________________________________________________________

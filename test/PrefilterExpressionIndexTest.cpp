@@ -114,8 +114,6 @@ static const inline std::string turtleInput =
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
-  // Dummy default graph.
-  const Id DG = Id::makeFromVocabIndex(VocabIndex::make(999));
   // Given that we depend on LocalVocab and Vocab values during evaluation an
   // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
@@ -1201,17 +1199,19 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   const auto& vocab = ad_utility::testing::getQec()->getIndex().getVocab();
   auto blockRanges = gt(IntId(0))->evaluate(vocab, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, std::nullopt, DG}, blockRanges));
-  ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, std::nullopt, std::nullopt, DG},
+      ScanSpecification{VocabId10, DoubleId33, std::nullopt, std::nullopt},
       blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt, DG},
+      ScanSpecification{VocabId10, std::nullopt, std::nullopt, std::nullopt},
+      blockRanges));
+  ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt, std::nullopt},
       blockRanges));
   ASSERT_TRUE(blockRanges.size() > 1);
   blockRanges.push_back(blockRanges.at(0));
   EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, DoubleId33, DG}, blockRanges));
+      ScanSpecification{VocabId10, DoubleId33, DoubleId33, std::nullopt},
+      blockRanges));
 }
 
 //______________________________________________________________________________
