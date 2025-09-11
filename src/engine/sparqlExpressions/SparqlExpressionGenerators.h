@@ -109,18 +109,12 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   auto gen =
       resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
   // Without type erasure, compiling the `sparqlExpressions` module takes a lot
-  // of time and memory. Therefore, we require opt-in here.
-#ifdef QLEVER_OPTIMIZED_EXPRESSIONS
-  return gen;
-#else
-  using Value = ql::ranges::range_value_t<decltype(gen)>;
-  static_assert(std::is_trivially_copyable_v<ValueId>);
-  if constexpr (std::is_trivially_copyable_v<Value>) {
-    return gen;
-  } else {
-    return ad_utility::InputRangeTypeErased<Value>(std::move(gen));
-  }
-#endif
+  // of time and memory. In the future we can evaluate the performance of
+  // deactivating the type erasure for certain expressions + datatypes (e.g.
+  // addition of IDs) etc.
+  static constexpr auto Cat = ::ranges::category::input;
+  return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>, Cat>{
+      std::move(gen)};
 }
 
 /// Return a generator that yields `numItems` many items for the various

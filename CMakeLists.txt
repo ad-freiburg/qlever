@@ -114,8 +114,9 @@ FetchContent_Declare(
 FetchContent_Declare(
         range-v3
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 34f2567718ce085193750b543b5fe654ed4160a6  # branch fork-for-qlever
+        GIT_TAG 9f17f553be486a0c1ae13a98e0e9958ce3f5d23d  # branch fork-for-qlever
 )
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
 # libspatialjoin
