@@ -114,6 +114,7 @@ string IndexScan::getCacheKeyImpl() const {
       os << ", ";
     }
   }
+  os << "filter default graph? " << filterDefaultGraph_ << ", ";
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");

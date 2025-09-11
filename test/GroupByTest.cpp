@@ -2296,8 +2296,6 @@ TEST(GroupBy, countDistinctGraph) {
     EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
   }
   {
-    // TODO<RobinTF> incorporate this into cache key.
-    qec->getQueryTreeCache().clearAll();
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}},

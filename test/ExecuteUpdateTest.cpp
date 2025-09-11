@@ -334,11 +334,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     expectComputeGraphUpdateQuads("CLEAR DEFAULT", {IsEmpty()}, {allTriples});
     expectComputeGraphUpdateQuads("CLEAR GRAPH <x>", {IsEmpty()}, {IsEmpty()});
     expectComputeGraphUpdateQuads("CLEAR NAMED", {IsEmpty()}, {IsEmpty()});
-    // expectComputeGraphUpdateQuads("CLEAR ALL", {IsEmpty()}, {allTriples});
+    expectComputeGraphUpdateQuads("CLEAR ALL", {IsEmpty()}, {allTriples});
     expectComputeGraphUpdateQuads("DROP DEFAULT", {IsEmpty()}, {allTriples});
     expectComputeGraphUpdateQuads("DROP GRAPH <x>", {IsEmpty()}, {IsEmpty()});
     expectComputeGraphUpdateQuads("DROP NAMED", {IsEmpty()}, {IsEmpty()});
-    // expectComputeGraphUpdateQuads("DROP ALL", {IsEmpty()}, {allTriples});
+    expectComputeGraphUpdateQuads("DROP ALL", {IsEmpty()}, {allTriples});
     expectComputeGraphUpdateQuads(
         "ADD DEFAULT TO GRAPH <x>",
         {UnorderedElementsAreArray(allTriplesWith(Id("<x>")))}, {IsEmpty()});
