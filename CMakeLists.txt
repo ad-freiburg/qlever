@@ -86,7 +86,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
+        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
 )
 
 ################################
