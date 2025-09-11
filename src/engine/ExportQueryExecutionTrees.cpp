@@ -27,7 +27,7 @@
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-static std::string_view ExceptionMessagePrefix{
+constexpr std::string_view ExceptionMessagePrefix{
     "\n !!!!>># An error has occurred while exporting the query result."
     " Unfortunately due to limitations in the HTTP 1.1 protocol, "
     "there is no better way to report this than to append it to the incomplete "
