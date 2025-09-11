@@ -93,18 +93,13 @@ struct GroupGraphPattern {
   // fixed graph IRI, or with a variable.
   using GraphSpec =
       std::variant<std::monostate, TripleComponent::Iri, Variable>;
-  GraphSpec graphSpec_;
-  bool skipDefaultGraph_;
+  GraphSpec graphSpec_ = std::monostate{};
+  bool skipDefaultGraph_ = false;
 
   // Constructors for all legal constellations.
-  explicit GroupGraphPattern(GraphPattern child)
-      : _child{std::move(child)},
-        graphSpec_{std::monostate{}},
-        skipDefaultGraph_{false} {}
+  explicit GroupGraphPattern(GraphPattern child) : _child{std::move(child)} {}
   GroupGraphPattern(GraphPattern child, TripleComponent::Iri graphIri)
-      : _child{std::move(child)},
-        graphSpec_{std::move(graphIri)},
-        skipDefaultGraph_{false} {}
+      : _child{std::move(child)}, graphSpec_{std::move(graphIri)} {}
   GroupGraphPattern(GraphPattern child, Variable graphVariable,
                     bool skipDefaultGraph)
       : _child{std::move(child)},
