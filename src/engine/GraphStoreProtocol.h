@@ -113,10 +113,12 @@ class GraphStoreProtocol {
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
+  FRIEND_TEST(GraphStoreProtocolTest, EncodedIriManagerUsage);
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.
-  static ParsedQuery transformGet(const GraphOrDefault& graph);
+  static ParsedQuery transformGet(const GraphOrDefault& graph,
+                                  const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
  public:
@@ -134,7 +136,7 @@ class GraphStoreProtocol {
     using enum boost::beast::http::verb;
     auto method = rawRequest.method();
     if (method == get) {
-      return {transformGet(operation.graph_)};
+      return {transformGet(operation.graph_, &index.encodedIriManager())};
     } else if (method == put) {
       throwNotYetImplementedHTTPMethod("PUT");
     } else if (method == delete_) {

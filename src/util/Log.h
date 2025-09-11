@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/keywords.h"
 #include "util/ConstexprMap.h"
 #include "util/TypeTraits.h"
 
@@ -125,16 +126,16 @@ class Log {
   }
 
   template <LogLevel LEVEL>
-  static consteval std::string_view getLevel() {
-    using std::pair;
-    constexpr ad_utility::ConstexprMap map{std::array{
-        pair(TRACE, "TRACE: "),
-        pair(TIMING, "TIMING: "),
-        pair(DEBUG, "DEBUG: "),
-        pair(INFO, "INFO: "),
-        pair(WARN, "WARN: "),
-        pair(ERROR, "ERROR: "),
-        pair(FATAL, "FATAL: "),
+  static QL_CONSTEVAL std::string_view getLevel() {
+    using P = ConstexprMapPair<LogLevel, std::string_view>;
+    constexpr ConstexprMap map{std::array{
+        P(TRACE, "TRACE: "),
+        P(TIMING, "TIMING: "),
+        P(DEBUG, "DEBUG: "),
+        P(INFO, "INFO: "),
+        P(WARN, "WARN: "),
+        P(ERROR, "ERROR: "),
+        P(FATAL, "FATAL: "),
     }};
     return map.at(LEVEL);
   }

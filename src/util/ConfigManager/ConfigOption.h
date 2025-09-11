@@ -13,10 +13,10 @@
 #include <concepts>
 #include <optional>
 #include <string_view>
-#include <type_traits>
 #include <typeinfo>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "global/ValueId.h"
 #include "gtest/gtest_prod.h"
 #include "util/ConfigManager/ConfigExceptions.h"

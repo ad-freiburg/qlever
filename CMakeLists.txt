@@ -111,11 +111,18 @@ FetchContent_Declare(
 #################################
 # Range v3 (for C++-17 backwards compatibility)
 ################################
+
 FetchContent_Declare(
         range-v3
+        #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 9f17f553be486a0c1ae13a98e0e9958ce3f5d23d  # branch fork-for-qlever
+
+        # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
+        # the former can be used as an (almost) drop-in replacement for the latter.
+        GIT_TAG 9f17f553be486a0c1ae13a98e0e9958ce3f5d23d # branch fork-for-qlever
 )
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
+
 add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
@@ -259,7 +266,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
+        GIT_TAG e34c26ba149b9fd9c34aa0f678e39739641a0d1e # v3.10.0
 )
 
 ################################
@@ -434,6 +441,7 @@ add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
+add_subdirectory(src/libqlever)
 add_subdirectory(benchmark)
 
 enable_testing()
@@ -447,11 +455,14 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 target_precompile_headers(ServerMain REUSE_FROM engine)
+
+add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})

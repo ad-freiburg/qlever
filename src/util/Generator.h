@@ -8,12 +8,12 @@
 #include <coroutine>
 #include <exception>
 #include <functional>
-#include <iterator>
-#include <type_traits>
 #include <utility>
 
 #include "Iterators.h"
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
+#include "backports/type_traits.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -38,7 +38,7 @@ class generator_promise {
   // Even if the generator only yields `const` values, the `value_type`
   // shouldn't be `const` because otherwise several static checks when
   // interacting with the STL fail.
-  using value_type = std::remove_cvref_t<T>;
+  using value_type = ql::remove_cvref_t<T>;
   using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
   using pointer_type = std::remove_reference_t<T>*;
 
