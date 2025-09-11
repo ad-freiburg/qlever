@@ -280,6 +280,9 @@ class DetailsProvider {
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
 
+  // This just defines how details are storesd in the derived class, actull
+  // storage is in the derived class. Used for example in InputRangeFromGet
+  // and InputRangeTypeErased.
   using DetailStorage =
       std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
 };
@@ -486,8 +489,11 @@ class InputRangeTypeErased
   using DetailStorage =
       DetailsProvider<InputRangeTypeErased<ValueType, DetailsType>,
                       DetailsType>::DetailStorage;
+
+  // Relays details to the implemenation.
   DetailStorage& getDetails() { return impl_->getDetails(); }
 
+  // Empty range implementation, used for the default constructor.
   struct Empty : public InputRangeFromGet<ValueType, DetailsType> {
     std::optional<ValueType> get() override { return std::nullopt; }
   };
