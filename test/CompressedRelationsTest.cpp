@@ -1132,8 +1132,8 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
         additionalColumns, handle, emptyLocatedTriples);
-    EXPECT_THAT(res,
-                matchesIdTableFromVector({{8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
         << "Failed with blocksize " << blocksize.getBytes();
 
     // std::nullopt matches only the default graph, so the directive to filter
@@ -1144,9 +1144,8 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
         additionalColumns, handle, emptyLocatedTriples);
-    EXPECT_THAT(res,
-                matchesIdTableFromVector(
-                    {{3, 4, 0}, {3, 4, 1}, {7, 4, 0}, {8, 4, 0}, {8, 5, 0}}))
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4, 0}, {7, 4, 0}, {8, 4, 0}, {8, 5, 0}}))
         << "Failed with blocksize " << blocksize.getBytes();
   }
 }

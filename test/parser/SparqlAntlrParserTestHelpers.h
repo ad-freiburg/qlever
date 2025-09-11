@@ -797,26 +797,22 @@ inline auto OptionalGraphPattern = [](std::vector<std::string>&& filters,
 inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
-namespace detail {
-inline auto GroupGraphPattern = [](std::vector<std::string>&& filters,
-                                   const auto&... childMatchers)
+inline auto GroupGraphPattern = [](const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...));
+  return Group(detail::GraphPattern(false, {}, childMatchers...));
 };
 
-inline auto GroupGraphPatternWithGraph =
-    [](std::vector<std::string>&& filters,
-       p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...), graph);
-};
-
-}  // namespace detail
-
-inline auto GroupGraphPattern =
-    MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
-inline auto GroupGraphPatternWithGraph =
-    MatcherWithDefaultFilters<detail::GroupGraphPatternWithGraph>{};
+inline auto GroupGraphPatternWithGraph = ad_utility::OverloadCallOperator{
+    [](p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...), graph);
+    },
+    [](::Variable graphVariable, bool skipDefaultGraph,
+       const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...),
+                   std::move(graphVariable), skipDefaultGraph);
+    }};
 
 namespace detail {
 inline auto MinusGraphPattern = [](std::vector<std::string>&& filters,
