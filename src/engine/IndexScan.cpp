@@ -623,8 +623,8 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
           if (!state->iterator_.has_value()) {
             state->iterator_ = state->generator_.begin();
           }
-          return LoopControl::breakWithYieldAll(std::move(ql::ranges::subrange(
-              state->iterator_.value(), state->generator_.end())));
+          return LoopControl::breakWithYieldAll(ql::ranges::subrange(
+              state->iterator_.value(), state->generator_.end()));
         }
 
         auto& prefetched = state->prefetchedValues_;

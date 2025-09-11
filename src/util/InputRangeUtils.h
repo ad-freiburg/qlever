@@ -263,16 +263,16 @@ CPP_class_template(typename F)(
     while (true) {
       if (innerRange_.has_value()) {
         auto res = innerRange_.value().get();
-        if (!res.has_value()) {
-          innerRange_.reset();
-          // If we were supposed to break after this range, do so now
-          if (shouldBreakAfterRange_) {
-            receivedBreak_ = true;
-            shouldBreakAfterRange_ = false;
-            return std::nullopt;
-          }
-        } else {
+        if (res.has_value()) {
           return res;
+        }
+        // Range is exhausted.
+        innerRange_.reset();
+        // If we were supposed to break after this range, do so now and end.
+        if (shouldBreakAfterRange_) {
+          receivedBreak_ = true;
+          shouldBreakAfterRange_ = false;
+          return std::nullopt;
         }
       }
       auto loopControl = getFunction_();
