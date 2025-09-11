@@ -38,7 +38,6 @@
 #include "../test/util/JoinHelpers.h"
 #include "../test/util/RandomTestHelpers.h"
 #include "backports/keywords.h"
-#include "backports/usingEnum.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -356,20 +355,15 @@ following information:
 The following enum exists, in order to make the information about the order of
 columns explicit.
 */
-QL_DEFINE_TYPED_ENUM_MANUAL(GeneratedTableColumn, unsigned long,
-                            ChangingParamter = 0UL, TimeForSorting,
-                            TimeForMergeGallopingJoin,
-                            TimeForSortingAndMergeGallopingJoin,
-                            TimeForHashJoin, NumRowsOfJoinResult,
-                            JoinAlgorithmSpeedup);
-QL_ENUM_ALIAS(GeneratedTableColumn, ChangingParamter)
-QL_ENUM_ALIAS(GeneratedTableColumn, TimeForSorting)
-QL_ENUM_ALIAS(GeneratedTableColumn, TimeForMergeGallopingJoin)
-QL_ENUM_ALIAS(GeneratedTableColumn, TimeForSortingAndMergeGallopingJoin)
-QL_ENUM_ALIAS(GeneratedTableColumn, TimeForHashJoin)
-QL_ENUM_ALIAS(GeneratedTableColumn, NumRowsOfJoinResult)
-QL_ENUM_ALIAS(GeneratedTableColumn, JoinAlgorithmSpeedup)
-QL_DEFINE_ENUM_END();
+enum struct GeneratedTableColumn : unsigned long {
+  ChangingParamter = 0UL,
+  TimeForSorting,
+  TimeForMergeGallopingJoin,
+  TimeForSortingAndMergeGallopingJoin,
+  TimeForHashJoin,
+  NumRowsOfJoinResult,
+  JoinAlgorithmSpeedup
+};
 
 // TODO<c++23> Replace usage with `std::to_underlying`.
 /*
@@ -1311,22 +1305,24 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   static void addPostMeasurementInformationsToBenchmarkTable(
       ResultTable* table) {
-    QL_USING_ENUM(GeneratedTableColumn);
     // Adding together the time for sorting the `IdTables` and then joining
     // them via merge/galloping join.
     sumUpColumns(
         table,
+        ColumnNumWithType<float>{toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)},
         ColumnNumWithType<float>{
-            toUnderlying(TimeForSortingAndMergeGallopingJoin)},
-        ColumnNumWithType<float>{toUnderlying(TimeForSorting)},
-        ColumnNumWithType<float>{toUnderlying(TimeForMergeGallopingJoin)});
+            toUnderlying(GeneratedTableColumn::TimeForSorting)},
+        ColumnNumWithType<float>{
+            toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
     // comparison to the merge/galloping join algorithm.
     calculateSpeedupOfColumn(
-        table, {toUnderlying(JoinAlgorithmSpeedup)},
-        {toUnderlying(TimeForHashJoin)},
-        {toUnderlying(TimeForSortingAndMergeGallopingJoin)});
+        table, {toUnderlying(GeneratedTableColumn::JoinAlgorithmSpeedup)},
+        {toUnderlying(GeneratedTableColumn::TimeForHashJoin)},
+        {toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)});
   }
 
   /*

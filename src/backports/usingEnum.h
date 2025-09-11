@@ -68,14 +68,13 @@
                              ...)                                              \
   QL_DEFINE_ENUM_##N
 
-#define QL_DEFINE_ENUM_1(EnumName, a) static constexpr EnumName a = EnumName::a;
-#define QL_DEFINE_ENUM_2(EnumName, a, b)     \
-  static constexpr EnumName a = EnumName::a; \
-  static constexpr EnumName b = EnumName::b;
-#define QL_DEFINE_ENUM_3(EnumName, a, b, c)  \
-  static constexpr EnumName a = EnumName::a; \
-  static constexpr EnumName b = EnumName::b; \
-  static constexpr EnumName c = EnumName::c;
+#define QL_DEFINE_ENUM_1(EnumName, a) QL_ENUM_ALIAS(EnumName, a);
+#define QL_DEFINE_ENUM_2(EnumName, a, b) \
+  QL_DEFINE_ENUM_1(EnumName, a);         \
+  QL_DEFINE_ENUM_1(EnumName, b);
+#define QL_DEFINE_ENUM_3(EnumName, a, b, c) \
+  QL_DEFINE_ENUM_1(EnumName, a);            \
+  QL_DEFINE_ENUM_2(EnumName, b, c);
 #define QL_DEFINE_ENUM_4(EnumName, a, b, c, d) \
   QL_DEFINE_ENUM_2(EnumName, a, b);            \
   QL_DEFINE_ENUM_2(EnumName, c, d);

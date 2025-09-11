@@ -261,7 +261,6 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
 // values that contain bounding `ValueId`s with different underlying datatypes.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
-  using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
@@ -275,8 +274,10 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     // ValueIds representing LocalVocab and Vocab entries are contained in mixed
     // and sorted order over the CompressedBlockMetadata values. Thus, we don't
     // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
-    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
-        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
+    if ((dType1 == Datatype::VocabIndex &&
+         dType2 == Datatype::LocalVocabIndex) ||
+        (dType1 == Datatype::LocalVocabIndex &&
+         dType2 == Datatype::VocabIndex)) {
       return false;
     }
     return dType1 != dType2;
@@ -962,7 +963,6 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 template <CompOp comparison>
 static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
     const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
-  using enum Datatype;
   // Standard pre-filtering procedure.
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
@@ -997,7 +997,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   const auto retrieveYearIntOrThrowErr =
       [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
         const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
-        if (valueId.getDatatype() == Int) {
+        if (valueId.getDatatype() == Datatype::Int) {
           return valueId.getInt();
         }
         throw std::runtime_error(absl::StrCat(

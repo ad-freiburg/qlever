@@ -498,25 +498,24 @@ void Service::throwErrorWithContext(std::string_view msg,
 // ____________________________________________________________________________
 std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using enum Datatype;
   const auto& optionalStringAndXsdType =
       ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
-    AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::Undefined);
     return "UNDEF";
   }
   const auto& [value, xsdType] = optionalStringAndXsdType.value();
 
   switch (id.getDatatype()) {
-    case BlankNodeIndex:
+    case Datatype::BlankNodeIndex:
       // Blank nodes are not allowed in a values clause. Additionally blank
       // nodes across a SERVICE endpoint are disjoint anyway, so rows that
       // contain blank nodes will never create matches and we can safely omit
       // them.
       return std::nullopt;
-    case Int:
-    case Double:
-    case Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Bool:
       return value;
     default:
       if (xsdType) {

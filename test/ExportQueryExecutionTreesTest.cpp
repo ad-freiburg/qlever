@@ -1858,7 +1858,6 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  using enum Datatype;
 
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test
