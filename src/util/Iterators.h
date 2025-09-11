@@ -280,9 +280,9 @@ class DetailsProvider {
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
 
-  // This just defines how details are storesd in the derived class, actull
+  // This just defines how details are storesd in the derived class, actuall
   // storage is in the derived class. Used for example in InputRangeFromGet
-  // and InputRangeTypeErased.
+  // and InputRangeTypeErased via CRPT.
   using DetailStorage =
       std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
 };
