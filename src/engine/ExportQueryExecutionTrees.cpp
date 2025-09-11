@@ -141,18 +141,38 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // export limit beyond the limit has no effect).
   effectiveExportLimit = std::min(effectiveExportLimit, effectiveLimit);
 
-  auto makeResult = [](TableConstRefWithVocab& tableWithVocab,
-                       uint64_t rangeBegin, uint64_t numRowsToBeExported) {
-    return ExportQueryExecutionTrees::TableWithRange{
-        std::move(tableWithVocab),
-        ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
+  auto reduceLimit = [](uint64_t& limit, uint64_t subtrahend) {
+    if (limit != std::numeric_limits<uint64_t>::max()) {
+      limit = limit > subtrahend ? limit - subtrahend : 0;
+    }
   };
 
   using LoopControl = LoopControl<ExportQueryExecutionTrees::TableWithRange>;
-  auto range = CachingContinuableTransformInputRange(
+  auto makeResult = [](TableConstRefWithVocab& tableWithVocab,
+                       uint64_t rangeBegin, uint64_t numRowsToBeExported,
+                       uint64_t effectiveLimit) {
+    auto value = ExportQueryExecutionTrees::TableWithRange{
+        std::move(tableWithVocab),
+        ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
+    // If the effective limit is zero, there is nothing to yield and nothing
+    // to count anymore. This should come at the end of the loop and not at
+    // the beginning, to avoid unnecessarily fetching another block from
+    // `result`.
+    if (effectiveLimit == 0) {
+      return numRowsToBeExported > 0 ? LoopControl::breakWithValue(value)
+                                     : LoopControl::makeBreak();
+    }
+
+    // If there is something to be exported, yield it.
+    return numRowsToBeExported > 0 ? LoopControl::yieldValue(value)
+                                   : LoopControl::makeContinue();
+  };
+
+  return InputRangeTypeErased(CachingContinuableTransformInputRange(
       getIdTables(result),
       [&resultSize, makeResult = std::move(makeResult),
-       effectiveOffset = effectiveOffset, effectiveLimit = effectiveLimit,
+       reduceLimit = std::move(reduceLimit), effectiveOffset = effectiveOffset,
+       effectiveLimit = effectiveLimit,
        effectiveExportLimit = effectiveExportLimit](
           TableConstRefWithVocab& tableWithVocab) mutable {
         // If all rows in the current block are before the effective offset, we
@@ -185,33 +205,12 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         // there).
         resultSize += numRowsToBeCounted;
         effectiveOffset = 0;
-        auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
-          if (limit != std::numeric_limits<uint64_t>::max()) {
-            limit = limit > subtrahend ? limit - subtrahend : 0;
-          }
-        };
         reduceLimit(effectiveLimit, numRowsToBeCounted);
         reduceLimit(effectiveExportLimit, numRowsToBeCounted);
 
-        // If the effective limit is zero, there is nothing to yield and nothing
-        // to count anymore. This should come at the end of this loop and not at
-        // the beginning, to avoid unnecessarily fetching another block from
-        // `result`.
-        if (effectiveLimit == 0) {
-          return numRowsToBeExported > 0
-                     ? LoopControl::breakWithValue(makeResult(
-                           tableWithVocab, rangeBegin, numRowsToBeExported))
-                     : LoopControl::makeBreak();
-        }
-
-        // If there is something to be exported, yield it.
-        return numRowsToBeExported > 0
-                   ? LoopControl::yieldValue(makeResult(
-                         tableWithVocab, rangeBegin, numRowsToBeExported))
-                   : LoopControl::makeContinue();
-      });
-
-  return InputRangeTypeErased(std::move(range));
+        return makeResult(tableWithVocab, rangeBegin, numRowsToBeExported,
+                          effectiveLimit);
+      }));
 }
 
 // _____________________________________________________________________________
