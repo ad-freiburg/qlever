@@ -15,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedIriManager.h"
+#include "index/Index.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
