@@ -272,6 +272,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     }
   };
 
+  // There is a std::mutex in the generator, so we cannot copy or move it,
+  // that's why it is consctucted via a unique_ptr.
   std::unique_ptr<ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata>>
       generator{std::make_unique<Generator>(beginBlock, endBlock, scanConfig,
                                             cancellationHandle, limitOffset,
