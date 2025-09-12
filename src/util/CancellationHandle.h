@@ -14,6 +14,7 @@
 #include <mutex>
 
 #include "backports/type_traits.h"
+#include "backports/usingEnum.h"
 #include "global/Constants.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
@@ -25,23 +26,18 @@
 
 namespace ad_utility {
 /// Enum to represent possible states of cancellation
-enum class CancellationState {
-  NOT_CANCELLED,
-  WAITING_FOR_CHECK,
-  CHECK_WINDOW_MISSED,
-  MANUAL,
-  TIMEOUT
-};
+QL_DEFINE_ENUM(CancellationState, NOT_CANCELLED, WAITING_FOR_CHECK,
+               CHECK_WINDOW_MISSED, MANUAL, TIMEOUT);
 
 namespace detail {
 
 /// Helper enum that selects which features to compile inside the
 /// `CancellationHandle` class.
-enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
+QL_DEFINE_ENUM(CancellationMode, ENABLED, NO_WATCH_DOG, DISABLED);
 
 /// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
-  using enum CancellationMode;
+  QL_USING_ENUM(CancellationMode);
 #ifndef QUERY_CANCELLATION_MODE
   return ENABLED;
 #else
@@ -54,7 +50,7 @@ constexpr CancellationMode CANCELLATION_MODE = []() {
 /// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
-  using enum CancellationState;
+  QL_USING_ENUM(CancellationState);
   static_assert(NOT_CANCELLED <= CHECK_WINDOW_MISSED);
   static_assert(WAITING_FOR_CHECK <= CHECK_WINDOW_MISSED);
   static_assert(MANUAL > CHECK_WINDOW_MISSED);

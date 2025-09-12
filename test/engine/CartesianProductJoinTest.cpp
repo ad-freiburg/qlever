@@ -9,6 +9,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -217,7 +218,7 @@ TEST(CartesianProductJoin, variableColumnMap) {
       Vars{std::nullopt, Variable{"?y"}, std::nullopt, Variable{"?z"}}));
   CartesianProductJoin join{qec, std::move(subtrees)};
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
   VariableToColumnMap expectedVariables{
       {Variable{"?x"}, {4, AlwaysDefined}},
       {Variable{"?y"}, {1, AlwaysDefined}},

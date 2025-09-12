@@ -11,6 +11,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gmock/gmock.h"
@@ -21,7 +22,7 @@ using namespace sparqlExpression;
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 using namespace std::literals;
-using enum valueIdComparators::Comparison;
+QL_USING_ENUM_NAMESPACE(valueIdComparators, Comparison);
 using valueIdComparators::Comparison;
 
 // First some internal helper functions and constants.

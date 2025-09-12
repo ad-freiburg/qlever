@@ -73,7 +73,7 @@ ad_utility::streams::stream_generator computeResultForAsk(
   };
 
   // Return the result in the requested format.
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   switch (mediaType) {
     case sparqlXml:
       co_yield getXmlResult();
@@ -199,7 +199,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
                                           qet.getVariableColumns(),
                                           qet.getQec()->getIndex(),
                                           rowOffset};
-      using enum PositionInTriple;
+      QL_USING_ENUM(PositionInTriple);
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
         auto predicate = triple[1].evaluate(context, PREDICATE);
@@ -331,11 +331,10 @@ ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
 // _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
-  using enum Datatype;
   switch (id.getDatatype()) {
-    case Undefined:
+    case Datatype::Undefined:
       return std::nullopt;
-    case Double:
+    case Datatype::Double:
       // We use the immediately invoked lambda here because putting this block
       // in braces confuses the test coverage tool.
       return [id] {
@@ -363,21 +362,21 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
                               : absl::StrFormat("%g", d);
         return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
-    case Bool:
+    case Datatype::Bool:
       return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
-    case Int:
+    case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
-    case Date:
+    case Datatype::Date:
       return id.getDate().toStringAndType();
-    case GeoPoint:
+    case Datatype::GeoPoint:
       return id.getGeoPoint().toStringAndType();
-    case BlankNodeIndex:
+    case Datatype::BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
       // TODO<joka921> This is only to make the strange `toRdfLiteral` function
       // work in the triple component class, which is only used to create cache
       // keys etc. Consider removing it in the future.
-    case EncodedVal:
+    case Datatype::EncodedVal:
       return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
     default:
       AD_FAIL();
@@ -493,10 +492,10 @@ std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
-  using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (onlyReturnLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+    if (!(datatype == Datatype::VocabIndex ||
+          datatype == Datatype::LocalVocabIndex)) {
       return std::nullopt;
     }
   }
@@ -522,17 +521,17 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
   };
   switch (id.getDatatype()) {
-    case WordVocabIndex: {
+    case Datatype::WordVocabIndex: {
       std::string_view entity = index.indexToString(id.getWordVocabIndex());
       return std::pair{escapeFunction(std::string{entity}), nullptr};
     }
-    case VocabIndex:
-    case LocalVocabIndex:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab));
-    case EncodedVal:
+    case Datatype::EncodedVal:
       return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index));
-    case TextRecordIndex:
+    case Datatype::TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
@@ -546,21 +545,20 @@ std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
-  using enum Datatype;
   auto datatype = id.getDatatype();
 
   switch (datatype) {
-    case WordVocabIndex:
+    case Datatype::WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
-    case EncodedVal:
+    case Datatype::EncodedVal:
       return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index),
                                 onlyReturnLiteralsWithXsdString);
-    case VocabIndex:
-    case LocalVocabIndex:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
-    case TextRecordIndex:
+    case Datatype::TextRecordIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromTextRecordIndex(index, id));
     default:
       return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
@@ -615,15 +613,14 @@ std::optional<ad_utility::triple_component::LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
                                             const LocalVocab& localVocab,
                                             bool skipEncodedValues) {
-  using enum Datatype;
   switch (id.getDatatype()) {
-    case WordVocabIndex:
+    case Datatype::WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
-    case VocabIndex:
-    case LocalVocabIndex:
-    case EncodedVal:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::EncodedVal:
       return getLiteralOrIriFromVocabIndex(index, id, localVocab);
-    case TextRecordIndex:
+    case Datatype::TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
     default:
       if (skipEncodedValues) {
@@ -1125,7 +1122,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
 
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};

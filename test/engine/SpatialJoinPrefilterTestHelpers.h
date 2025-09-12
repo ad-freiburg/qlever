@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
@@ -185,7 +186,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
+  QL_USING_ENUM(SpatialJoinType);
   sj::SweeperCfg cfg;
   cfg.numThreads = 1;
   cfg.numCacheThreads = 1;

@@ -12,6 +12,7 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "backports/type_traits.h"
+#include "backports/usingEnum.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -289,7 +290,7 @@ TEST(AggregateExpression, CountStar) {
 // _____________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
   using namespace sparqlExpression;
-  using enum SparqlExpression::AggregateStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(SparqlExpression, AggregateStatus);
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
   EXPECT_THAT(exp.getCacheKey({}), ::testing::HasSubstr("COUNT *"));
@@ -346,7 +347,7 @@ TEST(AggregateExpression, SampleExpressionSimpleMembers) {
   };
 
   auto sample = makeSample(I(3478));
-  using enum SparqlExpression::AggregateStatus;
+  QL_USING_SCOPED_ENUM_NAMESPACE(SparqlExpression, AggregateStatus);
   EXPECT_EQ(sample->isAggregate(), NonDistinctAggregate);
   EXPECT_TRUE(sample->getUnaggregatedVariables().empty());
   EXPECT_EQ(sample->children().size(), 1u);

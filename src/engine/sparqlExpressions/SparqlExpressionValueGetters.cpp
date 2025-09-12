@@ -5,6 +5,7 @@
 #include "SparqlExpressionValueGetters.h"
 
 #include "backports/type_traits.h"
+#include "backports/usingEnum.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
@@ -46,7 +47,7 @@ NumericValue NumericValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum Result;
+  QL_USING_SCOPED_ENUM_NAMESPACE(EffectiveBooleanValueGetter, Result);
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
@@ -285,33 +286,32 @@ IntDoubleStr ToNumericValueGetter::operator()(
 // _____________________________________________________________________________
 OptIri DatatypeValueGetter::operator()(ValueId id,
                                        const EvaluationContext* context) const {
-  using enum Datatype;
   auto datatype = id.getDatatype();
   std::optional<std::string> entity;
   switch (datatype) {
-    case Bool:
+    case Datatype::Bool:
       return Iri::fromIrirefWithoutBrackets(XSD_BOOLEAN_TYPE);
-    case Double:
+    case Datatype::Double:
       return Iri::fromIrirefWithoutBrackets(XSD_DOUBLE_TYPE);
-    case Int:
+    case Datatype::Int:
       return Iri::fromIrirefWithoutBrackets(XSD_INT_TYPE);
-    case GeoPoint:
+    case Datatype::GeoPoint:
       return Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
-    case Date: {
+    case Datatype::Date: {
       auto dateType = id.getDate().toStringAndType().second;
       AD_CORRECTNESS_CHECK(dateType != nullptr);
       return Iri::fromIrirefWithoutBrackets(dateType);
     }
-    case EncodedVal:
-    case LocalVocabIndex:
-    case VocabIndex:
+    case Datatype::EncodedVal:
+    case Datatype::LocalVocabIndex:
+    case Datatype::VocabIndex:
       return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
-    case Undefined:
-    case BlankNodeIndex:
-    case TextRecordIndex:
-    case WordVocabIndex:
+    case Datatype::Undefined:
+    case Datatype::BlankNodeIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
       return std::nullopt;
   }
   AD_FAIL();
@@ -391,24 +391,23 @@ CPP_template(typename T, typename ValueGetter)(
              concepts::same_as<std::optional<std::string>, T>)) T
     getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
              ValueGetter& valueGetter) {
-  using enum Datatype;
   switch (id.getDatatype()) {
-    case LocalVocabIndex:
-    case EncodedVal:
-    case VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::EncodedVal:
+    case Datatype::VocabIndex:
       return valueGetter(
           ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
               context->_qec.getIndex(), id, context->_localVocab),
           context);
-    case TextRecordIndex:
-    case WordVocabIndex:
-    case BlankNodeIndex:
-    case Bool:
-    case Int:
-    case Double:
-    case Date:
-    case GeoPoint:
-    case Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
+    case Datatype::Undefined:
       if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
       } else {
@@ -427,23 +426,22 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
   switch (id.getDatatype()) {
-    case Bool:
-    case Int:
-    case Double:
-    case Date:
-    case GeoPoint:
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
       // For literals without language tag, we return an empty string per
       // standard.
       return {""};
-    case Undefined:
-    case EncodedVal:
-    case VocabIndex:
-    case LocalVocabIndex:
-    case TextRecordIndex:
-    case WordVocabIndex:
-    case BlankNodeIndex:
+    case Datatype::Undefined:
+    case Datatype::EncodedVal:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
   }
   AD_FAIL();
@@ -479,11 +477,10 @@ template <typename RequestedInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
   switch (id.getDatatype()) {
-    case EncodedVal:
-    case LocalVocabIndex:
-    case VocabIndex: {
+    case Datatype::EncodedVal:
+    case Datatype::LocalVocabIndex:
+    case Datatype::VocabIndex: {
       auto precomputed = getPrecomputedGeometryInfo(id, context);
       if (precomputed.has_value()) {
         return precomputed.value().getRequestedInfo<RequestedInfo>();
@@ -495,17 +492,17 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
         return GeometryInfoValueGetter{}(lit, context);
       }
     }
-    case GeoPoint:
+    case Datatype::GeoPoint:
       return ad_utility::GeometryInfo::fromGeoPoint(id.getGeoPoint())
           .getRequestedInfo<RequestedInfo>();
-    case TextRecordIndex:
-    case WordVocabIndex:
-    case BlankNodeIndex:
-    case Bool:
-    case Int:
-    case Double:
-    case Date:
-    case Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::Undefined:
       return std::nullopt;
   }
   AD_FAIL();

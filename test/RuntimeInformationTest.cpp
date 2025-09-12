@@ -90,7 +90,7 @@ TEST(RuntimeInformation, setColumnNames) {
 
 // ________________________________________________________________
 TEST(RuntimeInformation, statusToString) {
-  using enum RuntimeInformation::Status;
+  QL_USING_SCOPED_ENUM_NAMESPACE(RuntimeInformation, Status);
   using R = RuntimeInformation;
   EXPECT_EQ(R::toString(fullyMaterialized), "fully materialized");
   EXPECT_EQ(R::toString(lazilyMaterialized), "lazily materialized");

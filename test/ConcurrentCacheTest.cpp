@@ -319,7 +319,7 @@ TEST(ConcurrentCache, abortPinned) {
 }
 
 TEST(ConcurrentCache, cacheStatusToString) {
-  using enum ad_utility::CacheStatus;
+  QL_USING_ENUM_NAMESPACE(ad_utility, CacheStatus);
   EXPECT_EQ(toString(cachedNotPinned), "cached_not_pinned");
   EXPECT_EQ(toString(cachedPinned), "cached_pinned");
   EXPECT_EQ(toString(computed), "computed");

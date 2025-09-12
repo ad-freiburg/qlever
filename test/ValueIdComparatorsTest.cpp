@@ -9,6 +9,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "global/ValueIdComparators.h"
 #include "util/Random.h"
 
@@ -16,7 +17,7 @@ using namespace valueIdComparators;
 namespace valueIdComparators {
 inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   switch (c) {
-    using enum Comparison;
+    QL_USING_ENUM(Comparison);
     case LT:
       str << "LT";
       break;
@@ -124,7 +125,7 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       auto y = applyComparator(comparator, a, b);
       return y;
     };
-    using enum ComparisonResult;
+    QL_USING_ENUM(ComparisonResult);
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id))
@@ -229,7 +230,7 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
     }
-    using enum ComparisonResult;
+    QL_USING_ENUM(ComparisonResult);
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
@@ -327,8 +328,8 @@ TEST_F(ValueIdComparators, IndexTypes) {
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
-  using enum ComparisonResult;
-  using enum ComparisonForIncompatibleTypes;
+  QL_USING_ENUM(ComparisonResult);
+  QL_USING_ENUM(ComparisonForIncompatibleTypes);
   ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);

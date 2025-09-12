@@ -44,28 +44,27 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
-  using enum WKTType;
   try {
     switch (type) {
-      case POINT:
+      case WKTType::POINT:
         parsed = pointFromWKT<CoordType>(wktLiteral);
         break;
-      case LINESTRING:
+      case WKTType::LINESTRING:
         parsed = lineFromWKT<CoordType>(wktLiteral);
         break;
-      case POLYGON:
+      case WKTType::POLYGON:
         parsed = polygonFromWKT<CoordType>(wktLiteral);
         break;
-      case MULTIPOINT:
+      case WKTType::MULTIPOINT:
         parsed = multiPointFromWKT<CoordType>(wktLiteral);
         break;
-      case MULTILINESTRING:
+      case WKTType::MULTILINESTRING:
         parsed = multiLineFromWKT<CoordType>(wktLiteral);
         break;
-      case MULTIPOLYGON:
+      case WKTType::MULTIPOLYGON:
         parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
         break;
-      case COLLECTION:
+      case WKTType::COLLECTION:
         parsed = collectionFromWKT<CoordType>(wktLiteral);
         break;
       case NONE:

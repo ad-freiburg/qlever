@@ -162,7 +162,6 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, extractMediatype) {
-  using enum http::field;
   auto makeRequest =
       [](const ad_utility::HashMap<http::field, std::string>& headers) {
         return ad_utility::testing::makeRequest(http::verb::get, "/", headers);
@@ -171,18 +170,19 @@ TEST(GraphStoreProtocolTest, extractMediatype) {
       GraphStoreProtocol::extractMediatype(makeRequest({})),
       testing::HasSubstr("Mediatype empty or not set."));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GraphStoreProtocol::extractMediatype(makeRequest({{content_type, ""}})),
+      GraphStoreProtocol::extractMediatype(
+          makeRequest({{http::field::content_type, ""}})),
       testing::HasSubstr("Mediatype empty or not set."));
   EXPECT_THAT(GraphStoreProtocol::extractMediatype(
-                  makeRequest({{content_type, "text/csv"}})),
+                  makeRequest({{http::field::content_type, "text/csv"}})),
               testing::Eq(ad_utility::MediaType::csv));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractMediatype(
-          makeRequest({{content_type, "text/plain"}})),
+          makeRequest({{http::field::content_type, "text/plain"}})),
       testing::HasSubstr("Mediatype \"text/plain\" is not supported for SPARQL "
                          "Graph Store HTTP Protocol in QLever."));
-  EXPECT_THAT(GraphStoreProtocol::extractMediatype(
-                  makeRequest({{content_type, "application/n-triples"}})),
+  EXPECT_THAT(GraphStoreProtocol::extractMediatype(makeRequest(
+                  {{http::field::content_type, "application/n-triples"}})),
               testing::Eq(ad_utility::MediaType::ntriples));
 }
 

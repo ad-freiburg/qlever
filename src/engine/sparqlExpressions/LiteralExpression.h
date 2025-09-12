@@ -246,10 +246,10 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
                                             bool stringAndIriOnly = false) {
-  using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     auto idType = idExpr->value().getDatatype();
-    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
+    if (stringAndIriOnly && idType != Datatype::VocabIndex &&
+        idType != Datatype::LocalVocabIndex) {
       return std::nullopt;
     }
     return idExpr->value();
@@ -269,7 +269,6 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
 // `std::nullopt`.
 inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
     const SparqlExpression* child) {
-  using enum Datatype;
   if (const auto* literalExpr =
           dynamic_cast<const StringLiteralExpression*>(child)) {
     return literalExpr->value();

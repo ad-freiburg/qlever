@@ -15,6 +15,7 @@
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
+#include "backports/usingEnum.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
@@ -1493,19 +1494,18 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
-  using enum Permutation::Enum;
   switch (p) {
-    case PSO:
+    case Permutation::Enum::PSO:
       return pso_;
-    case POS:
+    case Permutation::Enum::POS:
       return pos_;
-    case SPO:
+    case Permutation::Enum::SPO:
       return spo_;
-    case SOP:
+    case Permutation::Enum::SOP:
       return sop_;
-    case OSP:
+    case Permutation::Enum::OSP:
       return osp_;
-    case OPS:
+    case Permutation::Enum::OPS:
       return ops_;
   }
   AD_FAIL();

@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/usingEnum.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/StringUtils.h"
 
@@ -197,7 +198,7 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
                                 GEO_WKT_LITERAL,
                                 string_constants::detail::closeAngle>();
 
-enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
+QL_DEFINE_ENUM(UnitOfMeasurement, METERS, KILOMETERS, MILES, UNKNOWN);
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
 namespace string_constants::detail {
 constexpr inline std::string_view unit_meter = "M";

@@ -9,11 +9,15 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "backports/usingEnum.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "rdfTypes/Variable.h"
 
 namespace sparqlExpression {
+
+QL_DEFINE_SCOPED_ENUM(SparqlExpression, AggregateStatus, NoAggregate,
+                      DistinctAggregate, NonDistinctAggregate);
 
 // Virtual base class for an arbitrary Sparql Expression which holds the
 // structure of the expression as well as the logic to evaluate this expression
@@ -26,6 +30,7 @@ class SparqlExpression {
  public:
   // ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
+  QL_USING_SCOPED_ENUM(SparqlExpression, AggregateStatus);
 
   // Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
@@ -49,11 +54,6 @@ class SparqlExpression {
 
   // Check if expression is an aggregate. If true, then the return type also
   // specifies, whether the aggregate is `DISTINCT` or not.
-  enum struct AggregateStatus {
-    NoAggregate,
-    DistinctAggregate,
-    NonDistinctAggregate
-  };
   virtual AggregateStatus isAggregate() const;
 
   // Replace child at index `childIndex` with `newExpression`. Return the old

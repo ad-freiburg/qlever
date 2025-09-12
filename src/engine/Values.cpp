@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include "backports/usingEnum.h"
 #include "engine/CallFixedSize.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -56,7 +57,7 @@ VariableToColumnMap Values::computeVariableToColumnMap() const {
   }
   VariableToColumnMap map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    using enum ColumnIndexAndTypeInfo::UndefStatus;
+    QL_USING_SCOPED_ENUM_NAMESPACE(ColumnIndexAndTypeInfo, UndefStatus);
     auto undefStatus = static_cast<bool>(colContainsUndef.at(i))
                            ? PossiblyUndefined
                            : AlwaysDefined;

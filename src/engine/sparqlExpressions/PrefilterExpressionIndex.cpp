@@ -261,7 +261,6 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
 // values that contain bounding `ValueId`s with different underlying datatypes.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
-  using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
@@ -275,8 +274,10 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     // ValueIds representing LocalVocab and Vocab entries are contained in mixed
     // and sorted order over the CompressedBlockMetadata values. Thus, we don't
     // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
-    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
-        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
+    if ((dType1 == Datatype::VocabIndex &&
+         dType2 == Datatype::LocalVocabIndex) ||
+        (dType1 == Datatype::LocalVocabIndex &&
+         dType2 == Datatype::VocabIndex)) {
       return false;
     }
     return dType1 != dType2;
@@ -295,19 +296,18 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
 //______________________________________________________________________________
 // Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
-  using enum CompOp;
   switch (relOp) {
-    case LT:
+    case CompOp::LT:
       return "LT(<)";
-    case LE:
+    case CompOp::LE:
       return "LE(<=)";
-    case EQ:
+    case CompOp::EQ:
       return "EQ(=)";
-    case NE:
+    case CompOp::NE:
       return "NE(!=)";
-    case GE:
+    case CompOp::GE:
       return "GE(>=)";
-    case GT:
+    case CompOp::GT:
       return "GT(>)";
     default:
       return absl::StrCat("Undefined CompOp value: ", static_cast<int>(relOp),
@@ -318,7 +318,7 @@ static std::string getRelationalOpStr(const CompOp relOp) {
 //______________________________________________________________________________
 // Return `Datatype`s (for `isDatatype` pre-filter) as string.
 static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
-  using enum IsDatatype;
+  QL_USING_ENUM(IsDatatype);
   switch (isDtype) {
     case IRI:
       return "Iri";
@@ -336,7 +336,7 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
 //______________________________________________________________________________
 // Return `LogicalOperator`s as string.
 static std::string getLogicalOpStr(const LogicalOperator logOp) {
-  using enum LogicalOperator;
+  QL_USING_ENUM(LogicalOperator);
   switch (logOp) {
     case AND:
       return "AND(&&)";
@@ -505,7 +505,6 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
-  using enum CompOp;
   using namespace ad_utility;
   using P = ConstexprMapPair<CompOp, CompOp>;
   // The complementation logic implemented with the following mapping
@@ -517,7 +516,9 @@ RelationalExpression<Comparison>::logicalComplement() const {
   // (5) ?var = referenceValue -> ?var != referenceValue
   // (6) ?var != referenceValue -> ?var = referenceValue
   constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
-      {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
+      {P{CompOp::LT, CompOp::GE}, P{CompOp::LE, CompOp::GT},
+       P{CompOp::GE, CompOp::LT}, P{CompOp::GT, CompOp::LE},
+       P{CompOp::EQ, CompOp::NE}, P{CompOp::NE, CompOp::EQ}});
   return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
 }
@@ -776,7 +777,7 @@ BlockMetadataRanges IsInExpression::evaluateImpl(
 template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression>
 LogicalExpression<Operation>::logicalComplement() const {
-  using enum LogicalOperator;
+  QL_USING_ENUM(LogicalOperator);
   // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
@@ -796,7 +797,7 @@ template <LogicalOperator Operation>
 BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
-  using enum LogicalOperator;
+  QL_USING_ENUM(LogicalOperator);
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
         child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
@@ -935,20 +936,19 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
   const auto getDateId = [](const int adjustedYear) {
     return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
   };
-  using enum CompOp;
   switch (comparison) {
-    case EQ:
+    case CompOp::EQ:
       return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
                                  make<GeExpr>(getDateId(year)));
-    case LT:
+    case CompOp::LT:
       return make<LtExpr>(getDateId(year));
-    case LE:
+    case CompOp::LE:
       return make<LtExpr>(getDateId(year + 1));
-    case GE:
+    case CompOp::GE:
       return make<GeExpr>(getDateId(year));
-    case GT:
+    case CompOp::GT:
       return make<GeExpr>(getDateId(year + 1));
-    case NE:
+    case CompOp::NE:
       return make<OrExpression>(make<LtExpr>(getDateId(year)),
                                 make<GeExpr>(getDateId(year + 1)));
     default:
@@ -963,7 +963,6 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 template <CompOp comparison>
 static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
     const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
-  using enum Datatype;
   // Standard pre-filtering procedure.
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
@@ -998,7 +997,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   const auto retrieveYearIntOrThrowErr =
       [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
         const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
-        if (valueId.getDatatype() == Int) {
+        if (valueId.getDatatype() == Datatype::Int) {
           return valueId.getInt();
         }
         throw std::runtime_error(absl::StrCat(
@@ -1016,7 +1015,6 @@ template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
     bool mirrored, bool prefilterDateByYear) {
-  using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
     using P = ad_utility::ConstexprMapPair<CompOp, CompOp>;
@@ -1025,7 +1023,9 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     // procedure will transform the relational expression
     // `referenceValue > ?var` into `?var < referenceValue`.
     constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
-        {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
+        {P{CompOp::LT, CompOp::GT}, P{CompOp::LE, CompOp::GE},
+         P{CompOp::GE, CompOp::LE}, P{CompOp::GT, CompOp::LT},
+         P{CompOp::EQ, CompOp::EQ}, P{CompOp::NE, CompOp::NE}});
     resVec.emplace_back(
         makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
             referenceValue, prefilterDateByYear),

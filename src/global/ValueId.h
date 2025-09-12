@@ -14,6 +14,7 @@
 #include <functional>
 #include <limits>
 
+#include "backports/usingEnum.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -23,7 +24,6 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
-/// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -157,13 +157,14 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    using enum Datatype;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
-    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+    if (type != Datatype::LocalVocabIndex &&
+        otherType != Datatype::LocalVocabIndex) {
       return _bits <=> other._bits;
     }
-    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
+    if (type == Datatype::LocalVocabIndex &&
+        otherType == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
 
@@ -182,12 +183,13 @@ class ValueId {
     };
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
-    if ((type == VocabIndex || type == EncodedVal) &&
-        otherType == LocalVocabIndex) {
+    if ((type == Datatype::VocabIndex || type == Datatype::EncodedVal) &&
+        otherType == Datatype::LocalVocabIndex) {
       return compareVocabAndLocalVocab(IdProxy::make(getBits()),
                                        other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex &&
-               (otherType == VocabIndex || otherType == EncodedVal)) {
+    } else if (type == Datatype::LocalVocabIndex &&
+               (otherType == Datatype::VocabIndex ||
+                otherType == Datatype::EncodedVal)) {
       auto inverseOrder = compareVocabAndLocalVocab(
           IdProxy::make(other.getBits()), getLocalVocabIndex());
       return 0 <=> inverseOrder;
@@ -308,7 +310,7 @@ class ValueId {
   static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
-  static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
+  static ValueId makeFromLocalVocabIndex(::LocalVocabIndex index) {
     // The last `numDatatypeBits` of a `LocalVocabIndex` are always zero, so we
     // can reuse them for the datatype.
     static_assert(alignof(decltype(*index)) >= (1u << numDatatypeBits));
@@ -325,8 +327,8 @@ class ValueId {
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
   /// unspecified.
-  [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
-    return VocabIndex::make(removeDatatypeBits(_bits));
+  [[nodiscard]] constexpr ::VocabIndex getVocabIndex() const noexcept {
+    return ::VocabIndex::make(removeDatatypeBits(_bits));
   }
 
   [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
@@ -336,8 +338,8 @@ class ValueId {
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
-  [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
-    return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
+  [[nodiscard]] ::LocalVocabIndex getLocalVocabIndex() const noexcept {
+    return reinterpret_cast<::LocalVocabIndex>(_bits << numDatatypeBits);
   }
   [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
     return WordVocabIndex::make(removeDatatypeBits(_bits));
@@ -466,7 +468,7 @@ class ValueId {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
         ostr << value.toStringRepresentation();
-      } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
+      } else if constexpr (ad_utility::isSimilar<T, ::LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();
       } else {

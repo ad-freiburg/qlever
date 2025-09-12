@@ -9,8 +9,11 @@
 #include <utility>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+
+QL_DEFINE_SCOPED_ENUM(OrderBy, AscOrDesc, Asc, Desc);
 
 // The implementation of the SPARQL `ORDER BY` operation.
 //
@@ -22,6 +25,8 @@
 // processing directly before exporting the result.
 class OrderBy : public Operation {
  public:
+  QL_USING_SCOPED_ENUM(OrderBy, AscOrDesc);
+
   // TODO<joka921> This should be `pair<ColumnIndex, IsAscending>`
   // The bool means "isDescending"
   using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
@@ -47,7 +52,6 @@ class OrderBy : public Operation {
 
   // Expose the variables on which this OrderBy is performed. Currently mostly
   // used for testing.
-  enum class AscOrDesc { Asc, Desc };
   using SortedVariables = std::vector<std::pair<Variable, AscOrDesc>>;
   SortedVariables getSortedVariables() const;
 

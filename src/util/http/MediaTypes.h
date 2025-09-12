@@ -15,22 +15,13 @@
 
 #include "../HashMap.h"
 #include "../HashSet.h"
+#include "backports/usingEnum.h"
 
 namespace ad_utility {
 
 /// A minimal enum for different mime types.
-enum class MediaType {
-  textPlain,
-  json,
-  sparqlJson,
-  sparqlXml,
-  qleverJson,
-  tsv,
-  csv,
-  turtle,
-  ntriples,
-  octetStream
-};
+QL_DEFINE_ENUM(MediaType, textPlain, json, sparqlJson, sparqlXml, qleverJson,
+               tsv, csv, turtle, ntriples, octetStream);
 
 struct MediaTypeWithQuality {
   struct Wildcard {};  // Represents the total wildcard */*

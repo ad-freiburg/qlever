@@ -23,7 +23,7 @@ void CancellationHandle<Mode>::cancel(
 template <CancellationMode Mode>
 CPP_member_def auto CancellationHandle<Mode>::startWatchDogInternal()
     -> CPP_ret(void)(requires WatchDogEnabled) {
-  using enum CancellationState;
+  QL_USING_ENUM(CancellationState);
   std::unique_lock lock{watchDogState_.mutex_};
   // This function is only supposed to be run once.
   AD_CONTRACT_CHECK(!watchDogState_.running_);

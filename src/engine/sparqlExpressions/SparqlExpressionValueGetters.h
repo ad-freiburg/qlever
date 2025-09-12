@@ -10,6 +10,7 @@
 
 #include <re2/re2.h>
 
+#include "backports/usingEnum.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
@@ -121,11 +122,13 @@ struct IsValidValueGetter : Mixin<IsValidValueGetter> {
   }
 };
 
+QL_DEFINE_SCOPED_ENUM(EffectiveBooleanValueGetter, Result, False, True, Undef);
+
 // Return a boolean value that is used for AND, OR and NOT expressions.
 // See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   using Mixin<EffectiveBooleanValueGetter>::operator();
-  enum struct Result { False, True, Undef };
+  QL_USING_SCOPED_ENUM(EffectiveBooleanValueGetter, Result);
 
   Result operator()(ValueId id, const EvaluationContext*) const;
 

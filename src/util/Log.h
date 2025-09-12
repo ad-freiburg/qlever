@@ -17,6 +17,7 @@
 #include <string>
 
 #include "backports/keywords.h"
+#include "backports/usingEnum.h"
 #include "util/ConstexprMap.h"
 #include "util/TypeTraits.h"
 
@@ -48,15 +49,16 @@
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
 
-enum class LogLevel {
-  FATAL = 0,
-  ERROR = 1,
-  WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
-};
+QL_DEFINE_ENUM_MANUAL(LogLevel, FATAL = 0, ERROR = 1, WARN = 2, INFO = 3,
+                      DEBUG = 4, TIMING = 5, TRACE = 6);
+QL_ENUM_ALIAS(LogLevel, FATAL)
+QL_ENUM_ALIAS(LogLevel, ERROR)
+QL_ENUM_ALIAS(LogLevel, WARN)
+QL_ENUM_ALIAS(LogLevel, INFO)
+QL_ENUM_ALIAS(LogLevel, DEBUG)
+QL_ENUM_ALIAS(LogLevel, TIMING)
+QL_ENUM_ALIAS(LogLevel, TRACE)
+QL_DEFINE_ENUM_END();
 
 // Macros for the different log levels. Always use these instead of the old
 // `LOG(...)` macro to avoid conflicts with `abseil`.
@@ -68,7 +70,7 @@ enum class LogLevel {
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
-using enum LogLevel;
+QL_USING_ENUM(LogLevel);
 
 namespace ad_utility {
 // A singleton that holds a pointer to a single `std::ostream`. This enables us

@@ -140,7 +140,7 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
       testCase.resultTsv);
@@ -182,7 +182,7 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
@@ -213,7 +213,7 @@ void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
-  using enum ad_utility::MediaType;
+  QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
@@ -1512,7 +1512,7 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
   runAskQueryTestCase(askResultFalse(false));
 }
 
-using enum ad_utility::MediaType;
+QL_USING_ENUM_NAMESPACE(ad_utility, MediaType);
 
 // ____________________________________________________________________________
 class StreamableMediaTypesFixture
@@ -1858,7 +1858,6 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  using enum Datatype;
 
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test

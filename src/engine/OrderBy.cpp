@@ -131,9 +131,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // ___________________________________________________________________
 OrderBy::SortedVariables OrderBy::getSortedVariables() const {
+  QL_USING_SCOPED_ENUM_NAMESPACE(OrderBy, AscOrDesc);
   SortedVariables result;
   for (const auto& [colIdx, isDescending] : sortIndices_) {
-    using enum AscOrDesc;
     result.emplace_back(subtree_->getVariableAndInfoByColumnIndex(colIdx).first,
                         isDescending ? Desc : Asc);
   }

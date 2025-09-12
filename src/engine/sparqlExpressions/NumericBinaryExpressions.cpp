@@ -53,11 +53,10 @@ NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
 // OR and AND
 // _____________________________________________________________________________
 inline auto orLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True || b == True) {
+  if (a == TernaryBool::True || b == TernaryBool::True) {
     return Id::makeFromBool(true);
   }
-  if (a == False && b == False) {
+  if (a == TernaryBool::False && b == TernaryBool::False) {
     return Id::makeFromBool(false);
   }
   return Id::makeUndefined();
@@ -65,11 +64,10 @@ inline auto orLambda = [](TernaryBool a, TernaryBool b) {
 
 // _____________________________________________________________________________
 inline auto andLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True && b == True) {
+  if (a == TernaryBool::True && b == TernaryBool::True) {
     return Id::makeFromBool(true);
   }
-  if (a == False || b == False) {
+  if (a == TernaryBool::False || b == TernaryBool::False) {
     return Id::makeFromBool(false);
   }
   return Id::makeUndefined();
@@ -199,7 +197,6 @@ template <BinaryOperator binOp, typename BinaryPrefilterExpr>
 std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
-  using enum BinaryOperator;
   namespace pd = prefilterExpressions::detail;
   pd::checkPropertiesForPrefilterConstruction(leftChild);
   pd::checkPropertiesForPrefilterConstruction(rightChild);
@@ -219,18 +216,18 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
       ++itLeft;
       ++itRight;
     } else if (varLeft < varRight) {
-      if constexpr (binOp == AND) {
+      if constexpr (binOp == BinaryOperator::AND) {
         resPairs.emplace_back(std::move(*itLeft));
       }
       ++itLeft;
     } else {
-      if constexpr (binOp == AND) {
+      if constexpr (binOp == BinaryOperator::AND) {
         resPairs.emplace_back(std::move(*itRight));
       }
       ++itRight;
     }
   }
-  if constexpr (binOp == AND) {
+  if constexpr (binOp == BinaryOperator::AND) {
     ql::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
     ql::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
   }

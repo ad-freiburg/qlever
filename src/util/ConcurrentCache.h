@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "backports/keywords.h"
+#include "backports/usingEnum.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
@@ -33,14 +34,10 @@ class WaitedForResultWhichThenFailedException : public std::exception {
 // a result was stored in the cache, but not cachedPinned. A result was stored
 // in the cache and cachedPinned, a result was not in the cache and therefore
 // had to be computed.
-enum struct CacheStatus {
-  cachedNotPinned,
-  cachedPinned,
-  // TODO<RobinTF> Rename to notCached, the name is just confusing. Can
-  // potentially be merged with notInCacheAndNotComputed.
-  computed,
-  notInCacheAndNotComputed
-};
+QL_DEFINE_ENUM(CacheStatus, cachedNotPinned, cachedPinned,
+               // TODO<RobinTF> Rename to notCached, the name is just confusing.
+               // Can potentially be merged with notInCacheAndNotComputed.
+               computed, notInCacheAndNotComputed);
 
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.

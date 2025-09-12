@@ -1305,22 +1305,24 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   static void addPostMeasurementInformationsToBenchmarkTable(
       ResultTable* table) {
-    using enum GeneratedTableColumn;
     // Adding together the time for sorting the `IdTables` and then joining
     // them via merge/galloping join.
     sumUpColumns(
         table,
+        ColumnNumWithType<float>{toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)},
         ColumnNumWithType<float>{
-            toUnderlying(TimeForSortingAndMergeGallopingJoin)},
-        ColumnNumWithType<float>{toUnderlying(TimeForSorting)},
-        ColumnNumWithType<float>{toUnderlying(TimeForMergeGallopingJoin)});
+            toUnderlying(GeneratedTableColumn::TimeForSorting)},
+        ColumnNumWithType<float>{
+            toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
     // comparison to the merge/galloping join algorithm.
     calculateSpeedupOfColumn(
-        table, {toUnderlying(JoinAlgorithmSpeedup)},
-        {toUnderlying(TimeForHashJoin)},
-        {toUnderlying(TimeForSortingAndMergeGallopingJoin)});
+        table, {toUnderlying(GeneratedTableColumn::JoinAlgorithmSpeedup)},
+        {toUnderlying(GeneratedTableColumn::TimeForHashJoin)},
+        {toUnderlying(
+            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)});
   }
 
   /*

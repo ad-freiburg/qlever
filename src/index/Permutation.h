@@ -8,6 +8,7 @@
 #include <array>
 #include <string>
 
+#include "backports/usingEnum.h"
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
@@ -16,6 +17,9 @@
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
+
+/// Identifiers for the six possible permutations.
+QL_DEFINE_SCOPED_ENUM(Permutation, Enum, PSO, POS, SPO, SOP, OPS, OSP);
 
 // Forward declaration of `IdTable`
 class IdTable;
@@ -29,8 +33,8 @@ struct LocatedTriplesSnapshot;
 class Permutation {
  public:
   using KeyOrder = qlever::KeyOrder;
-  /// Identifiers for the six possible permutations.
-  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  QL_USING_SCOPED_ENUM(Permutation, Enum);
+
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;

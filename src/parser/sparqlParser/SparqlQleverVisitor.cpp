@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "backports/usingEnum.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -205,7 +206,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
-  using enum ad_utility::BoundingCoordinate;
+  QL_USING_ENUM_NAMESPACE(ad_utility, BoundingCoordinate);
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
@@ -216,7 +217,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
       {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
-  using enum SpatialJoinType;
+  QL_USING_ENUM(SpatialJoinType);
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       // Geometric relation functions

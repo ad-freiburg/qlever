@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
+#include "backports/usingEnum.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/GTestHelpers.h"
 
@@ -152,7 +153,7 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  QL_USING_ENUM_NAMESPACE(ad_utility, BoundingCoordinate);
 
   BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);

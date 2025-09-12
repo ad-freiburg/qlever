@@ -50,14 +50,14 @@ auto toMs(std::chrono::microseconds us) {
 void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
-  using enum nlohmann::json::value_t;
+  using value_t = nlohmann::json::value_t;
   // We want to print doubles and ints as their native type so they get
   // thousands separators. For everything else we let nlohmann::json handle it.
-  if (value.type() == number_float) {
+  if (value.type() == value_t::number_float) {
     out << value.get<double>();
-  } else if (value.type() == number_unsigned) {
+  } else if (value.type() == value_t::number_unsigned) {
     out << value.get<uint64_t>();
-  } else if (value.type() == number_integer) {
+  } else if (value.type() == value_t::number_integer) {
     out << value.get<int64_t>();
   } else {
     out << value;
@@ -168,6 +168,7 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
 
 // __________________________________________________________________________
 std::string_view RuntimeInformation::toString(Status status) {
+  QL_USING_SCOPED_ENUM_NAMESPACE(RuntimeInformation, Status);
   switch (status) {
     case fullyMaterialized:
       return "fully materialized";
