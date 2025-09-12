@@ -457,6 +457,7 @@ CompressedRelationReader::lazyScan(
       switch (state_) {
         case State::yieldFirstBlocks: {
           start();
+          AD_CORRECTNESS_CHECK(beginBlockMetadata_ < endBlockMetadata_);
 
           // Get and yield the first block.
           auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata_);
