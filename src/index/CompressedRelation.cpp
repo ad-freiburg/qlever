@@ -461,11 +461,9 @@ CompressedRelationReader::lazyScan(
           // Get and yield the first block.
           auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata_);
 
-          if (beginBlockMetadata_ + 1 < endBlockMetadata_) {
-            state_ = State::createMiddleBlocksGenerator;
-          } else {
-            state_ = State::check;
-          }
+          state_ = (beginBlockMetadata_ + 1 < endBlockMetadata_)
+                       ? State::createMiddleBlocksGenerator
+                       : State::check;
 
           if (!block.empty()) {
             return block;
