@@ -245,6 +245,11 @@ class IndexImpl {
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
+  void createFromTurtleStringGenerator(cppcoro::generator<std::string> files);
+  // _____________________________________________________________________________
+  template <typename Files, typename MakeParser>
+  void createFromFilesImpl(Files&& files, MakeParser makeParser);
+
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,

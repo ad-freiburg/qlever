@@ -1328,6 +1328,61 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
   return result;
 }
 
+RdfMultifileParser::RdfMultifileParser(
+    cppcoro::generator<std::string> turtleFileContents,
+    const EncodedIriManager* encodedIriManager)
+    : RdfParserBase(encodedIriManager) {
+  auto makeParser = [encodedIriManager](const std::string& turtleFileContent) {
+    // TODO<joka921> make this configurable;
+    auto parser = RdfStringParser<TurtleParser<Tokenizer>>(encodedIriManager);
+    parser.setInputStream(turtleFileContent);
+    return parser;
+  };
+
+  auto parseFile = [this, makeParser](std::string turtleFileContent) {
+    // TODO<joka921> Code duplication.
+    try {
+      auto parser = makeParser(turtleFileContent);
+      auto batch = parser.parseAndReturnAllTriples();
+      bool active = finishedBatchQueue_.push(std::move(batch));
+      if (!active) {
+        // The queue was finished prematurely, stop this thread. This is
+        // important to avoid deadlocks.
+        return;
+      }
+    } catch (...) {
+      finishedBatchQueue_.pushException(std::current_exception());
+      return;
+    }
+    if (numActiveParsers_.fetch_sub(1) == 1) {
+      // We are the last parser, we have to notify the downstream code that the
+      // input has been parsed completely.
+      finishedBatchQueue_.finish();
+    }
+  };
+
+  // Feed all the input files to the `parsingQueue_`.
+  auto makeParsers = [gen = std::make_shared<cppcoro::generator<std::string>>(
+                          std::move(turtleFileContents)),
+                      this, parseFile]() {
+    for (const auto& fileContent : *gen) {
+      numActiveParsers_++;
+      bool active = parsingQueue_.push(
+          absl::bind_front(parseFile, std::move(fileContent)));
+      if (!active) {
+        // The queue was finished prematurely, stop this thread. This is
+        // important to avoid deadlocks.
+        return;
+      }
+    }
+    AD_LOG_INFO << "Finished receiving files in the parser" << std::endl;
+    if (numActiveParsers_ == 0) {
+      finishedBatchQueue_.finish();
+    }
+    parsingQueue_.finish();
+  };
+  feederThread_ = ad_utility::JThread{makeParsers};
+}
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files,
@@ -1373,6 +1428,9 @@ RdfMultifileParser::RdfMultifileParser(
         // important to avoid deadlocks.
         return;
       }
+    }
+    if (numActiveParsers_ == 0) {
+      finishedBatchQueue_.finish();
     }
     parsingQueue_.finish();
   };
