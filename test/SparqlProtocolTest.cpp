@@ -510,6 +510,12 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
                               GraphStoreOperation{Iri("<foo>")}));
+  EXPECT_THAT(parse(makeRequest(http::verb::delete_, "/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
+  EXPECT_THAT(parse(makeRequest("TSOP", "/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
 
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
