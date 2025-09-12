@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
 #include "util/CtreHelpers.h"
@@ -63,6 +64,8 @@ class EncodedIriManagerImpl {
 
   // The prefixes of the IRIs that will be encoded.
   std::vector<std::string> prefixes_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(prefixes_)
 
   // By default, `prefixes_` is empty, so no IRI will be encoded.
   EncodedIriManagerImpl() = default;
@@ -194,7 +197,7 @@ class EncodedIriManagerImpl {
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  bool operator==(const EncodedIriManagerImpl&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(EncodedIriManagerImpl)
 
  private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit

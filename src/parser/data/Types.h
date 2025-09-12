@@ -9,6 +9,7 @@
 #include <tuple>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "parser/Alias.h"
 #include "parser/PropertyPath.h"
 #include "parser/data/GraphTerm.h"
@@ -35,7 +36,9 @@ struct TripleWithPropertyPath {
   VarOrPath predicate_;
   GraphTerm object_;
 
-  bool operator==(const TripleWithPropertyPath&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(subject_, predicate_, object_)
+
+  QL_DEFINE_EQUALITY_OPERATOR(TripleWithPropertyPath)
 };
 using PathObjectPairsAndTriples =
     std::pair<PathObjectPairs, std::vector<TripleWithPropertyPath>>;

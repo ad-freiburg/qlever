@@ -19,6 +19,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
@@ -47,6 +48,7 @@ class MemorySize {
   // Because of `sizeof` we know, that any size of memory, in bytes, can be
   // encoded as a `size_t` in cpp.
   size_t memoryInBytes_ = 0;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(memoryInBytes_)
 
  public:
   // Default constructors.
@@ -59,7 +61,8 @@ class MemorySize {
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
   // Default comparison operator.
-  constexpr auto operator<=>(const MemorySize&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(MemorySize)
+  QL_DEFINE_THREEWAY_OPERATOR_CONSTEXPR(MemorySize)
 
   // Hashing.
   template <typename H>

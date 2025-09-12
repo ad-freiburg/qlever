@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -72,8 +73,9 @@ class CacheValue {
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(key_, locatedTriplesSnapshotIndex_)
 
-  bool operator==(const QueryCacheKey&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(QueryCacheKey)
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {

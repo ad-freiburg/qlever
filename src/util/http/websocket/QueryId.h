@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <random>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
@@ -21,6 +22,9 @@ namespace ad_utility::websocket {
 /// Typed wrapper class for a query id represented as a string
 class QueryId {
   std::string id_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(id_)
+
   explicit QueryId(std::string id) : id_{std::move(id)} {
     AD_CONTRACT_CHECK(!id_.empty());
   }
@@ -44,7 +48,7 @@ class QueryId {
   }
 
   // Starting with gcc 12 and clang 15 this can be constexpr
-  bool operator==(const QueryId&) const noexcept = default;
+  QL_DEFINE_EQUALITY_OPERATOR(QueryId)
 };
 
 /// This class is similar to QueryId, but it's instances are all unique within

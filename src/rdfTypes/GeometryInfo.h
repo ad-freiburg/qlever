@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -71,6 +72,7 @@ struct EncodedBoundingBox {
 struct GeometryType {
  private:
   uint8_t type_;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(type_)
 
  public:
   explicit GeometryType(uint8_t type) : type_{type} {};
@@ -80,7 +82,7 @@ struct GeometryType {
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
 
-  constexpr bool operator==(const GeometryType& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(GeometryType)
 };
 
 // Forward declaration for concept

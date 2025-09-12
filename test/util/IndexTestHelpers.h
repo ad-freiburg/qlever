@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "AllocatorTestHelpers.h"
+#include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -67,6 +68,13 @@ struct TestIndexConfig {
   std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<EncodedIriManager> encodedIriManager = std::nullopt;
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(turtleInput, loadAllPermutations, usePatterns,
+                                 usePrefixCompression, blocksizePermutations,
+                                 createTextIndex, addWordsFromLiterals,
+                                 contentsOfWordsFileAndDocsfile,
+                                 parserBufferSize, scoringMetric, bAndKParam,
+                                 indexType, vocabularyType, encodedIriManager)
+
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
   // for this case.
@@ -84,7 +92,7 @@ struct TestIndexConfig {
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
                       c.indexType, c.encodedIriManager);
   }
-  bool operator==(const TestIndexConfig&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(TestIndexConfig)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

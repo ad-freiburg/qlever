@@ -7,6 +7,8 @@
 
 #include <optional>
 #include <string>
+
+#include "backports/three_way_comparison.h"
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
@@ -32,7 +34,11 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  bool operator==(const InputFileSpecification&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(filename_, filetype_, defaultGraph_,
+                                 parseInParallel_,
+                                 parseInParallelSetExplicitly_)
+
+  QL_DEFINE_EQUALITY_OPERATOR(InputFileSpecification)
 };
 }  // namespace qlever
 

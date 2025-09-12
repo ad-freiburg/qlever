@@ -10,6 +10,8 @@
 #include <utility>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
+
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
 // is not very clean and should be refactored.
@@ -19,6 +21,8 @@ enum struct PositionInTriple : int;
 class Variable {
  private:
   std::string _name;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_name)
 
  public:
   // Create the variable from the given `name` (which must include the leading ?
@@ -79,7 +83,7 @@ class Variable {
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
-  bool operator==(const Variable&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Variable)
 
   // The construction of PrefilterExpressions requires a defined < order.
   bool operator<(const Variable& other) const { return _name < other._name; };

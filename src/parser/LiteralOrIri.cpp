@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "index/IndexImpl.h"
 
 namespace ad_utility::triple_component {
@@ -126,16 +127,17 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
 }
 
 // ___________________________________________
-std::strong_ordering LiteralOrIri::operator<=>(const LiteralOrIri& rhs) const {
-  int i = IndexImpl::staticGlobalSingletonComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation(),
-      LocaleManager::Level::TOTAL);
-  if (i < 0) {
-    return std::strong_ordering::less;
-  } else if (i > 0) {
-    return std::strong_ordering::greater;
-  } else {
-    return std::strong_ordering::equal;
-  }
-}
+QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_IMPL(
+    LiteralOrIri, (const LiteralOrIri& rhs) const->ql::strong_ordering, {
+      int i = IndexImpl::staticGlobalSingletonComparator().compare(
+          toStringRepresentation(), rhs.toStringRepresentation(),
+          LocaleManager::Level::TOTAL);
+      if (i < 0) {
+        return ql::strong_ordering::less;
+      } else if (i > 0) {
+        return ql::strong_ordering::greater;
+      } else {
+        return ql::strong_ordering::equal;
+      }
+    })
 }  // namespace ad_utility::triple_component

@@ -12,6 +12,7 @@
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
+#include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
@@ -52,6 +53,7 @@ class SharedLocatedTriplesSnapshot
 struct DeltaTriplesCount {
   int64_t triplesInserted_;
   int64_t triplesDeleted_;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(triplesInserted_, triplesDeleted_)
 
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
@@ -60,7 +62,7 @@ struct DeltaTriplesCount {
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
                                      const DeltaTriplesCount& rhs);
 
-  bool operator==(const DeltaTriplesCount& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(DeltaTriplesCount)
 };
 
 // A class for maintaining triples that are inserted or deleted after index

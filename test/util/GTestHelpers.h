@@ -11,6 +11,8 @@
 #include <concepts>
 #include <optional>
 
+#include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -158,9 +160,11 @@ class CopyShield {
     return *this;
   }
 
-  auto operator<=>(const T& other) const requires std::three_way_comparable<T> {
-    return *pointer_ <=> other;
-  }
+  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+      T,
+      (const T& other)
+          const QL_CONCEPT_OR_NOTHING(requires(std::three_way_comparable<T>)),
+      { return ql::compareThreeWay(*pointer_, other); })
 
   bool operator==(const T& other) const requires std::equality_comparable<T> {
     return *pointer_ == other;

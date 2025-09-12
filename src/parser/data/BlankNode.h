@@ -7,11 +7,14 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 class BlankNode {
   bool _generated;
   std::string _label;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_generated, _label)
 
  public:
   BlankNode(bool generated, std::string label);
@@ -32,7 +35,7 @@ class BlankNode {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const;
 
-  bool operator==(const BlankNode& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(BlankNode)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

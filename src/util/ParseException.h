@@ -14,6 +14,8 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
+
 // Contains Metadata (position of the faulty clause) about a ParseException that
 // occurred.
 struct ExceptionMetadata {
@@ -31,7 +33,10 @@ struct ExceptionMetadata {
   size_t line_;
   size_t charPositionInLine_;
 
-  bool operator==(const ExceptionMetadata& rhs) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(query_, startIndex_, stopIndex_, line_,
+                                 charPositionInLine_)
+
+  QL_DEFINE_EQUALITY_OPERATOR(ExceptionMetadata)
 
   // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.

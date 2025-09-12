@@ -19,6 +19,7 @@
 #include <cmath>
 #include <set>
 
+#include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "global/RuntimeParameters.h"
@@ -878,10 +879,12 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     size_t rowLeft_;
     size_t rowRight_;
 
-    auto operator<=>(const AddedPair& other) const {
-      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_)
-                                          : (rowLeft_ <=> other.rowLeft_);
-    }
+    QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+        AddedPair, (const AddedPair& other) const, {
+          return (rowLeft_ == other.rowLeft_)
+                     ? ql::compareThreeWay(rowRight_, other.rowRight_)
+                     : ql::compareThreeWay(rowLeft_, other.rowLeft_);
+        })
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,

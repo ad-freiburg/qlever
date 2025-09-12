@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
@@ -26,6 +27,8 @@ class Literal {
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(content_, beginOfSuffix_)
 
   // Create a new literal without any descriptor
   explicit Literal(std::string content, size_t beginOfSuffix_);
@@ -48,7 +51,7 @@ class Literal {
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-  bool operator==(const Literal&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Literal)
 
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();
