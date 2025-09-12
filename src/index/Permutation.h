@@ -111,7 +111,8 @@ class Permutation {
   IdTableGenerator lazyScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
-      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
 
