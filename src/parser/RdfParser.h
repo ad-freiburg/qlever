@@ -720,6 +720,10 @@ class RdfMultifileParser : public RdfParserBase {
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
+  // Construct the parser from a generator of turtle file contents.
+  RdfMultifileParser(cppcoro::generator<std::string> turtleFileContents,
+                     const EncodedIriManager* encodedIriManager);
+
   // This function is needed for the interface, but always throws an exception.
   // `getBatch` (below) has to be used instead.
   bool getLineImpl(TurtleTriple* triple) override;
