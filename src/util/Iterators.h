@@ -280,7 +280,7 @@ class DetailsProvider {
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
 
-  // This just defines how details are storesd in the derived class, actuall
+  // This just defines how details are storesd in the derived class, actually
   // storage is in the derived class. Used for example in InputRangeFromGet
   // and InputRangeTypeErased via CRPT.
   using DetailStorage =
@@ -490,7 +490,7 @@ class InputRangeTypeErased
       DetailsProvider<InputRangeTypeErased<ValueType, DetailsType>,
                       DetailsType>::DetailStorage;
 
-  // Relays details to the implemenation.
+  // Relays details to the implementation.
   DetailStorage& getDetails() { return impl_->getDetails(); }
 
   // Empty range implementation, used for the default constructor.
