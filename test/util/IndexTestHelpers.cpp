@@ -114,12 +114,22 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       };
 
   auto checkConsistencyForPredicate = [&](Id predicateId) {
-    using enum Permutation::Enum;
+    using Permutation::Enum::PSO;
+    using Permutation::Enum::POS;
+    using Permutation::Enum::SPO;
+    using Permutation::Enum::SOP;
+    using Permutation::Enum::OPS;
+    using Permutation::Enum::OSP;
     checkConsistencyForCol0IdAndPermutation(predicateId, PSO, 0, 1);
     checkConsistencyForCol0IdAndPermutation(predicateId, POS, 1, 0);
   };
   auto checkConsistencyForObject = [&](Id objectId) {
-    using enum Permutation::Enum;
+    using Permutation::Enum::PSO;
+    using Permutation::Enum::POS;
+    using Permutation::Enum::SPO;
+    using Permutation::Enum::SOP;
+    using Permutation::Enum::OPS;
+    using Permutation::Enum::OSP;
     checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };

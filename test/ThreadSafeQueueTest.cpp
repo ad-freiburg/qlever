@@ -419,7 +419,11 @@ TEST(ThreadSafeQueue, queueManager) {
     consumerFinishesEarly,
     bothThrowImmediately
   };
-  using enum TestType;
+  using TestType::bothThrowImmediately;
+  using TestType::consumerFinishesEarly;
+  using TestType::consumerThrows;
+  using TestType::normalExecution;
+  using TestType::producerThrows;
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
   runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
   runWithBothQueueTypes(

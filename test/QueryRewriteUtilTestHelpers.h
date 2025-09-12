@@ -20,9 +20,20 @@ namespace queryRewriteUtilTestHelpers {
 using namespace makeSparqlExpression;
 using Loc = ad_utility::source_location;
 using V = Variable;
-using enum SpatialJoinType;
-using enum UnitOfMeasurement;
 using ad_utility::triple_component::Iri;
+using SpatialJoinType::CONTAINS;
+using SpatialJoinType::COVERS;
+using SpatialJoinType::CROSSES;
+using SpatialJoinType::EQUALS;
+using SpatialJoinType::INTERSECTS;
+using SpatialJoinType::OVERLAPS;
+using SpatialJoinType::TOUCHES;
+using SpatialJoinType::WITHIN;
+using SpatialJoinType::WITHIN_DIST;
+using UnitOfMeasurement::KILOMETERS;
+using UnitOfMeasurement::METERS;
+using UnitOfMeasurement::MILES;
+using UnitOfMeasurement::UNKNOWN;
 using Ptr = SparqlExpression::Ptr;
 
 using GeoDistanceFilter =

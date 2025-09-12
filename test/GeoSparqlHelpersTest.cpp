@@ -91,7 +91,10 @@ TEST(GeoSparqlHelpers, WktDist) {
   // according to the distance measurement of Google Maps).
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
-  using enum UnitOfMeasurement;
+  using UnitOfMeasurement::KILOMETERS;
+  using UnitOfMeasurement::METERS;
+  using UnitOfMeasurement::MILES;
+  using UnitOfMeasurement::UNKNOWN;
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, KILOMETERS), 421.098,
               0.01);
@@ -108,7 +111,10 @@ TEST(GeoSparqlHelpers, WktDist) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, KmToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  using UnitOfMeasurement::KILOMETERS;
+  using UnitOfMeasurement::METERS;
+  using UnitOfMeasurement::MILES;
+  using UnitOfMeasurement::UNKNOWN;
   auto kmToUnit = kilometerToUnit;
 
   ASSERT_NEAR(kmToUnit(0.0, std::nullopt), 0.0, 0.0001);
@@ -127,7 +133,10 @@ TEST(GeoSparqlHelpers, KmToUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, UnitToKm) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  using UnitOfMeasurement::KILOMETERS;
+  using UnitOfMeasurement::METERS;
+  using UnitOfMeasurement::MILES;
+  using UnitOfMeasurement::UNKNOWN;
   auto toKm = valueInUnitToKilometer;
 
   ASSERT_NEAR(toKm(0.0, std::nullopt), 0.0, 0.0001);
@@ -146,7 +155,10 @@ TEST(GeoSparqlHelpers, UnitToKm) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IriToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  using UnitOfMeasurement::KILOMETERS;
+  using UnitOfMeasurement::METERS;
+  using UnitOfMeasurement::MILES;
+  using UnitOfMeasurement::UNKNOWN;
   auto iriToUnit = iriToUnitOfMeasurement;
 
   ASSERT_EQ(iriToUnit(""), UNKNOWN);
@@ -172,7 +184,15 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  using SpatialJoinType::CONTAINS;
+  using SpatialJoinType::COVERS;
+  using SpatialJoinType::CROSSES;
+  using SpatialJoinType::EQUALS;
+  using SpatialJoinType::INTERSECTS;
+  using SpatialJoinType::OVERLAPS;
+  using SpatialJoinType::TOUCHES;
+  using SpatialJoinType::WITHIN;
+  using SpatialJoinType::WITHIN_DIST;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();

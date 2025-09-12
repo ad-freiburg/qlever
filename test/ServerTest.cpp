@@ -98,7 +98,16 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");
   auto constructQuery = parseQuery("CONSTRUCT WHERE {}");
-  using enum ad_utility::MediaType;
+  using ad_utility::MediaType::csv;
+  using ad_utility::MediaType::json;
+  using ad_utility::MediaType::ntriples;
+  using ad_utility::MediaType::octetStream;
+  using ad_utility::MediaType::qleverJson;
+  using ad_utility::MediaType::sparqlJson;
+  using ad_utility::MediaType::sparqlXml;
+  using ad_utility::MediaType::textPlain;
+  using ad_utility::MediaType::tsv;
+  using ad_utility::MediaType::turtle;
 
   auto choose = &Server::chooseBestFittingMediaType;
 
@@ -268,7 +277,16 @@ TEST(ServerTest, createResponseMetadata) {
 }
 
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
+  using ad_utility::MediaType::csv;
+  using ad_utility::MediaType::json;
+  using ad_utility::MediaType::ntriples;
+  using ad_utility::MediaType::octetStream;
+  using ad_utility::MediaType::qleverJson;
+  using ad_utility::MediaType::sparqlJson;
+  using ad_utility::MediaType::sparqlXml;
+  using ad_utility::MediaType::textPlain;
+  using ad_utility::MediaType::tsv;
+  using ad_utility::MediaType::turtle;
   auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     QueryExecutionTree qet =

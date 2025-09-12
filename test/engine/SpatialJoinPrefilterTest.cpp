@@ -10,7 +10,15 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+using SpatialJoinType::CONTAINS;
+using SpatialJoinType::COVERS;
+using SpatialJoinType::CROSSES;
+using SpatialJoinType::EQUALS;
+using SpatialJoinType::INTERSECTS;
+using SpatialJoinType::OVERLAPS;
+using SpatialJoinType::TOUCHES;
+using SpatialJoinType::WITHIN;
+using SpatialJoinType::WITHIN_DIST;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various literals carefully selected literals. It

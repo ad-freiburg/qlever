@@ -16,7 +16,12 @@ using namespace valueIdComparators;
 namespace valueIdComparators {
 inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   switch (c) {
-    using enum Comparison;
+    using valueIdComparators::Comparison::EQ;
+    using valueIdComparators::Comparison::GE;
+    using valueIdComparators::Comparison::GT;
+    using valueIdComparators::Comparison::LE;
+    using valueIdComparators::Comparison::LT;
+    using valueIdComparators::Comparison::NE;
     case LT:
       str << "LT";
       break;
@@ -124,7 +129,9 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       auto y = applyComparator(comparator, a, b);
       return y;
     };
-    using enum ComparisonResult;
+    using valueIdComparators::ComparisonResult::False;
+    using valueIdComparators::ComparisonResult::True;
+    using valueIdComparators::ComparisonResult::Undef;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id))
@@ -229,7 +236,9 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
     }
-    using enum ComparisonResult;
+    using valueIdComparators::ComparisonResult::False;
+    using valueIdComparators::ComparisonResult::True;
+    using valueIdComparators::ComparisonResult::Undef;
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
@@ -327,8 +336,11 @@ TEST_F(ValueIdComparators, IndexTypes) {
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
-  using enum ComparisonResult;
-  using enum ComparisonForIncompatibleTypes;
+  using valueIdComparators::ComparisonForIncompatibleTypes::AlwaysUndef;
+  using valueIdComparators::ComparisonForIncompatibleTypes::CompareByType;
+  using valueIdComparators::ComparisonResult::False;
+  using valueIdComparators::ComparisonResult::True;
+  using valueIdComparators::ComparisonResult::Undef;
   ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);

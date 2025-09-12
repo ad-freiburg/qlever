@@ -185,7 +185,15 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
+  using SpatialJoinType::CONTAINS;
+  using SpatialJoinType::COVERS;
+  using SpatialJoinType::CROSSES;
+  using SpatialJoinType::EQUALS;
+  using SpatialJoinType::INTERSECTS;
+  using SpatialJoinType::OVERLAPS;
+  using SpatialJoinType::TOUCHES;
+  using SpatialJoinType::WITHIN;
+  using SpatialJoinType::WITHIN_DIST;
   sj::SweeperCfg cfg;
   cfg.numThreads = 1;
   cfg.numCacheThreads = 1;
