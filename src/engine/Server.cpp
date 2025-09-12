@@ -384,10 +384,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
-    response = createJsonResponse(nlohmann::json{countAfterClear}, request);
+    response = createJsonResponse(json(countAfterClear), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
-    response = createJsonResponse(json{RuntimeParameters().toMap()}, request);
+    response = createJsonResponse(json(RuntimeParameters().toMap()), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
@@ -439,7 +439,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
       RuntimeParameters().set(key, std::string{value.value()});
-      response = createJsonResponse(json{RuntimeParameters().toMap()}, request);
+      response = createJsonResponse(json(RuntimeParameters().toMap()), request);
     }
   }
 
@@ -934,7 +934,7 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 
 // ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
-    const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
+    const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree_;
@@ -1001,14 +1001,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           // Update the delta triples.
           auto updateMetadata =
               index_.deltaTriplesManager().modify<UpdateMetadata>(
-                  [this, &requestTimer, &cancellationHandle, &plannedUpdate,
+                  [this, &cancellationHandle, &plannedUpdate,
                    &tracer](auto& deltaTriples) {
                     // Use `this` explicitly to silence false-positive
                     // errors on captured `this` being unused.
                     tracer.beginTrace("processUpdateImpl");
-                    auto res = this->processUpdateImpl(
-                        plannedUpdate.value(), requestTimer, cancellationHandle,
-                        deltaTriples, tracer);
+                    auto res = this->processUpdateImpl(plannedUpdate.value(),
+                                                       cancellationHandle,
+                                                       deltaTriples, tracer);
                     tracer.endTrace("processUpdateImpl");
                     return res;
                   },

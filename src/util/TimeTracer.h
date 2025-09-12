@@ -100,7 +100,7 @@ class TimeTracer {
     activeTraces_.emplace_back(rootTrace_);
   }
 
-  virtual nlohmann::ordered_json getJSON() const { return {rootTrace_}; }
+  virtual nlohmann::ordered_json getJSON() const { return rootTrace_; }
   virtual nlohmann::ordered_json getJSONShort() const {
     nlohmann::ordered_json j;
     to_json_short(j, rootTrace_);
