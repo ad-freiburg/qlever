@@ -446,13 +446,10 @@ CompressedRelationReader::lazyScan(
 
     auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
       auto block = getIncompleteBlock(it);
-
       pruneBlock(block, limitOffset_);
-
       if (!block.empty()) {
         details().numElementsYielded_ += block.numRows();
       }
-
       return block;
     }
 
