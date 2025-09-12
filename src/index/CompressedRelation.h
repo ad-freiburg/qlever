@@ -468,10 +468,9 @@ class CompressedRelationReader {
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
   struct FilterDuplicatesAndGraphs {
-    ScanSpecification::Graphs desiredGraphs_;
+    ScanSpecification::GraphFilter graphFilter_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
-    std::optional<Id> defaultGraph_;
     // Filter `block` such that it contains only the specified graphs and no
     // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
     // (for example, if we know that there are no duplicates, we do not have to

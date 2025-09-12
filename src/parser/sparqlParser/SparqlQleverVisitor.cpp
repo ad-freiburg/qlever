@@ -726,13 +726,14 @@ GraphPatternOperation makeAllTripleGraphPattern(TripleComponent::Iri graphIri) {
 }
 
 // _____________________________________________________________________________
-GraphPatternOperation makeAllTripleGraphPattern(Variable graphVariable,
-                                                bool skipDefaultGraph) {
+GraphPatternOperation makeAllTripleGraphPattern(
+    Variable graphVariable,
+    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) {
   GraphPattern inner;
   inner._graphPatterns.emplace_back(BasicGraphPattern{
       {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
-  return {parsedQuery::GroupGraphPattern{
-      std::move(inner), std::move(graphVariable), skipDefaultGraph}};
+  return {parsedQuery::GroupGraphPattern{std::move(inner),
+                                         std::move(graphVariable), behaviour}};
 }
 
 // ____________________________________________________________________________________
@@ -751,25 +752,34 @@ ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
-  // We first select all graphs and then filter out the default graph, to get
-  // only the named graphs.
-  auto pattern = [&graph]() {
-    if (std::holds_alternative<GraphRef>(graph)) {
-      return makeAllTripleGraphPattern(std::get<GraphRef>(graph));
-    }
-    if (std::holds_alternative<DEFAULT>(graph)) {
-      return makeAllTripleGraphPattern(
-          ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
-    }
-    return makeAllTripleGraphPattern(Variable{"?g"},
-                                     std::holds_alternative<NAMED>(graph));
-  }();
+  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  using P =
+      std::pair<GraphPatternOperation, SparqlTripleSimpleWithGraph::Graph>;
+  auto [graphPattern, updatePattern] = std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GraphRef& graph) -> P {
+            return {makeAllTripleGraphPattern(graph), graph};
+          },
+          [](const DEFAULT&) -> P {
+            auto defaultGraph = ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+            auto copy = defaultGraph;
+            return {makeAllTripleGraphPattern(std::move(defaultGraph)),
+                    std::move(copy)};
+          },
+          [](const NAMED&) -> P {
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::NAMED),
+                    Variable{"?g"}};
+          },
+          [](const ALL&) -> P {
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::ALL),
+                    Variable{"?g"}};
+          }},
+      graph);
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      std::move(graphPattern));
   parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {},
-      {{makeAllTripleTemplate(
-           std::get<parsedQuery::GroupGraphPattern>(pattern).graphSpec_)},
-       LocalVocab{}}}};
-  parsedQuery_._rootGraphPattern._graphPatterns.push_back(std::move(pattern));
+      {}, {{makeAllTripleTemplate(std::move(updatePattern))}, LocalVocab{}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -1322,8 +1332,9 @@ parsedQuery::GraphPatternOperation Visitor::visit(
       ad_utility::OverloadCallOperator{
           [this, &group](const Variable& graphVar) {
             addVisibleVariable(graphVar);
-            return parsedQuery::GroupGraphPattern{std::move(group), graphVar,
-                                                  true};
+            return parsedQuery::GroupGraphPattern{
+                std::move(group), graphVar,
+                parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED};
           },
           [&group](const TripleComponent::Iri& graphIri) {
             return parsedQuery::GroupGraphPattern{std::move(group), graphIri};

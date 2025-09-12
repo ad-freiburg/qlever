@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "index/ScanSpecification.h"
 #include "parser/sparqlParser/DatasetClause.h"
 
 namespace parsedQuery {
@@ -15,7 +14,7 @@ namespace parsedQuery {
 // A struct for the FROM [NAMED] clause in queries, and the `USING [NAMED]` and
 // `WITH` clauses from `SPARQL Update`.
 struct DatasetClauses {
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  using Graphs = std::optional<ad_utility::HashSet<TripleComponent>>;
 
  private:
   // Store the default and named graphs.

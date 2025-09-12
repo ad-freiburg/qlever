@@ -34,34 +34,18 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
   std::optional<Id> col0Id = getId(col0_);
   std::optional<Id> col1Id = getId(col1_);
   std::optional<Id> col2Id = getId(col2_);
-  std::optional<Id> defaultGraph =
-      filterDefaultGraph_
-          ? std::optional{getNonOptionalId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    DEFAULT_GRAPH_IRI)},
-                index, localVocab)}
-          : std::nullopt;
 
-  ScanSpecification::Graphs graphsToFilter = std::nullopt;
-  if (graphsToFilter_.has_value()) {
-    graphsToFilter.emplace();
-    for (const auto& graph : graphsToFilter_.value()) {
-      graphsToFilter->insert(getId(graph).value());
-    }
-  }
-  return {col0Id,
-          col1Id,
-          col2Id,
-          defaultGraph,
-          std::move(localVocab),
-          std::move(graphsToFilter)};
+  auto filter = graphFilter_.transform(
+      [&index, &localVocab](TripleComponent tripleComponent) {
+        return getNonOptionalId(std::move(tripleComponent), index, localVocab);
+      });
+  return {col0Id, col1Id, col2Id, std::move(localVocab), std::move(filter)};
 }
 
 // ____________________________________________________________________________
 ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(
-    T col0, T col1, T col2, Graphs graphsToFilter, bool filterDefaultGraph)
-    : graphsToFilter_{std::move(graphsToFilter)},
-      filterDefaultGraph_{filterDefaultGraph} {
+    T col0, T col1, T col2, GraphFilter graphFilter)
+    : graphFilter_{std::move(graphFilter)} {
   auto toNulloptIfVariable = [](T& tc) -> std::optional<TripleComponent> {
     if (tc.has_value() && tc.value().isVariable()) {
       return std::nullopt;

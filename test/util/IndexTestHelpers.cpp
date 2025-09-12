@@ -96,13 +96,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
       [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
           size_t objectColIdx) {
         auto scanResult = index.scan(
-            ScanSpecification{
-                col0Id, std::nullopt, std::nullopt,
-                TripleComponent{
-                    triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
-                    .toValueId(index.getVocab(), index.encodedIriManager())
-                    .value()},
-            permutation,
+            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy, locatedTriplesSnapshot);

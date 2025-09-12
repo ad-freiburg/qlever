@@ -236,17 +236,14 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 // _____________________________________________________________________________
 auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
     const {
-  return [this](Id graph) {
-    return desiredGraphs_.has_value() ? desiredGraphs_.value().contains(graph)
-                                      : graph != defaultGraph_;
-  };
+  return [this](Id graph) { return graphFilter_.isGraphAllowed(graph); };
 }
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
-  if (!desiredGraphs_.has_value()) {
-    return defaultGraph_.has_value();
+  if (graphFilter_.isWildcard()) {
+    return false;
   }
   if (!metadata.graphInfo_.has_value()) {
     return true;
@@ -273,7 +270,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 #endif
   } else {
     AD_EXPENSIVE_CHECK(
-        !desiredGraphs_.has_value() ||
+        graphFilter_.isWildcard() ||
         ql::ranges::all_of(block, isGraphAllowedLambda(), graphIdFromRow));
   }
   return needsFilteringByGraph;
@@ -307,7 +304,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
 // ______________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
     const CompressedBlockMetadata& block) const {
-  if (!desiredGraphs_.has_value()) {
+  if (graphFilter_.isWildcard()) {
     return false;
   }
   if (!block.graphInfo_.has_value()) {
@@ -642,10 +639,11 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
                           static_cast<size_t>(manuallyDeleteGraphColumn),
                       blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
-  ScanSpecification specForAllColumns{
-      std::nullopt, std::nullopt,
-      std::nullopt, scanSpec.getDefaultGraph(),
-      {},           scanConfig.graphFilter_.desiredGraphs_};
+  ScanSpecification specForAllColumns{std::nullopt,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      {},
+                                      scanConfig.graphFilter_.graphFilter_};
   auto config = getScanConfig(specForAllColumns,
                               std::move(allAdditionalColumns), locatedTriples);
 
@@ -1190,8 +1188,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   ScanSpecification scanSpecForAllColumns{
-      std::nullopt, std::nullopt, std::nullopt, scanSpec.getDefaultGraph(),
-      {},           std::nullopt};
+      std::nullopt, std::nullopt, std::nullopt, {}, scanSpec.graphFilter()};
   auto config =
       getScanConfig(scanSpecForAllColumns,
                     std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
@@ -1798,9 +1795,8 @@ auto CompressedRelationReader::getScanConfig(
     }
     return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
-  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
-                                        graphColumnIndex, deleteGraphColumn,
-                                        scanSpec.getDefaultGraph()};
+  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
+                                        graphColumnIndex, deleteGraphColumn};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }
 

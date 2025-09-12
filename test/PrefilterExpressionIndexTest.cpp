@@ -1199,19 +1199,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   const auto& vocab = ad_utility::testing::getQec()->getIndex().getVocab();
   auto blockRanges = gt(IntId(0))->evaluate(vocab, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, std::nullopt, std::nullopt},
-      blockRanges));
+      ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, std::nullopt, std::nullopt, std::nullopt},
-      blockRanges));
+      ScanSpecification{VocabId10, std::nullopt, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt, std::nullopt},
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockRanges));
   ASSERT_TRUE(blockRanges.size() > 1);
   blockRanges.push_back(blockRanges.at(0));
   EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, DoubleId33, std::nullopt},
-      blockRanges));
+      ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
 }
 
 //______________________________________________________________________________

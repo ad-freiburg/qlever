@@ -32,7 +32,9 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
-  bool filterDefaultGraph_ = false;
+  parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+      defaultGraphBehaviour_ =
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL;
 
  public:
   using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
@@ -719,6 +721,9 @@ class QueryPlanner {
   /// been cancelled yet and throw an exception if this is the case.
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
+
+  // Return a filter that filters the active graphs.
+  qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

@@ -86,14 +86,18 @@ Quads::toGraphPatternOperations() const {
     GraphPattern tripleSubPattern;
     tripleSubPattern._graphPatterns.emplace_back(
         BasicGraphPattern{ad_utility::transform(triples, toSparqlTriple)});
-    if (std::holds_alternative<Variable>(graph)) {
-      operations.emplace_back(GroupGraphPattern{
-          std::move(tripleSubPattern), std::get<Variable>(graph), false});
-    } else {
-      operations.emplace_back(GroupGraphPattern{
-          std::move(tripleSubPattern),
-          std::get<ad_utility::triple_component::Iri>(graph)});
-    }
+    operations.emplace_back(std::visit(
+        [&tripleSubPattern](auto graphValue) mutable {
+          if constexpr (ad_utility::isSimilar<decltype(graphValue), Variable>) {
+            return GroupGraphPattern{
+                std::move(tripleSubPattern), std::move(graphValue),
+                GroupGraphPattern::GraphVariableBehaviour::ALL};
+          } else {
+            return GroupGraphPattern{std::move(tripleSubPattern),
+                                     std::move(graphValue)};
+          }
+        },
+        graph));
   }
   return operations;
 }

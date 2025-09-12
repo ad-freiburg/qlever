@@ -2299,7 +2299,8 @@ TEST(GroupBy, countDistinctGraph) {
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}},
-        std::nullopt, std::nullopt, true);
+        IndexScan::Graphs::Blacklist(TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}));
 
     auto expr0 = std::make_unique<VariableExpression>(Variable{"?g"});
     auto expr1 = std::make_unique<CountExpression>(true, std::move(expr0));
