@@ -4,6 +4,8 @@
 
 #include "engine/NeutralOptional.h"
 
+#include "engine/QueryExecutionTree.h"
+
 // _____________________________________________________________________________
 NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> tree)
