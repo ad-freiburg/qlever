@@ -25,6 +25,12 @@
   _Pragma("GCC diagnostic push")           \
       _Pragma("GCC diagnostic ignored \"-Wstringop-overflow\"")
 
+// Disable the `free-non-heap-object` warning, which has false positives in
+// certain tests in modern versions of GTest.
+#define DISABLE_FREE_NONHEAP_WARNINGS \
+  _Pragma("GCC diagnostic push")      \
+      _Pragma("GCC diagnostic ignored \"-Wfree-nonheap-object\"")
+
 // Disable the `non-template-friend` warning which sometimes can't be avoided
 // in generic code.
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND \
@@ -39,6 +45,7 @@
 #define DISABLE_OVERREAD_WARNINGS
 #define DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
+#define DISABLE_FREE_NONHEAP_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 
