@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility::triple_component {
@@ -18,6 +19,8 @@ class Iri {
  private:
   // Store the string value of the IRI including the angle brackets.
   std::string iri_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(iri_)
 
   // Create a new `Iri` object
   explicit Iri(std::string iri);
@@ -36,7 +39,9 @@ class Iri {
       AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
-  bool operator==(const Iri&) const = default;
+
+  QL_DEFINE_EQUALITY_OPERATOR(Iri)
+
   static Iri fromStringRepresentation(std::string s);
 
   const std::string& toStringRepresentation() const;

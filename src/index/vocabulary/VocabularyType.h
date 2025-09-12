@@ -10,6 +10,7 @@
 #include <array>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/Random.h"
 #include "util/json.h"
 
@@ -33,6 +34,8 @@ class VocabularyType {
 
  private:
   Enum value_ = Enum::InMemoryUncompressed;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(value_)
 
   static constexpr size_t numValues_ = 5;
   // All possible values.
@@ -102,7 +105,7 @@ class VocabularyType {
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 
-  bool operator==(const VocabularyType&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(VocabularyType)
 };
 }  // namespace ad_utility
 

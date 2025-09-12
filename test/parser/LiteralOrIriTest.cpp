@@ -437,6 +437,6 @@ TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
   getQec(TestIndexConfig{});
   ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
-  EXPECT_THAT(l1 <=> l2,
-              testing::Not(testing::Eq(std::strong_ordering::equal)));
+  EXPECT_THAT(ql::compareThreeWay(l1, l2),
+              testing::Not(testing::Eq(ql::strong_ordering::equal)));
 }

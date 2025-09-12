@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
 #include "util/SourceLocation.h"
@@ -37,6 +38,8 @@ class GeoPoint {
  private:
   double lat_;
   double lng_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(lat_, lng_)
 
  public:
   using T = uint64_t;
@@ -91,7 +94,7 @@ class GeoPoint {
 
   std::pair<std::string, const char*> toStringAndType() const;
 
-  bool operator==(const GeoPoint& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(GeoPoint)
 };
 
 #endif  // QLEVER_SRC_PARSER_GEOPOINT_H
