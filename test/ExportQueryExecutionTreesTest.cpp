@@ -554,7 +554,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">-INF</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144.0</literal></binding>
   </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
@@ -573,7 +573,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
       // TSV
       "?o\n"
       "-INF\n"
-      "-42019234865780982022144\n"
+      "-42019234865780982022144.0\n"
       "4.01293e-12\n"
       "42.2\n"
       "INF\n"
@@ -581,14 +581,14 @@ TEST(ExportQueryExecutionTrees, Floats) {
       // CSV
       "o\n"
       "-INF\n"
-      "-42019234865780982022144\n"
+      "-42019234865780982022144.0\n"
       "4.01293e-12\n"
       "42.2\n"
       "INF\n"
       "NaN\n",
       makeExpectedQLeverJSON(
           {"\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
-           "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"-42019234865780982022144.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
@@ -597,7 +597,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
                            "-INF"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "-42019234865780982022144"),
+                           "literal", "-42019234865780982022144.0"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "4.01293e-12"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
@@ -613,21 +613,21 @@ TEST(ExportQueryExecutionTrees, Floats) {
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 6, 6,
       // TSV
       "<s>\t<p>\t\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
-      "<s>\t<p>\t-42019234865780982022144\n"
+      "<s>\t<p>\t-42019234865780982022144.0\n"
       "<s>\t<p>\t4.01293e-12\n"
       "<s>\t<p>\t42.2\n"
       "<s>\t<p>\t\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
       "<s>\t<p>\t\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>\n",
       // CSV
       "<s>,<p>,\"\"\"-INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
-      "<s>,<p>,-42019234865780982022144\n"
+      "<s>,<p>,-42019234865780982022144.0\n"
       "<s>,<p>,4.01293e-12\n"
       "<s>,<p>,42.2\n"
       "<s>,<p>,\"\"\"INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
       "<s>,<p>,\"\"\"NaN\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n",
       // Turtle
       "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
-      "<s> <p> -42019234865780982022144 .\n"
+      "<s> <p> -42019234865780982022144.0 .\n"
       "<s> <p> 4.01293e-12 .\n"
       "<s> <p> 42.2 .\n"
       "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
@@ -637,7 +637,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
         j.push_back(std::vector{
             "<s>"s, "<p>"s,
             "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
-        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144.0"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
         j.push_back(
