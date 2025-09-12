@@ -226,8 +226,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     };
 
     std::optional<IdTable> get() override {
-      std::optional<std::optional<DecompressedBlockAndMetadata>> item{};
-
       if (needsStart_) {
         start();
         needsStart_ = false;
@@ -236,8 +234,16 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       // Yield the blocks (in the right order) as soon as they become
       // available. Stop when all the blocks have been yielded or the LIMIT of
       // the query is reached. Keep track of various statistics.
-      while ((item = queue_.get()) != std::nullopt) {
+      while (true) {
+        popTimer_.cont();
+        auto item{queue_.get()};
         popTimer_.stop();
+
+        details().blockingTime_ = popTimer_.msecs();
+
+        if (item == std::nullopt) {
+          break;
+        }
 
         if (cancellationHandle_->isCancelled()) {
           details().blockingTime_ = popTimer_.msecs();
@@ -250,19 +256,17 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         if (optBlock.has_value()) {
           auto block{std::move(optBlock.value().block_)};
           pruneBlock(block, limitOffset_);
-          details().numElementsYielded_ += block.numRows();
+
           if (!block.empty()) {
-            popTimer_.cont();
+            details().numElementsYielded_ += block.numRows();
             return block;
           }
+
           if (limitOffset_._limit.value_or(1) == 0) {
             break;
           }
         }
       }
-
-      popTimer_.stop();
-      details().blockingTime_ = popTimer_.msecs();
 
       return std::nullopt;
     }
