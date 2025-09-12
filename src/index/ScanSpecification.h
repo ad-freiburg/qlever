@@ -45,18 +45,27 @@ class ScanSpecification {
   // If specified (i.e. not `nullopt`) then the result of the scan only consists
   // of triples that belong to the union of these graphs.
   Graphs graphsToFilter_{};
+
+  // Id representing the default graph, which is never considered when emitting
+  // values within a GRAPH clause, so it is filtered out. If it's not present no
+  // filtering will be done. Note: If present, in almost all cases this will be
+  // of type `VocabIndex`, but we cannot guarantee that the default graph is
+  // present in the vocabulary.
+  std::optional<Id> defaultGraph_;
   friend class ScanSpecificationAsTripleComponent;
 
   void validate() const;
 
  public:
-  ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab = {},
+  ScanSpecification(T col0Id, T col1Id, T col2Id,
+                    std::optional<Id> defaultGraph, LocalVocab localVocab = {},
                     Graphs graphsToFilter = std::nullopt)
       : col0Id_{col0Id},
         col1Id_{col1Id},
         col2Id_{col2Id},
         localVocab_{std::make_shared<LocalVocab>(std::move(localVocab))},
-        graphsToFilter_(std::move(graphsToFilter)) {
+        graphsToFilter_{std::move(graphsToFilter)},
+        defaultGraph_{std::move(defaultGraph)} {
     validate();
   }
   const T& col0Id() const { return col0Id_; }
@@ -72,6 +81,8 @@ class ScanSpecification {
   }
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
+
+  std::optional<Id> getDefaultGraph() const { return defaultGraph_; }
 
   // Only used in tests.
   void setCol1Id(T col1Id) {
@@ -92,6 +103,7 @@ class ScanSpecificationAsTripleComponent {
   T col1_;
   T col2_;
   Graphs graphsToFilter_{};
+  bool filterDefaultGraph_;
 
  public:
   // Construct from three optional `TripleComponent`s. If any of the three
@@ -99,12 +111,12 @@ class ScanSpecificationAsTripleComponent {
   // entries also have to be unbound. For example if `col0` is bound, but `col1`
   // isn't, then `col2` also has to be unbound.
   ScanSpecificationAsTripleComponent(T col0, T col1, T col2,
-                                     Graphs graphsToFilter = std::nullopt);
+                                     Graphs graphsToFilter = std::nullopt,
+                                     bool filterDefaultGraph = false);
 
   // Convert to a `ScanSpecification`. The `index` is used to convert the
   // `TripleComponent` to `Id`s by looking them up in the vocabulary.
   ScanSpecification toScanSpecification(const IndexImpl& index) const;
-  ScanSpecification toScanSpecification(const Index& index) const;
 
   // The number of columns that the corresponding index scan will have.
   size_t numColumns() const;

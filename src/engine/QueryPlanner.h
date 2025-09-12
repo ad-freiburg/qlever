@@ -32,6 +32,7 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
+  bool filterDefaultGraph_ = false;
 
  public:
   using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;

@@ -87,8 +87,6 @@ struct Values {
 };
 
 /// A `GroupGraphPattern` is anything enclosed in `{}`.
-/// TODO<joka921> The naming is inconsistent between `GroupGraphPattern` and
-/// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
@@ -96,6 +94,17 @@ struct GroupGraphPattern {
   using GraphSpec =
       std::variant<std::monostate, TripleComponent::Iri, Variable>;
   GraphSpec graphSpec_ = std::monostate{};
+  bool skipDefaultGraph_ = false;
+
+  // Constructors for all legal constellations.
+  explicit GroupGraphPattern(GraphPattern child) : _child{std::move(child)} {}
+  GroupGraphPattern(GraphPattern child, TripleComponent::Iri graphIri)
+      : _child{std::move(child)}, graphSpec_{std::move(graphIri)} {}
+  GroupGraphPattern(GraphPattern child, Variable graphVariable,
+                    bool skipDefaultGraph)
+      : _child{std::move(child)},
+        graphSpec_{std::move(graphVariable)},
+        skipDefaultGraph_{skipDefaultGraph} {}
 };
 
 /// An `OPTIONAL` clause.

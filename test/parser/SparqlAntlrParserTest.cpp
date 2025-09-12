@@ -963,7 +963,7 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ GRAPH ?g { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          Variable("?g"),
+          Variable("?g"), true,
           m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}))));
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",

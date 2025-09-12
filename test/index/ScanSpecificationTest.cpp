@@ -12,7 +12,7 @@ TEST(ScanSpecification, getters) {
   Id i = Id::makeFromInt(42);
   Id j = Id::makeFromInt(47);
   Id k = Id::makeFromInt(49);
-  auto s = ScanSpecification{i, j, k};
+  auto s = ScanSpecification{i, j, k, std::nullopt};
   EXPECT_EQ(s.col0Id(), i);
   EXPECT_EQ(s.col1Id(), j);
   EXPECT_EQ(s.col2Id(), k);
@@ -21,7 +21,7 @@ TEST(ScanSpecification, getters) {
   auto graphsToFilter = ad_utility::HashSet<Id>{i, k};
 
   auto n = std::nullopt;
-  s = ScanSpecification{n, n, n, {}, graphsToFilter};
+  s = ScanSpecification{n, n, n, std::nullopt, {}, graphsToFilter};
   AD_EXPECT_NULLOPT(s.col0Id());
   AD_EXPECT_NULLOPT(s.col1Id());
   AD_EXPECT_NULLOPT(s.col2Id());
@@ -34,15 +34,15 @@ TEST(ScanSpecification, validate) {
   Id i = Id::makeFromInt(42);
   auto n = std::nullopt;
   using S = ScanSpecification;
-  EXPECT_NO_THROW(S(i, i, i));
-  EXPECT_NO_THROW(S(i, i, n));
-  EXPECT_NO_THROW(S(i, n, n));
-  EXPECT_NO_THROW(S(n, n, n));
+  EXPECT_NO_THROW(S(i, i, i, std::nullopt));
+  EXPECT_NO_THROW(S(i, i, n, std::nullopt));
+  EXPECT_NO_THROW(S(i, n, n, std::nullopt));
+  EXPECT_NO_THROW(S(n, n, n, std::nullopt));
 
-  EXPECT_ANY_THROW(S(n, i, i));
-  EXPECT_ANY_THROW(S(n, n, i));
-  EXPECT_ANY_THROW(S(n, i, n));
-  EXPECT_ANY_THROW(S(i, n, i));
+  EXPECT_ANY_THROW(S(n, i, i, std::nullopt));
+  EXPECT_ANY_THROW(S(n, n, i, std::nullopt));
+  EXPECT_ANY_THROW(S(n, i, n, std::nullopt));
+  EXPECT_ANY_THROW(S(i, n, i, std::nullopt));
 }
 
 // _____________________________________________________________________________
@@ -60,7 +60,7 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
 
   const auto& index = ad_utility::testing::getQec()->getIndex();
   auto toScanSpec = [&index](const STc& s) {
-    return s.toScanSpecification(index);
+    return s.toScanSpecification(index.getImpl());
   };
 
   // Match that a `ScanSpecificationAsTripleComponent` has the expected number
@@ -87,25 +87,27 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
     };
     return AllOf(AD_PROPERTY(STc, numColumns, numColumns), innerMatcher());
   };
-  EXPECT_THAT(STc(iTc, iTc, iTc), matchScanSpec(S(i, i, i), 0));
-  EXPECT_THAT(STc(iTc, iTc, n), matchScanSpec(S(i, i, n), 1));
-  EXPECT_THAT(STc(iTc, n, n), matchScanSpec(S(i, n, n), 2));
-  EXPECT_THAT(STc(n, n, n), matchScanSpec(S(n, n, n), 3));
+  EXPECT_THAT(STc(iTc, iTc, iTc), matchScanSpec(S(i, i, i, {}), 0));
+  EXPECT_THAT(STc(iTc, iTc, n), matchScanSpec(S(i, i, n, {}), 1));
+  EXPECT_THAT(STc(iTc, n, n), matchScanSpec(S(i, n, n, {}), 2));
+  EXPECT_THAT(STc(n, n, n), matchScanSpec(S(n, n, n, {}), 3));
   // An Example with graph Ids
   using GIri = ad_utility::HashSet<TripleComponent>;
   using G = ad_utility::HashSet<Id>;
   ad_utility::HashSet<Id> graphs{i};
-  EXPECT_THAT(STc(n, n, n, GIri{iTc}), matchScanSpec(S(n, n, n, {}, G{i}), 3));
+  EXPECT_THAT(STc(n, n, n, GIri{iTc}),
+              matchScanSpec(S(n, n, n, std::nullopt, {}, G{i}), 3));
   // Test that the matcher is in fact sensitive to the Graph ID.
   EXPECT_THAT(STc(n, n, n, GIri{iTc}),
-              ::testing::Not(matchScanSpec(S(n, n, n), 3)));
+              ::testing::Not(matchScanSpec(S(n, n, n, std::nullopt), 3)));
 
   // Test the resolution of vocab entries.
   auto getId = ad_utility::testing::makeGetId(index);
   auto x = getId("<x>");
   TripleComponent xIri = TripleComponent::Iri::fromIriref("<x>");
 
-  EXPECT_THAT(STc(xIri, xIri, xIri), matchScanSpec(S(x, x, x), 0));
+  EXPECT_THAT(STc(xIri, xIri, xIri),
+              matchScanSpec(S(x, x, x, std::nullopt), 0));
 
   // For an entry that is not in the vocabulary, the complete result of
   // `toScanSpecification` is `nullopt`.
@@ -114,11 +116,13 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
   LocalVocabEntry localVocabEntry{notInVocab.getIri()};
   auto localVocabId = Id::makeFromLocalVocabIndex(&localVocabEntry);
   EXPECT_THAT(STc(notInVocab, xIri, xIri),
-              matchScanSpec(S(localVocabId, x, x)));
+              matchScanSpec(S(localVocabId, x, x, std::nullopt)));
   EXPECT_THAT(STc(xIri, notInVocab, xIri),
-              matchScanSpec(S(x, localVocabId, x)));
+              matchScanSpec(S(x, localVocabId, x, std::nullopt)));
   EXPECT_THAT(STc(xIri, xIri, notInVocab, GIri{xIri, notInVocab}),
-              matchScanSpec(S(x, x, localVocabId, {}, G{x, localVocabId})));
-  EXPECT_THAT(STc(xIri, xIri, notInVocab, GIri{xIri, notInVocab}),
-              ::testing::Not(matchScanSpec(S(x, x, localVocabId))));
+              matchScanSpec(
+                  S(x, x, localVocabId, std::nullopt, {}, G{x, localVocabId})));
+  EXPECT_THAT(
+      STc(xIri, xIri, notInVocab, GIri{xIri, notInVocab}),
+      ::testing::Not(matchScanSpec(S(x, x, localVocabId, std::nullopt))));
 }

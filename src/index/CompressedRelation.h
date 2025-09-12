@@ -471,6 +471,7 @@ class CompressedRelationReader {
     ScanSpecification::Graphs desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
+    std::optional<Id> defaultGraph_;
     // Filter `block` such that it contains only the specified graphs and no
     // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
     // (for example, if we know that there are no duplicates, we do not have to
@@ -485,6 +486,10 @@ class CompressedRelationReader {
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
    private:
+    // Return a lambda that returns true if `desiredGraphs_` allows the given
+    // `graph` and it is not the default graph.
+    auto isGraphAllowedLambda() const;
+
     // Return true iff all triples from the block belong to the
     // `desiredGraphs_`, and if this fact can be determined by looking at the
     // metadata alone.

@@ -23,18 +23,20 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  ScanSpecAndBlocks scanSpecAndBlocks_;
-  bool scanSpecAndBlocksIsPrefiltered_;
-  size_t numVariables_;
-  size_t sizeEstimate_;
-  bool sizeEstimateIsExact_;
-  std::vector<float> multiplicity_;
+  bool filterDefaultGraph_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
   // the "ordinary" subjects, predicates, or objects, as well as the variables
   // that they are bound to.
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
+
+  ScanSpecAndBlocks scanSpecAndBlocks_;
+  bool scanSpecAndBlocksIsPrefiltered_;
+  size_t numVariables_;
+  size_t sizeEstimate_;
+  bool sizeEstimateIsExact_;
+  std::vector<float> multiplicity_;
 
   // If set, then only the specified variables will be part of the result.
   // Can be used to strip some columns that are not needed by the remainder
@@ -46,7 +48,8 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
-            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
+            bool filterDefaultGraph = false);
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -55,7 +58,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            bool filterDefaultGraph);
 
   ~IndexScan() override = default;
 

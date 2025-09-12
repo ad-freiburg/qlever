@@ -704,13 +704,16 @@ inline auto Optional =
 };
 }  // namespace detail
 
-inline auto Group =
-    [](auto&& subMatcher,
-       p::GroupGraphPattern::GraphSpec graphSpec =
-           std::monostate{}) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Group = [](auto&& subMatcher,
+                       p::GroupGraphPattern::GraphSpec graphSpec =
+                           std::monostate{},
+                       bool skipDefaultGraph =
+                           false) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::GroupGraphPattern>(::testing::AllOf(
       AD_FIELD(p::GroupGraphPattern, _child, subMatcher),
-      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec))));
+      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec)),
+      AD_FIELD(p::GroupGraphPattern, skipDefaultGraph_,
+               ::testing::Eq(skipDefaultGraph))));
 };
 
 inline auto Union =
@@ -794,26 +797,22 @@ inline auto OptionalGraphPattern = [](std::vector<std::string>&& filters,
 inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
-namespace detail {
-inline auto GroupGraphPattern = [](std::vector<std::string>&& filters,
-                                   const auto&... childMatchers)
+inline auto GroupGraphPattern = [](const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...));
+  return Group(detail::GraphPattern(false, {}, childMatchers...));
 };
 
-inline auto GroupGraphPatternWithGraph =
-    [](std::vector<std::string>&& filters,
-       p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...), graph);
-};
-
-}  // namespace detail
-
-inline auto GroupGraphPattern =
-    MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
-inline auto GroupGraphPatternWithGraph =
-    MatcherWithDefaultFilters<detail::GroupGraphPatternWithGraph>{};
+inline auto GroupGraphPatternWithGraph = ad_utility::OverloadCallOperator{
+    [](p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...), graph);
+    },
+    [](::Variable graphVariable, bool skipDefaultGraph,
+       const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...),
+                   std::move(graphVariable), skipDefaultGraph);
+    }};
 
 namespace detail {
 inline auto MinusGraphPattern = [](std::vector<std::string>&& filters,
@@ -1163,25 +1162,25 @@ inline auto ExistsFilter =
 // A helper matcher for a graph pattern that targets all triples in `graph`.
 inline auto SelectAllPattern =
     [](parsedQuery::GroupGraphPattern::GraphSpec graph,
-       std::optional<std::string>&& filter =
-           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
+       bool skipDefaultGraph =
+           false) -> Matcher<const parsedQuery::GraphPattern&> {
   return GraphPattern(
-      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
+      false, std::vector<std::string>{},
       Group(GraphPattern(Triples(
                 {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
-            std::move(graph)));
+            std::move(graph), skipDefaultGraph));
 };
 
 // Matcher for a `ParsedQuery` with a clear of `graph`.
 inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
-                       std::optional<std::string>&& filter = std::nullopt) {
+                       bool skipDefaultGraph = false) {
   // The `GraphSpec` type is the same variant as
   // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
   return UpdateClause(
       GraphUpdate(
           {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
           {}),
-      SelectAllPattern(graph, AD_FWD(filter)));
+      SelectAllPattern(graph, skipDefaultGraph));
 };
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
