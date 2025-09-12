@@ -467,13 +467,11 @@ CompressedRelationReader::lazyScan(
 
           if (!block.empty()) {
             return block;
-          } else {
-            // recursively go to next state because there is no data to yield
-            // from this call
-            return get();
           }
+          // recursively go to next state because there is no data to yield
+          // from this call
+          return get();
         }
-          [[fallthrough]];
 
         case State::createMiddleBlocksGenerator: {
           middleBlocksGenerator_ = reader_->asyncParallelBlockGenerator(
