@@ -19,6 +19,7 @@
 #include <cmath>
 #include <set>
 
+#include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "global/RuntimeParameters.h"

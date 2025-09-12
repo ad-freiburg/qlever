@@ -16,6 +16,8 @@
 #include <sstream>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
+
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
 // 26)
@@ -167,10 +169,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    bool operator==(const NoTimeZone&) const = default;
+    QL_DEFINE_EQUALITY_OPERATORS(NoTimeZone)
   };
   struct TimeZoneZ {
-    bool operator==(const TimeZoneZ&) const = default;
+    QL_DEFINE_EQUALITY_OPERATORS(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the

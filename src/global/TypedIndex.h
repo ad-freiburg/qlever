@@ -7,6 +7,7 @@
 
 #include <ostream>
 
+#include "backports/three_way_comparison.h"
 #include "util/ConstexprSmallString.h"
 
 namespace ad_utility {
@@ -25,8 +26,7 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  constexpr bool operator==(const TypedIndex&) const = default;
-  constexpr auto operator<=>(const TypedIndex&) const = default;
+  QL_DEFINE_THREEWAY_OPERATOR(TypedIndex, _value)
 
   static constexpr TypedIndex max() {
     return {std::numeric_limits<Type>::max()};

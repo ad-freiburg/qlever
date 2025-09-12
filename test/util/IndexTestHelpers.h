@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "AllocatorTestHelpers.h"
+#include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -84,7 +85,13 @@ struct TestIndexConfig {
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
                       c.indexType, c.encodedIriManager);
   }
-  bool operator==(const TestIndexConfig&) const = default;
+  QL_DEFINE_EQUALITY_OPERATORS(TestIndexConfig, turtleInput,
+                               loadAllPermutations, usePatterns,
+                               usePrefixCompression, blocksizePermutations,
+                               createTextIndex, addWordsFromLiterals,
+                               contentsOfWordsFileAndDocsfile, parserBufferSize,
+                               scoringMetric, bAndKParam, indexType,
+                               vocabularyType, encodedIriManager)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

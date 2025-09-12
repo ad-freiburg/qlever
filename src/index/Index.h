@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
@@ -42,7 +43,7 @@ class Index {
     size_t normal{};
     size_t internal{};
     size_t normalAndInternal_() const { return normal + internal; }
-    bool operator==(const NumNormalAndInternal&) const = default;
+    QL_DEFINE_EQUALITY_OPERATORS(NumNormalAndInternal, normal, internal)
     static NumNormalAndInternal fromNormalAndTotal(size_t normal,
                                                    size_t total) {
       AD_CONTRACT_CHECK(total >= normal);

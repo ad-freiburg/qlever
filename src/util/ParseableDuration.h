@@ -15,6 +15,7 @@
 #include <iostream>
 
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -53,7 +54,7 @@ class ParseableDuration {
            CommonType{other.duration_}.count();
   }
 
-  bool operator==(const ParseableDuration&) const noexcept = default;
+  QL_DEFINE_EQUALITY_OPERATORS(ParseableDuration, duration_)
 
   // ___________________________________________________________________________
   template <typename CharT>

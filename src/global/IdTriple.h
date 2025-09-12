@@ -11,6 +11,7 @@
 #include <ostream>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
@@ -67,6 +68,7 @@ struct IdTriple {
     };
     return tie(ids()) <=> tie(other.ids());
   }
+  // QL_DEFINE_THREEWAY_OPERATOR(IdTriple, data_)
 
   bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
 
