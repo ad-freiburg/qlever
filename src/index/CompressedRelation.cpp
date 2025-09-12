@@ -413,15 +413,14 @@ CompressedRelationReader::lazyScan(
     const LimitOffsetClause originalLimit_{limitOffset_};
     std::size_t numBlocksTotal_;
 
-    Generator(const ScanSpecification& scanSpec,
+    Generator(ScanSpecification scanSpec,
               std::vector<CompressedBlockMetadata> relevantBlockMetadata,
               ColumnIndices additionalColumns,
               const CancellationHandle& cancellationHandle,
               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-              const LimitOffsetClause& limitOffset,
-              const CompressedRelationReader* reader,
-              const ScanImplConfig& config)
-        : scanSpec_{scanSpec},
+              LimitOffsetClause limitOffset,
+              const CompressedRelationReader* reader, ScanImplConfig config)
+        : scanSpec_{std::move(scanSpec)},
           relevantBlockMetadata_{std::move(relevantBlockMetadata)},
           additionalColumns_{std::move(additionalColumns)},
           cancellationHandle_{cancellationHandle},
