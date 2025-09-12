@@ -4,7 +4,6 @@
 
 #include "engine/GraphStoreProtocol.h"
 
-#include "parser/SparqlParser.h"
 #include "parser/Tokenizer.h"
 #include "util/http/beast.h"
 
@@ -99,4 +98,21 @@ ParsedQuery GraphStoreProtocol::transformGet(
     }
   };
   return SparqlParser::parseQuery(encodedIriManager, getQuery());
+}
+
+// ____________________________________________________________________________
+ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
+                                                const Index& index) {
+  // Construct the parsed update from its short equivalent SPARQL Update string.
+  // This is easier and also provides e.g. the `_originalString` field.
+  auto getUpdate = [&graph]() -> std::string {
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      return absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
+    } else {
+      return "DROP DEFAULT";
+    }
+  };
+  return ad_utility::getSingleElement(SparqlParser::parseUpdate(
+      index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
 }
