@@ -366,7 +366,8 @@ CompressedRelationReader::IdTableGeneratorInputRange
 CompressedRelationReader::lazyScan(
     const ScanSpecification& scanSpec,
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-    ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+    ColumnIndices additionalColumns,
+    const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
@@ -390,7 +391,7 @@ CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec_;
     std::vector<CompressedBlockMetadata> relevantBlockMetadata_;
     ColumnIndices additionalColumns_;
-    CancellationHandle cancellationHandle_;
+    const CancellationHandle& cancellationHandle_;
     const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
     LimitOffsetClause limitOffset_;
     ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
@@ -409,7 +410,7 @@ CompressedRelationReader::lazyScan(
     Generator(const ScanSpecification& scanSpec,
               std::vector<CompressedBlockMetadata> relevantBlockMetadata,
               ColumnIndices additionalColumns,
-              CancellationHandle cancellationHandle,
+              const CancellationHandle& cancellationHandle,
               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
               const LimitOffsetClause& limitOffset,
               const CompressedRelationReader* reader,

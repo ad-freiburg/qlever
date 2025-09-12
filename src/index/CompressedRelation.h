@@ -697,7 +697,8 @@ class CompressedRelationReader {
   CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       const ScanSpecification& scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      ColumnIndices additionalColumns,
+      const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset = {}) const;
 

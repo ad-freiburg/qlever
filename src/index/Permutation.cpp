@@ -198,7 +198,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle,
+    const CancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
