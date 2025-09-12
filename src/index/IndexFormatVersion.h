@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "backports/three_way_comparison.h"
 #include "util/DateYearDuration.h"
 #include "util/json.h"
 

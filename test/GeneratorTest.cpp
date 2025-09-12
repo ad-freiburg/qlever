@@ -4,12 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include "backports/three_way_comparison.h"
 #include "util/Generator.h"
 
 struct Details {
   bool begin_ = false;
   bool end_ = false;
-  bool operator==(const Details&) const = default;
+  QL_DEFINE_EQUALITY_OPERATORS(Details, begin_, end_)
 };
 
 // A simple generator that first yields three numbers and then adds a detail

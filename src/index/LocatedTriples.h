@@ -13,6 +13,7 @@
 
 #include <boost/optional.hpp>
 
+#include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
@@ -25,7 +26,7 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  bool operator<=>(const NumAddedAndDeleted&) const = default;
+  QL_DEFINE_THREEWAY_OPERATOR(NumAddedAndDeleted, numAdded_, numDeleted_)
   friend std::ostream& operator<<(std::ostream& str,
                                   const NumAddedAndDeleted& n) {
     str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;

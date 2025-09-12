@@ -8,6 +8,7 @@
 #include <string>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 /// Store an expression that appeared in an ORDER BY clause.

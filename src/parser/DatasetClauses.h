@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "index/ScanSpecification.h"
 #include "parser/sparqlParser/DatasetClause.h"
 
@@ -82,7 +83,8 @@ struct DatasetClauses {
   // implicitly allowed.
   bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
-  bool operator==(const DatasetClauses& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATORS(DatasetClauses, defaultGraphs_, namedGraphs_,
+                               emptyDummy_, defaultGraphSpecifiedUsingWith_)
 };
 }  // namespace parsedQuery
 

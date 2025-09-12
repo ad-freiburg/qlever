@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <random>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
@@ -44,7 +45,7 @@ class QueryId {
   }
 
   // Starting with gcc 12 and clang 15 this can be constexpr
-  bool operator==(const QueryId&) const noexcept = default;
+  QL_DEFINE_EQUALITY_OPERATORS(QueryId, id_)
 };
 
 /// This class is similar to QueryId, but it's instances are all unique within

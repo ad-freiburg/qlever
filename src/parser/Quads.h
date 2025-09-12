@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
@@ -25,7 +26,7 @@ struct Quads {
   using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
                                 ad_utility::sparql_types::Triples>;
 
-  bool operator==(const Quads&) const = default;
+  QL_DEFINE_EQUALITY_OPERATORS(Quads, freeTriples_, graphTriples_)
 
   // Free triples are outside a `GRAPH ...` clause.
   ad_utility::sparql_types::Triples freeTriples_{};
