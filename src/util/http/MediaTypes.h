@@ -15,6 +15,7 @@
 
 #include "../HashMap.h"
 #include "../HashSet.h"
+#include "backports/three_way_comparison.h"
 
 namespace ad_utility {
 
@@ -41,20 +42,23 @@ struct MediaTypeWithQuality {
   };
 
   using Variant = std::variant<Wildcard, TypeWithWildcard, MediaType>;
-  friend std::weak_ordering operator<=>(const Variant& a, const Variant& b) {
-    return a.index() <=> b.index();
-  }
+  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM(
+      Variant, (const Variant& a, const Variant& b)->ql::weak_ordering,
+      { return ql::compareThreeWay(a.index(), b.index()); })
 
   float _qualityValue;
   Variant _mediaType;
 
   // Order first by the qualities, and then by the specificity of the type.
-  std::partial_ordering operator<=>(const MediaTypeWithQuality& rhs) const {
-    if (auto cmp = _qualityValue <=> rhs._qualityValue; cmp != 0) {
-      return cmp;
-    }
-    return _mediaType <=> rhs._mediaType;
-  }
+  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+      MediaTypeWithQuality,
+      (const MediaTypeWithQuality& rhs) const->ql::partial_ordering, {
+        if (auto cmp = ql::compareThreeWay(_qualityValue, rhs._qualityValue);
+            cmp != 0) {
+          return cmp;
+        }
+        return ql::compareThreeWay(_mediaType, rhs._mediaType);
+      })
 };
 
 namespace detail {

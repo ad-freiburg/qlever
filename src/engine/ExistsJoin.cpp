@@ -4,6 +4,7 @@
 
 #include "engine/ExistsJoin.h"
 
+#include "backports/three_way_comparison.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
@@ -424,8 +425,9 @@ struct LazyExistsJoinImpl
     while (currentRight_.has_value()) {
       AD_CORRECTNESS_CHECK(currentRightIndex_ <
                            currentRight_.value().get().size());
-      auto comparison = currentRight_.value().get().at(currentRightIndex_,
-                                                       rightJoinColumn_) <=> id;
+      auto comparison = ql::compareThreeWay(
+          currentRight_.value().get().at(currentRightIndex_, rightJoinColumn_),
+          id);
       if (comparison == 0) {
         return true;
       }

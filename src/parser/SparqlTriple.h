@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "parser/PropertyPath.h"
 #include "parser/TripleComponent.h"
@@ -29,7 +30,8 @@ class SparqlTripleBase {
         o_(std::move(o)),
         additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  bool operator==(const SparqlTripleBase& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(SparqlTripleBase)
+
   TripleComponent s_;
   Predicate p_;
   TripleComponent o_;
@@ -38,6 +40,8 @@ class SparqlTripleBase {
   // TODO<joka921> On this level we should not store `ColumnIndex`, but the
   // special predicate IRIs that are to be attached here.
   std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(s_, p_, o_, additionalScanColumns_)
 };
 
 // A triple where the predicate is a `TripleComponent`, so a fixed entity or a
@@ -59,7 +63,9 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(g_)
+
+  QL_DEFINE_EQUALITY_OPERATOR(SparqlTripleSimpleWithGraph)
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.

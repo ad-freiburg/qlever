@@ -7,11 +7,14 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // TODO: replace usages of this class with `ad_utility::triple_component::Iri`
 class Iri {
   std::string _string;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_string)
 
  public:
   explicit Iri(std::string str);
@@ -30,7 +33,7 @@ class Iri {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _string; }
 
-  bool operator==(const Iri& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Iri)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_IRI_H

@@ -11,6 +11,7 @@
 #include <string>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
@@ -47,7 +48,8 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    bool operator==(const UNDEF&) const = default;
+    QL_DEFINE_CLASS_MEMBERS_AS_TIE()
+    QL_DEFINE_EQUALITY_OPERATOR(UNDEF)
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>
@@ -62,6 +64,8 @@ class TripleComponent {
       std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
                    Literal, Iri, DateYearOrDuration, GeoPoint>;
   Variant _variant;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_variant)
 
  public:
   // There are several places during the parsing where an uninitizalized
@@ -125,7 +129,7 @@ class TripleComponent {
   }
 
   /// Equality comparison between two `TripleComponent`s.
-  bool operator==(const TripleComponent&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(TripleComponent)
 
   /// Hash value for `TripleComponent` object.
   /// Note: It is important to use `std::same_as` because otherwise this

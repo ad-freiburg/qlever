@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "index/ScanSpecification.h"
 #include "parser/sparqlParser/DatasetClause.h"
 
@@ -27,6 +28,9 @@ struct DatasetClauses {
   // True iff the `defaultGraph` is a single graph that originates from a `WITH`
   // clause, which slightly changes the semantics.
   bool defaultGraphSpecifiedUsingWith_ = false;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(defaultGraphs_, namedGraphs_, emptyDummy_,
+                                 defaultGraphSpecifiedUsingWith_)
 
  public:
   // Divide the dataset clause from `clauses` into default and named graphs,
@@ -82,7 +86,7 @@ struct DatasetClauses {
   // implicitly allowed.
   bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
-  bool operator==(const DatasetClauses& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(DatasetClauses)
 };
 }  // namespace parsedQuery
 

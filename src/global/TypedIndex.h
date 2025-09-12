@@ -7,6 +7,7 @@
 
 #include <ostream>
 
+#include "backports/three_way_comparison.h"
 #include "util/ConstexprSmallString.h"
 
 namespace ad_utility {
@@ -17,6 +18,7 @@ template <typename Type, IndexTag tag>
 struct TypedIndex {
  private:
   Type _value;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(_value)
 
  public:
   static constexpr TypedIndex make(Type id) noexcept { return {id}; }
@@ -25,8 +27,8 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  constexpr bool operator==(const TypedIndex&) const = default;
-  constexpr auto operator<=>(const TypedIndex&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(TypedIndex)
+  QL_DEFINE_THREEWAY_OPERATOR_CONSTEXPR(TypedIndex)
 
   static constexpr TypedIndex max() {
     return {std::numeric_limits<Type>::max()};
