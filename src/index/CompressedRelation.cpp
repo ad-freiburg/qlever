@@ -506,7 +506,6 @@ CompressedRelationReader::lazyScan(
 
         case State::check:
           check();
-          return std::nullopt;
       }
 
       return std::nullopt;
