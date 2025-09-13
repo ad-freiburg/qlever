@@ -31,6 +31,194 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
+namespace groupBy::detail {
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
+class LazyGroupByRange
+    : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+ private:
+  using IdTableVocabPair = Result::IdTableVocabPair;
+  // input arguments
+  const GroupByImpl* parent_{nullptr};
+  std::shared_ptr<const Result> subresult_;
+  std::vector<GroupByImpl::Aggregate> aggregates_;
+  std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases_;
+  std::vector<size_t> groupByCols_;
+  bool singleIdTable_{false};
+  // runtime state
+  size_t inWidth_;
+  IdTable resultTable_;
+  std::unique_ptr<LazyGroupBy> lazyGroupBy_;
+  LocalVocab currentLocalVocab_;
+  std::vector<LocalVocab> storedLocalVocabs_;
+  GroupByImpl::GroupBlock currentGroupBlock_;
+  bool groupSplitAcrossTables_{false};
+  // range state
+  bool isFinished_{false};
+  std::optional<Result::LazyResult> range_;
+  std::optional<Result::LazyResult::iterator> rangeIt_;
+
+ public:
+  LazyGroupByRange(
+      const GroupByImpl* parent, std::shared_ptr<const Result> subresult,
+      std::vector<GroupByImpl::Aggregate> aggregates,
+      std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases,
+      std::vector<size_t> groupByCols, bool singleIdTable,
+      size_t subTreeResultWidth)
+      : parent_(parent),
+        subresult_(std::move(subresult)),
+        aggregates_(std::move(aggregates)),
+        aggregateAliases_(std::move(aggregateAliases)),
+        groupByCols_(std::move(groupByCols)),
+        singleIdTable_(singleIdTable),
+        inWidth_(subTreeResultWidth),
+        resultTable_(parent->getResultWidth(),
+                     parent->getExecutionContext()->getAllocator()) {
+    AD_CONTRACT_CHECK(inWidth_ == IN_WIDTH || IN_WIDTH == 0);
+    AD_CONTRACT_CHECK(parent_ != nullptr);
+  }
+
+  void initialise() {
+    lazyGroupBy_ = std::make_unique<LazyGroupBy>(
+        currentLocalVocab_, std::move(aggregateAliases_),
+        parent_->getExecutionContext()->getAllocator(), groupByCols_.size());
+    range_ =
+        Result::LazyResult(ad_utility::CachingContinuableTransformInputRange(
+            subresult_->idTables(),
+            [this](IdTableVocabPair& pair) { return process(pair); }));
+    rangeIt_ = ql::ranges::begin(range_.value());
+  }
+
+  std::optional<IdTableVocabPair> get() override {
+    if (isFinished_) {
+      return std::nullopt;
+    }
+
+    if (!range_.has_value()) {
+      initialise();
+    } else {
+      ++(rangeIt_.value());
+    }
+
+    // if the main range is empty, yield the final value.
+    if (rangeIt_.value() == ql::ranges::end(range_.value())) {
+      isFinished_ = true;
+      return yieldFinalValue();
+    }
+
+    return std::optional(std::move(*(rangeIt_.value())));
+  }
+
+  // This method is forwarded to GroupByImpl::searchBlockBoundaries() during
+  // process(). There is no reason to call this method outside of that use-case.
+  void onBlockChange(size_t blockStart, size_t blockEnd,
+                     sparqlExpression::EvaluationContext& evaluationContext) {
+    if (groupSplitAcrossTables_) {
+      lazyGroupBy_->processBlock(evaluationContext, blockStart, blockEnd);
+      lazyGroupBy_->commitRow(resultTable_, evaluationContext,
+                              currentGroupBlock_);
+      groupSplitAcrossTables_ = false;
+    } else {
+      // This processes the whole block in batches if possible
+      IdTableStatic<OUT_WIDTH> table =
+          std::move(resultTable_).toStatic<OUT_WIDTH>();
+      parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
+                                       blockStart, blockEnd,
+                                       &currentLocalVocab_, groupByCols_);
+      resultTable_ = std::move(table).toDynamic();
+    }
+  }
+
+  // This method serves as the transformation for each IdTableVocabPair in the
+  // subresult_->idTables(), input range. It us called by the range_ member.
+  // There is no reason to call this method outside of that use-case.
+  auto process(IdTableVocabPair& pair) {
+    using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+    auto& idTable = pair.idTable_;
+    if (idTable.empty()) {
+      return LoopControl::makeContinue();
+    }
+
+    AD_CORRECTNESS_CHECK(idTable.numColumns() == inWidth_);
+    parent_->checkCancellation();
+    storedLocalVocabs_.emplace_back(std::move(pair.localVocab_));
+
+    if (currentGroupBlock_.empty()) {
+      for (size_t col : groupByCols_) {
+        currentGroupBlock_.emplace_back(col, idTable(0, col));
+      }
+    }
+
+    sparqlExpression::EvaluationContext evaluationContext =
+        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+
+    size_t lastBlockStart = parent_->searchBlockBoundaries(
+        [this, &evaluationContext](size_t a, size_t b) {
+          onBlockChange(a, b, evaluationContext);
+        },
+        idTable.asStaticView<IN_WIDTH>(), currentGroupBlock_);
+    groupSplitAcrossTables_ = true;
+    lazyGroupBy_->processBlock(evaluationContext, lastBlockStart,
+                               idTable.size());
+    if (!singleIdTable_ && !resultTable_.empty()) {
+      currentLocalVocab_.mergeWith(storedLocalVocabs_);
+      auto result = Result::IdTableVocabPair{std::move(resultTable_),
+                                             std::move(currentLocalVocab_)};
+      // Keep last local vocab for next commit.
+      currentLocalVocab_ = std::move(storedLocalVocabs_.back());
+      storedLocalVocabs_.clear();
+
+      return LoopControl::yieldValue(std::move(result));
+    }
+
+    return LoopControl::makeContinue();
+  }
+
+  // After range_ is finished, this method is called to yield the final value,
+  // which includes processing the last group if necessary.
+  std::optional<Result::IdTableVocabPair> yieldFinalValue() {
+    // No need for final commit when loop was never entered.
+    if (!groupSplitAcrossTables_) {
+      // If we have an implicit group by we need to produce one result row
+      if (groupByCols_.empty()) {
+        // If we have an implicit GROUP BY, where the entire input is a
+        // single group, we need to produce one result row.
+        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable_, aggregates_,
+                                                      &currentLocalVocab_);
+        return IdTableVocabPair{std::move(resultTable_),
+                                std::move(currentLocalVocab_)};
+      }
+      if (singleIdTable_) {
+        // Yield at least a single empty table if requested.
+        return IdTableVocabPair{std::move(resultTable_),
+                                std::move(currentLocalVocab_)};
+      }
+      return std::nullopt;
+    }
+
+    // Process remaining items in the last group.  For those we have already
+    // called `lazyGroupBy.processBlock()` but the call to `commitRow` is
+    // still missing. We have to setup a dummy input table and evaluation
+    // context, that have the values of the `currentGroupBlock` in the
+    // correct columns.
+    IdTable idTable{inWidth_, ad_utility::makeAllocatorWithLimit<Id>(
+                                  1_B * sizeof(Id) * inWidth_)};
+    idTable.emplace_back();
+    for (const auto& [colIdx, value] : currentGroupBlock_) {
+      idTable.at(0, colIdx) = value;
+    }
+
+    sparqlExpression::EvaluationContext evaluationContext =
+        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+
+    lazyGroupBy_->commitRow(resultTable_, evaluationContext,
+                            currentGroupBlock_);
+    currentLocalVocab_.mergeWith(storedLocalVocabs_);
+    return IdTableVocabPair{std::move(resultTable_),
+                            std::move(currentLocalVocab_)};
+  }
+};
+}  // namespace groupBy::detail
+
 using groupBy::detail::VectorOfAggregationData;
 
 // _____________________________________________________________________________
@@ -432,7 +620,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    Result::Generator generator = CALL_FIXED_SIZE(
+    Result::LazyResult generator = CALL_FIXED_SIZE(
         (std::array{inWidth, outWidth}), &GroupByImpl::computeResultLazily,
         this, std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
@@ -440,7 +628,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
     return requestLaziness
                ? Result{std::move(generator), resultSortedOn()}
-               : Result{cppcoro::getSingleElement(std::move(generator)),
+               : Result{ad_utility::getSingleElement(std::move(generator)),
                         resultSortedOn()};
   }
 
@@ -526,107 +714,15 @@ void GroupByImpl::processEmptyImplicitGroup(
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-Result::Generator GroupByImpl::computeResultLazily(
+Result::LazyResult GroupByImpl::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, bool singleIdTable) const {
-  size_t inWidth = _subtree->getResultWidth();
-  AD_CONTRACT_CHECK(inWidth == IN_WIDTH || IN_WIDTH == 0);
-  LocalVocab currentLocalVocab{};
-  std::vector<LocalVocab> storedLocalVocabs;
-  LazyGroupBy lazyGroupBy{currentLocalVocab, std::move(aggregateAliases),
-                          getExecutionContext()->getAllocator(),
-                          groupByCols.size()};
-
-  IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
-
-  bool groupSplitAcrossTables = false;
-
-  GroupBlock currentGroupBlock;
-
-  for (Result::IdTableVocabPair& pair : subresult->idTables()) {
-    auto& idTable = pair.idTable_;
-    if (idTable.empty()) {
-      continue;
-    }
-    AD_CORRECTNESS_CHECK(idTable.numColumns() == inWidth);
-    checkCancellation();
-    storedLocalVocabs.emplace_back(std::move(pair.localVocab_));
-
-    if (currentGroupBlock.empty()) {
-      for (size_t col : groupByCols) {
-        currentGroupBlock.emplace_back(col, idTable(0, col));
-      }
-    }
-
-    sparqlExpression::EvaluationContext evaluationContext =
-        createEvaluationContext(currentLocalVocab, idTable);
-
-    size_t lastBlockStart = searchBlockBoundaries(
-        [this, &groupSplitAcrossTables, &lazyGroupBy, &evaluationContext,
-         &resultTable, &currentGroupBlock, &aggregates, &currentLocalVocab,
-         &groupByCols](size_t blockStart, size_t blockEnd) {
-          if (groupSplitAcrossTables) {
-            lazyGroupBy.processBlock(evaluationContext, blockStart, blockEnd);
-            lazyGroupBy.commitRow(resultTable, evaluationContext,
-                                  currentGroupBlock);
-            groupSplitAcrossTables = false;
-          } else {
-            // This processes the whole block in batches if possible
-            IdTableStatic<OUT_WIDTH> table =
-                std::move(resultTable).toStatic<OUT_WIDTH>();
-            processBlock<OUT_WIDTH>(table, aggregates, evaluationContext,
-                                    blockStart, blockEnd, &currentLocalVocab,
-                                    groupByCols);
-            resultTable = std::move(table).toDynamic();
-          }
-        },
-        idTable.asStaticView<IN_WIDTH>(), currentGroupBlock);
-    groupSplitAcrossTables = true;
-    lazyGroupBy.processBlock(evaluationContext, lastBlockStart, idTable.size());
-    if (!singleIdTable && !resultTable.empty()) {
-      currentLocalVocab.mergeWith(storedLocalVocabs);
-      Result::IdTableVocabPair outputPair{std::move(resultTable),
-                                          std::move(currentLocalVocab)};
-      co_yield outputPair;
-      // Reuse buffer if not moved out
-      resultTable = std::move(outputPair.idTable_);
-      resultTable.clear();
-      // Keep last local vocab for next commit.
-      currentLocalVocab = std::move(storedLocalVocabs.back());
-      storedLocalVocabs.clear();
-    }
-  }
-  // No need for final commit when loop was never entered.
-  if (!groupSplitAcrossTables) {
-    // If we have an implicit group by we need to produce one result row
-    if (groupByCols.empty()) {
-      processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates,
-                                           &currentLocalVocab);
-      co_yield {std::move(resultTable), std::move(currentLocalVocab)};
-    } else if (singleIdTable) {
-      // Yield at least a single empty table if requested.
-      co_yield {std::move(resultTable), std::move(currentLocalVocab)};
-    }
-    co_return;
-  }
-
-  // Process remaining items in the last group.  For those we have already
-  // called `lazyGroupBy.processBlock()` but the call to `commitRow` is still
-  // missing. We have to setup a dummy input table and evaluation context, that
-  // have the values of the `currentGroupBlock` in the correct columns.
-  IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(
-                               1_B * sizeof(Id) * inWidth)};
-  idTable.emplace_back();
-  for (const auto& [colIdx, value] : currentGroupBlock) {
-    idTable.at(0, colIdx) = value;
-  }
-
-  sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(currentLocalVocab, idTable);
-  lazyGroupBy.commitRow(resultTable, evaluationContext, currentGroupBlock);
-  currentLocalVocab.mergeWith(storedLocalVocabs);
-  co_yield {std::move(resultTable), std::move(currentLocalVocab)};
+  return Result::LazyResult(
+      groupBy::detail::LazyGroupByRange<IN_WIDTH, OUT_WIDTH>(
+          this, std::move(subresult), std::move(aggregates),
+          std::move(aggregateAliases), std::move(groupByCols), singleIdTable,
+          _subtree->getResultWidth()));
 }
 
 // _____________________________________________________________________________

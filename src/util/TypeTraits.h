@@ -13,12 +13,12 @@
 #include <concepts>
 #include <optional>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "util/Forward.h"
 
 namespace ad_utility {
@@ -77,11 +77,11 @@ template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};
 
 template <typename T>
-struct LastT<T> : public std::type_identity<T> {};
+struct LastT<T> : public ql::type_identity<T> {};
 
 // Implementation for First
 template <typename T, typename...>
-struct FirstWrapper : public std::type_identity<T> {};
+struct FirstWrapper : public ql::type_identity<T> {};
 
 }  // namespace detail
 
@@ -315,9 +315,9 @@ struct InvalidInvokeResult {
 template <typename T, typename... Args>
 constexpr auto getInvokeResultImpl() {
   if constexpr (std::is_invocable_v<T, Args...>) {
-    return std::type_identity<std::invoke_result_t<T, Args...>>{};
+    return ql::type_identity<std::invoke_result_t<T, Args...>>{};
   } else {
-    return std::type_identity<InvalidInvokeResult<T, Args...>>{};
+    return ql::type_identity<InvalidInvokeResult<T, Args...>>{};
   }
 }
 }  // namespace invokeResultSfinaeFriendly::detail

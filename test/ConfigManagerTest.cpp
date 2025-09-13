@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <functional>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -23,6 +22,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
+#include "backports/type_traits.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"

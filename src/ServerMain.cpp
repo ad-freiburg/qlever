@@ -50,7 +50,6 @@ int main(int argc, char** argv) {
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
-  bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
   bool persistUpdates;
 
@@ -102,11 +101,6 @@ int main(int argc, char** argv) {
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
-  add("no-pattern-trick,T", po::bool_switch(&noPatternTrick),
-      "Maximum number of entries in the cache. If exceeded, remove "
-      "least-recently used entries from the cache if possible. Note that "
-      "this condition and the size limit specified via --cache-max-size-gb "
-      "both have to hold (logical AND).");
   add("text,t", po::bool_switch(&text),
       "Also load the text index. The text index must have been built before "
       "using `IndexBuilderMain` with options `-d` and `-w`.");
@@ -181,7 +175,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatternTrick);
+                  std::move(accessToken), !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates);
   } catch (const std::exception& e) {

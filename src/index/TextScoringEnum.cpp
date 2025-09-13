@@ -4,6 +4,7 @@
 
 #include "index/TextScoringEnum.h"
 
+namespace qlever {
 // ____________________________________________________________________________
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
   switch (textScoringMetric) {
@@ -36,3 +37,4 @@ TextScoringMetric getTextScoringMetricFromString(
       absl::StrCat(R"(Faulty text scoring metric given: ")",
                    textScoringMetricString, R"(".)"));
 }
+}  // namespace qlever

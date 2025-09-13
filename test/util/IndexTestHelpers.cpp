@@ -12,6 +12,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
+using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
@@ -152,7 +153,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en . <zz> <label> <zz>";
+        "\"zz\"@en . <zz> <label> <zz> .";
   }
 
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;

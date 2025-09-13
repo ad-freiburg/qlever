@@ -28,6 +28,11 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+namespace groupBy::detail {
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
+class LazyGroupByRange;
+}
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
@@ -144,7 +149,7 @@ class GroupByImpl : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
@@ -161,6 +166,9 @@ class GroupByImpl : public Operation {
   IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
+
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
+  friend class groupBy::detail::LazyGroupByRange;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
