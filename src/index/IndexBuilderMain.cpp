@@ -188,13 +188,16 @@ int main(int argc, char** argv) {
   add("text-docs-input-file,d", po::value(&docsfile),
       "The full text of the text records from which to build the text index.");
   add("text-words-from-docsfile,D", po::bool_switch(&useWordsFromDocsfile),
-      "Use the words in the documents from the docsfile to build the text "
-      "index. Can be used together with a wordsfile to add the co-occuring "
-      "entities from the wordsfile.");
+      "If this flag is set the docsfile is parsed for the text index instead "
+      "of the wordsfile. Only works if additionally a docsfile is given with "
+      "the `text-docs-input-file` (-d) option.");
   add("text-entities-from-wordsfile,E",
       po::bool_switch(&addEntitiesFromWordsfile),
-      "Used together with the text-words-from-docsfile option to add entities "
-      "to the text index using the wordsfile.");
+      "Can only be used together with the `text-words-from-docsfile` option. "
+      "If this flag is set the docsfile is parsed for the words of the text "
+      "index and the wordsfile is parsed for the entities of the text index. "
+      "Only works if additionally a docsfile and wordsfile are given with the "
+      "options -w [wordsfile] and -d [docsfile]");
   add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
@@ -274,6 +277,22 @@ int main(int argc, char** argv) {
           "A docsfile was given without a wordsfile and without the flag -D to "
           "specify building the text "
           "index from docsfile.");
+    }
+    if (useWordsFromDocsfile &&
+        (docsfile.empty() ||
+         (!addEntitiesFromWordsfile && !wordsfile.empty()))) {
+      throw std::invalid_argument(
+          "If the option -D to build the text index using the words from the "
+          "docsfile was specified a docsfile has to be specified as well with "
+          "the option -d. Also an additional wordsfile should not be given if "
+          "-D isn't used together with -E.");
+    }
+    if (addEntitiesFromWordsfile &&
+        (!useWordsFromDocsfile || docsfile.empty() || wordsfile.empty())) {
+      throw std::invalid_argument(
+          "If the option -E to only add entities from the wordsfile is given, "
+          "the option -D has to be set as well. Also a wordsfile and a "
+          "docsfile have to be given with -w and -d.");
     }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
