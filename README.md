@@ -9,7 +9,7 @@ QLever (pronounced "Clever") is a graph database implementing the
 [RDF](https://www.w3.org/TR/rdf11-concepts/) and
 [SPARQL](https://www.w3.org/TR/sparql11-overview/) standards. QLever can
 efficiently load and query very large datasets, even with hundreds of billions
-of triples, on a single commodity PC or server. QLever outperforms other RDF
+of triples, on a single commodity PC or server. QLever outperforms other RDF/SPARQL
 databases by [a large margin on most queries](https://qlever.dev/evaluation).
 QLever implements the full SPARQL 1.1 standard, including federated queries,
 named graphs, and updates. On top of its outstanding performance, QLever offers
@@ -30,14 +30,18 @@ our [CIKM'17 paper](https://ad-publications.informatik.uni-freiburg.de/CIKM_qlev
 our [CIKM'22 paper](https://ad-publications.cs.uni-freiburg.de/CIKM_sparql_autocompletion_BKKKS_2022.pdf) (QLever's autocompletion, with extensive evaluation),
 our [2023 book chapter](https://ad-publications.cs.uni-freiburg.de/CHAPTER_knowledge_graphs_BKKK_2023.pdf) (survey of knowledge graphs and basics of QLever, with many example queries).
 
-QLever is in active and rapid development. If you find a bug or if you are missing a feature or if there is anything else you want to tell us, please [open an issue](https://github.com/ad-freiburg/qlever/issues).
+QLever is in active and rapid development. If you find a bug or if you are
+missing a feature or if there is anything else you want to tell us, please
+[open an issue](https://github.com/ad-freiburg/qlever/issues) or [open a
+discussion](https://github.com/ad-freiburg/qlever/discussions).
 
 # Quickstart
 
-Use QLever via the `qlever` CLI (command-line interface), following the
-instructions on https://github.com/ad-freiburg/qlever-control . It is
-self-documenting via `qlever --help` (for an overview of all commands) and
-`qlever <command> --help` (for details on any specific command).
+Use QLever via the `qlever` command-line interface (CLI),  which can be
+installed via `pip install qlever`. It is self-documenting via `qlever --help`
+(for an overview of all commands) and `qlever <command> --help` (for details on
+any specific command). For more information and example use cases, see
+https://github.com/ad-freiburg/qlever-control .
 
 You can control everything `qlever` does via a single configuration file, the
 so-called `Qleverfile`. Via `qlever setup-config <config-name>` you can fetch
@@ -46,6 +50,7 @@ demos mentioned above). To write a `Qleverfile` for your own data, pick one of
 these configurations as a starting point and edit the `Qleverfile` as you see
 fit. Every option from the `Qleverfile` can also be set (and overridden) via
 a command-line option with the same name, see `qlever <command> --help`.
+
 
 # Using QLever without the `qlever` CLI
 
@@ -57,7 +62,8 @@ available options.
 
 The easiest way to find out the right command-line is to use the `qlever` CLI,
 which for each command prints the exact command-line it is going to execute.
-With the option `--show`, it will print the command-line without executing it.
+With the option `--show`, it will print the command-line without executing it,
+e.g., `qlever start --show`.
 
 # Using QLever as an embedded database
 
@@ -68,10 +74,11 @@ small example program.
 
 # Wiki and older documentation
 
-For high-level descriptions how Qlever works, performance evaluations,
-and experiences with some concrete datasets, see the [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+For high-level descriptions of how Qlever works, performance evaluations,
+and experiences with some concrete datasets, and details about QLever see the
+[Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki).
 
 There is quite a bit of additional documentation in the [docs](docs) folder of
-this repository. These documents are not well maintained and may be outdated.
-We are currently working on an own `qlever-docs` repository that will provide
-extensive documentation and tutorials.
+this repository. The documents in that folder are not well maintained and may
+be outdated. We are currently working on an own `qlever-docs` repository that
+will provide extensive documentation and tutorials.
