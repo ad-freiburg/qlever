@@ -418,8 +418,9 @@ CompressedRelationReader::lazyScan(
               ColumnIndices additionalColumns,
               const CancellationHandle& cancellationHandle,
               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-              LimitOffsetClause limitOffset,
-              const CompressedRelationReader* reader, ScanImplConfig config)
+              const LimitOffsetClause& limitOffset,
+              const CompressedRelationReader* reader,
+              const ScanImplConfig& config)
         : scanSpec_{std::move(scanSpec)},
           relevantBlockMetadata_{std::move(relevantBlockMetadata)},
           additionalColumns_{std::move(additionalColumns)},

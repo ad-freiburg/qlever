@@ -209,7 +209,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   }
   auto lazyScan{p.reader().lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), std::move(cancellationHandle),
+      std::move(columns), cancellationHandle,
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset)};
 
   return cppcoro::fromInputRange<IdTable,
