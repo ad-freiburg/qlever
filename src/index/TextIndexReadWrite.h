@@ -128,7 +128,8 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 IdTable readContextListHelper(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ContextListMetaData& contextList, bool isWordCl,
-    const ad_utility::File& textIndexFile, TextScoringMetric textScoringMetric);
+    const ad_utility::File& textIndexFile,
+    qlever::TextScoringMetric textScoringMetric);
 
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
@@ -192,14 +193,14 @@ std::vector<T> readZstdComprList(size_t nofElements, off_t from,
 IdTable readWordCl(const TextBlockMetaData& tbmd,
                    const ad_utility::AllocatorWithLimit<Id>& allocator,
                    const ad_utility::File& textIndexFile,
-                   TextScoringMetric textScoringMetric);
+                   qlever::TextScoringMetric textScoringMetric);
 
 // Reads the given textblock and returns all entities with their contextId,
 // entityId and score. Internally uses readContextListHelper.
 IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
                          const ad_utility::AllocatorWithLimit<Id>& allocator,
                          const ad_utility::File& textIndexFile,
-                         TextScoringMetric textScoringMetric);
+                         qlever::TextScoringMetric textScoringMetric);
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
@@ -344,7 +345,7 @@ class FrequencyEncode {
   CPP_template(typename View)(requires(
       !ranges::same_as<
           FrequencyEncode,
-          std::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
+          ql::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
     initialize(std::forward<View>(view));
   };
 
@@ -396,7 +397,7 @@ class GapEncode {
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
-      !ranges::same_as<GapEncode, std::remove_cvref_t<
+      !ranges::same_as<GapEncode, ql::remove_cvref_t<
                                       View>>)) explicit GapEncode(View&& view) {
     initialize(std::forward<View>(view));
   };

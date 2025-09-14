@@ -37,6 +37,7 @@
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 #include "../test/util/RandomTestHelpers.h"
+#include "backports/keywords.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -74,8 +75,8 @@ static constexpr bool isValuePreservingCast(const Source& source) {
 /*
 @brief Return biggest possible value for the given arithmetic type.
 */
-CPP_template(typename Type)(
-    requires ad_utility::Arithmetic<Type>) consteval Type getMaxValue() {
+CPP_template(typename Type)(requires ad_utility::Arithmetic<Type>)
+    QL_CONSTEVAL Type getMaxValue() {
   return std::numeric_limits<Type>::max();
 }
 

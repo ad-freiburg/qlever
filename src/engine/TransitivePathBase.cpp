@@ -17,6 +17,7 @@
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MultiColumnJoin.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Union.h"
@@ -38,12 +39,10 @@ TransitivePathBase::TransitivePathBase(
       rhs_(std::move(rightSide)),
       minDist_(minDist),
       maxDist_(maxDist),
-      activeGraphs_{std::move(activeGraphs)} {
+      activeGraphs_{std::move(activeGraphs)},
+      graphVariable_{graphVariable} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
-  // For now we don't support the `graphVariable` yet, but only have it for a
-  // faster review cycle.
-  AD_CORRECTNESS_CHECK(!graphVariable.has_value());
   if (lhs_.isVariable()) {
     variableColumns_[lhs_.value_.getVariable()] = makeAlwaysDefinedColumn(0);
   }
@@ -62,34 +61,93 @@ TransitivePathBase::TransitivePathBase(
       minDist_ = 1;
     } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
       boundVariableIsForEmptyPath_ = true;
-      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs_), 0);
+      lhs_.treeAndCol_.emplace(
+          makeEmptyPathSide(qec, activeGraphs_, graphVariable_), 0);
     } else if (!startingSide.isVariable()) {
       startingSide.treeAndCol_.emplace(
-          joinWithIndexScan(qec, activeGraphs_, startingSide.value_), 0);
+          joinWithIndexScan(qec, activeGraphs_, graphVariable_,
+                            startingSide.value_),
+          0);
     }
   }
 
   lhs_.outputCol_ = 0;
   rhs_.outputCol_ = 1;
+
+  // Add graph variable to output if present
+  if (graphVariable_.has_value()) {
+    // Don't overwrite entry if the graph variable has the same name as one of
+    // the columns.
+    if (!variableColumns_.contains(graphVariable_.value())) {
+      variableColumns_[graphVariable_.value()] =
+          makeAlwaysDefinedColumn(resultWidth_);
+    }
+    resultWidth_ += 1;
+  }
 }
 
 namespace {
 auto makeInternalVariable(std::string_view string) {
   return Variable{absl::StrCat("?internal_property_path_variable_", string)};
 }
+
+// Helper function to make a sorted tree distinct on all columns.
+auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree) {
+  auto* qec = executionTree->getRootOperation()->getExecutionContext();
+  std::vector<ColumnIndex> distinctColumns;
+  distinctColumns.reserve(executionTree->getResultWidth());
+  ql::ranges::copy(ad_utility::integerRange(executionTree->getResultWidth()),
+                   std::back_inserter(distinctColumns));
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(executionTree),
+                                                 std::move(distinctColumns));
+}
 }  // namespace
+
+// _____________________________________________________________________________
+std::array<std::shared_ptr<QueryExecutionTree>, 2>
+TransitivePathBase::makeIndexScanPair(
+    QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
+    const std::optional<Variable>& graphVariable) {
+  // Dummy variables to get a full scan of the index.
+  auto a = makeInternalVariable("a");
+  auto b = makeInternalVariable("b");
+  auto c = makeInternalVariable("c");
+  auto d = makeInternalVariable("d");
+  std::set variables{variable};
+  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
+  if (graphVariable.has_value()) {
+    additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                   graphVariable.value());
+    variables.emplace(graphVariable.value());
+  }
+  auto stripColumns =
+      [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
+        return QueryExecutionTree::makeTreeWithStrippedColumns(
+            std::move(executionTree), variables);
+      };
+
+  return {
+      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTripleSimple{TripleComponent{variable}, std::move(a),
+                             TripleComponent{std::move(b)}, additionalColumns},
+          activeGraphs)),
+      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTripleSimple{TripleComponent{std::move(c)}, std::move(d),
+                             TripleComponent{variable}, additionalColumns},
+          activeGraphs))};
+}
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     QueryExecutionContext* qec, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable,
     const TripleComponent& tripleComponent) {
   // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
   // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
 
-  // Dummy variables to get a full scan of the index.
   auto x = makeInternalVariable("x");
-  auto y = makeInternalVariable("y");
-  auto z = makeInternalVariable("z");
 
   auto joinWithValues = [qec, &tripleComponent, &x](
                             std::shared_ptr<QueryExecutionTree> executionTree) {
@@ -98,53 +156,23 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
                                                std::move(valuesClause), 0, 0);
   };
-  auto selectXVariable =
-      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
-        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
-        return executionTree;
-      };
-  auto allValues = ad_utility::makeExecutionTree<Union>(
-      qec,
-      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::SPO,
-          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
-          activeGraphs))),
-      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::OPS,
-          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
-          activeGraphs))));
-  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::vector<ColumnIndex>{0});
+  auto [leftScan, rightScan] =
+      makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
+  return makeDistinct(ad_utility::makeExecutionTree<Union>(
+      qec, joinWithValues(std::move(leftScan)),
+      joinWithValues(std::move(rightScan))));
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
     QueryExecutionContext* qec, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable,
     std::optional<Variable> variable) {
-  // Dummy variables to get a full scan of the index.
-  auto x = std::move(variable).value_or(makeInternalVariable("x"));
-  auto y = makeInternalVariable("y");
-  auto z = makeInternalVariable("z");
-  // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
-  // and ?z in the first place.
-  // We don't need to materialize the extra variables y and z in the union.
-  auto selectXVariable =
-      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
-        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
-        return executionTree;
-      };
-  auto allValues = ad_utility::makeExecutionTree<Union>(
-      qec,
-      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::SPO,
-          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
-          activeGraphs)),
-      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::OPS,
-          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
-          activeGraphs)));
-  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::vector<ColumnIndex>{0});
+  auto [leftScan, rightScan] = makeIndexScanPair(
+      qec, std::move(activeGraphs),
+      std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
+  return makeDistinct(ad_utility::makeExecutionTree<Union>(
+      qec, std::move(leftScan), std::move(rightScan)));
 }
 
 // _____________________________________________________________________________
@@ -177,17 +205,6 @@ Result::Generator TransitivePathBase::fillTableWithHull(
 }
 
 // _____________________________________________________________________________
-Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
-                                                        size_t startSideCol,
-                                                        size_t targetSideCol,
-                                                        bool yieldOnce) const {
-  return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
-    return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
-                                           targetSideCol, yieldOnce);
-  });
-}
-
-// _____________________________________________________________________________
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::Generator TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
@@ -196,7 +213,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
   LocalVocab mergedVocab{};
-  for (auto& [node, linkedNodes, localVocab, idTable, inputRow] : hull) {
+  for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
     timer.cont();
     // As an optimization nodes without any linked nodes should not get yielded
     // in the first place.
@@ -216,6 +233,9 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       if (inputView.has_value()) {
         copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
                                                inputRow, outputRow);
+      }
+      if (graphVariable_.has_value()) {
+        table(outputRow, table.numColumns() - 1) = graph;
       }
 
       outputRow++;
@@ -243,6 +263,9 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 std::string TransitivePathBase::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TRANSITIVE PATH ";
+  if (graphVariable_.has_value()) {
+    os << "with graph " << graphVariable_.value().name() << ' ';
+  }
   if (lhs_.isVariable() && lhs_.value_ == rhs_.value_) {
     // Use a different cache key if the same variable is used left and right,
     // because that changes the behaviour of this operation and variable names
@@ -260,6 +283,31 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
   return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
+    const std::shared_ptr<QueryExecutionTree>& tree) const {
+  if (graphVariable_.has_value()) {
+    auto helperVar = tree->getVariableColumnOrNullopt(internalGraphHelper_);
+    if (helperVar.has_value()) {
+      return helperVar;
+    }
+    return tree->getVariableColumnOrNullopt(graphVariable_.value());
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+size_t TransitivePathBase::numJoinColumnsWith(
+    const std::shared_ptr<QueryExecutionTree>& tree,
+    ColumnIndex joinColumn) const {
+  auto graphCol = getActualGraphColumnIndex(tree);
+  if (!graphCol.has_value() || graphCol.value() == joinColumn) {
+    return 1;
+  } else {
+    return 2;
+  }
 }
 
 // _____________________________________________________________________________
@@ -431,34 +479,61 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   auto [originalVar, info] =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
 
-  // If we're not explicitly handling the empty path, the first step will
-  // already filter out non-matching values.
+  // If we don't include the empty path, then inputs which don't originate in
+  // the graph will be automatically filtered out because they cannot appear in
+  // the `subtree_`.
   if (minDist_ > 0) {
     return leftOrRightOp;
   }
 
-  // Remove undef values, these are definitely not in the graph, and are
-  // problematic when joining.
-  if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
-    using namespace sparqlExpression;
-    SparqlExpressionPimpl pimpl{
-        makeBoundExpression(std::make_unique<VariableExpression>(originalVar)),
-        absl::StrCat("BOUND(", originalVar.name(), ")")};
-    leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
-        getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
+  if (graphVariable_.has_value()) {
+    // Join with the starting side of a clone of the subtree to get the proper
+    // graph values.
+    if (!leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
+             .has_value()) {
+      auto completeScan = makeEmptyPathSide(
+          getExecutionContext(), activeGraphs_, graphVariable_, originalVar);
+      leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+          getExecutionContext(), std::move(leftOrRightOp), completeScan,
+          inputCol, 0);
+      inputCol = leftOrRightOp->getVariableColumn(originalVar);
+    }
+
     AD_CORRECTNESS_CHECK(
-        inputCol == leftOrRightOp->getVariableColumn(originalVar),
-        "The column index should not change when applying a filter.");
+        leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
+            .has_value());
   }
+
+  bool graphIsJoin = originalVar == graphVariable_;
 
   // If we cannot guarantee the values are part of the graph, we have to join
   // with it first.
   if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
           originalVar)) {
+    auto completeScan = makeEmptyPathSide(
+        getExecutionContext(), activeGraphs_,
+        graphIsJoin ? internalGraphHelper_ : graphVariable_, originalVar);
+    if (graphVariable_.has_value() && !graphIsJoin) {
+      leftOrRightOp = ad_utility::makeExecutionTree<MultiColumnJoin>(
+          getExecutionContext(), std::move(leftOrRightOp),
+          std::move(completeScan));
+    } else {
+      leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+          getExecutionContext(), std::move(leftOrRightOp),
+          std::move(completeScan), inputCol, 0);
+    }
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
+  } else if (graphIsJoin) {
+    // If the join column is a subject or object anywhere in the graph, we still
+    // don't know for sure if it is also a valid graph name. Hence, we need to
+    // join it with actual graphs. To get actual matching graph ids if they
+    // exist. We don't need a filter here, because
+    // `TransitivePathImpl::transitiveHull` already does the comparison.
+    auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
+                                          internalGraphHelper_, originalVar);
     leftOrRightOp = ad_utility::makeExecutionTree<Join>(
         getExecutionContext(), std::move(leftOrRightOp),
-        makeEmptyPathSide(getExecutionContext(), activeGraphs_, originalVar),
-        inputCol, 0);
+        std::move(completeScan), inputCol, 0);
     inputCol = leftOrRightOp->getVariableColumn(originalVar);
   }
   return leftOrRightOp;
@@ -469,9 +544,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
   leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
-  // Enforce required sorting of `leftOrRightOp`.
-  leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
-                                                       {inputCol});
   // Create a copy of this.
   //
   // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
@@ -503,11 +575,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
                                           rhs, minDist_, maxDist_, useBinSearch,
-                                          {}));
+                                          {}, graphVariable_));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
-    candidates.push_back(
-        makeTransitivePath(getExecutionContext(), alternativeSubtree, lhs, rhs,
-                           minDist_, maxDist_, useBinSearch, {}));
+    candidates.push_back(makeTransitivePath(
+        getExecutionContext(), alternativeSubtree, lhs, rhs, minDist_, maxDist_,
+        useBinSearch, {}, graphVariable_));
   }
 
   auto& p = *ql::ranges::min_element(
@@ -519,16 +591,36 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   for (auto [variable, columnIndexWithType] :
        leftOrRightOp->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    if (columnIndex == inputCol) {
+    if (columnIndex == inputCol || variable == graphVariable_) {
       continue;
     }
 
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
+    // When we have a graph variable, we write it last, so we have to account
+    // for that.
+    if (graphVariable_.has_value()) {
+      auto optGraphIndex =
+          leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value());
+      if (columnIndex >
+          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
+        columnIndexWithType.columnIndex_ -= 1;
+      }
+    }
+
     AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
     p->variableColumns_[variable] = columnIndexWithType;
   }
-  p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
+  p->resultWidth_ += leftOrRightOp->getResultWidth() -
+                     numJoinColumnsWith(leftOrRightOp, inputCol);
+  // Make sure mapping actually points to the last column if it's not one of the
+  // regular variables.
+  if (graphVariable_.has_value()) {
+    auto& graphIndex = p->variableColumns_[graphVariable_.value()].columnIndex_;
+    if (graphIndex == 2) {
+      graphIndex = p->resultWidth_ - 1;
+    }
+  }
   return std::move(p);
 }
 
@@ -543,11 +635,17 @@ bool TransitivePathBase::isBoundOrId() const {
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                                     size_t inputRow, size_t outputRow) {
+                                     size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
+  // The first two columns are both sides of the transitive path, then they are
+  // followed by the payload columns (if present) and then the (optional) graph
+  // column follows (but it is not written in this function).
   size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 == outputTable.numColumns());
-  while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() +
+                           (graphVariable_.has_value() ? 3 : 2) ==
+                       outputTable.numColumns());
+  while (inCol < inputTable.numColumns()) {
+    AD_CORRECTNESS_CHECK(outCol < outputTable.numColumns());
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;
@@ -560,3 +658,9 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == lhs_.value_ || variable == rhs_.value_;
 }
+
+// _____________________________________________________________________________
+// Don't check the name because this leads to segfaults during static
+// initialization.
+const Variable TransitivePathBase::internalGraphHelper_{
+    "?_Qlever_internal_transitive_path_graph", false};

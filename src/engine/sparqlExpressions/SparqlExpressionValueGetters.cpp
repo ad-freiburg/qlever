@@ -4,8 +4,7 @@
 
 #include "SparqlExpressionValueGetters.h"
 
-#include <type_traits>
-
+#include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"

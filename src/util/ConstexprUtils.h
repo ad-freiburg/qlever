@@ -259,7 +259,7 @@ constexpr void forEachTypeInParameterPack(const F& lambda) {
 }
 
 // Same as the function above, but the types are passed to the lambda as a first
-// argument `std::type_identity<T>{}`.
+// argument `ql::type_identity<T>{}`.
 template <typename... Ts>
 constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
   (lambda(use_type_identity::ti<Ts>), ...);
@@ -304,7 +304,7 @@ constexpr void forEachTypeInTemplateType(const F& lambda) {
 }
 
 // Same as the function above, but the template type is passed in as a
-// `std::type_identity<TemplateType>`.
+// `ql::type_identity<TemplateType>`.
 template <typename TemplateType>
 constexpr void forEachTypeInTemplateTypeWithTI(
     use_type_identity::TI<TemplateType>, const auto& lambda) {
