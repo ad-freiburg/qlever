@@ -14,6 +14,7 @@
 class ScoreData {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
+  using TextScoringConfig = qlever::TextScoringConfig;
   ScoreData() = default;
 
   explicit ScoreData(const LocaleManager& localeManager)

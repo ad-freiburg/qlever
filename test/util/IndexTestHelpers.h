@@ -21,6 +21,7 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+using TextIndexConfig = qlever::TextIndexConfig;
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead. Using the parameter

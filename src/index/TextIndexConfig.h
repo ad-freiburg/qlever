@@ -10,6 +10,7 @@
 
 #include "index/TextScoringEnum.h"
 
+namespace qlever {
 /**
  * @brief A configuration that stores all parameters to build the text index.
  *        The correctness of all parameters is checked during construction.
@@ -142,5 +143,6 @@ class TextIndexConfig {
     }
   }
 };
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXCONFIG_H

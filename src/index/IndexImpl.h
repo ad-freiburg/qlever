@@ -802,7 +802,7 @@ class IndexImpl {
       std::optional<bool> parallelParsingSpecifiedViaJson);
 
   void storeTextScoringParamsInConfiguration(
-      const TextScoringConfig& textScoringConfig);
+      const qlever::TextScoringConfig& textScoringConfig);
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

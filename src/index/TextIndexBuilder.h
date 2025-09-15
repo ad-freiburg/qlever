@@ -10,6 +10,8 @@
 // This class contains all the code that is only required when building the
 // fulltext index
 class TextIndexBuilder : public IndexImpl {
+  using TextIndexConfig = qlever::TextIndexConfig;
+
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
                             const std::string& onDiskBase)

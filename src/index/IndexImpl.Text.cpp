@@ -247,7 +247,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 
 // _____________________________________________________________________________
 void IndexImpl::storeTextScoringParamsInConfiguration(
-    const TextScoringConfig& textScoringConfig) {
+    const qlever::TextScoringConfig& textScoringConfig) {
   textScoringMetric_ = textScoringConfig.scoringMetric_;
   configurationJson_["text-scoring-metric"] = textScoringMetric_;
   // The checking for correct values is already done during the creation of

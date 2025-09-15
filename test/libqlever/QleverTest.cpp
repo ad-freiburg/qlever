@@ -148,6 +148,6 @@ TEST(IndexBuilderConfig, validate) {
   c.docsfile_ = "blabb";
   EXPECT_NO_THROW(c.validate());
   c.wordsfile_ = "";
-  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
-                               HasSubstr("Only specified docsfile"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("docsfile was given without a wordsfile"));
 }
