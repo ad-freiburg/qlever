@@ -10,9 +10,11 @@ QLever (pronounced "Clever") is a graph database implementing the
 [SPARQL](https://www.w3.org/TR/sparql11-overview/) standards. QLever can
 efficiently load and query very large datasets, even with hundreds of billions
 of triples, on a single commodity PC or server. QLever outperforms other RDF/SPARQL
-databases by [a large margin on most queries](https://qlever.dev/evaluation).
-QLever implements the full SPARQL 1.1 standard, including federated queries,
-named graphs, and updates. On top of its outstanding performance, QLever offers
+databases by [a large margin on most queries](https://qlever.dev/evaluation) in a
+[resourceful](https://github.com/ad-freiburg/qlever/wiki/QLever-performance-evaluation-and-comparison-to-other-SPARQL-engines)
+manner. QLever implements the full SPARQL 1.1 standard, including federated queries,
+named graphs, and updates, and the Graph Store HTTP Protocol.
+On top of its outstanding performance, QLever offers
 a variety of unique features: advanced text search capabilities,
 context-sensitive autocompletion of SPARQL queries, live query analysis,
 extremely efficient spatial queries, and the interactive visualization of very
@@ -28,7 +30,14 @@ short description (with dates) and basic statistics.
 If you use QLever in your research work, please cite one of the following publications:
 our [CIKM'17 paper](https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf) (combination of SPARQL and text search, with extensive evaluation),
 our [CIKM'22 paper](https://ad-publications.cs.uni-freiburg.de/CIKM_sparql_autocompletion_BKKKS_2022.pdf) (QLever's autocompletion, with extensive evaluation),
-our [2023 book chapter](https://ad-publications.cs.uni-freiburg.de/CHAPTER_knowledge_graphs_BKKK_2023.pdf) (survey of knowledge graphs and basics of QLever, with many example queries).
+our [2023 book chapter](https://ad-publications.cs.uni-freiburg.de/CHAPTER_knowledge_graphs_BKKK_2023.pdf) (survey of knowledge graphs and basics of QLever, with many example queries),
+our [SIGSPATIAL'25
+paper](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_spatialjoin_BBK_2025.pdf)
+(efficient spatial joins, with a performance evaluation against PostgreSQL+PostGIS),
+our [ISWC'25 GRASP paper](https://ad-publications.cs.uni-freiburg.de/ISWC_grasp_WB_2025.pdf) (zero-shot question answering on RDF graphs),
+and our [ISWC'25 Sparqloscope paper](https://ad-publications.cs.uni-freiburg.de/ISWC_sparqloscope_BKTU_2025.pdf)
+(a comprehensive SPARQL benchmark with a performance comparison of QLever and
+several other RDF databases).
 
 QLever is in active and rapid development. If you find a bug or if you are
 missing a feature or if there is anything else you want to tell us, please
