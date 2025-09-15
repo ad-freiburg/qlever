@@ -122,6 +122,9 @@ struct IndexBuilderConfig : CommonConfig {
   std::string wordsfile_;
   std::string docsfile_;
 
+  // Sets the number of word postings per block of the half-inverted text index
+  size_t nofWordPostingsPerTextBlock_ = NOF_WORD_POSTINGS_PER_TEXT_BLOCK;
+
   // The name of the full-text index, analogously to `kbIndexName_` above.
   std::string textIndexName_;
 

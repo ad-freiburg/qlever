@@ -82,6 +82,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   }
   auto textIndexBuilder = TextIndexBuilder(
       ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+  textIndexBuilder.setNofWordPostingsPerTextBlock(
+      config.nofWordPostingsPerTextBlock_);
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
     textIndexBuilder.buildTextIndexFile(
         config.wordsAndDocsFileSpecified()

@@ -4,6 +4,7 @@
 
 #include "index/TextIndexReadWrite.h"
 
+#include "index/TextIndexBuilderTypes.h"
 #include "index/TextScoringEnum.h"
 
 using qlever::TextScoringMetric;
@@ -26,18 +27,19 @@ IdTable readContextListHelper(
       });
 
   // Helper lambda to read wordIndexList
-  auto wordIndexToId = [isWordCl](auto wordIndex) {
+  auto wordOrEntityIndexToId = [isWordCl](auto wordOrEntityIndex) {
     if (isWordCl) {
-      return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
+      return Id::makeFromWordVocabIndex(
+          WordVocabIndex::make(wordOrEntityIndex));
     }
-    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+    return Id::makeFromVocabIndex(VocabIndex::make(wordOrEntityIndex));
   };
 
   // Read wordIndexList
-  readFreqComprList<Id, WordIndex>(
+  readFreqComprList<Id, uint64_t>(
       idTable.getColumn(1).begin(), contextList._nofElements,
       contextList._startWordlist, contextList.getByteLengthWordlist(),
-      textIndexFile, wordIndexToId);
+      textIndexFile, wordOrEntityIndexToId);
 
   // Helper lambdas to read scoreList
   auto scoreToId = [](auto score) {
@@ -78,6 +80,7 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
 }
 
 // ____________________________________________________________________________
+template <typename Posting>
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const std::vector<Posting>& postings,
                                   off_t& currentOffset, bool scoreIsInt) {
@@ -95,16 +98,16 @@ ContextListMetaData writePostings(ad_utility::File& out,
                               ql::views::transform([](const Posting& posting) {
                                 return std::get<0>(posting).get();
                               }));
-  FrequencyEncode wordIndexEncoder(
+  FrequencyEncode wordOrEntityIndexEncoder(
       postings | ql::views::transform([](const Posting& posting) {
-        return std::get<1>(posting);
+        return std::get<1>(posting).get();
       }));
 
   meta._startContextlist = currentOffset;
   textRecordEncoder.writeToFile(out, currentOffset);
 
   meta._startWordlist = currentOffset;
-  wordIndexEncoder.writeToFile(out, currentOffset);
+  wordOrEntityIndexEncoder.writeToFile(out, currentOffset);
 
   meta._startScorelist = currentOffset;
   if (scoreIsInt) {
@@ -126,6 +129,15 @@ ContextListMetaData writePostings(ad_utility::File& out,
 
   return meta;
 }
+
+// Explicit instantiations
+template ContextListMetaData writePostings<WordPosting>(
+    ad_utility::File& out, const std::vector<WordPosting>& postings,
+    off_t& currentOffset, bool scoreIsInt);
+
+template ContextListMetaData writePostings<EntityPosting>(
+    ad_utility::File& out, const std::vector<EntityPosting>& postings,
+    off_t& currentOffset, bool scoreIsInt);
 
 // ____________________________________________________________________________
 template <typename T>

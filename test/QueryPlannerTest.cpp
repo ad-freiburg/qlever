@@ -3211,13 +3211,14 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
 namespace {
 // Get a `QueryExecutionContext` with a text index. This is used in several
 // tests below.
-auto getQecWithTextIndex = []() {
+auto getQecWithTextIndex = [](size_t textBlockSize = 2) {
   ad_utility::testing::TestIndexConfig config{
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
       "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
       "test\" . <a> <p> \"only this text contains the word opti \" . "
       "<a> <p> \"testing and picking\""};
   config.createTextIndex = true;
+  config.textBlockSize = textBlockSize;
   return ad_utility::testing::getQec(std::move(config));
 };
 }  // namespace
@@ -3248,7 +3249,7 @@ TEST(QueryPlanner, TextIndexScanForWord) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForEntity) {
-  auto qec = getQecWithTextIndex();
+  auto qec = getQecWithTextIndex(3);
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -3276,15 +3277,17 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
 
   // NOTE: It is important that the TextIndexScanForEntity uses "opti", because
   // we also want to test here if the QueryPlanner assigns the optimal word to
-  // the Operation.
+  // the Operation. The reason for "opti" being the optimal word is the sum of
+  // all entity lists of all textblocks returned by the words from the WordScans
+  // is the smallest for the term "opti".
   h::expect(
-      "SELECT * WHERE { ?text ql:contains-word \"picking*\" . ?text "
+      "SELECT * WHERE { ?text ql:contains-word \"p*\" . ?text "
       "ql:contains-entity <testEntity> . ?text ql:contains-word "
-      "\"opti\" . ?text ql:contains-word \"testi*\"}",
+      "\"opti\" . ?text ql:contains-word \"test*\"}",
       h::UnorderedJoins(entityScan(Var{"?text"}, "<testEntity>", "opti"),
-                        wordScan(Var{"?text"}, "testi*"),
+                        wordScan(Var{"?text"}, "test*"),
                         wordScan(Var{"?text"}, "opti"),
-                        wordScan(Var{"?text"}, "picking*")),
+                        wordScan(Var{"?text"}, "p*")),
       qec);
 
   ParsedQuery pq =
@@ -3568,7 +3571,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = getQecWithTextIndex();
+  auto qec = getQecWithTextIndex(3);
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3691,10 +3694,10 @@ TEST(QueryPlanner, TextSearchService) {
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:contains [qlts:word \"picking*\" ] ."
+      "?t qlts:contains [qlts:word \"p*\" ] ."
       "?t qlts:contains [qlts:entity <a> ] ."
       "?t qlts:contains [qlts:word \"opti\" ] ."
-      "?t qlts:contains [qlts:word \"testi*\" ] ."
+      "?t qlts:contains [qlts:word \"test*\" ] ."
       "}"
       "}",
       h::UnorderedJoins(
@@ -3706,13 +3709,12 @@ TEST(QueryPlanner, TextSearchService) {
               {},
               VarOrFixedEntity(qec, "<a>")}),
           wordScanConf(TextIndexScanForWordConfiguration{
-              Var{"?t"}, "testi*", Var{"?t"}.getMatchingWordVariable("testi"),
+              Var{"?t"}, "test*", Var{"?t"}.getMatchingWordVariable("test"),
               std::nullopt, true}),
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "opti"}),
           wordScanConf(TextIndexScanForWordConfiguration{
-              Var{"?t"}, "picking*",
-              Var{"?t"}.getMatchingWordVariable("picking"), std::nullopt,
-              true})),
+              Var{"?t"}, "p*", Var{"?t"}.getMatchingWordVariable("p"),
+              std::nullopt, true})),
       qec);
 
   // Check full word config

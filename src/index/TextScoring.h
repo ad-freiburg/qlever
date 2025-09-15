@@ -32,7 +32,7 @@ class ScoreData {
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
   // Retrieves score from filled InvertedIndex
-  float getScore(WordIndex wordIndex, TextRecordIndex contextId);
+  float getScore(WordVocabIndex wordIndex, TextRecordIndex contextId);
 
   // Parses docsFile and if true literals to fill the InvertedIndex and the
   // extra values needed to calculate scores
@@ -49,7 +49,7 @@ class ScoreData {
   LocaleManager localeManager_;
 
   // The invertedIndex_ connects words to documents (docIds) and the term
-  // frequency of  those words inside the documents
+  // frequency of those words inside the documents
   InvertedIndex invertedIndex_;
 
   // The docLengthMap_ connects documents (docIds) to their length measured in

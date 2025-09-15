@@ -223,6 +223,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       }
       auto buildTextIndex = [&textIndexBuilder, &c](auto wordsAndDocsfile,
                                                     bool addWordsFromLiterals) {
+        textIndexBuilder.setNofWordPostingsPerTextBlock(c.textBlockSize);
         textIndexBuilder.buildTextIndexFile(
             std::move(wordsAndDocsfile), addWordsFromLiterals,
             c.scoringMetric.value(), c.bAndKParam.value());
