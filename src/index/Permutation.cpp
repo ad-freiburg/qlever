@@ -8,6 +8,7 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
+#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -197,7 +198,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle,
+    const CancellationHandle& cancellationHandle,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
@@ -206,10 +207,14 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return p.reader().lazyScan(
+  auto lazyScan{p.reader().lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), std::move(cancellationHandle),
-      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
+      std::move(columns), cancellationHandle,
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset)};
+
+  return cppcoro::fromInputRange<IdTable,
+                                 CompressedRelationReader::LazyScanMetadata>(
+      std::move(lazyScan));
 }
 
 // ______________________________________________________________________
