@@ -345,22 +345,59 @@ nlohmann::json idTableToQLeverJSONRow(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
-ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
+auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSize)) {
-    for (uint64_t rowIndex : range) {
-      co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab(), rowIndex,
-                                      pair.idTable())
-          .dump();
-      cancellationHandle->throwIfCancelled();
-    }
-  }
+  using IotaView = ql::ranges::iota_view<uint64_t, uint64_t>;
+  using IotaViewIt = ql::ranges::iterator_t<IotaView>;
+
+  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize);
+  auto rowIndicesIt = rowIndices.begin();
+  return ad_utility::InputRangeFromGetCallable(
+      [&qet, columns = std::move(columns), result = std::move(result),
+       cancellationHandle = std::move(cancellationHandle),
+       iotaView = std::optional<IotaView>{}, iotaViewIt = IotaViewIt{},
+       rowIndices = std::move(rowIndices),
+       rowIndicesIt =
+           std::move(rowIndicesIt)]() mutable -> std::optional<std::string> {
+        while (rowIndicesIt != rowIndices.end()) {
+          auto& tableWithRange = *rowIndicesIt;
+
+          if (!iotaView.has_value()) {
+            iotaView = std::move(tableWithRange.view_);
+            iotaViewIt = ql::ranges::begin(iotaView.value());
+          }
+
+          if (iotaViewIt == ql::ranges::end(iotaView.value())) {
+            iotaView.reset();
+            ++rowIndicesIt;
+            continue;
+          }
+
+          cancellationHandle->throwIfCancelled();
+          uint64_t rowIndex = *iotaViewIt;
+          ++iotaViewIt;
+          auto& pair = tableWithRange.tableWithVocab_;
+          return idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
+                                        rowIndex, pair.idTable())
+              .dump();
+        }
+        return std::nullopt;
+      });
+
+  // for (const auto& [pair, range] :
+  //      getRowIndices(limitAndOffset, *result, resultSize)) {
+  //   for (uint64_t rowIndex : range) {
+  //     co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
+  //     rowIndex,
+  //                                     pair.idTable())
+  //         .dump();
+  //     cancellationHandle->throwIfCancelled();
+  //   }
+  // }
 }
 
 // _____________________________________________________________________________
@@ -768,11 +805,9 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  auto generator = idTableToQLeverJSONBindings(
+  return ad_utility::InputRangeTypeErased(idTableToQLeverJSONBindings(
       qet, limitAndOffset, selectedColumnIndices, std::move(result), resultSize,
-      std::move(cancellationHandle));
-
-  return ad_utility::InputRangeTypeErased<std::string>(std::move(generator));
+      std::move(cancellationHandle)));
 }
 
 // _____________________________________________________________________________

@@ -203,7 +203,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the individual bindings for the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
+  static auto idTableToQLeverJSONBindings(
       const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result, uint64_t& resultSize,
