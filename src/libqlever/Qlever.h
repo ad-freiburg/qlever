@@ -114,7 +114,13 @@ struct IndexBuilderConfig : CommonConfig {
   // records specified by the user.
 
   // If set, build a full-text index for all literals from the input data.
-  bool addWordsFromLiterals_ = false;
+  bool addWordsFromAllLiterals_ = false;
+  // Specifies a regex evaluated on predicates of triples. Depending on the
+  // value of `tripleInTextIndexRegexIsBlacklist` either adds all object
+  // literals of matching predicates to the text index or adds all object
+  // literals of non-matching predicates to the text index.
+  std::string tripleInTextIndexRegex_;
+  bool tripleInTextIndexRegexIsBlacklist_ = false;
 
   // If set, build a full-text index for the text records specified by the
   // following two files. See `https://github.com/ad-freiburg/qlever` for
