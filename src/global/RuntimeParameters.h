@@ -47,7 +47,7 @@ inline auto& RuntimeParameters() {
                 30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
         Bool<"use-binsearch-transitive-path">{true},
-        Bool<"group-by-hash-map-enabled">{false},
+        Bool<"group-by-hash-map-enabled">{true},
         SizeT<"group-by-hash-map-group-threshold">{1'000'000},
         Bool<"group-by-disable-index-scan-optimizations">{false},
         SizeT<"service-max-value-rows">{10'000},

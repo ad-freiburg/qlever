@@ -103,10 +103,10 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     AliasInfo alias{
         std::move(pimpl2), 1, std::vector<AggInfo>{std::move(aggInfo)}, {}};
     OptData data{std::vector<AliasInfo>{std::move(alias)}};
-    data.columnIndices = std::vector<size_t>{0};
+    data.columnIndices_ = std::vector<size_t>{0};
 
     LocalVocab localVocab;
-    data.localVocabRef = std::ref(localVocab);
+    data.localVocabRef_ = localVocab;
     GroupByImpl::HashMapAggregationData<1> aggr{alloc_, data.aggregateAliases_,
                                                 1};
     return {std::move(gb), std::move(data), std::move(aggr),
@@ -416,9 +416,10 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   spansA[1] = table_A.getColumn(1).subspan(0, table_A.size());
   auto [entriesA, nonmatchA] = aggrData.getHashEntries(spansA, false);
   ASSERT_TRUE(nonmatchA.empty());
-  std::vector<size_t> expectedA{0, 1, 0, 2};
+  std::vector<GroupByImpl::RowToGroup> expectedA{
+      {0, 0}, {1, 1}, {2, 0}, {3, 2}};
   ASSERT_EQ(entriesA, expectedA);
-  EXPECT_EQ(aggrData.getNumberOfGroups(), 3u);
+  EXPECT_EQ(aggrData.numGroups(), 3u);
 
   // Second block, onlyMatching: new keys should be reported as non-matching
   auto table_B = make2({{1, 1}, {3, 3}, {2, 2}, {4, 4}}, alloc_);
@@ -428,7 +429,7 @@ TEST_F(GroupByHashMapOptimizationTest, GetHashEntries_InsertAndOnlyMatching) {
   auto [entriesB, nonmatchB] = aggrData.getHashEntries(spansB, true);
   // Expect two matches at positions 0 -> key (1,1) and 2 -> key (2,2)
   // Their indices correspond to the ones assigned before: (1,1)->0, (2,2)->2
-  std::vector<size_t> expectedEntriesB{0, 2};
+  std::vector<GroupByImpl::RowToGroup> expectedEntriesB{{0, 0}, {2, 2}};
   ASSERT_EQ(entriesB, expectedEntriesB);
   std::vector<size_t> expectedNonmatchB{1, 3};
   ASSERT_EQ(nonmatchB, expectedNonmatchB);

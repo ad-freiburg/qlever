@@ -8,6 +8,7 @@
 #include <numeric>
 
 #include "../util/AllocatorTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "GroupByStrategyHelpers.h"
@@ -66,9 +67,7 @@ TEST_F(GroupByFallbackTest, EmptyInput) {
 // Mixed values: fallback should sort+uniq
 TEST_F(GroupByFallbackTest, MixedValues) {
   forceFallback();
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  RowData vals = {2, 1, 3, 2, 0};
-  IdTable table = createIdTable(vals, allocator);
+  IdTable table = makeIdTableFromInts({{2}, {1}, {3}, {2}, {0}});
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -82,11 +81,8 @@ TEST_F(GroupByFallbackTest, MixedValues) {
 // Multi-column GROUP BY: should group on tuple
 TEST_F(GroupByFallbackTest, MultiColumn) {
   forceFallback();
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   // Table with two columns, five rows, with three distinct pairs
-  // Two-column row data
-  TableData data = {{1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}};
-  IdTable table = createIdTable(data, allocator);
+  IdTable table = makeIdTableFromInts({{1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}});
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -106,17 +102,16 @@ TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   RuntimeParameters().set<"group-by-hash-map-group-threshold">(1'000'000);
 
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  TableData ch1{{1, 10}, {1, 11}, {2, 12}};
-  TableData ch2{{2, 13}, {3, 14}};
-  auto tables = createLazyIdTables(ChunkedTableData{ch1, ch2}, allocator);
+  std::vector<VectorTable> chunks{makeVT({{1, 10}, {1, 11}, {2, 12}}),
+                                  makeVT({{2, 13}, {3, 14}})};
+  auto tables = createLazyIdTables(chunks);
 
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   auto valuesOp = std::make_shared<ValuesForTesting>(
       qec_, std::move(tables), vars, false, std::vector<ColumnIndex>{});
   auto subtree = std::make_shared<QueryExecutionTree>(qec_, valuesOp);
-  subtree = std::make_shared<QueryExecutionTree>(
-      qec_, std::make_shared<Sort>(qec_, subtree, std::vector<ColumnIndex>{0}));
+  subtree = QueryExecutionTree::createSortedTree(subtree,
+                                                 std::vector<ColumnIndex>{0});
 
   using namespace sparqlExpression;
   auto expr = std::make_unique<CountExpression>(
@@ -142,12 +137,7 @@ TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {
 // row
 TEST_F(GroupByFallbackTest, ImplicitGroupOnly) {
   // Create input table with 5 rows
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  // Create input table with 5 rows
-  // Single-column data for implicit group-only test: values 1..5
-  RowData rows(5);
-  for (size_t i = 0; i < rows.size(); ++i) rows[i] = i + 1;
-  IdTable table = createIdTable(rows, allocator);
+  IdTable table = makeIdTableFromInts({{1}, {2}, {3}, {4}, {5}});
   // Build a GroupByImpl with no aliases using ValuesForTesting.
   // ValuesForTesting requires one optional<Variable> per input column.
   std::vector<std::optional<Variable>> varOpts = {Variable{"?x"}};
@@ -169,22 +159,24 @@ class GroupByFallbackTestChunkOverlap
 
 // Overload: Build a two-column lazy subtree from an arbitrary number of chunks.
 static std::shared_ptr<QueryExecutionTree> makeSortedLazySubtreeAB(
-    QueryExecutionContext* qec, const ChunkedTableData& chunks) {
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  auto tables = createLazyIdTables(chunks, allocator);
+    QueryExecutionContext* qec, const std::vector<VectorTable>& chunks) {
+  auto tables = createLazyIdTables(chunks);
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   auto valuesOp = std::make_shared<ValuesForTesting>(
       qec, std::move(tables), vars, false, std::vector<ColumnIndex>{});
   auto subtree = std::make_shared<QueryExecutionTree>(qec, valuesOp);
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Sort>(qec, subtree, std::vector<ColumnIndex>{0}));
+  return QueryExecutionTree::createSortedTree(subtree,
+                                              std::vector<ColumnIndex>{0});
 }
 
 // Overload for arbitrary number of chunks with string values in column ?b.
+// Overload for arbitrary number of chunks with string values in column ?b.
+// Accepts chunks as VectorTable instances where the second column values are
+// interpreted as integers that will be converted to string ids in the
+// provided LocalVocab.
 static std::shared_ptr<QueryExecutionTree> makeSortedLazySubtreeAB_Strings(
-    QueryExecutionContext* qec, const std::vector<TableData>& chunksInt,
+    QueryExecutionContext* qec, const std::vector<VectorTable>& chunksInt,
     LocalVocab* outLocalVocab) {
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
   auto makeStringId = [&](size_t x) {
     using ad_utility::triple_component::LiteralOrIri;
     auto lit = LiteralOrIri::literalWithoutQuotes(std::to_string(x));
@@ -193,11 +185,11 @@ static std::shared_ptr<QueryExecutionTree> makeSortedLazySubtreeAB_Strings(
   };
   std::vector<IdTable> tables;
   for (const auto& in : chunksInt) {
-    IdTable t{2, allocator};
+    IdTable t{2, ad_utility::testing::makeAllocator()};
     t.resize(in.size());
     for (size_t i = 0; i < in.size(); ++i) {
-      t(i, 0) = IntId(in[i][0]);
-      t(i, 1) = makeStringId(in[i][1]);
+      t(i, 0) = IntId(std::get<int64_t>(in[i][0]));
+      t(i, 1) = makeStringId(std::get<int64_t>(in[i][1]));
     }
     tables.push_back(std::move(t));
   }
@@ -206,17 +198,14 @@ static std::shared_ptr<QueryExecutionTree> makeSortedLazySubtreeAB_Strings(
       qec, std::move(tables), vars, false, std::vector<ColumnIndex>{},
       std::move(*outLocalVocab));
   auto subtree = std::make_shared<QueryExecutionTree>(qec, valuesOp);
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Sort>(qec, subtree, std::vector<ColumnIndex>{0}));
+  return QueryExecutionTree::createSortedTree(subtree,
+                                              std::vector<ColumnIndex>{0});
 }
 
 // Generators for parameterized scenarios (single column values)
-static std::vector<RowData> generateSingleColumnChunks(ChunkOverlapScenario s) {
-  auto range = [](size_t a, size_t b) {
-    RowData r(b - a + 1);
-    for (size_t i = a; i <= b; ++i) r[i - a] = i;
-    return r;
-  };
+static std::vector<VectorTable> generateSingleColumnChunks(
+    ChunkOverlapScenario s) {
+  auto range = [](size_t a, size_t b) { return makeRangeVectorTable(a, b); };
   switch (s) {
     case ChunkOverlapScenario::TwoDistinct:
       return {range(1, 500), range(501, 1000)};
@@ -236,28 +225,29 @@ static std::vector<RowData> generateSingleColumnChunks(ChunkOverlapScenario s) {
   }
   AD_FAIL();
 }
-
 // Generators for parameterized scenarios for (a,b) where expectations can be
 // derived programmatically for COUNT.
-static std::vector<TableData> generateABChunks(ChunkOverlapScenario s) {
-  const TableData baseRows{{1, 1}, {1, 2}, {2, 1}, {2, 2}, {3, 1}};
+// Generators for parameterized scenarios for (a,b) where expectations can be
+// derived programmatically for COUNT.
+static std::vector<VectorTable> generateABChunks(ChunkOverlapScenario s) {
+  const VectorTable baseRows = makeVT({{1, 1}, {1, 2}, {2, 1}, {2, 2}, {3, 1}});
   switch (s) {
     case ChunkOverlapScenario::TwoDistinct:
-      return {baseRows, TableData{{1, 3}, {2, 3}, {4, 1}}};
+      return {baseRows, makeVT({{1, 3}, {2, 3}, {4, 1}})};
     case ChunkOverlapScenario::TwoSubset:
-      return {baseRows, TableData{{1, 1}, {2, 2}, {3, 1}, {1, 2}}};
+      return {baseRows, makeVT({{1, 1}, {2, 2}, {3, 1}, {1, 2}})};
     case ChunkOverlapScenario::TwoMixed:
-      return {baseRows, TableData{{1, 2}, {1, 3}, {2, 1}, {3, 0}}};
+      return {baseRows, makeVT({{1, 2}, {1, 3}, {2, 1}, {3, 0}})};
     case ChunkOverlapScenario::FiveDistinct:
-      return {TableData{{1, 1}}, TableData{{1, 2}}, TableData{{2, 1}},
-              TableData{{2, 2}}, TableData{{3, 1}}};
+      return {makeVT({{1, 1}}), makeVT({{1, 2}}), makeVT({{2, 1}}),
+              makeVT({{2, 2}}), makeVT({{3, 1}})};
     case ChunkOverlapScenario::FiveSubset:
-      return {baseRows, TableData{{1, 1}, {2, 1}}, TableData{{1, 2}, {2, 1}},
-              TableData{{2, 2}}, TableData{{3, 1}, {3, 1}}};
+      return {baseRows, makeVT({{1, 1}, {2, 1}}), makeVT({{1, 2}, {2, 1}}),
+              makeVT({{2, 2}}), makeVT({{3, 1}, {3, 1}})};
     case ChunkOverlapScenario::FiveMixed:
-      return {baseRows, TableData{{1, 2}, {2, 0}, {0, 1}},
-              TableData{{1, 1}, {2, 3}}, TableData{{3, 1}, {1, 4}},
-              TableData{{2, 5}}};
+      return {baseRows, makeVT({{1, 2}, {2, 0}, {0, 1}}),
+              makeVT({{1, 1}, {2, 3}}), makeVT({{3, 1}, {1, 4}}),
+              makeVT({{2, 5}})};
   }
   AD_FAIL();
 }
@@ -266,13 +256,15 @@ static std::vector<TableData> generateABChunks(ChunkOverlapScenario s) {
 // rows. The `Update` functor is called as `update(acc, b, inserted)` for each
 // (a,b). `inserted` is true if the key `a` was first created for this row.
 template <typename Acc, typename Update>
-static std::map<size_t, Acc> buildPerGroup(const std::vector<TableData>& chunks,
-                                           Update update) {
+static std::map<size_t, Acc> buildPerGroup(
+    const std::vector<VectorTable>& chunks, Update update) {
   std::map<size_t, Acc> result;
   for (const auto& ch : chunks) {
     for (const auto& ab : ch) {
-      auto [it, inserted] = result.try_emplace(ab[0]);
-      update(it->second, ab[1], inserted);
+      auto key = static_cast<size_t>(std::get<int64_t>(ab[0]));
+      auto val = static_cast<size_t>(std::get<int64_t>(ab[1]));
+      auto [it, inserted] = result.try_emplace(key);
+      update(it->second, val, inserted);
     }
   }
   return result;
@@ -283,7 +275,7 @@ static std::map<size_t, Acc> buildPerGroup(const std::vector<TableData>& chunks,
 // MinExpression, MaxExpression, AvgExpression, SampleExpression, or
 // CountExpression.
 template <typename AggExpr>
-std::pair<std::vector<TableData>, GroupBy> makeChunksAndGroupBy(
+std::pair<std::vector<VectorTable>, GroupBy> makeChunksAndGroupBy(
     QueryExecutionContext* qec, ChunkOverlapScenario scenario,
     std::string descriptor, std::string aliasName) {
   using namespace sparqlExpression;
@@ -333,15 +325,16 @@ TEST_P(GroupByFallbackTestChunkOverlap, UniqueValuesAcrossChunks) {
   forceFallback();
   auto chunks = generateSingleColumnChunks(GetParam());
   // Build tables
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  auto tables = createLazyIdTables(chunks, allocator);
+  auto tables = createLazyIdTables(chunks);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
   const auto& out = res.idTable();
   // Compute expected unique count from input chunks.
   ad_utility::HashSet<size_t> unique;
   for (const auto& ch : chunks) {
-    for (auto v : ch) unique.insert(v);
+    for (const auto& v : ch) {
+      unique.insert(static_cast<size_t>(std::get<int64_t>(v[0])));
+    }
   }
   ASSERT_EQ(out.size(), unique.size());
   // Also check sorted ascending.
@@ -357,15 +350,17 @@ TEST_P(GroupByFallbackTestChunkOverlap, UniquePairsAcrossChunks) {
   forceFallback();
   auto chunks = generateABChunks(GetParam());
   // Build tables
-  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
-  auto tables = createLazyIdTables(chunks, allocator);
+  auto tables = createLazyIdTables(chunks);
   auto gb = setupLazyGroupBy(std::move(tables), qec_);
   auto res = gb->computeResult(true);
   const auto& out = res.idTable();
   // Compute expected unique pairs and sort.
   std::set<std::pair<size_t, size_t>> uniq;
   for (const auto& ch : chunks) {
-    for (const auto& p : ch) uniq.insert({p[0], p[1]});
+    for (const auto& p : ch) {
+      uniq.insert({static_cast<size_t>(std::get<int64_t>(p[0])),
+                   static_cast<size_t>(std::get<int64_t>(p[1]))});
+    }
   }
   ASSERT_EQ(out.size(), uniq.size());
   // Verify sorted lexicographically and values match
@@ -522,7 +517,9 @@ TEST_P(GroupByFallbackTestChunkOverlap, GroupConcatPerGroupAcrossChunks) {
   std::map<size_t, std::map<std::string, size_t>> expected;
   for (const auto& ch : chunks) {
     for (const auto& ab : ch) {
-      expected[ab[0]][std::to_string(ab[1])]++;
+      auto a = static_cast<size_t>(std::get<int64_t>(ab[0]));
+      auto b = static_cast<size_t>(std::get<int64_t>(ab[1]));
+      expected[a][std::to_string(b)]++;
     }
   }
   ASSERT_EQ(out.numColumns(), 2u);

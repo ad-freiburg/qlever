@@ -170,7 +170,8 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"group-by-hash-map-group-threshold">(),
       "The maximum number of groups for which the hash map should be used. "
       "If the number of groups exceeds this threshold, a hybrid approach "
-      "will be used instead, that sorts entries that don't belong to the hash map.");
+      "will be used instead, that sorts entries that don't belong to the hash "
+      "map.");
   po::variables_map optionsMap;
 
   try {
