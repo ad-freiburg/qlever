@@ -295,6 +295,17 @@ class TransitivePathImpl : public TransitivePathBase {
           start.isVariable() && parent_->graphVariable_ == start.getVariable();
     }
 
+    std::optional<Id> getTargetId(const Id& startNode,
+                                  const Id& graphId) const {
+      if (sameVariableOnBothSides_) {
+        return startNode;
+      } else if (endsWithGraphVariable_) {
+        return graphId;
+      } else {
+        return targetId_;
+      }
+    };
+
     ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
                                                      size_t currentRow,
                                                      PayloadTable& payload) {
@@ -306,14 +317,9 @@ class TransitivePathImpl : public TransitivePathBase {
       if (startsWithGraphVariable_ && startNode != graphId) {
         return LoopControl<NodeWithTargets>::makeContinue();
       }
-      if (sameVariableOnBothSides_) {
-        targetId_ = startNode;
-      } else if (endsWithGraphVariable_) {
-        targetId_ = graphId;
-      }
       edges_.setGraphId(graphId);
-      Set connectedNodes =
-          parent_->findConnectedNodes(edges_, startNode, targetId_);
+      Set connectedNodes = parent_->findConnectedNodes(
+          edges_, startNode, getTargetId(startNode, graphId));
       if (!connectedNodes.empty()) {
         parent_->runtimeInfo().addDetail("Hull time", timer_.msecs());
         NodeWithTargets result{startNode,
