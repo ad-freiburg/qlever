@@ -57,11 +57,6 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
 
-  // Add words from literals if either a regex filter for predicates with
-  // literals as objects is given or the option to add all literals is chosen
-  config.addWordsFromLiterals_ = config.addWordsFromAllLiterals_ ||
-                                 !config.tripleInTextIndexRegex_.empty();
-
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
   if (config.textIndexName_.empty() && !config.wordsfile_.empty()) {
@@ -90,14 +85,16 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
     index.createFromFiles(config.inputFiles_);
   }
+  bool addLiterals = config.addWordsFromAllLiterals_ ||
+                     !config.tripleInTextIndexRegex_.empty();
   auto textIndexBuilder = TextIndexBuilder(
       ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
-  if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
+  if (config.wordsAndDocsFileSpecified() || addLiterals) {
     textIndexBuilder.buildTextIndexFile(
         config.wordsAndDocsFileSpecified()
             ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
             : std::nullopt,
-        config.addWordsFromLiterals_, config.textScoringMetric_,
+        addLiterals || !con, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
   }
   if (!config.docsfile_.empty()) {

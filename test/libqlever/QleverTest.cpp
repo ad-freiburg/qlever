@@ -56,7 +56,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     EXPECT_EQ(res, "o\no\n");
   }
 
-  c.addWordsFromLiterals_ = true;
+  c.addWordsFromAllLiterals_ = true;
 
   // Note: Currently the `addWordsFromLiterals` feature is broken, but
   // @flixtastic has a fix for this.
