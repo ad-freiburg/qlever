@@ -94,7 +94,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         config.wordsAndDocsFileSpecified()
             ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
             : std::nullopt,
-        addLiterals || !con, config.textScoringMetric_,
+        addLiterals, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
   }
   if (!config.docsfile_.empty()) {
