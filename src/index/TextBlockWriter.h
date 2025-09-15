@@ -40,6 +40,7 @@
  *
  */
 struct TextBlockWriter {
+  using TextScoringMetric = qlever::TextScoringMetric;
   TextBlockWriter(WordTextVec& wordTextVec, EntityTextVec& entityTextVec,
                   ad_utility::File& out, TextScoringMetric textScoringMetric,
                   TextMetaData& textMeta)

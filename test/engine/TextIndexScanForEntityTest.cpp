@@ -16,6 +16,7 @@
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 namespace h = textIndexScanTestHelpers;
+using TextScoringMetric = qlever::TextScoringMetric;
 
 namespace {
 std::string kg =
