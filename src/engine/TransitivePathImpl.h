@@ -246,7 +246,7 @@ class TransitivePathImpl : public TransitivePathBase {
         ad_utility::InputRangeTypeErased<std::pair<int64_t, ZippedType>>;
 
     // input arguments
-    const TransitivePathImpl<T>* parent_{nullptr};
+    const TransitivePathImpl<T>& parent_;
     T edges_;
     LocalVocab edgesVocab_;
     Node startNodes_;
@@ -269,7 +269,7 @@ class TransitivePathImpl : public TransitivePathBase {
     NodeWithTargetRange::iterator result_{};
 
    public:
-    TransitiveHullLazyRange(const TransitivePathImpl<T>* parent, const T edges,
+    TransitiveHullLazyRange(const TransitivePathImpl<T>& parent, const T edges,
                             LocalVocab edgesVocab, Node startNodes,
                             TripleComponent start, TripleComponent target,
                             bool yieldOnce)
@@ -281,18 +281,18 @@ class TransitivePathImpl : public TransitivePathBase {
           yieldOnce_(yieldOnce) {
       // `targetId` is only ever used for comparisons, and never stored in the
       // result, so we use a separate local vocabulary - targetHelper_.
-      const auto& index = parent_->getIndex();
+      const auto& index = parent_.getIndex();
       targetId_ = target_.isVariable()
                       ? std::nullopt
                       : std::optional{std::move(target_).toValueId(
                             index.getVocab(), targetHelper_,
                             index.encodedIriManager())};
-      sameVariableOnBothSides_ = !targetId_.has_value() &&
-                                 parent_->lhs_.value_ == parent_->rhs_.value_;
+      sameVariableOnBothSides_ =
+          !targetId_.has_value() && parent_.lhs_.value_ == parent_.rhs_.value_;
       endsWithGraphVariable_ = !targetId_.has_value() &&
-                               parent_->graphVariable_ == target_.getVariable();
+                               parent_.graphVariable_ == target_.getVariable();
       startsWithGraphVariable_ =
-          start.isVariable() && parent_->graphVariable_ == start.getVariable();
+          start.isVariable() && parent_.graphVariable_ == start.getVariable();
     }
 
     std::optional<Id> getTargetId(const Id& startNode,
@@ -318,10 +318,10 @@ class TransitivePathImpl : public TransitivePathBase {
         return LoopControl<NodeWithTargets>::makeContinue();
       }
       edges_.setGraphId(graphId);
-      Set connectedNodes = parent_->findConnectedNodes(
+      Set connectedNodes = parent_.findConnectedNodes(
           edges_, startNode, getTargetId(startNode, graphId));
       if (!connectedNodes.empty()) {
-        parent_->runtimeInfo().addDetail("Hull time", timer_.msecs());
+        parent_.runtimeInfo().addDetail("Hull time", timer_.msecs());
         NodeWithTargets result{startNode,
                                graphId,
                                std::move(connectedNodes),
@@ -346,7 +346,7 @@ class TransitivePathImpl : public TransitivePathBase {
       return NodeWithTargetRange(
           ad_utility::CachingContinuableTransformInputRange(
               tableColumn.expandUndef(zippedType, edges_,
-                                      parent_->graphVariable_.has_value()),
+                                      parent_.graphVariable_.has_value()),
               [this, currentRow = currentRow,
                payload = tableColumn.payload_](auto& idPair) mutable {
                 return process(idPair, currentRow, payload);
@@ -441,7 +441,7 @@ class TransitivePathImpl : public TransitivePathBase {
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
     return NodeGenerator(TransitiveHullLazyRange<Node>(
-        this, std::move(edges), std::move(edgesVocab), std::move(startNodes),
+        *this, std::move(edges), std::move(edgesVocab), std::move(startNodes),
         std::move(start), std::move(target), yieldOnce));
   }
 
