@@ -9,9 +9,9 @@
 #include <concepts>
 #include <cstdint>
 #include <string>
-#include <type_traits>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -71,7 +71,7 @@ class TripleComponent {
   /// `Variant`.
   CPP_template(typename FirstArg, typename... Args)(
       requires CPP_NOT(
-          std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
+          std::same_as<ql::remove_cvref_t<FirstArg>, TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {

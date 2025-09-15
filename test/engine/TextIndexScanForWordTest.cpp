@@ -20,6 +20,7 @@
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 namespace h = textIndexScanTestHelpers;
+using qlever::TextScoringMetric;
 
 namespace {
 
@@ -114,6 +115,7 @@ auto getQecWithTextIndex(
 
 TEST(TextIndexScanForWord, TextScoringMetric) {
   using enum TextScoringMetric;
+  using namespace qlever;
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
   ASSERT_EQ(getTextScoringMetricAsString(BM25), "bm25");

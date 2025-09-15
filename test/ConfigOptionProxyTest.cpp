@@ -7,10 +7,10 @@
 #include <gtest/gtest.h>
 
 #include <concepts>
-#include <type_traits>
 
 #include "../test/util/ConfigOptionHelpers.h"
 #include "../test/util/GTestHelpers.h"
+#include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/TypeTraits.h"

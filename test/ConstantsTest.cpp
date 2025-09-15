@@ -26,9 +26,13 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
   EXPECT_NO_THROW(RuntimeParameters().set<"default-query-timeout">(1s));
 }
 
+namespace {
+constexpr std::string_view hi = "hi";
+constexpr std::string_view bye = "-bye";
+}  // namespace
 TEST(Constants, makeQleverInternalIri) {
   EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
-            (makeQleverInternalIriConst<"hi", "-bye">()));
-  EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
+            (makeQleverInternalIriConst<hi, bye>()));
+  EXPECT_EQ(makeQleverInternalIri(hi, bye),
             "<http://qlever.cs.uni-freiburg.de/builtin-functions/hi-bye>");
 }
