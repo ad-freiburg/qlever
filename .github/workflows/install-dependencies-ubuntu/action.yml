@@ -6,6 +6,14 @@ inputs:
     description: "Should be set to false for conan builds"
     required: true
     default: "true"
+  cmake-version:
+    description: "Minimum required cmake version"
+    required: false
+    default: "3.27"
+  cmake-build-version:
+    description: "The cmake build version to install if the minimum version is not met"
+    required: false
+    default: "0"
 
 runs:
   using: "composite"
@@ -31,6 +39,26 @@ runs:
         sudo apt-get install -y build-essential
       shell: bash
 
+    - name: Get cmake version
+      id: cmake
+      run: |
+        echo "::set-output name=cmake-version::$(cmake --version | head -n1 | cut -d' ' -f3)"
+        echo "Minimum desired version: ${{ inputs.cmake-version }}"
+      shell: bash
+
+    - name: Ensure cmake version >= ${{ inputs.cmake-version }}
+      if: steps.cmake.outputs.cmake-version < inputs.cmake-version
+      run:  |
+        sudo apt-get remove -y cmake
+        export CMAKE_FULL_VERSION="cmake-${{ inputs.cmake-version }}.${{ inputs.cmake-build-version }}-linux-x86_64"
+        wget "https://cmake.org/files/v${{ inputs.cmake-version }}/${CMAKE_FULL_VERSION}.tar.gz"
+        tar -xzvf ${CMAKE_FULL_VERSION}.tar.gz
+        sudo mv ${CMAKE_FULL_VERSION} /opt/cmake
+        echo "/opt/cmake/bin" >> $GITHUB_PATH
+        export PATH="/opt/cmake/bin:$PATH"
+        cmake --version
+      shell: bash
+
     - name: Install third-party libraries
       if: inputs.install-third-party-libraries == 'true'
       run:  |
@@ -43,5 +71,5 @@ runs:
       shell: bash
 
     - name: Install Python packages for E2E tests
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      run: sudo apt-get install -y python3-yaml unzip pkg-config python3-icu
       shell: bash
