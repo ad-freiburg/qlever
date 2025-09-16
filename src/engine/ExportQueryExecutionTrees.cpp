@@ -387,17 +387,6 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
         }
         return std::nullopt;
       });
-
-  // for (const auto& [pair, range] :
-  //      getRowIndices(limitAndOffset, *result, resultSize)) {
-  //   for (uint64_t rowIndex : range) {
-  //     co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
-  //     rowIndex,
-  //                                     pair.idTable())
-  //         .dump();
-  //     cancellationHandle->throwIfCancelled();
-  //   }
-  // }
 }
 
 // _____________________________________________________________________________
