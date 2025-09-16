@@ -380,7 +380,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
           cancellationHandle->throwIfCancelled();
           uint64_t rowIndex = *iotaViewIt;
           ++iotaViewIt;
-          auto& pair = tableWithRange.tableWithVocab_;
+          const auto& pair = tableWithRange.tableWithVocab_;
           return idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
                                         rowIndex, pair.idTable())
               .dump();
