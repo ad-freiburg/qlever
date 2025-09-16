@@ -913,7 +913,7 @@ auto QueryPlanner::seedWithScansAndText(
       }
 
       pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple),
-                                          relevantGraphs, std::nullopt));
+                                          relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }

@@ -249,6 +249,8 @@ struct CountAvailablePredicatesMatcher {
 };
 constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
 
+// Class used to indicate only named graphs are allowed when using
+// `IndexScanFromStrings`.
 class NamedTag {};
 
 // Same as above, but the subject, predicate, and object are passed in as

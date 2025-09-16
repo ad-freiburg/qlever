@@ -469,8 +469,10 @@ TEST(IndexScan, namedGraphs) {
                         IndexScan::Graphs::Whitelist(graphs)};
   using namespace testing;
   EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
+  // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
-              HasSubstr("GRAPHS: Whitelist <graph1> <graph2>"));
+              AnyOf(HasSubstr("GRAPHS: Whitelist <graph1> <graph2>"),
+                    HasSubstr("GRAPHS: Whitelist <graph2> <graph1>")));
   EXPECT_THAT(scan.getScanSpecificationTc().graphFilter(),
               Eq(IndexScan::Graphs::Whitelist(graphs)));
 

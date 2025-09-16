@@ -1168,8 +1168,6 @@ inline auto SelectAllPattern =
 // Matcher for a `ParsedQuery` with a clear of `graph`.
 inline auto Clear = ad_utility::OverloadCallOperator{
     [](const ad_utility::triple_component::Iri& graph) {
-      // The `GraphSpec` type is the same variant as
-      // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
       return UpdateClause(GraphUpdate({{{::Variable("?s")},
                                         {::Variable("?p")},
                                         {::Variable("?o")},
@@ -1180,8 +1178,6 @@ inline auto Clear = ad_utility::OverloadCallOperator{
     [](const ::Variable& graph,
        parsedQuery::GroupGraphPattern::GraphVariableBehaviour
            graphVariableBehaviour) {
-      // The `GraphSpec` type is the same variant as
-      // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
       return UpdateClause(
           GraphUpdate({{{::Variable("?s")},
                         {::Variable("?p")},

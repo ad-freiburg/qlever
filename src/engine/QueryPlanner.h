@@ -32,6 +32,8 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
+  // Store a flag that decides in only named graphs or all graphs including the
+  // default graph are supposed to be bound to the graph variable.
   parsedQuery::GroupGraphPattern::GraphVariableBehaviour
       defaultGraphBehaviour_ =
           parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL;

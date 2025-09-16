@@ -1193,7 +1193,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
       getScanConfig(scanSpecForAllColumns,
                     std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
                     locatedTriplesPerBlock);
-  auto scanBlock = [&](const CompressedBlockMetadata& block) {
+  auto scanBlock = [this, &scanSpec, &config, &locatedTriplesPerBlock](
+                       const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // matches the `col0` and `col1`.
     return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
