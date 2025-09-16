@@ -770,8 +770,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
-  return ad_utility::InputRangeTypeErased(ad_utility::lazySingleValueRange(
-      [result = std::move(result)]() -> std::string {
+  return ad_utility::InputRangeTypeErased(
+      ad_utility::lazySingleValueRange([result = std::move(result)]() {
         AD_CORRECTNESS_CHECK(result != nullptr);
         std::string_view value = getResultForAsk(result) ? "true" : "false";
         std::string resultLit =
