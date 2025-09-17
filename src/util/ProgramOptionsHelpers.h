@@ -103,21 +103,24 @@ class ParameterToProgramOptionFactory {
    *
    * TODO<C++17,joka921>: template-values are not supported in C++17
    */
-  template <ad_utility::ParameterName name>
-  auto getProgramOption() {
+  template <typename T>
+  auto getProgramOption(const std::string& name)
+      -> boost::program_options::typed_value<typename T::value_type>* {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
-    auto defaultValue = _parameters->template get<name>();
+    typename T::value_type defaultValue =
+        _parameters->rlock()->template get<T>(name);
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
 
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
-    auto setParameterToValue{
-        [this](const Type& value) { _parameters->template set<name>(value); }};
+    auto setParameterToValue{[this, name](const Type& value) {
+      _parameters->wlock()->template set<T>(name, value);
+    }};
 
-    return boost::program_options::value<Type>()
+    return boost::program_options::value<typename T::value_type>()
         ->default_value(defaultValue)
         ->notifier(setParameterToValue);
   }

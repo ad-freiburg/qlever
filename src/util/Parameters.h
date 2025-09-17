@@ -383,6 +383,9 @@ CPP_template(typename Type, typename FromString, typename ToString)(
             CPP_and ParameterToStringType<ToString,
                                           Type>) struct ParameterWithoutName
     : public ParameterBase {
+ public:
+  using value_type = Type;
+
  private:
   Type value_{};
   std::string name_;

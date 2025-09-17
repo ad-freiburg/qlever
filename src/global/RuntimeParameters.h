@@ -36,10 +36,6 @@ inline auto& RuntimeParameters() {
         // If the time estimate for a sort operation is larger by more than this
         // factor than the remaining time, then the sort is canceled with a
         // timeout exception.
-        Double<"sort-estimate-cancellation-factor">{3.0},
-        SizeT<"cache-max-num-entries">{1000},
-        MemorySizeParameter<"cache-max-size">{30_GB},
-        MemorySizeParameter<"cache-max-size-single-entry">{5_GB},
         SizeT<"lazy-index-scan-queue-size">{20},
         SizeT<"lazy-index-scan-num-threads">{10},
         ensureStrictPositivity(
@@ -123,11 +119,127 @@ struct RuntimeParametersNew {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
+  // If the time estimate for a sort operation is larger by more than this
+  // factor than the remaining time, then the sort is canceled with a
+  // timeout exception.
+  Double sortEstimateCancellationFactor{3.0,
+                                        "sort-estimate-cancellation-factor"};
+  SizeT cacheMaxNumEntries{1000, "cache-max-num-entries"};
+
+  // TODO wrap into lambda to get over using operator limitation and use _GB
+  // operator
+  MemorySizeParameter cacheMaxSize{ad_utility::MemorySize::gigabytes(30),
+                                   "cache-max-size"};
+  MemorySizeParameter cacheMaxSizeSingleEntry{
+      ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
+  SizeT lazyIndexScanQueueSize{20, "lazy-index-scan-queue-size"};
+  SizeT lazyIndexScanNumThreads{10, "lazy-index-scan-num-threads"};
+  Duration<std::chrono::seconds> defaultQueryTimeout{std::chrono::seconds(30),
+                                                     "default-query-timeout"};
+  SizeT lazyIndexScanMaxSizeMaterialization{
+      1'000'000, "lazy-index-scan-max-size-materialization"};
+  Bool useBinsearchTransitivePath{true, "use-binsearch-transitive-path"};
+  Bool groupByHashMapEnabled{false, "group-by-hash-map-enabled"};
+  Bool groupByDisableIndexScanOptimizations{
+      false, "group-by-disable-index-scan-optimizations"};
+  SizeT serviceMaxValueRows{10'000, "service-max-value-rows"};
+  SizeT queryPlanningBudget{1500, "query-planning-budget"};
+  Bool throwOnUnboundVariables{false, "throw-on-unbound-variables"};
+
+  // Control up until which size lazy results should be cached. Caching
+  // does cause significant overhead for this case.
+  MemorySizeParameter cacheMaxSizeLazyResult{
+      ad_utility::MemorySize::megabytes(5), "cache-max-size-lazy-result"};
+  Bool websocketUpdatesEnabled{true, "websocket-updates-enabled"};
+  // When the result of an index scan is smaller than a single block, then
+  // its size estimate will be the size of the block divided by this
+  // value.
+  SizeT smallIndexScanSizeEstimateDivisor{
+      5, "small-index-scan-size-estimate-divisor"};
+  // Determines whether the cost estimate for a cached subtree should be
+  // set to zero in query planning.
+  Bool zeroCostEstimateForCachedSubtree{
+      false, "zero-cost-estimate-for-cached-subtree"};
+  // Maximum size for the body of requests that the server will process.
+  MemorySizeParameter requestBodyLimit{ad_utility::MemorySize::megabytes(100),
+                                       "request-body-limit"};
+  // SERVICE operations are not cached by default, but can be enabled
+  // which has the downside that the sibling optimization where VALUES are
+  // dynamically pushed into `SERVICE` is no longer used.
+  Bool cacheServiceResults{false, "cache-service-results"};
+  // If set to `true`, we expect the contents of URLs loaded via a LOAD to
+  // not change over time. This enables caching of LOAD operations.
+  Bool cacheLoadResults{false, "cache-load-results"};
+  // If set to `true`, several exceptions will silently be ignored and a
+  // dummy result will be returned instead.
+  // This mode should only be activated when running the syntax tests of
+  // the SPARQL conformance test suite.
+  Bool syntaxTestMode{false, "syntax-test-mode"};
+  // If set to `true`, then a division by zero in an expression will lead
+  // to an
+  // expression error, meaning that the result is undefined. If set to
+  // false,
+  // the result will be `NaN` or `infinity` respectively.
+  Bool divisionByZeroIsUndef{true, "division-by-zero-is-undef"};
+  // If set to `true`, the contained `FILTER` expressions in the query
+  // try to set and apply a corresponding `PrefilterExpression` (see
+  // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
+  // operation.
+  //
+  // If set to `false`, the queries `FILTER` expressions omit setting and
+  // applying `PrefilterExpression`s. This is useful to set a
+  // prefilter-free baseline, or for debugging, as wrong results may be
+  // related to the `PrefilterExpression`s.
+  Bool enablePrefilterOnIndexScans{true, "enable-prefilter-on-index-scans"};
+  // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+  SizeT spatialJoinMaxNumThreads{8, "spatial-join-max-num-threads"};
+  // The maximum size of the `prefilterBox` for
+  // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+  SizeT spatialJoinPrefilterMaxSize{2'500, "spatial-join-prefilter-max-size"};
+  // Push joins into both children of unions if this leads to a cheaper
+  // cost-estimate.
+  Bool enableDistributiveUnion{true, "enable-distributive-union"};
+
   std::map<std::string, ad_utility::ParameterBase*> runtimeMap_;
 
   RuntimeParametersNew() {
     // Here all of the newly defined parameters have to be added.
     runtimeMap_[stripColumns_.name()] = &stripColumns_;
+    runtimeMap_[sortEstimateCancellationFactor.name()] = &stripColumns_;
+    runtimeMap_[cacheMaxNumEntries.name()] = &cacheMaxNumEntries;
+    runtimeMap_[cacheMaxSize.name()] = &cacheMaxSize;
+    runtimeMap_[cacheMaxSizeSingleEntry.name()] = &cacheMaxSizeSingleEntry;
+    runtimeMap_[lazyIndexScanQueueSize.name()] = &lazyIndexScanQueueSize;
+    runtimeMap_[lazyIndexScanNumThreads.name()] = &lazyIndexScanNumThreads;
+
+    runtimeMap_[lazyIndexScanMaxSizeMaterialization.name()] =
+        &lazyIndexScanMaxSizeMaterialization;
+    runtimeMap_[useBinsearchTransitivePath.name()] =
+        &useBinsearchTransitivePath;
+    runtimeMap_[groupByHashMapEnabled.name()] = &groupByHashMapEnabled;
+    runtimeMap_[groupByDisableIndexScanOptimizations.name()] =
+        &groupByDisableIndexScanOptimizations;
+    runtimeMap_[serviceMaxValueRows.name()] = &serviceMaxValueRows;
+    runtimeMap_[queryPlanningBudget.name()] = &queryPlanningBudget;
+    runtimeMap_[throwOnUnboundVariables.name()] = &throwOnUnboundVariables;
+    runtimeMap_[cacheMaxSizeLazyResult.name()] = &cacheMaxSizeLazyResult;
+
+    runtimeMap_[websocketUpdatesEnabled.name()] = &websocketUpdatesEnabled;
+    runtimeMap_[smallIndexScanSizeEstimateDivisor.name()] =
+        &smallIndexScanSizeEstimateDivisor;
+    runtimeMap_[zeroCostEstimateForCachedSubtree.name()] =
+        &zeroCostEstimateForCachedSubtree;
+    runtimeMap_[requestBodyLimit.name()] = &requestBodyLimit;
+    runtimeMap_[cacheServiceResults.name()] = &cacheServiceResults;
+
+    runtimeMap_[syntaxTestMode.name()] = &syntaxTestMode;
+    runtimeMap_[divisionByZeroIsUndef.name()] = &divisionByZeroIsUndef;
+    runtimeMap_[enablePrefilterOnIndexScans.name()] =
+        &enablePrefilterOnIndexScans;
+    runtimeMap_[spatialJoinMaxNumThreads.name()] = &spatialJoinMaxNumThreads;
+    runtimeMap_[spatialJoinPrefilterMaxSize.name()] =
+        &spatialJoinPrefilterMaxSize;
+    runtimeMap_[enableDistributiveUnion.name()] = &enableDistributiveUnion;
   }
 
   // Obtain a map from parameter names to parameter values.
@@ -141,7 +253,8 @@ struct RuntimeParametersNew {
     return result;
   }
 
-  void set(const std::string& parameterName, const std::string& value) {
+  void setFromString(const std::string& parameterName,
+                     const std::string& value) {
     if (!runtimeMap_.contains(parameterName)) {
       throw std::runtime_error{"No parameter with name " +
                                std::string{parameterName} + " exists"};
@@ -157,6 +270,47 @@ struct RuntimeParametersNew {
     }
   }
 
+  template <typename ParameterType>
+  void set(const std::string& parameterName,
+           const ParameterType::value_type& value) {
+    if (!runtimeMap_.contains(parameterName)) {
+      throw std::runtime_error{"No parameter with name " +
+                               std::string{parameterName} + " exists"};
+    }
+    try {
+      // Call the virtual set(std::string) function on the
+      // correct ParameterBase& in the `_runtimePointers`.
+      static_cast<ParameterType*>(runtimeMap_.at(parameterName))->set(value);
+    } catch (const std::exception& e) {
+      throw std::runtime_error("Could not set parameter " +
+                               std::string{parameterName} + " to value " +
+                               // TODO solve this properly
+                               //  ParameterType(value).toString() +
+                               ". Exception was: " + e.what());
+    }
+  }
+
+  template <typename ParameterType>
+  ParameterType::value_type get(const std::string& parameterName) const {
+    if (!runtimeMap_.contains(parameterName)) {
+      throw std::runtime_error{"No parameter with name " +
+                               std::string{parameterName} + " exists"};
+    }
+    return static_cast<ParameterType*>(runtimeMap_.at(parameterName))->get();
+  }
+
+  std::vector<std::string> getKeys() const {
+    static std::vector<std::string> keys = [this]() {
+      std::vector<std::string> result;
+      result.reserve(runtimeMap_.size());
+      for (const auto& [name, _] : runtimeMap_) {
+        result.push_back(name);
+      }
+      return result;
+    }();
+
+    return keys;
+  }
   // TODO<BMW> Delete copying and moving (to make the map work)
 };
 
