@@ -369,7 +369,7 @@ class TransitivePathImpl : public TransitivePathBase {
               }));
     }
 
-    void setRuntimeState() {
+    void buildEnumerateRange() {
       if (tableColumnIt_ == ql::ranges::end(startNodes_)) {
         finished_ = true;
         return;
@@ -385,7 +385,7 @@ class TransitivePathImpl : public TransitivePathBase {
         // if there are no start nodes in this table column, we move to the
         // next table column and recursively find the next valid range.
         ++tableColumnIt_;
-        return setRuntimeState();
+        return buildEnumerateRange();
       }
     }
 
@@ -393,7 +393,7 @@ class TransitivePathImpl : public TransitivePathBase {
       ++enumerateRangeIt_;
       if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
         ++tableColumnIt_;
-        setRuntimeState();
+        buildEnumerateRange();
       }
 
       if (finished_) {
@@ -409,7 +409,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     void start() {
       tableColumnIt_ = ql::ranges::begin(startNodes_);
-      setRuntimeState();
+      buildEnumerateRange();
       if (finished_) {
         return;
       }
