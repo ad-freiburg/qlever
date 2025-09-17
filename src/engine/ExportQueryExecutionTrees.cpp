@@ -974,7 +974,11 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
-  std::erase(columns, std::nullopt);
+  // std::erase(columns, std::nullopt);
+  columns.erase(std::remove(columns.begin(), columns.end(),
+                             std::nullopt),
+                columns.end());
+
 
   auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
                         const LocalVocab& localVocab) {
