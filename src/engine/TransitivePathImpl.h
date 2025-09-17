@@ -27,6 +27,8 @@ struct TableColumnWithVocab {
   ColumnType startNodes_;
   LocalVocab vocab_;
 
+  using column_type = ColumnType;
+
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(std::optional<IdTableView<0>> payload,
@@ -242,8 +244,9 @@ class TransitivePathImpl : public TransitivePathBase {
    private:
     using NodeWithTargetRange =
         ad_utility::InputRangeTypeErased<NodeWithTargets>;
-    using ZippedTypeRange =
-        ad_utility::InputRangeTypeErased<std::pair<int64_t, ZippedType>>;
+    using EnumerateRangeType =
+        std::invoke_result_t<decltype(::ranges::views::enumerate),
+                             typename Node::value_type::column_type&>;
 
     // input arguments
     const TransitivePathImpl<T>& parent_;
@@ -263,8 +266,8 @@ class TransitivePathImpl : public TransitivePathBase {
     // range state
     bool finished_{false};
     ql::ranges::iterator_t<Node> tableColumnIt_{};
-    std::optional<ZippedTypeRange> zippedTypeRange_;
-    ql::ranges::iterator_t<ZippedTypeRange> zippedTypeIt_{};
+    std::optional<EnumerateRangeType> enumerateRange_;
+    ql::ranges::iterator_t<EnumerateRangeType> enumerateRangeIt_{};
     std::optional<NodeWithTargetRange> resultRange_;
     NodeWithTargetRange::iterator result_{};
 
@@ -342,7 +345,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     NodeWithTargetRange buildResultRange() {
       auto& tableColumn = *tableColumnIt_;
-      const auto& [currentRow, zippedType] = *zippedTypeIt_;
+      const auto& [currentRow, zippedType] = *enumerateRangeIt_;
       return NodeWithTargetRange(
           ad_utility::CachingContinuableTransformInputRange(
               tableColumn.expandUndef(zippedType, edges_,
@@ -362,19 +365,18 @@ class TransitivePathImpl : public TransitivePathBase {
       mergedVocab_ = std::move(tableColumn.vocab_);
       mergedVocab_.mergeWith(edgesVocab_);
 
-      zippedTypeRange_ =
-          ZippedTypeRange(::ranges::views::enumerate(tableColumn.startNodes_));
-      zippedTypeIt_ = zippedTypeRange_->begin();
+      enumerateRange_ = ::ranges::views::enumerate(tableColumn.startNodes_);
+      enumerateRangeIt_ = ql::ranges::begin(*enumerateRange_);
 
-      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+      if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
         ++tableColumnIt_;
         return setRuntimeState();
       }
     }
 
     void getNextResultRange() {
-      ++zippedTypeIt_;
-      if (zippedTypeIt_ == zippedTypeRange_->end()) {
+      ++enumerateRangeIt_;
+      if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
         ++tableColumnIt_;
         setRuntimeState();
       }
