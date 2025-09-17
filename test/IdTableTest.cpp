@@ -19,6 +19,9 @@
 #include "util/BufferedVector.h"
 #include "util/TypeIdentity.h"
 
+// template class columnBasedIdTable::IdTable<char, 0,
+// ad_utility::BufferedVector<char>>;
+
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
@@ -374,6 +377,69 @@ TEST(IdTable, insertAtEnd) {
     }
   };
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
+}
+
+// Tests for merging two already-sorted IdTables using the various APIs.
+TEST(IdTable, mergeTwoSortedTables_and_member_wrappers) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+    // Only compile merge calls when storage supports allocatable columns
+    if constexpr (!Table::columnsAreAllocatable) {
+      return;  // skip for BufferedVector storage
+    } else {
+      // Two input tables that are already sorted lexicographically on (col0,
+      // col1)
+      Table a{2, std::move(additionalArgs.at(0))...};
+      Table b{2, std::move(additionalArgs.at(0))...};
+
+      a.push_back({make(1), make(10)});
+      a.push_back({make(3), make(30)});
+      a.push_back({make(5), make(50)});
+
+      b.push_back({make(2), make(20)});
+      b.push_back({make(3), make(31)});
+      b.push_back({make(6), make(60)});
+
+      // Expected merged order: (1,10),(2,20),(3,30),(3,31),(5,50),(6,60)
+      Table expected{2, std::move(additionalArgs.at(0))...};
+      expected.push_back({make(1), make(10)});
+      expected.push_back({make(2), make(20)});
+      expected.push_back({make(3), make(30)});
+      expected.push_back({make(3), make(31)});
+      expected.push_back({make(5), make(50)});
+      expected.push_back({make(6), make(60)});
+
+      std::vector<ColumnIndex> sortCols{ColumnIndex(0), ColumnIndex(1)};
+
+      // Member that returns a new merged table
+      Table merged = a.mergeSortedTable(b, sortCols);
+      EXPECT_EQ(merged, expected);
+
+      // Ensure original tables unchanged
+      EXPECT_EQ(a.size(), 3u);
+      EXPECT_EQ(b.size(), 3u);
+
+      // In-place merge
+      Table a2 = clone(a, std::move(additionalArgs.at(0))...);
+      a2.mergeSortedTableIntoThis(b, sortCols);
+      EXPECT_EQ(a2, expected);
+
+      // Static function with explicit allocator
+      Table mergedStatic =
+          Table::mergeTwoSortedTables(a, b, sortCols, a.getAllocator());
+      EXPECT_EQ(mergedStatic, expected);
+
+      // Edge case: merging with an empty table yields the original table
+      Table empty{2, std::move(additionalArgs.at(0))...};
+      Table mergedWithEmpty = a.mergeSortedTable(empty, sortCols);
+      EXPECT_EQ(mergedWithEmpty, a);
+      Table a3 = clone(a, std::move(additionalArgs.at(0))...);
+      a3.mergeSortedTableIntoThis(empty, sortCols);
+      EXPECT_EQ(a3, a);
+    }
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable,
+                              "idTableTest.mergeSortedTables");
 }
 
 TEST(IdTable, insertSubsetAtEnd) {
@@ -1235,5 +1301,3 @@ TEST(IdTable, moveOrClone) {
 
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
-template class columnBasedIdTable::IdTable<char, 0,
-                                           ad_utility::BufferedVector<char>>;

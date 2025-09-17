@@ -1548,9 +1548,12 @@ static constexpr auto makeProcessGroupsVisitor =
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
-        // Sort matches by row index once
         auto matches = groupLookupResult.matchedRowsToGroups_;
-        ql::ranges::sort(matches, {}, &GroupByImpl::RowToGroup::rowIndex_);
+        // Ensure matches are sorted by rowIndex, as we will iterate
+        // through the generator in ascending order of rowIndex
+        AD_CORRECTNESS_CHECK(
+            ql::ranges::is_sorted(matches.begin(), matches.end(), {},
+                                  &GroupByImpl::RowToGroup::rowIndex_));
 
         // Process each matching row
         auto matchIt = matches.begin();
@@ -1595,11 +1598,6 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
-  // If the hash map optimization is possible, but the size of the hash map
-  // grows beyond the `groupThreashold`, we use a hybrid approach, where we add
-  // all entries with existing groups to the hash map, and then perform a
-  // sort-based grouping on the remaining entries.
-  //
   // Iterate through input blocks; buffer the rest and return result if
   // threshold exceeded
   while (currentChunk != endOfChunks) {
@@ -1617,9 +1615,10 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // Advance to the next chunk.
     ++currentChunk;
 
-    // If the number of groups exceeds the threshold, we switch to a hybrid
-    // approach, where we add all entries with existing groups to the hash map,
-    // and then perform a sort-based grouping on the remaining entries.
+    // If the size of the hashmap (the number of groups) exceeds the
+    // `groupThreshold`, we switch to a hybrid approach, where we add all
+    // entries with existing groups to the hash map, and then perform a
+    // sort-based grouping on the remaining entries.
     if (aggregationData.numGroups() > groupThreshold) {
       AD_LOG_DEBUG << "GroupBy HashMap groups: (est: "
                    << aggregationData.numGroups()
@@ -1678,10 +1677,11 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
       "hybridFallback",
       absl::StrCat("hash groups=", hashResult.numRows(),
                    ", sorted tail groups=", restResult.numRows()));
-  // Build final hybrid result: append fallback rows and sort on grouping
-  // columns
-  hashResult.insertAtEnd(restResult);
-  Engine::sort(hashResult, data.columnIndices_.value());
+  // Build final hybrid result.
+  // Both `hashResult` and `restResult` are sorted by the grouping columns.
+  // (In `createResultFromHashMap()` and `doGroupBy()` respectively.)
+  // Therefore, we can merge them in O(n+m) time.
+  hashResult.mergeSortedTableIntoThis(restResult, data.columnIndices_.value());
   return Result{std::move(hashResult), data.columnIndices_.value(),
                 std::move(localVocab)};
 }
