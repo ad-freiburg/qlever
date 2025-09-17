@@ -338,7 +338,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
                                 const ad_utility::MemorySize& requestBodySize) {
     const ad_utility::MemorySize currentLimit =
-        RuntimeParameters().get<"request-body-limit">();
+        runtimeParametersNew().rlock()->requestBodyLimit.get();
     // For large requests we get an exception while writing to the request
     // stream when going over the limit. For small requests we get the response
     // normally. We would need the HttpClient to return the response even

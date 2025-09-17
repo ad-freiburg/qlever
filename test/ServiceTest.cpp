@@ -884,8 +884,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Compute (large) sibling -> sibling result is computed
   const auto maxValueRowsDefault =
-      RuntimeParameters().get<"service-max-value-rows">();
-  RuntimeParameters().set<"service-max-value-rows">(0);
+      runtimeParametersNew().rlock()->serviceMaxValueRows.get();
+  runtimeParametersNew().wlock()->serviceMaxValueRows.set(0);
   Service::precomputeSiblingResult(sibling, service, true, false);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -894,7 +894,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  runtimeParametersNew().wlock()->serviceMaxValueRows.set(maxValueRowsDefault);
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
