@@ -52,9 +52,10 @@ constexpr inline size_t BZIP2_MAX_TOTAL_BUFFER_SIZE = 1 << 30;
 constexpr inline size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 
 // ________________________________________________________________
-constexpr inline std::string_view PARTIAL_VOCAB_FILE_NAME =
-    ".tmp.partial-vocabulary.";
-constexpr inline std::string_view PARTIAL_MMAP_IDS = ".tmp.partial-ids-mmap.";
+constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
+    ".partial-vocab.words.tmp.";
+constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
+    ".partial-vocab.idmap.tmp.";
 
 // ________________________________________________________________
 constexpr inline std::string_view TMP_BASENAME_COMPRESSION =

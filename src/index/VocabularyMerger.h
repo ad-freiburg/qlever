@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -16,12 +17,37 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/Vocabulary.h"
 #include "util/HashMap.h"
-#include "util/MmapVector.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
-using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
-using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
+// Writes pairs of (partial ID, global ID) incrementally to a file.
+class IdMapWriter {
+ private:
+  std::string filename_;
+  using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
+      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
+  std::unique_ptr<Serializer> serializer_;
+
+ public:
+  explicit IdMapWriter(const std::string& filename) : filename_(filename) {
+    serializer_ = std::make_unique<Serializer>(filename);
+  }
+
+  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
+};
+
+// Get a vector of pairs of (partial ID, global ID) deserialized from a file
+// that has previously been written using the `IdMapWriter` class above.
+using IdMap = std::vector<std::pair<Id, Id>>;
+inline IdMap getIdMapFromFile(const std::string& filename) {
+  IdMap idMap;
+  ad_utility::serialization::FileReadSerializer serializer(filename);
+  serializer >> idMap;
+  return idMap;
+}
 
 using TripleVec =
     ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
@@ -141,7 +167,7 @@ struct VocabularyMetaData {
 };
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
-// `basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)`
+// `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)`
 // where `0 <= i < numFiles`.
 // Return the number of total Words merged and the lower and upper bound of
 // language tagged predicates. Argument `comparator` gives the way to order
@@ -165,7 +191,7 @@ class VocabularyMerger {
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
-  std::vector<IdPairMMapVec> idVecs_;
+  std::vector<IdMapWriter> idMaps_;
 
   const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 
@@ -212,7 +238,7 @@ class VocabularyMerger {
                                          q.entry_.iriOrLiteral().size());
   };
 
-  // Write the queue words in the buffer to their corresponding `idPairVecs`.
+  // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
   // clang-format off
@@ -220,20 +246,20 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
-  // Close all associated files and MmapVectors and reset all internal
+  // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
-    idVecs_.clear();
+    idMaps_.clear();
   }
 
   // Inner helper function for the parallel pipeline, which performs the actual
-  // write to the IdPairVecs. Format of argument is `<vecToWriteTo<internalId,
+  // write to the IdMaps. Format of argument is `<mapToWriteTo<internalId,
   // globalId>>`.
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
@@ -241,7 +267,7 @@ class VocabularyMerger {
 
 // ____________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const std::string& mmapFilename);
+    const std::string& filename);
 
 /**
  * @brief Create a hashMap that maps the Id of the pair<string, Id> to the

@@ -622,7 +622,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
-    deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
+    deleteTemporaryFile(
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
   return res;
@@ -756,11 +757,12 @@ auto IndexImpl::convertPartialToGlobalIds(
     if (idx >= actualLinesPerPartial.size()) {
       return std::nullopt;
     }
-    std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
+    std::string filename =
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
     auto map =
-        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(mmapFilename);
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
-    deleteTemporaryFile(mmapFilename);
+    deleteTemporaryFile(filename);
     return std::pair{idx, std::move(map)};
   };
 
@@ -1424,9 +1426,10 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  std::string partialCompressionFilename = absl::StrCat(
-      onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
+      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
+  std::string partialCompressionFilename =
+      absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
+                   PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,

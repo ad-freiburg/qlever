@@ -65,10 +65,10 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  // Open and prepare all infiles and mmap output vectors.
+  // Open and prepare all infiles and file-based output vectors.
   auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
+        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
 
@@ -86,7 +86,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   for (std::size_t i : ad_utility::integerRange(numFiles)) {
     generators.push_back(makeWordRangeFromFile(i));
-    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
+    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -113,7 +113,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
                         &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
+        this->writeQueueWordsToIdMap(buffer, wordCallback, lessThan,
                                      progressBar);
       };
       sortedBuffer.clear();
@@ -138,7 +138,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -153,7 +153,7 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+    writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
                            C& wordCallback, const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
@@ -233,7 +233,7 @@ CPP_template_def(typename C, typename L)(
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   for (const auto& [id, value] : buffer) {
-    idVecs_[id].push_back(
+    idMaps_[id].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
   }
 }
@@ -366,9 +366,9 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const std::string& mmapFilename) {
+    const std::string& filename) {
   ad_utility::HashMap<Id, Id> res;
-  IdPairMMapVecView vec(mmapFilename);
+  auto vec = getIdMapFromFile(filename);
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;
   }
