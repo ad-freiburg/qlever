@@ -1154,9 +1154,8 @@ bool Server::checkAccessToken(
   }
   const auto accessTokenProvidedMsg = "Access token was provided";
   if (accessToken_.empty()) {
-    throw std::runtime_error(
-        absl::StrCat(accessTokenProvidedMsg,
-                     " but server was started without --access-token"));
+    LOG(DEBUG) << accessTokenProvidedMsg << " but server was started without --access-token" << std::endl;
+    return true;
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
     throw std::runtime_error(
