@@ -39,6 +39,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 /// Call `push` for each of the elements that will become part of the vector.
 CPP_template(typename T, typename Serializer)(
     requires WriteSerializer<Serializer>) class VectorIncrementalSerializer {
+ public:
  private:
   Serializer _serializer;
   uint64_t _startPosition;

@@ -25,8 +25,7 @@
 using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
-bool vocabTestCompare(const IdMapView& a,
-                      const std::vector<std::pair<Id, Id>>& b) {
+bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
   if (a.size() != b.size()) {
     return false;
   }
@@ -219,9 +218,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
   // Check that vocabulary has the right form.
-  IdMapView mapping0(_basePath + PARTIAL_VOCAB_IDMAP_INFIX + std::to_string(0));
+  IdMap mapping0 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
-  IdMapView mapping1(_basePath + PARTIAL_VOCAB_IDMAP_INFIX + std::to_string(1));
+  IdMap mapping1 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(1));
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
 

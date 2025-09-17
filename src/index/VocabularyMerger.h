@@ -24,99 +24,29 @@
 #include "util/TypeTraits.h"
 
 // Writes pairs of (partial ID, global ID) incrementally to a file
-class IdMap {
+class IdMapWriter {
  private:
-  uint64_t count_ = 0;
   std::string filename_;
-  std::unique_ptr<ad_utility::serialization::FileWriteSerializer> serializer_;
-  bool headerWritten_ = false;
+  using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
+      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
+  std::unique_ptr<Serializer> serializer_;
 
  public:
-  explicit IdMap(const std::string& filename) : filename_(filename) {
-    serializer_ =
-        std::make_unique<ad_utility::serialization::FileWriteSerializer>(
-            filename);
+  explicit IdMapWriter(const std::string& filename) : filename_(filename) {
+    serializer_ = std::make_unique<Serializer>(filename);
   }
 
-  IdMap(size_t, const std::string& filename) : IdMap(filename) {}
-
-  void push_back(const std::pair<Id, Id>& pair) {
-    // Write header (vector size) on first push_back - we'll update it in
-    // destructor
-    if (!headerWritten_) {
-      // Reserve space for size, will be updated in destructor
-      uint64_t placeholder = 0;
-      *serializer_ << placeholder;
-      headerWritten_ = true;
-    }
-    // Write the pair directly to file
-    *serializer_ << pair;
-    ++count_;
-  }
-
-  ~IdMap() {
-    if (serializer_) {
-      try {
-        // Update the size at the beginning of the file
-        auto currentPos = serializer_->getSerializationPosition();
-        serializer_->setSerializationPosition(0);
-        *serializer_ << count_;
-        serializer_->setSerializationPosition(currentPos);
-      } catch (...) {
-        // Handle errors gracefully in destructor
-      }
-    }
-  }
-
-  // Disable copy constructor and assignment
-  IdMap(const IdMap&) = delete;
-  IdMap& operator=(const IdMap&) = delete;
-
-  // Allow move operations
-  IdMap(IdMap&& other) noexcept
-      : count_(other.count_),
-        filename_(std::move(other.filename_)),
-        serializer_(std::move(other.serializer_)),
-        headerWritten_(other.headerWritten_) {
-    other.headerWritten_ = false;
-    other.count_ = 0;
-  }
-
-  IdMap& operator=(IdMap&& other) noexcept {
-    if (this != &other) {
-      count_ = other.count_;
-      filename_ = std::move(other.filename_);
-      serializer_ = std::move(other.serializer_);
-      headerWritten_ = other.headerWritten_;
-      other.headerWritten_ = false;
-      other.count_ = 0;
-    }
-    return *this;
-  }
+  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
 };
 
-// Read-only view of pairs of (partial ID, global ID) deserialized from a file
-class IdMapView {
- private:
-  std::vector<std::pair<Id, Id>> data_;
-
- public:
-  explicit IdMapView(const std::string& filename) {
-    ad_utility::serialization::FileReadSerializer serializer(filename);
-    serializer >> data_;
-  }
-
-  using const_iterator = std::vector<std::pair<Id, Id>>::const_iterator;
-  using iterator = const_iterator;  // Read-only view
-
-  const_iterator begin() const { return data_.begin(); }
-  const_iterator end() const { return data_.end(); }
-  size_t size() const { return data_.size(); }
-  const std::pair<Id, Id>& operator[](size_t idx) const { return data_[idx]; }
-};
-
-using IdPairMMapVec = IdMap;
-using IdPairMMapVecView = IdMapView;
+// Get a vector of pairs of (partial ID, global ID) deserialized from a file.
+using IdMap = std::vector<std::pair<Id, Id>>;
+inline IdMap getIdMapFromFile(const std::string& filename) {
+  IdMap idMap;
+  ad_utility::serialization::FileReadSerializer serializer(filename);
+  serializer >> idMap;
+  return idMap;
+}
 
 using TripleVec =
     ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
@@ -260,7 +190,7 @@ class VocabularyMerger {
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
-  std::vector<IdMap> idMaps_;
+  std::vector<IdMapWriter> idMaps_;
 
   const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 

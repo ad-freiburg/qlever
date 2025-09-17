@@ -86,8 +86,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   for (std::size_t i : ad_utility::integerRange(numFiles)) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(0,
-                         absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
+    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -369,7 +368,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
   ad_utility::HashMap<Id, Id> res;
-  IdMapView vec(filename);
+  auto vec = getIdMapFromFile(filename);
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;
   }
