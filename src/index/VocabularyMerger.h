@@ -23,7 +23,7 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
-// Writes pairs of (partial ID, global ID) incrementally to a file
+// Writes pairs of (partial ID, global ID) incrementally to a file.
 class IdMapWriter {
  private:
   std::string filename_;
@@ -39,7 +39,8 @@ class IdMapWriter {
   void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
 };
 
-// Get a vector of pairs of (partial ID, global ID) deserialized from a file.
+// Get a vector of pairs of (partial ID, global ID) deserialized from a file
+// that has previously been written using the `IdMapWriter` class above.
 using IdMap = std::vector<std::pair<Id, Id>>;
 inline IdMap getIdMapFromFile(const std::string& filename) {
   IdMap idMap;
