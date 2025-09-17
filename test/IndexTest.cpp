@@ -299,7 +299,12 @@ TEST(IndexTest, indexIdAndGitHash) {
 
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
-    using enum Permutation::Enum;
+    using Permutation::Enum::PSO;
+    using Permutation::Enum::POS;
+    using Permutation::Enum::SPO;
+    using Permutation::Enum::SOP;
+    using Permutation::Enum::OPS;
+    using Permutation::Enum::OSP;
     std::string kb =
         "<a>  <b>  <c>  . \n"
         "<a>  <b>  <c2> . \n"
@@ -531,7 +536,12 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
 }
 
 TEST(IndexTest, getPermutation) {
-  using enum Permutation::Enum;
+  using Permutation::Enum::OPS;
+  using Permutation::Enum::OSP;
+  using Permutation::Enum::POS;
+  using Permutation::Enum::PSO;
+  using Permutation::Enum::SOP;
+  using Permutation::Enum::SPO;
   const IndexImpl& index = getQec()->getIndex().getImpl();
   EXPECT_EQ(&index.PSO(), &index.getPermutation(PSO));
   EXPECT_EQ(&index.POS(), &index.getPermutation(POS));
@@ -552,7 +562,8 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  using enum qlever::Filetype;
+  using qlever::Filetype::NQuad;
+  using qlever::Filetype::Turtle;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
   std::vector<qlever::InputFileSpecification> twoFilesSpec = {

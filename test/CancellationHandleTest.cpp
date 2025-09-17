@@ -15,8 +15,14 @@
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
-using enum ad_utility::CancellationState;
-using enum ad_utility::detail::CancellationMode;
+using ad_utility::CancellationState::CHECK_WINDOW_MISSED;
+using ad_utility::CancellationState::MANUAL;
+using ad_utility::CancellationState::NOT_CANCELLED;
+using ad_utility::CancellationState::TIMEOUT;
+using ad_utility::CancellationState::WAITING_FOR_CHECK;
+using ad_utility::detail::CancellationMode::DISABLED;
+using ad_utility::detail::CancellationMode::ENABLED;
+using ad_utility::detail::CancellationMode::NO_WATCH_DOG;
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;

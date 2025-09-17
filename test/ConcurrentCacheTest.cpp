@@ -319,7 +319,10 @@ TEST(ConcurrentCache, abortPinned) {
 }
 
 TEST(ConcurrentCache, cacheStatusToString) {
-  using enum ad_utility::CacheStatus;
+  using ad_utility::CacheStatus::cachedNotPinned;
+  using ad_utility::CacheStatus::cachedPinned;
+  using ad_utility::CacheStatus::computed;
+  using ad_utility::CacheStatus::notInCacheAndNotComputed;
   EXPECT_EQ(toString(cachedNotPinned), "cached_not_pinned");
   EXPECT_EQ(toString(cachedPinned), "cached_pinned");
   EXPECT_EQ(toString(computed), "computed");

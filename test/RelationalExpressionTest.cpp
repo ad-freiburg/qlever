@@ -21,8 +21,13 @@ using namespace sparqlExpression;
 using namespace ad_utility::testing;
 using ad_utility::source_location;
 using namespace std::literals;
-using enum valueIdComparators::Comparison;
 using valueIdComparators::Comparison;
+using valueIdComparators::Comparison::EQ;
+using valueIdComparators::Comparison::GE;
+using valueIdComparators::Comparison::GT;
+using valueIdComparators::Comparison::LE;
+using valueIdComparators::Comparison::LT;
+using valueIdComparators::Comparison::NE;
 
 // First some internal helper functions and constants.
 namespace {

@@ -10,8 +10,10 @@
 #include "parser/data/Types.h"
 
 using namespace std::string_literals;
+using PositionInTriple::OBJECT;
+using PositionInTriple::PREDICATE;
+using PositionInTriple::SUBJECT;
 using ::testing::Optional;
-using enum PositionInTriple;
 
 namespace {
 struct ContextWrapper {
@@ -55,7 +57,9 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
-  using enum PositionInTriple;
+  using PositionInTriple::OBJECT;
+  using PositionInTriple::PREDICATE;
+  using PositionInTriple::SUBJECT;
 
   EXPECT_THAT(blankNodeA.evaluate(context0, SUBJECT), Optional("_:u0_a"s));
   EXPECT_THAT(blankNodeA.evaluate(context0, PREDICATE), Optional("_:u0_a"s));

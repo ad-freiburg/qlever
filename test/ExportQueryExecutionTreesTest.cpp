@@ -140,7 +140,16 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  using enum ad_utility::MediaType;
+  using ad_utility::MediaType::csv;
+  using ad_utility::MediaType::json;
+  using ad_utility::MediaType::ntriples;
+  using ad_utility::MediaType::octetStream;
+  using ad_utility::MediaType::qleverJson;
+  using ad_utility::MediaType::sparqlJson;
+  using ad_utility::MediaType::sparqlXml;
+  using ad_utility::MediaType::textPlain;
+  using ad_utility::MediaType::tsv;
+  using ad_utility::MediaType::turtle;
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
       testCase.resultTsv);
@@ -182,7 +191,16 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
-  using enum ad_utility::MediaType;
+  using ad_utility::MediaType::csv;
+  using ad_utility::MediaType::json;
+  using ad_utility::MediaType::ntriples;
+  using ad_utility::MediaType::octetStream;
+  using ad_utility::MediaType::qleverJson;
+  using ad_utility::MediaType::sparqlJson;
+  using ad_utility::MediaType::sparqlXml;
+  using ad_utility::MediaType::textPlain;
+  using ad_utility::MediaType::tsv;
+  using ad_utility::MediaType::turtle;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
@@ -213,7 +231,16 @@ void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
-  using enum ad_utility::MediaType;
+  using ad_utility::MediaType::csv;
+  using ad_utility::MediaType::json;
+  using ad_utility::MediaType::ntriples;
+  using ad_utility::MediaType::octetStream;
+  using ad_utility::MediaType::qleverJson;
+  using ad_utility::MediaType::sparqlJson;
+  using ad_utility::MediaType::sparqlXml;
+  using ad_utility::MediaType::textPlain;
+  using ad_utility::MediaType::tsv;
+  using ad_utility::MediaType::turtle;
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
@@ -1512,7 +1539,16 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
   runAskQueryTestCase(askResultFalse(false));
 }
 
-using enum ad_utility::MediaType;
+using ad_utility::MediaType::csv;
+using ad_utility::MediaType::json;
+using ad_utility::MediaType::ntriples;
+using ad_utility::MediaType::octetStream;
+using ad_utility::MediaType::qleverJson;
+using ad_utility::MediaType::sparqlJson;
+using ad_utility::MediaType::sparqlXml;
+using ad_utility::MediaType::textPlain;
+using ad_utility::MediaType::tsv;
+using ad_utility::MediaType::turtle;
 
 // ____________________________________________________________________________
 class StreamableMediaTypesFixture
@@ -1858,7 +1894,19 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  using enum Datatype;
+  using Datatype::BlankNodeIndex;
+  using Datatype::Bool;
+  using Datatype::Date;
+  using Datatype::Double;
+  using Datatype::EncodedVal;
+  using Datatype::GeoPoint;
+  using Datatype::Int;
+  using Datatype::LocalVocabIndex;
+  using Datatype::MaxValue;
+  using Datatype::TextRecordIndex;
+  using Datatype::Undefined;
+  using Datatype::VocabIndex;
+  using Datatype::WordVocabIndex;
 
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test

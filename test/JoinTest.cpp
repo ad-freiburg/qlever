@@ -306,7 +306,12 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
   return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
 }
 
-using enum Permutation::Enum;
+using Permutation::Enum::OPS;
+using Permutation::Enum::OSP;
+using Permutation::Enum::POS;
+using Permutation::Enum::PSO;
+using Permutation::Enum::SOP;
+using Permutation::Enum::SPO;
 auto I = ad_utility::testing::IntId;
 using Var = Variable;
 }  // namespace

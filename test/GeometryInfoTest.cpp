@@ -152,7 +152,10 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  using ad_utility::BoundingCoordinate::MAX_X;
+  using ad_utility::BoundingCoordinate::MAX_Y;
+  using ad_utility::BoundingCoordinate::MIN_X;
+  using ad_utility::BoundingCoordinate::MIN_Y;
 
   BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);

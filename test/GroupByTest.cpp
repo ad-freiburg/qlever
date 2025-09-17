@@ -571,7 +571,12 @@ struct GroupByOptimizations : ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
-  using enum Permutation::Enum;
+  using Permutation::Enum::OPS;
+  using Permutation::Enum::OSP;
+  using Permutation::Enum::POS;
+  using Permutation::Enum::PSO;
+  using Permutation::Enum::SOP;
+  using Permutation::Enum::SPO;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
@@ -1013,7 +1018,8 @@ TEST_F(GroupByOptimizations,
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?b"}, {1, AlwaysDefined}},
@@ -1068,7 +1074,8 @@ TEST_F(GroupByOptimizations,
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?b"}, {1, AlwaysDefined}},
@@ -1122,7 +1129,8 @@ TEST_F(GroupByOptimizations,
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?c"}, {1, AlwaysDefined}},
@@ -1184,7 +1192,8 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?b"}, {1, AlwaysDefined}},
@@ -1256,7 +1265,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
@@ -1329,7 +1339,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   auto d = DoubleId;
   auto i = IntId;
   auto undef = ValueId::makeUndefined();
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
@@ -1410,7 +1421,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
 
   // Check the result.
   auto i = IntId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
@@ -2019,7 +2031,8 @@ TEST(GroupBy, GroupedVariableInExpressions) {
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
@@ -2082,7 +2095,8 @@ TEST(GroupBy, AliasResultReused) {
 
   // Check the result.
   auto d = DoubleId;
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
@@ -2116,7 +2130,8 @@ TEST(GroupBy, AddedHavingRows) {
   // which becomes part of the result, but is not selected by the query.
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?x"}, {0, AlwaysDefined}},
       {Variable{"?count"}, {1, PossiblyUndefined}},

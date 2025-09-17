@@ -47,9 +47,14 @@
   _Pragma("clang diagnostic push")        \
       _Pragma("clang diagnostic ignored \"-Wself-assign-overloaded\"")
 
+#define DISABLE_CLANG_UNUSED_RESULT_WARNING \
+  _Pragma("clang diagnostic push")          \
+      _Pragma("clang diagnostic ignored \"-Wunused-result\"")
+
 #define ENABLE_CLANG_WARNINGS _Pragma("clang diagnostic pop")
 #else
 #define DISABLE_CLANG_SELF_ASSIGN_WARNING
+#define DISABLE_CLANG_UNUSED_RESULT_WARNING
 #define ENABLE_CLANG_WARNINGS
 #endif
 

@@ -154,7 +154,9 @@ auto getQecWithTextIndex(
 }
 
 TEST(TextIndexScanForWord, TextScoringMetric) {
-  using enum TextScoringMetric;
+  using qlever::TextScoringMetric::BM25;
+  using qlever::TextScoringMetric::EXPLICIT;
+  using qlever::TextScoringMetric::TFIDF;
   using namespace qlever;
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
@@ -186,7 +188,8 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   s2.getExternallyVisibleVariableColumns();
 
   // Test if all columns are there and correct
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},

@@ -217,7 +217,8 @@ TEST(CartesianProductJoin, variableColumnMap) {
       Vars{std::nullopt, Variable{"?y"}, std::nullopt, Variable{"?z"}}));
   CartesianProductJoin join{qec, std::move(subtrees)};
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  using ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  using ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?x"}, {4, AlwaysDefined}},
       {Variable{"?y"}, {1, AlwaysDefined}},
