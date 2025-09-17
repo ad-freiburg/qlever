@@ -15,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedIriManager.h"
+#include "index/InputFileSpecification.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -1278,7 +1279,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const Index::InputFileSpecification& file, const EncodedIriManager* ev,
+    const qlever::InputFileSpecification& file, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
   auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
@@ -1306,7 +1307,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
   // arguments.
   return ad_utility::callFixedSize(
       std::array{file.parseInParallel_ ? 1 : 0,
-                 file.filetype_ == Index::Filetype::Turtle ? 1 : 0},
+                 file.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
       makeRdfParserImpl);
 }
 

@@ -5,6 +5,10 @@
 #ifndef QLEVER_SRC_PARSER_MAGICSERVICEIRICONSTANTS_H
 #define QLEVER_SRC_PARSER_MAGICSERVICEIRICONSTANTS_H
 
+#include <ctre-unicode.hpp>
+#include <string>
+#include <string_view>
+
 // Constants for the various magic services - they are invoked using these
 // federated querying IRIs but actually never contact these and activate special
 // query features locally

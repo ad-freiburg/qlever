@@ -16,6 +16,7 @@
 
 #include "backports/keywords.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {

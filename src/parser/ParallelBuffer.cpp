@@ -3,6 +3,8 @@
 
 #include "./ParallelBuffer.h"
 
+#include "util/StringUtils.h"
+
 // _________________________________________________________________________
 void ParallelFileBuffer::open(const std::string& filename) {
   file_.open(filename, "r");

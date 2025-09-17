@@ -5,6 +5,7 @@
 #include "ParsedRequestBuilder.h"
 
 #include "engine/HttpError.h"
+#include "util/Algorithm.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;
 
