@@ -265,11 +265,24 @@ class TransitivePathImpl : public TransitivePathBase {
     bool startsWithGraphVariable_;
     // range state
     bool finished_{false};
-    ql::ranges::iterator_t<Node> tableColumnIt_{};
-    std::optional<EnumerateRangeType> enumerateRange_;
-    ql::ranges::iterator_t<EnumerateRangeType> enumerateRangeIt_{};
+    // The `resultRange_` yields results of this transitive hull
+    // computation. Values from `TableColumnWithVocab::expandUndef` are
+    // processed one by one. The range and iterator are reinitialised when the
+    // next value from the `enumerateRange_` is yielded. The iterator is
+    // incremented on each iteration of this object.
     std::optional<NodeWithTargetRange> resultRange_;
     NodeWithTargetRange::iterator result_{};
+    // The `enumerateRange_` yields `pair<index, ZippedType>` for the current
+    // table column's `startNodes_`.  The range and iterator are
+    // reinitialised when the next table column is yielded. The iterator is
+    // incremented only when the `resultRange_` is exhausted.
+    std::optional<EnumerateRangeType> enumerateRange_;
+    ql::ranges::iterator_t<EnumerateRangeType> enumerateRangeIt_{};
+    // This iterator points to the table columns of `startNodes_` and only
+    // incremented when the `enumerateRange_` is exhausted. The transitive hull
+    // computation is completed when  this iterator reaches the end of
+    // `startNodes_`.
+    ql::ranges::iterator_t<Node> tableColumnIt_{};
 
    public:
     TransitiveHullLazyRange(const TransitivePathImpl<T>& parent, const T edges,
@@ -369,6 +382,8 @@ class TransitivePathImpl : public TransitivePathBase {
       enumerateRangeIt_ = ql::ranges::begin(*enumerateRange_);
 
       if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
+        // if there are no start nodes in this table column, we move to the
+        // next table column and recursively find the next valid range.
         ++tableColumnIt_;
         return setRuntimeState();
       }
