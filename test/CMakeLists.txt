@@ -470,3 +470,5 @@ addLinkAndDiscoverTest(GeometryInfoTest util)
 addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTestSerial(HttpErrorTest engine)
+
+addLinkAndDiscoverTest(TimeTracerTest)
