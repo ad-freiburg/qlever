@@ -4427,7 +4427,7 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();
 
-  auto cleanup = setRuntimeParameterForTest<"enable-distributive-union">(false);
+  auto cleanup = setRuntimeParameterForTest<EnableDistributiveUnion>(false);
   auto query = parseQuery(
       "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
   auto plans = qp.createExecutionTrees(query);
@@ -5375,7 +5375,7 @@ LIMIT 1
 // are not even stored as `stripped`.
 TEST(QueryPlanner, SubqueryColumnStripping) {
   // Save current strip-columns setting and ensure it's enabled for this test
-  auto cleanup = setRuntimeParameterForTest<"strip-columns">(true);
+  auto cleanup = setRuntimeParameterForTest<StripColumnsParameter>(true);
 
   // Test a subquery that selects only some variables, causing others to be
   // stripped
@@ -5391,7 +5391,7 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
 
     // The outer cleanup will reset the original status, so we can safely
     // modify the global parameter here.
-    RuntimeParameters().set<"strip-columns">(doStrip);
+    RuntimeParameters().set<StripColumnsParameter>(doStrip);
 
     // The inner subquery should have ?z and ?w stripped (as they're not
     // selected) but since it's a subquery, the stripped variables should not be

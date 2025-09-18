@@ -358,6 +358,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
       checkThatTablesAreEqual(col1And2, table);
     }
+
     for (const auto& block : reader.lazyScan(
              scanSpec,
              CompressedRelationReader::convertBlockMetadataRangesToVector(

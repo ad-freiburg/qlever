@@ -11,12 +11,12 @@
 
 // Set a runtime parameter to a specific value for the duration of the current
 // scope. The original value is restored when the scope is left.
-template <ad_utility::ParameterName Name, typename Value>
+template <typename ParameterName, typename Value>
 [[nodiscard]] auto setRuntimeParameterForTest(Value&& value) {
-  auto originalValue = RuntimeParameters().get<Name>();
-  RuntimeParameters().set<Name>(AD_FWD(value));
+  auto originalValue = RuntimeParameters().get<ParameterName>();
+  RuntimeParameters().set<ParameterName>(AD_FWD(value));
   return absl::Cleanup{[originalValue = std::move(originalValue)]() {
-    RuntimeParameters().set<Name>(originalValue);
+    RuntimeParameters().set<ParameterName>(originalValue);
   }};
 }
 

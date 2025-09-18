@@ -323,9 +323,9 @@ class Parameters {
 
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
-  template <ParameterName Name, typename OnUpdateAction>
+  template <typename ParameterName, typename OnUpdateAction>
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    constexpr auto index = _nameToIndex.at(Name);
+    constexpr auto index = _nameToIndex.at(ParameterName::Name);
     std::get<index>(_parameters)
         .wlock()
         ->setOnUpdateAction(std::move(onUpdateAction));
