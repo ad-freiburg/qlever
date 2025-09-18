@@ -311,6 +311,19 @@ class TransitivePathImpl : public TransitivePathBase {
           start.isVariable() && parent_.graphVariable_ == start.getVariable();
     }
 
+    // Return the ID of the target node when finding connected nodes.
+    // Returns either `startNode`, `graphId` or `targetId_`,
+    // where the selection logic covers the following case:
+    // SELECT * {
+    //   ?x <a>+ ?x . # sameVariableOnBothSides
+    //   GRAPH ?g {
+    //     ?y <b>+ ?g # endsWithGraphVariable
+    //   }
+    //   # else
+    //   VALUES ?z { <d> }
+    //   ?z <c>+ <e> # where <e> would be the target id,
+    //                 or nullopt if <e> would be ?e instead.
+    // }
     std::optional<Id> getTargetId(const Id& startNode,
                                   const Id& graphId) const {
       if (sameVariableOnBothSides_) {
