@@ -31,7 +31,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  if (RuntimeParameters().get<"cache-service-results">()) {
+  if (RuntimeParameters().get<CacheServiceResults>()) {
     return absl::StrCat(
         "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
@@ -133,7 +133,7 @@ Result Service::computeResult(bool requestLaziness) {
 // ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
-  if (RuntimeParameters().get<"syntax-test-mode">()) {
+  if (RuntimeParameters().get<SyntaxTestMode>()) {
     return makeNeutralElementResultForSilentFail();
   }
   ad_utility::httpUtils::Url serviceUrl{
@@ -554,7 +554,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // - or exactly one of the operations is a Service. If we could estimate
   // the result size of a Service, the Service with the smaller result could
   // be used as a sibling here.
-  if (RuntimeParameters().get<"cache-service-results">() ||
+  if (RuntimeParameters().get<CacheServiceResults>() ||
       (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;
@@ -588,7 +588,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   if (siblingResult->isFullyMaterialized()) {
     bool resultIsSmall = siblingResult->idTable().size() <=
-                         RuntimeParameters().get<"service-max-value-rows">();
+                         RuntimeParameters().get<ServiceMaxValueRows>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
@@ -609,8 +609,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // keep and pass an iterator to the sibling result if the max row threshold
   // is exceeded
   auto generator = moveToCachingInputRange(siblingResult->idTables());
-  const size_t maxValueRows =
-      RuntimeParameters().get<"service-max-value-rows">();
+  const size_t maxValueRows = RuntimeParameters().get<ServiceMaxValueRows>();
   while (auto pairOpt = generator.get()) {
     auto& pair = pairOpt.value();
     rows += pair.idTable_.size();

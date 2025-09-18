@@ -186,7 +186,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
 
   {
     auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(2'500);
+        setRuntimeParameterForTest<SpatialJoinPrefilterMaxSize>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -212,7 +212,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
 
   {
     auto cleanUp =
-        setRuntimeParameterForTest<"spatial-join-prefilter-max-size">(10'000);
+        setRuntimeParameterForTest<SpatialJoinPrefilterMaxSize>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.

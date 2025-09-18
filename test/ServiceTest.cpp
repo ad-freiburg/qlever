@@ -257,7 +257,7 @@ TEST_F(ServiceTest, computeResult) {
 
           // In the syntax test mode, all services (so also the failing ones)
           // return the neutral result.
-          auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+          auto cleanup = setRuntimeParameterForTest<SyntaxTestMode>(true);
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, false));
         };
 
@@ -563,7 +563,7 @@ TEST_F(ServiceTest, getCacheKey) {
 // _____________________________________________________________________________
 TEST_F(ServiceTest, getCacheKeyWithCaching) {
   using namespace ::testing;
-  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  auto cleanup = setRuntimeParameterForTest<CacheServiceResults>(true);
   {
     parsedQuery::Service parsedServiceClause{
         {Variable{"?x"}, Variable{"?y"}},
@@ -725,7 +725,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
-  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  auto cleanup = setRuntimeParameterForTest<CacheServiceResults>(true);
   auto service = std::make_shared<Service>(
       testQec,
       parsedQuery::Service{
@@ -884,8 +884,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Compute (large) sibling -> sibling result is computed
   const auto maxValueRowsDefault =
-      RuntimeParameters().get<"service-max-value-rows">();
-  RuntimeParameters().set<"service-max-value-rows">(0);
+      RuntimeParameters().get<ServiceMaxValueRows>();
+  RuntimeParameters().set<ServiceMaxValueRows>(0);
   Service::precomputeSiblingResult(sibling, service, true, false);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -894,7 +894,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  RuntimeParameters().set<ServiceMaxValueRows>(maxValueRowsDefault);
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
@@ -911,7 +911,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
-  RuntimeParameters().set<"service-max-value-rows">(0);
+  RuntimeParameters().set<ServiceMaxValueRows>(0);
   Service::precomputeSiblingResult(service, sibling, false, true);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -920,7 +920,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                    ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  RuntimeParameters().set<ServiceMaxValueRows>(maxValueRowsDefault);
 
   // consume the sibling result-generator
   for ([[maybe_unused]] auto& _ :

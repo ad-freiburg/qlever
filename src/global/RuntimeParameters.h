@@ -7,6 +7,42 @@
 
 #include "util/Parameters.h"
 
+DECLARE_PAREMETER(SortEstimateCancellationFactor,
+                  "sort-estimate-cancellation-factor");
+DECLARE_PAREMETER(CacheMaxNumEntries, "cache-max-num-entries");
+DECLARE_PAREMETER(CacheMaxSize, "cache-max-size");
+DECLARE_PAREMETER(CacheMaxSizeSingleEntry, "cache-max-size-single-entry");
+DECLARE_PAREMETER(DefaultQueryTimeout, "default-query-timeout");
+DECLARE_PAREMETER(LazyIndexScanQueueSize, "lazy-index-scan-queue-size");
+DECLARE_PAREMETER(LazyIndexScanNumThreads, "lazy-index-scan-num-threads");
+DECLARE_PAREMETER(LazyIndexScanMaxSizeMaterialization,
+                  "lazy-index-scan-max-size-materialization");
+DECLARE_PAREMETER(UseBinsearchTransitivePath, "use-binsearch-transitive-path");
+DECLARE_PAREMETER(GroupByHashMapEnabled, "group-by-hash-map-enabled");
+DECLARE_PAREMETER(GroupByDisableIndexScanOptimizations,
+                  "group-by-disable-index-scan-optimizations");
+DECLARE_PAREMETER(ServiceMaxValueRows, "service-max-value-rows");
+DECLARE_PAREMETER(QueryPlanningBudget, "query-planning-budget");
+DECLARE_PAREMETER(ThrowOnUnboundVariables, "throw-on-unbound-variables");
+DECLARE_PAREMETER(CacheMaxSizeLazyResult, "cache-max-size-lazy-result");
+DECLARE_PAREMETER(WebsocketUpdatesEnabled, "websocket-updates-enabled");
+DECLARE_PAREMETER(SmallIndexScanSizeEstimateDivisor,
+                  "small-index-scan-size-estimate-divisor");
+DECLARE_PAREMETER(ZeroCostEstimateForCachedSubtree,
+                  "zero-cost-estimate-for-cached-subtree");
+DECLARE_PAREMETER(RequestBodyLimit, "request-body-limit");
+DECLARE_PAREMETER(CacheServiceResults, "cache-service-results");
+DECLARE_PAREMETER(CacheLoadResults, "cache-load-results");
+DECLARE_PAREMETER(SyntaxTestMode, "syntax-test-mode");
+DECLARE_PAREMETER(DivisionByZeroIsUndef, "division-by-zero-is-undef");
+DECLARE_PAREMETER(EnablePrefilterOnIndexScans,
+                  "enable-prefilter-on-index-scans");
+DECLARE_PAREMETER(StripColumnsParameter, "strip-columns");
+DECLARE_PAREMETER(SpatialJoinMaxNumThreads, "spatial-join-max-num-threads");
+DECLARE_PAREMETER(SpatialJoinPrefilterMaxSize,
+                  "spatial-join-prefilter-max-size");
+DECLARE_PAREMETER(EnableDistributiveUnion, "enable-distributive-union");
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
@@ -36,53 +72,52 @@ inline auto& RuntimeParameters() {
         // If the time estimate for a sort operation is larger by more than this
         // factor than the remaining time, then the sort is canceled with a
         // timeout exception.
-        Double<"sort-estimate-cancellation-factor">{3.0},
-        SizeT<"cache-max-num-entries">{1000},
-        MemorySizeParameter<"cache-max-size">{30_GB},
-        MemorySizeParameter<"cache-max-size-single-entry">{5_GB},
-        SizeT<"lazy-index-scan-queue-size">{20},
-        SizeT<"lazy-index-scan-num-threads">{10},
+        Double<SortEstimateCancellationFactor>{3.0},
+        SizeT<CacheMaxNumEntries>{1000},
+        MemorySizeParameter<CacheMaxSize>{30_GB},
+        MemorySizeParameter<CacheMaxSizeSingleEntry>{5_GB},
+        SizeT<LazyIndexScanQueueSize>{20},
+        SizeT<LazyIndexScanNumThreads>{10},
         ensureStrictPositivity(
-            DurationParameter<std::chrono::seconds, "default-query-timeout">{
-                30s}),
-        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-binsearch-transitive-path">{true},
-        Bool<"group-by-hash-map-enabled">{false},
-        Bool<"group-by-disable-index-scan-optimizations">{false},
-        SizeT<"service-max-value-rows">{10'000},
-        SizeT<"query-planning-budget">{1500},
-        Bool<"throw-on-unbound-variables">{false},
+            DurationParameter<std::chrono::seconds, DefaultQueryTimeout>{30s}),
+        SizeT<LazyIndexScanMaxSizeMaterialization>{1'000'000},
+        Bool<UseBinsearchTransitivePath>{true},
+        Bool<GroupByHashMapEnabled>{false},
+        Bool<GroupByDisableIndexScanOptimizations>{false},
+        SizeT<ServiceMaxValueRows>{10'000},
+        SizeT<QueryPlanningBudget>{1500},
+        Bool<ThrowOnUnboundVariables>{false},
         // Control up until which size lazy results should be cached. Caching
         // does cause significant overhead for this case.
-        MemorySizeParameter<"cache-max-size-lazy-result">{5_MB},
-        Bool<"websocket-updates-enabled">{true},
+        MemorySizeParameter<CacheMaxSizeLazyResult>{5_MB},
+        Bool<WebsocketUpdatesEnabled>{true},
         // When the result of an index scan is smaller than a single block, then
         // its size estimate will be the size of the block divided by this
         // value.
-        SizeT<"small-index-scan-size-estimate-divisor">{5},
+        SizeT<SmallIndexScanSizeEstimateDivisor>{5},
         // Determines whether the cost estimate for a cached subtree should be
         // set to zero in query planning.
-        Bool<"zero-cost-estimate-for-cached-subtree">{false},
+        Bool<ZeroCostEstimateForCachedSubtree>{false},
         // Maximum size for the body of requests that the server will process.
-        MemorySizeParameter<"request-body-limit">{100_MB},
+        MemorySizeParameter<RequestBodyLimit>{100_MB},
         // SERVICE operations are not cached by default, but can be enabled
         // which has the downside that the sibling optimization where VALUES are
         // dynamically pushed into `SERVICE` is no longer used.
-        Bool<"cache-service-results">{false},
+        Bool<CacheServiceResults>{false},
         // If set to `true`, we expect the contents of URLs loaded via a LOAD to
         // not change over time. This enables caching of LOAD operations.
-        Bool<"cache-load-results">{false},
+        Bool<CacheLoadResults>{false},
         // If set to `true`, several exceptions will silently be ignored and a
         // dummy result will be returned instead.
         // This mode should only be activated when running the syntax tests of
         // the SPARQL conformance test suite.
-        Bool<"syntax-test-mode">{false},
+        Bool<SyntaxTestMode>{false},
         // If set to `true`, then a division by zero in an expression will lead
         // to an
         // expression error, meaning that the result is undefined. If set to
         // false,
         // the result will be `NaN` or `infinity` respectively.
-        Bool<"division-by-zero-is-undef">{true},
+        Bool<DivisionByZeroIsUndef>{true},
         // If set to `true`, the contained `FILTER` expressions in the query
         // try to set and apply a corresponding `PrefilterExpression` (see
         // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
@@ -92,21 +127,21 @@ inline auto& RuntimeParameters() {
         // applying `PrefilterExpression`s. This is useful to set a
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
-        Bool<"enable-prefilter-on-index-scans">{true},
+        Bool<EnablePrefilterOnIndexScans>{true},
         // If set, then unneeded variables will not be emitted as the result of
         // each operation.
         // This makes the queries faster, but leads to more cache misses if e.g.
         // variables in a SELECT clause change
         // between otherwise equal queries.
-        Bool<"strip-columns">{false},
+        Bool<StripColumnsParameter>{false},
         // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
-        SizeT<"spatial-join-max-num-threads">{8},
+        SizeT<SpatialJoinMaxNumThreads>{8},
         // The maximum size of the `prefilterBox` for
         // `SpatialJoinAlgorithms::libspatialjoinParse()`.
-        SizeT<"spatial-join-prefilter-max-size">{2'500},
+        SizeT<SpatialJoinPrefilterMaxSize>{2'500},
         // Push joins into both children of unions if this leads to a cheaper
         // cost-estimate.
-        Bool<"enable-distributive-union">{true},
+        Bool<EnableDistributiveUnion>{true},
     };
   }();
   return params;

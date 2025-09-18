@@ -60,11 +60,11 @@ Server::Server(unsigned short port, size_t numThreads,
       queryThreadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
-  RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
+  RuntimeParameters().setOnUpdateAction<CacheMaxNumEntries>(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size">(
+  RuntimeParameters().setOnUpdateAction<CacheMaxSize>(
       [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
-  RuntimeParameters().setOnUpdateAction<"cache-max-size-single-entry">(
+  RuntimeParameters().setOnUpdateAction<CacheMaxSizeSingleEntry>(
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
@@ -194,7 +194,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         verifyUserSubmittedQueryTimeout(
             std::optional<std::string_view> userTimeout, bool accessTokenOk,
             const RequestT& request, ResponseT& send) const {
-  auto defaultTimeout = RuntimeParameters().get<"default-query-timeout">();
+  auto defaultTimeout = RuntimeParameters().get<DefaultQueryTimeout>();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =

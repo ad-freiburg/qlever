@@ -305,8 +305,7 @@ TEST(OperationTest, estimatesForCachedResults) {
   // change (see the `getCostEstimate` function for details on why).
   {
     auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            true);
+        setRuntimeParameterForTest<ZeroCostEstimateForCachedSubtree>(true);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
@@ -314,8 +313,7 @@ TEST(OperationTest, estimatesForCachedResults) {
   }
   {
     auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            false);
+        setRuntimeParameterForTest<ZeroCostEstimateForCachedSubtree>(false);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
@@ -676,8 +674,7 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // Too small for storage, make sure to change back before consuming
     // generator to additionally assert sure it is not re-read on every
     // iteration.
-    auto cleanup =
-        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
+    auto cleanup = setRuntimeParameterForTest<CacheMaxSizeLazyResult>(1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
@@ -744,7 +741,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
         }};
     qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
 
-    auto cleanup = setRuntimeParameterForTest<"cache-max-size-lazy-result">(
+    auto cleanup = setRuntimeParameterForTest<CacheMaxSizeLazyResult>(
         runtimeParameterLimit);
 
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
