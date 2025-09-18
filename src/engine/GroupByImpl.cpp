@@ -1315,12 +1315,22 @@ void GroupByImpl::substituteGroupVariable(
       resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
   for (const auto& occurrence : occurrences) {
-    sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
-    values.resize(groupValues.size());
-    ql::ranges::copy(groupValues, values.begin());
+    auto newExpression =
+        [&groupValues,
+         &allocator]() -> std::unique_ptr<sparqlExpression::SparqlExpression> {
+      // Make sure that "constant results" i.e. expressions returning a single
+      // value are not wrapped into vectors.
+      if (groupValues.size() == 1) {
+        return std::make_unique<sparqlExpression::IdExpression>(groupValues[0]);
+      }
 
-    auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
-        std::move(values));
+      sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
+      values.resize(groupValues.size());
+      ql::ranges::copy(groupValues, values.begin());
+
+      return std::make_unique<sparqlExpression::VectorIdExpression>(
+          std::move(values));
+    }();
 
     occurrence.parent_->replaceChild(occurrence.nThChild_,
                                      std::move(newExpression));
