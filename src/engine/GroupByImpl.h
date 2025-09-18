@@ -493,11 +493,13 @@ class GroupByImpl : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
 
-  // Substitute the group values for all occurrences of a group variable.
-  static void substituteGroupVariable(
-      const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
-      size_t beginIndex, size_t count, size_t columnIndex,
-      const Allocator& allocator);
+  // Substitute the group values for all occurrences of a group variable. Return
+  // a vector of the replaced `SparqlExpression`s to potentially put them pack
+  // afterwards.
+  static std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+  substituteGroupVariable(const std::vector<ParentAndChildIndex>& occurrences,
+                          IdTable* resultTable, size_t beginIndex, size_t count,
+                          size_t columnIndex, const Allocator& allocator);
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`. Return a vector of

@@ -1307,23 +1307,21 @@ GroupByImpl::getHashMapAggregationResults(
 }
 
 // _____________________________________________________________________________
-void GroupByImpl::substituteGroupVariable(
+std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+GroupByImpl::substituteGroupVariable(
     const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
     size_t beginIndex, size_t count, size_t columnIndex,
     const Allocator& allocator) {
   decltype(auto) groupValues =
       resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
+  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+      originalChildren;
+  originalChildren.reserve(occurrences.size());
   for (const auto& occurrence : occurrences) {
     auto newExpression =
         [&groupValues,
          &allocator]() -> std::unique_ptr<sparqlExpression::SparqlExpression> {
-      // Make sure that "constant results" i.e. expressions returning a single
-      // value are not wrapped into vectors.
-      if (groupValues.size() == 1) {
-        return std::make_unique<sparqlExpression::IdExpression>(groupValues[0]);
-      }
-
       sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
       values.resize(groupValues.size());
       ql::ranges::copy(groupValues, values.begin());
@@ -1332,9 +1330,10 @@ void GroupByImpl::substituteGroupVariable(
           std::move(values));
     }();
 
-    occurrence.parent_->replaceChild(occurrence.nThChild_,
-                                     std::move(newExpression));
+    originalChildren.push_back(occurrence.parent_->replaceChild(
+        occurrence.nThChild_, std::move(newExpression)));
   }
+  return originalChildren;
 }
 
 // _____________________________________________________________________________
@@ -1516,13 +1515,19 @@ void GroupByImpl::evaluateAlias(
         sparqlExpression::copyExpressionResult(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
+    std::vector<std::pair<
+        const std::vector<ParentAndChildIndex>&,
+        std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>>>
+        originalChildrenForGroupVariable;
     for (const auto& substitution : substitutions) {
       const auto& occurrences =
           get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
       // Substitute in the values of the grouped variable
-      substituteGroupVariable(
-          occurrences, result, evaluationContext._beginIndex,
-          evaluationContext.size(), substitution.resultColumnIndex_, allocator);
+      originalChildrenForGroupVariable.emplace_back(
+          occurrences, substituteGroupVariable(
+                           occurrences, result, evaluationContext._beginIndex,
+                           evaluationContext.size(),
+                           substitution.resultColumnIndex_, allocator));
     }
 
     // Substitute in the results of all aggregates contained in the
@@ -1538,13 +1543,24 @@ void GroupByImpl::evaluateAlias(
 
     // Restore original children. Only necessary when the expression will be
     // used in the future (not the case for the hash map optimization).
-    // TODO<C++23> Use `ql::views::zip(info, originalChildren)`.
-    for (size_t i = 0; i < info.size(); ++i) {
-      auto& aggregate = info.at(i);
-      auto parentAndIndex = aggregate.parentAndIndex_.value();
-      parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                           std::move(originalChildren.at(i)));
+    auto restoreOriginalExpressions = [](auto&& range, auto& originalChildren) {
+      for (auto&& [parentAndIndex, originalExpression] :
+           ::ranges::views::zip(AD_FWD(range), originalChildren)) {
+        parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
+                                             std::move(originalExpression));
+      }
+    };
+
+    for (auto& [occurrences, children] : originalChildrenForGroupVariable) {
+      restoreOriginalExpressions(occurrences, children);
     }
+
+    restoreOriginalExpressions(
+        info | ql::views::transform(
+                   [](auto& aggregate) -> const ParentAndChildIndex& {
+                     return aggregate.parentAndIndex_.value();
+                   }),
+        originalChildren);
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
