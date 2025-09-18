@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"

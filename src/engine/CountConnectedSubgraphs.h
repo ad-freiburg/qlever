@@ -6,6 +6,8 @@
 #define QLEVER_SRC_ENGINE_COUNTCONNECTEDSUBGRAPHS_H
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // This module implements the efficient counting of the number of connected
 // subgraphs in a given graph. This routine can be used to analyze the
