@@ -19,9 +19,6 @@
 #include "util/BufferedVector.h"
 #include "util/TypeIdentity.h"
 
-// template class columnBasedIdTable::IdTable<char, 0,
-// ad_utility::BufferedVector<char>>;
-
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
@@ -379,7 +376,6 @@ TEST(IdTable, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
-// Tests for merging two already-sorted IdTables using the various APIs.
 TEST(IdTable, mergeTwoSortedTables_and_member_wrappers) {
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
     using Table = typename decltype(t)::type;
@@ -1301,3 +1297,5 @@ TEST(IdTable, moveOrClone) {
 
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
+template class columnBasedIdTable::IdTable<char, 0,
+                                           ad_utility::BufferedVector<char>>;

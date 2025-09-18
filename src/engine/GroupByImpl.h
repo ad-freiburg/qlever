@@ -53,30 +53,6 @@ class GroupByImpl : public Operation {
     size_t _outCol;
   };
 
-  struct RowToGroup {
-    size_t rowIndex_;
-    size_t groupIndex_;
-
-    friend bool operator==(const RowToGroup& lhs, const RowToGroup& rhs) {
-      return lhs.rowIndex_ == rhs.rowIndex_ &&
-             lhs.groupIndex_ == rhs.groupIndex_;
-    }
-  };
-
-  // Type returned by `getHashEntries(groupByCols, onlyInsertPreexistingKeys)`.
-  // If `onlyInsertPreexistingKeys` is true, nonMatchingRows_ will only contain
-  // rows that would create new groups.
-  // If `onlyInsertPreexistingKeys` is false, nonMatchingRows_ will be empty as
-  // new groups are created for these rows.
-  struct GroupLookupResult {
-    // For each processed input row that matched an existing group (in order),
-    // stores a RowToGroup mapping containing both the row's index in the input
-    // and the index of its matching group in the hash map.
-    std::vector<RowToGroup> matchedRowsToGroups_;
-    // Indices of input rows for which no existing group was found.
-    std::vector<size_t> nonMatchingRows_;
-  };
-
   GroupByImpl(QueryExecutionContext* qec, vector<Variable> groupByVariables,
               std::vector<Alias> aliases,
               std::shared_ptr<QueryExecutionTree> subtree);
@@ -384,6 +360,30 @@ class GroupByImpl : public Operation {
   Result computeGroupByForHashMapOptimization(HashMapOptimizationData data,
                                               SubResults&& subresults) const;
 
+  struct RowToGroup {
+    size_t rowIndex_;
+    size_t groupIndex_;
+
+    friend bool operator==(const RowToGroup& lhs, const RowToGroup& rhs) {
+      return lhs.rowIndex_ == rhs.rowIndex_ &&
+             lhs.groupIndex_ == rhs.groupIndex_;
+    }
+  };
+
+  // Type returned by `getHashEntries(groupByCols, onlyInsertPreexistingKeys)`.
+  // If `onlyInsertPreexistingKeys` is true, nonMatchingRows_ will only contain
+  // rows that would create new groups.
+  // If `onlyInsertPreexistingKeys` is false, nonMatchingRows_ will be empty as
+  // new groups are created for these rows.
+  struct GroupLookupResult {
+    // For each processed input row that matched an existing group (in order),
+    // stores a RowToGroup mapping containing both the row's index in the input
+    // and the index of its matching group in the hash map.
+    std::vector<RowToGroup> matchedRowsToGroups_;
+    // Indices of input rows for which no existing group was found.
+    std::vector<size_t> nonMatchingRows_;
+  };
+
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
                    MaxAggregationData, SumAggregationData,
@@ -461,9 +461,6 @@ class GroupByImpl : public Operation {
         size_t aggregationDataIndex) {
       return aggregationData_.at(aggregationDataIndex);
     }
-
-    // Expose map of group key to index for external use (e.g., sampling).
-    const auto& getMap() const { return map_; }
 
     // Get vector containing the aggregation data at `aggregationDataIndex`,
     // but const.
@@ -679,8 +676,8 @@ class GroupByImpl : public Operation {
 
  private:
   struct HashMapTimers {
-    ad_utility::Timer lookupTimer;
-    ad_utility::Timer aggregationTimer;
+    ad_utility::Timer lookupTimer_;
+    ad_utility::Timer aggregationTimer_;
   };
 
   // Load entries from the given table into the hash map, optionally only
@@ -699,34 +696,33 @@ class GroupByImpl : public Operation {
   makeGroupValueSpans(const IdTable& table, size_t beginIdx, size_t blockSize,
                       const std::vector<ColumnIndex>& cols) const;
 
-  // Helper function to handle the remainder of the input after the hash map
-  // threshold has been exceeded.
-  //
-  // Hybrid approach summary:
-  // - While processing input blocks we insert all rows into a hash map and
-  //   maintain aggregation state for groups already present in the map.
-  // - If the number of groups exceeds a runtime-configured threshold we
-  //   switch to a hybrid fallback: we keep the hash map results for groups
-  //   already discovered, and buffer the remaining rows (those that would
-  //   create new groups) into a temporary table. The buffered rows are then
-  //   processed using a sort-based grouping (i.e., sort the buffered rows on
-  //   the grouping columns and run the usual grouping algorithm) and merged
-  //   with the hash-map results.
-  //
-  // Template Parameters:
-  // - NUM_GROUP_COLUMNS: number of grouping columns used by the HashMap
-  //   aggregation data (compile-time constant; may be 0).
-  // - ChunkIterator: an input iterator type that points into the range of
-  //   subresults (each element is expected to be a pair/reference of the
-  //   form (IdTable, LocalVocab)). This iterator is advanced from the
-  //   current position to the end.
-  // - ChunkEnd: the corresponding end/sentinel type for the input range. In
-  //   many cases this is the same type as ChunkIterator, but it may be a
-  //   distinct sentinel type for ranges that use sentinels.
-  //
-  // The function consumes the remaining input starting at `currentChunk`
-  // up to `endOfChunks` and returns the final `Result` consisting of the
-  // hash-map entries and the grouped fallback rows.
+  /** Helper function to handle the remainder of the input after the hash map
+   * threshold has been exceeded.
+   *
+   * Hybrid approach summary:
+   * - While processing input blocks we insert all rows into a hash map and
+   *   maintain aggregation state for groups already present in the map.
+   * - If the number of groups exceeds a runtime-configured threshold we
+   *   switch to a hybrid fallback: we keep the hash map results for groups
+   *   already discovered, and buffer the remaining rows (those that would
+   *   create new groups) into a temporary table. The buffered rows are then
+   *   processed using a sort-based grouping and merged with the hash-map
+   *   results.
+   *
+   * @tparam NUM_GROUP_COLUMNS: number of grouping columns used by the HashMap
+   *   aggregation data (compile-time constant; may be 0).
+   * @tparam ChunkIterator: an input iterator type that points into the range of
+   *   subresults (each element is expected to be a pair/reference of the
+   *   form (IdTable, LocalVocab)). This iterator is advanced from the
+   *   current position to the end.
+   * @tparam ChunkEnd: the corresponding end/sentinel type for the input range.
+   * In many cases this is the same type as ChunkIterator, but it may be a
+   *   distinct sentinel type for ranges that use sentinels.
+   *
+   * The function consumes the remaining input starting at `currentChunk`
+   * up to `endOfChunks` and returns the final `Result` consisting of the
+   * hash-map entries and the grouped fallback rows.
+   */
   template <size_t NUM_GROUP_COLUMNS, typename ChunkIterator, typename ChunkEnd>
   requires std::input_iterator<ChunkIterator> &&
            std::sentinel_for<ChunkEnd, ChunkIterator>

@@ -1628,8 +1628,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
           std::move(data), aggregationData, timers, currentChunk, endOfChunks);
     }
   }
-  runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer.msecs());
-  runtimeInfo().addDetail("timeAggregation", timers.aggregationTimer.msecs());
+  runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer_.msecs());
+  runtimeInfo().addDetail("timeAggregation", timers.aggregationTimer_.msecs());
   IdTable resultTable = createResultFromHashMap(
       aggregationData, data.aggregateAliases_, &localVocab);
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
@@ -1733,10 +1733,10 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
         table, evaluationContext._beginIndex, evaluationContext.size(),
         data.columnIndices_.value());
 
-    timers.lookupTimer.cont();
+    timers.lookupTimer_.cont();
     auto lookupResult =
         aggregationData.getHashEntries(groupValues, onlyInsertPreexistingKeys);
-    timers.lookupTimer.stop();
+    timers.lookupTimer_.stop();
 
     if (onlyInsertPreexistingKeys) {
       nonMatchingRows.insert(nonMatchingRows.end(),
@@ -1744,11 +1744,10 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
                              lookupResult.nonMatchingRows_.end());
     }
 
-    timers.aggregationTimer.cont();
-    // Delegate processing of aggregate aliases for this block to a helper.
+    timers.aggregationTimer_.cont();
     processAggregateAliasesForBlock(lookupResult, data, aggregationData,
                                     evaluationContext);
-    timers.aggregationTimer.stop();
+    timers.aggregationTimer_.stop();
   }
   return nonMatchingRows;
 }
@@ -1843,3 +1842,28 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   result.push_back(std::array{Id::makeFromInt(res)});
   return result;
 }
+
+// Explicit template instantiations for test usage
+template typename GroupByImpl::HashMapAggregationData<
+    1>::template ArrayOrVector<ql::span<const Id>>
+GroupByImpl::makeGroupValueSpans<1>(const IdTable&, size_t, size_t,
+                                    const std::vector<ColumnIndex>&) const;
+
+template typename GroupByImpl::HashMapAggregationData<
+    2>::template ArrayOrVector<ql::span<const Id>>
+GroupByImpl::makeGroupValueSpans<2>(const IdTable&, size_t, size_t,
+                                    const std::vector<ColumnIndex>&) const;
+
+template
+    typename GroupByImpl::HashMapAggregationData<1>::template ArrayOrVector<Id>
+    GroupByImpl::HashMapAggregationData<1>::makeKeyForHashMap(
+        const typename HashMapAggregationData<1>::template ArrayOrVector<
+            ql::span<const Id>>&,
+        size_t) const;
+
+template
+    typename GroupByImpl::HashMapAggregationData<2>::template ArrayOrVector<Id>
+    GroupByImpl::HashMapAggregationData<2>::makeKeyForHashMap(
+        const typename HashMapAggregationData<2>::template ArrayOrVector<
+            ql::span<const Id>>&,
+        size_t) const;
