@@ -328,4 +328,231 @@ generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
 }
 }  // namespace cppcoro
 
+// ____________________________________________________________________________
+// Infrastructure for coroutines in C++17
+struct HandleFrame {
+  using F = void(void*);
+  using B = bool(void*);
+  void* target;
+  F* resumeFunc;
+  F* destroyFunc;
+  B* doneFunc;
+};
+
+template <typename Promise = void>
+struct Handle {
+  HandleFrame* ptr;
+  void resume() { ptr->resumeFunc(ptr->target); }
+
+  static Handle from_promise(Promise& p) {
+    // TODO<joka921> This has to take into account the alignment.
+    auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
+                                              sizeof(HandleFrame));
+    /*
+    std::cerr << "Address of frame computed " << reinterpret_cast<intptr_t>(ptr)
+              << std::endl;
+              */
+    return Handle{ptr};
+  }
+
+  operator bool() const { return static_cast<bool>(ptr); }
+
+  bool done() const { return ptr->doneFunc(ptr->target); }
+
+  // TODO<joka921> This has to take into account the alignment.
+  Promise& promise() {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  const Promise& promise() const {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  void destroy() { ptr->destroyFunc(ptr->target); }
+};
+
+template <typename T>
+inline constexpr bool alwaysFalse = false;
+
+bool co_await_impl(auto&& awaiter, auto handle) {
+  if (awaiter.await_ready()) {
+    return true;
+  }
+  using type = decltype(awaiter.await_suspend(handle));
+  static_assert(std::is_void_v<decltype(awaiter.await_resume())>);
+  if constexpr (std::is_void_v<type>) {
+    awaiter.await_suspend(handle);
+    return false;
+  } else if constexpr (std::same_as<type, bool>) {
+    return !awaiter.await_suspend(handle);
+  } else {
+    static_assert(alwaysFalse<type>,
+                  "await_suspend with symmetric transfer is not yet supported");
+  }
+}
+
+#define CO_YIELD(index, value)                            \
+  {                                                       \
+    auto&& awaiter = promise().yield_value(value);        \
+    this->curState = index;                               \
+    if (!co_await_impl(awaiter, Hdl::from_promise(pt))) { \
+      return;                                             \
+    }                                                     \
+  }                                                       \
+  [[fallthrough]];                                        \
+  case index:
+
+namespace blubbi {
+template <typename T>
+using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+}
+
+#define CO_YIELD_BUFFERED(index, value)                                        \
+  {                                                                            \
+    using BufT##index = blubbi::remove_cvref_t<decltype(value)>;               \
+    using PtrT##index =                                                        \
+        std::add_pointer_t<std::remove_reference_t<decltype(value)>>;          \
+    new (state.yieldBuffer) std::remove_reference_t<decltype(value)>{value};   \
+    CO_YIELD(index, static_cast<std::add_rvalue_reference_t<decltype(value)>>( \
+                        *reinterpret_cast<PtrT##index>(state.yieldBuffer)))    \
+    reinterpret_cast<PtrT##index>(state.yieldBuffer)->~BufT##index();          \
+  }                                                                            \
+  void()
+
+template <typename Derived, typename PromiseType>
+struct CoroImpl {
+  HandleFrame frm;
+  PromiseType pt;
+
+  static void CHECK() {
+    static_assert(offsetof(CoroImpl, pt) - offsetof(CoroImpl, frm) ==
+                  sizeof(HandleFrame));
+  }
+
+  size_t curState = 0;
+  using Hdl = Handle<PromiseType>;
+
+  PromiseType& promise() { return pt; }
+
+  static auto cast(void* blubb) {
+    return static_cast<Derived*>(reinterpret_cast<CoroImpl*>(
+        reinterpret_cast<char*>(blubb) - offsetof(CoroImpl, frm)));
+  }
+
+  static void resume(void* blubb) { cast(blubb)->doStep(); }
+
+  // TODO<joka921> Allocator support.
+  static void destroy(void* blubb) { delete (cast(blubb)); }
+
+  static bool done([[maybe_unused]] void* blubb) {
+    // TODO extend to more general things.
+    return false;
+  }
+
+  CoroImpl() {
+    CHECK();
+    frm.target = this;
+    frm.resumeFunc = &CoroImpl::resume;
+    frm.destroyFunc = &CoroImpl::destroy;
+    frm.doneFunc = &CoroImpl::done;
+  }
+
+  static auto make() {
+    // TODO allocator support
+    auto* frame = new Derived;
+    return frame->pt.get_return_object();
+  }
+};
+
+#define COROUTINE_HEADER(returnType, StateType)        \
+  using PromiseType = returnType::promise_type;        \
+  struct GeneratorStateMachine                         \
+      : CoroImpl<GeneratorStateMachine, PromiseType> { \
+    StateType state;                                   \
+    void doStep() {                                    \
+      switch (this->curState) {                        \
+        case 0:
+#define COROUTINE_FOOTER(...)                                 \
+  }                                                           \
+  }                                                           \
+  }                                                           \
+  ;                                                           \
+  auto* frame = new GeneratorStateMachine{{}, {__VA_ARGS__}}; \
+  return frame->pt.get_return_object();
+
+#define FOR_LOOP_HEADER(N)
+
+template <typename Ref, bool isOwningStorage>
+struct _coro_storage {
+  static constexpr bool isOwning = isOwningStorage;
+  using Storage = std::conditional_t<isOwning, std::decay_t<Ref>,
+                                     std::add_pointer_t<std::decay_t<Ref>>>;
+  alignas(Storage) char buffer[sizeof(Storage)];
+  bool constructed = false;
+
+  struct Val {
+    Ref ref_;
+  };
+
+  template <typename... Args>
+  void construct(Args&&... args) {
+    if constexpr (!isOwning) {
+      new (buffer) Storage(&args...);
+    } else {
+      new (buffer) Storage(std::forward<Args>(args)...);
+    }
+    constructed = true;
+  }
+
+  void destroy() {
+    if (constructed) {
+      reinterpret_cast<Storage*>(buffer)->~Storage();
+      constructed = false;
+    }
+  }
+
+  Val get() {
+    Storage& storage = *reinterpret_cast<Storage*>(buffer);
+    if constexpr (isOwning) {
+      return Val{static_cast<Ref>(storage)};
+    } else {
+      return Val{static_cast<Ref>(*storage)};
+    }
+  }
+
+  ~_coro_storage() { destroy(); }
+};
+
+#define CO_BRACED_INIT(mem, ...)                                   \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      &__VA_ARGS__};                                               \
+  this->state.mem.constructed = true
+#define CO_BRACED_INIT_OWNING(mem, ...)                            \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      __VA_ARGS__};                                                \
+  this->state.mem.constructed = true
+#define CO_PAREN_INIT(mem, ...)                                    \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      &__VA_ARGS__};                                               \
+  this->state.mem.constructed = true
+#define CO_PAREN_INIT_OWNING(mem, ...)                             \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage( \
+      __VA_ARGS__);                                                \
+  this->state.mem.constructed = true
+
+template <typename Ref, bool isOwning>
+struct coro_for_loop_storage {
+  _coro_storage<Ref, isOwning> range_;
+  // TODO<joka921> This doesn't work for nonmember begin and end, but that
+  // should work for most cases now.
+  using Begin = decltype(std::declval<Ref>().begin());
+  using End = decltype(std::declval<Ref>().end());
+  _coro_storage<Begin&, true> begin_;
+  _coro_storage<End&, true> end_;
+};
+
+#define CO_GET(arg) this->state.arg.get().ref_
+
 #endif
