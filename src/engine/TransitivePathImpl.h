@@ -248,14 +248,14 @@ class TransitivePathImpl : public TransitivePathBase {
         std::invoke_result_t<decltype(::ranges::views::enumerate),
                              typename Node::value_type::column_type&>;
 
-    // input arguments
+    // Input arguments
     const TransitivePathImpl<T>& parent_;
     T edges_;
     LocalVocab edgesVocab_;
     Node startNodes_;
     TripleComponent target_;
     bool yieldOnce_;
-    // runtime state
+    // Runtime state
     ad_utility::Timer timer_{ad_utility::Timer::Stopped};
     LocalVocab targetHelper_;
     LocalVocab mergedVocab_;
@@ -263,7 +263,7 @@ class TransitivePathImpl : public TransitivePathBase {
     bool sameVariableOnBothSides_;
     bool endsWithGraphVariable_;
     bool startsWithGraphVariable_;
-    // range state
+    // Range state
     bool finished_{false};
     // The `resultRange_` yields results of this transitive hull
     // computation. Values from `TableColumnWithVocab::expandUndef` are
@@ -296,7 +296,7 @@ class TransitivePathImpl : public TransitivePathBase {
           target_(std::move(target)),
           yieldOnce_(yieldOnce) {
       // `targetId` is only ever used for comparisons, and never stored in the
-      // result, so we use a separate local vocabulary - targetHelper_.
+      // result, so we use a separate local vocabulary - `targetHelper_`.
       const auto& index = parent_.getIndex();
       targetId_ = target_.isVariable()
                       ? std::nullopt
