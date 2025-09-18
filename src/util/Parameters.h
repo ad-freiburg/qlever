@@ -23,6 +23,11 @@
 #include "util/TupleForEach.h"
 #include "util/TypeTraits.h"
 
+#define DECLARE_PAREMETER(name, kebab_name)                      \
+  struct name {                                                  \
+    static constexpr ad_utility::ParameterName Name{kebab_name}; \
+  }
+
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
 
@@ -59,12 +64,12 @@ CPP_concept ParameterToStringType =
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
 CPP_template(typename Type, typename FromString, typename ToString,
-             ParameterName Name)(
+             typename ParameterWithName)(
     requires std::semiregular<Type> CPP_and
         ParameterFromStringType<FromString, Type>
             CPP_and ParameterToStringType<ToString, Type>) struct Parameter
     : public ParameterBase {
-  constexpr static ParameterName name = Name;
+  constexpr static ParameterName name = ParameterWithName::Name;
 
  private:
   Type value_{};
@@ -139,8 +144,7 @@ namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-template <typename Type, typename FromString, typename ToString,
-          ParameterName Name>
+template <typename Type, typename FromString, typename ToString, typename Name>
 struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
     : std::true_type {};
 }  // namespace detail::parameterConceptImpl
@@ -219,29 +223,31 @@ struct MemorySizeFromString {
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
-template <ParameterName Name>
-using Float = Parameter<float, fl, toString, Name>;
+template <typename ParameterWithName>
+using Float = Parameter<float, fl, toString, ParameterWithName>;
 
-template <ParameterName Name>
-using Double = Parameter<double, dbl, toString, Name>;
+template <typename ParameterWithName>
+using Double = Parameter<double, dbl, toString, ParameterWithName>;
 
-template <ParameterName Name>
-using SizeT = Parameter<size_t, szt, toString, Name>;
+template <typename ParameterWithName>
+using SizeT = Parameter<size_t, szt, toString, ParameterWithName>;
 
-template <ParameterName Name>
-using String = Parameter<std::string, std::identity, std::identity, Name>;
+template <typename ParameterWithName>
+using String =
+    Parameter<std::string, std::identity, std::identity, ParameterWithName>;
 
-template <ParameterName Name>
-using Bool = Parameter<bool, bl, boolToString, Name>;
+template <typename ParameterWithName>
+using Bool = Parameter<bool, bl, boolToString, ParameterWithName>;
 
-template <ParameterName Name>
-using MemorySizeParameter =
-    Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
+template <typename ParameterWithName>
+using MemorySizeParameter = Parameter<MemorySize, MemorySizeFromString,
+                                      MemorySizeToString, ParameterWithName>;
 
-template <typename DurationType, ParameterName Name>
-using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
-                                    durationFromString<DurationType>,
-                                    durationToString<DurationType>, Name>;
+template <typename DurationType, typename ParameterWithName>
+using DurationParameter =
+    Parameter<ad_utility::ParseableDuration<DurationType>,
+              durationFromString<DurationType>, durationToString<DurationType>,
+              ParameterWithName>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
@@ -302,16 +308,16 @@ class Parameters {
   //  Note that we deliberately do not have an overload of
   // `get()` where the `Name` can be specified at runtime, because we want to
   // check the existence of a parameter at compile time.
-  template <ParameterName Name>
+  template <typename ParameterName>
   auto get() const {
-    constexpr auto index = _nameToIndex.at(Name);
+    constexpr auto index = _nameToIndex.at(ParameterName::Name);
     return std::get<index>(_parameters).rlock()->get();
   }
 
   // Set value for parameter `Name` known at compile time.
-  template <ParameterName Name, typename Value>
+  template <typename ParameterName, typename Value>
   void set(Value newValue) {
-    constexpr auto index = _nameToIndex.at(Name);
+    constexpr auto index = _nameToIndex.at(ParameterName::Name);
     return std::get<index>(_parameters).wlock()->set(std::move(newValue));
   }
 

@@ -150,8 +150,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
 // ____________________________________________________________________________
 size_t SpatialJoinAlgorithms::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
-  size_t userPreference =
-      RuntimeParameters().get<"spatial-join-max-num-threads">();
+  size_t userPreference = RuntimeParameters().get<SpatialJoinMaxNumThreads>();
   if (userPreference == 0 || maxHwConcurrency < userPreference) {
     return maxHwConcurrency;
   }
@@ -983,5 +982,5 @@ void SpatialJoinAlgorithms::throwIfCancelled() const {
 // ____________________________________________________________________________
 double SpatialJoinAlgorithms::maxAreaPrefilterBox() {
   return static_cast<double>(
-      RuntimeParameters().get<"spatial-join-prefilter-max-size">());
+      RuntimeParameters().get<SpatialJoinPrefilterMaxSize>());
 }

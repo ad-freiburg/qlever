@@ -12,12 +12,19 @@ using namespace memory_literals;
 using namespace detail::parameterShortNames;
 using namespace std::chrono_literals;
 
+DECLARE_PAREMETER(FloatParameterTag, "Float");
+DECLARE_PAREMETER(IntParameterTag, "SizeT");
+DECLARE_PAREMETER(DoubleParameterTag, "Double");
+DECLARE_PAREMETER(BoolParameterTag, "Bool");
+DECLARE_PAREMETER(BoolParameter2Tag, "Bool2");
+
 TEST(Parameters, First) {
-  using FloatParameter = Float<"Float">;
-  using IntParameter = SizeT<"SizeT">;
-  using DoubleParameter = Double<"Double">;
-  using BoolParameter = Bool<"Bool">;
-  using BoolParameter2 = Bool<"Bool2">;  // to test both results of toString
+  using FloatParameter = Float<FloatParameterTag>;
+  using IntParameter = SizeT<IntParameterTag>;
+  using DoubleParameter = Double<DoubleParameterTag>;
+  using BoolParameter = Bool<BoolParameterTag>;
+  using BoolParameter2 =
+      Bool<BoolParameter2Tag>;  // to test both results of toString
 
   Parameters pack2(FloatParameter{2.0f}, IntParameter{3ull},
                    DoubleParameter{42.1}, BoolParameter{true},
@@ -53,6 +60,7 @@ TEST(Parameters, First) {
   ASSERT_EQ("true", map.at("Bool2"));
 }
 
+DECLARE_PAREMETER(MemoryParameterTag, "Memory");
 // Basic test, if the parameter for `MemorySize` works.
 TEST(Parameters, MemorySizeParameter) {
   // Compare a given `MemorySizeParameter` with a given `MemorySize`.
@@ -63,7 +71,7 @@ TEST(Parameters, MemorySizeParameter) {
                  parameter.toString().c_str());
   };
 
-  MemorySizeParameter<"Memory"> m(6_GB);
+  MemorySizeParameter<MemoryParameterTag> m(6_GB);
   compareWithMemorySize(m, 6_GB);
   m.set(6_MB);
   compareWithMemorySize(m, 6_MB);
@@ -71,33 +79,38 @@ TEST(Parameters, MemorySizeParameter) {
   compareWithMemorySize(m, 6_TB);
 
   // Test, if it works with `Parameters`.
-  Parameters pack(Float<"Float">{2.0f}, SizeT<"SizeT">{3ull},
-                  Double<"Double">{42.1}, MemorySizeParameter<"Memory">{6_GB});
+  Parameters pack(Float<FloatParameterTag>{2.0f}, SizeT<IntParameterTag>{3ull},
+                  Double<DoubleParameterTag>{42.1},
+                  MemorySizeParameter<MemoryParameterTag>{6_GB});
   ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_GB).getBytes());
   pack.set("Memory", "6 MB");
   ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_MB).getBytes());
 }
 
+DECLARE_PAREMETER(StringParameterTag, "String");
+DECLARE_PAREMETER(DurationParameterTag, "Duration");
+
 // Basic test, if the concept works.
 TEST(Parameters, ParameterConcept) {
   // Test the parameter short names.
-  static_assert(IsParameter<Float<"Float">>);
-  static_assert(IsParameter<Double<"Double">>);
-  static_assert(IsParameter<SizeT<"SizeT">>);
-  static_assert(IsParameter<String<"String">>);
-  static_assert(IsParameter<MemorySizeParameter<"MemorySizeParameter">>);
-  static_assert(IsParameter<Bool<"Bool">>);
-  static_assert(
-      IsParameter<DurationParameter<std::chrono::seconds, "Seconds">>);
+  static_assert(IsParameter<Float<FloatParameterTag>>);
+  static_assert(IsParameter<Double<DoubleParameterTag>>);
+  static_assert(IsParameter<SizeT<IntParameterTag>>);
+  static_assert(IsParameter<String<StringParameterTag>>);
+  static_assert(IsParameter<MemorySizeParameter<MemoryParameterTag>>);
+  static_assert(IsParameter<Bool<BoolParameterTag>>);
+  static_assert(IsParameter<
+                DurationParameter<std::chrono::seconds, DurationParameterTag>>);
 
   // Test some other random types.
   static_assert(!IsParameter<std::string>);
   static_assert(!IsParameter<ParameterName>);
 }
 
+DECLARE_PAREMETER(TestParameterTag, "test");
 // _____________________________________________________________________________
 TEST(Parameter, verifyParameterConstraint) {
-  Parameter<size_t, szt, toString, "test"> parameter{42};
+  Parameter<size_t, szt, toString, TestParameterTag> parameter{42};
 
   EXPECT_NO_THROW(parameter.set(1337));
 
@@ -124,9 +137,11 @@ TEST(Parameter, verifyParameterConstraint) {
   EXPECT_EQ(parameter.get(), 0);
 }
 
+DECLARE_PAREMETER(SecondsParameterTag, "Seconds");
 // _____________________________________________________________________________
 TEST(Parameter, verifyDurationParameterSerializationWorks) {
-  DurationParameter<std::chrono::seconds, "Seconds"> durationParameter{0s};
+  DurationParameter<std::chrono::seconds, SecondsParameterTag>
+      durationParameter{0s};
   EXPECT_EQ(durationParameter.toString(), "0s");
 
   durationParameter.setFromString("10s");
