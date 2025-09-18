@@ -285,7 +285,7 @@ class TransitivePathImpl : public TransitivePathBase {
     ql::ranges::iterator_t<Node> tableColumnIt_{};
 
    public:
-    TransitiveHullLazyRange(const TransitivePathImpl<T>& parent, const T edges,
+    TransitiveHullLazyRange(const TransitivePathImpl<T>& parent, T edges,
                             LocalVocab edgesVocab, Node startNodes,
                             TripleComponent start, TripleComponent target,
                             bool yieldOnce)
