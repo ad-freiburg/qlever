@@ -8,6 +8,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
+#include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
 

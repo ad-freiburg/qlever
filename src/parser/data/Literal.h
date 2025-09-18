@@ -5,9 +5,12 @@
 #ifndef QLEVER_SRC_PARSER_DATA_LITERAL_H
 #define QLEVER_SRC_PARSER_DATA_LITERAL_H
 
+#include <optional>
 #include <sstream>
 #include <string>
 
+#include "backports/type_traits.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
 
 class Literal {

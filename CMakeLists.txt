@@ -25,6 +25,10 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
+# contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
+option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
@@ -82,7 +86,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
+        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
 )
 
 ################################
@@ -432,9 +436,11 @@ set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h sr
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
-target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
-target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
@@ -456,7 +462,9 @@ qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_I
 
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+if (USE_PRECOMPILED_HEADERS)
 target_precompile_headers(ServerMain REUSE_FROM engine)
+endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
