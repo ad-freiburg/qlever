@@ -557,3 +557,42 @@ TEST_F(GroupByHashMapOptimizationTest,
   std::vector<size_t> expected{1, 3};
   ASSERT_EQ(nonmatchingIndicesSecondBlock, expected);
 }
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest, ProcessAggregateAliasesForBlock) {
+  // ================= SETUP ===================================================
+  auto inputTable = make2({{42, 100}, {42, 200}, {84, 300}}, alloc_);
+  auto [gb, data, aggr, localVocab] = getGroupByCountSetup(inputTable);
+  VariableToColumnMap variableMap{
+      {Variable{"?g"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
+      {Variable{"?v"}, {1, ColumnIndexAndTypeInfo::AlwaysDefined}}};
+  sparqlExpression::EvaluationContext evaluationContext(
+      *qec_, variableMap, inputTable, qec_->getAllocator(), localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      sparqlExpression::EvaluationContext::TimePoint::max());
+  evaluationContext._beginIndex = 0;
+  evaluationContext._endIndex = inputTable.size();
+
+  using AggData = GroupByImpl::HashMapAggregationData<1>;
+  AggData::ArrayOrVector<ql::span<const Id>> spans;
+  spans[0] = inputTable.getColumn(0).subspan(0, inputTable.size());
+  auto lookupResult = aggr.getHashEntries(spans, false);
+
+  // ================= TEST ====================================================
+  gb.processAggregateAliasesForBlock<1>(lookupResult, data, aggr,
+                                        evaluationContext);
+
+  // Verify that the aggregation data has been updated correctly.
+  // Group with key=42 should have count=2 (rows 0,1),
+  // group with key=84 should have count=1 (row 2)
+  auto result =
+      gb.createResultFromHashMap<1>(aggr, data.aggregateAliases_, &localVocab);
+  ASSERT_EQ(result.size(), 2u);
+  ASSERT_EQ(result.numColumns(), 2u);  // group column + count column
+
+  // Results should be sorted by group key
+  EXPECT_EQ(result(0, 0), IntId(42));    // Group key 42
+  EXPECT_EQ(result(0, 1).getInt(), 2);  // Count for group 42: 2 values
+  EXPECT_EQ(result(1, 0), IntId(84));    // Group key 84
+  EXPECT_EQ(result(1, 1).getInt(), 1);  // Count for group 84: 1 value
+}
