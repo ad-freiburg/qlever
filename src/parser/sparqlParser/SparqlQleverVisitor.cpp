@@ -726,6 +726,8 @@ GraphPatternOperation makeAllTripleGraphPattern(TripleComponent::Iri graphIri) {
 }
 
 // _____________________________________________________________________________
+// Make a `GraphPatternOperation` that matches all triples in either all graphs,
+// or just named graphs, depending on the value of `behaviour`.
 GraphPatternOperation makeAllTripleGraphPattern(
     Variable graphVariable,
     parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) {

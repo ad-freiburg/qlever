@@ -32,7 +32,7 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
-  // Store a flag that decides in only named graphs or all graphs including the
+  // Store a flag that decides if only named graphs or all graphs including the
   // default graph are supposed to be bound to the graph variable.
   parsedQuery::GroupGraphPattern::GraphVariableBehaviour
       defaultGraphBehaviour_ =
@@ -724,7 +724,8 @@ class QueryPlanner {
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
 
-  // Return a filter that filters the active graphs.
+  // Return a filter that filters the active graphs. 'Active' graphs are graphs
+  // that are either implicitly or explicitly requested by SPARQL query.
   qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 

@@ -242,7 +242,7 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
-  if (graphFilter_.isWildcard()) {
+  if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
   if (!metadata.graphInfo_.has_value()) {
@@ -270,7 +270,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 #endif
   } else {
     AD_EXPENSIVE_CHECK(
-        graphFilter_.isWildcard() ||
+        graphFilter_.areAllGraphsAllowed() ||
         ql::ranges::all_of(block, isGraphAllowedLambda(), graphIdFromRow));
   }
   return needsFilteringByGraph;
@@ -304,7 +304,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
 // ______________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
     const CompressedBlockMetadata& block) const {
-  if (graphFilter_.isWildcard()) {
+  if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
   if (!block.graphInfo_.has_value()) {

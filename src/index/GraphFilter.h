@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_GRAPHFILTER_H
 #define QLEVER_SRC_INDEX_GRAPHFILTER_H
 
+#include <absl/functional/function_ref.h>
 #include <absl/strings/str_join.h>
 
 #include <variant>
@@ -20,7 +21,8 @@ namespace qlever::index {
 // Class that represents the concept of a graph filter. It can store a whitelist
 // of multiple graphs or a blacklist of a single graph or be no-op and provides
 // an interface that simply tells you if a specific graph is allowed by this
-// filter.
+// filter. The template parameter `T` indicates how a graph is represented.
+// Currently, this is either `TripleComponent` or `ValueId`.
 template <typename T>
 class GraphFilter {
  public:
@@ -55,9 +57,9 @@ class GraphFilter {
   // argument, by using `func` to transform the underlying values from `T` to a
   // new type.
   CPP_template(typename Func)(requires std::invocable<Func, const T&>)
-      GraphFilter<decltype(std::declval<Func>()(std::declval<T>()))> transform(
+      GraphFilter<std::invoke_result_t<Func, T>> transform(
           const Func& func) const {
-    using TransformedT = decltype(func(std::declval<T>()));
+    using TransformedT = std::invoke_result_t<Func, T>;
     using ResultT = GraphFilter<TransformedT>;
     return std::visit(ad_utility::OverloadCallOperator{
                           [](const AllTag&) { return ResultT::All(); },
@@ -78,33 +80,15 @@ class GraphFilter {
   bool isGraphAllowed(T graph) const;
 
   // Return true iff all graphs are always allowed.
-  bool isWildcard() const;
+  bool areAllGraphsAllowed() const;
 
   // Make sure this filter is comparable.
   bool operator==(const GraphFilter&) const = default;
 
   // Describe this `GraphFilter` and write it to the output stream using
   // `formatter` to format the individual graph values `T`.
-  CPP_template(typename Formatter)(
-      requires ad_utility::InvocableWithExactReturnType<
-          Formatter, std::string, const T&>) void format(std::ostream& os,
-                                                         const Formatter&
-                                                             formatter) const {
-    os << "GRAPHS: ";
-    std::visit(ad_utility::OverloadCallOperator{
-                   [&os](const AllTag&) { os << "ALL"; },
-                   [&os, &formatter](const ad_utility::HashSet<T>& whitelist) {
-                     os << "Whitelist "
-                        << absl::StrJoin(
-                               whitelist | ql::views::transform(formatter), " ")
-                        << std::endl;
-                   },
-                   [&os, &formatter](const T& blacklist) {
-                     os << "Blacklist " << std::invoke(formatter, blacklist)
-                        << std::endl;
-                   }},
-               filter_);
-  }
+  void format(std::ostream& os,
+              absl::FunctionRef<std::string(const T&)> formatter) const;
 };
 }  // namespace qlever::index
 

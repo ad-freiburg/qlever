@@ -89,6 +89,11 @@ Quads::toGraphPatternOperations() const {
     operations.emplace_back(std::visit(
         [&tripleSubPattern](auto graphValue) mutable {
           if constexpr (ad_utility::isSimilar<decltype(graphValue), Variable>) {
+            // This creates a group graph pattern with a graph variable like
+            // `GRAPH ?g { ?s ?p ?o }` which normally would exclude the default
+            // graph. But as we have a CLEAR ALL, we need to also consider the
+            // default graph, hence we have to overwrite the
+            // GraphVariableBehavior.
             return GroupGraphPattern{
                 std::move(tripleSubPattern), std::move(graphValue),
                 GroupGraphPattern::GraphVariableBehaviour::ALL};

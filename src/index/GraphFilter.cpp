@@ -46,8 +46,29 @@ bool GraphFilter<T>::isGraphAllowed(T graph) const {
 
 //______________________________________________________________________________
 template <typename T>
-bool GraphFilter<T>::isWildcard() const {
+bool GraphFilter<T>::areAllGraphsAllowed() const {
   return std::holds_alternative<AllTag>(filter_);
+}
+
+//______________________________________________________________________________
+template <typename T>
+void GraphFilter<T>::format(
+    std::ostream& os,
+    absl::FunctionRef<std::string(const T&)> formatter) const {
+  os << "GRAPHS: ";
+  std::visit(ad_utility::OverloadCallOperator{
+                 [&os](const AllTag&) { os << "ALL"; },
+                 [&os, &formatter](const ad_utility::HashSet<T>& whitelist) {
+                   os << "Whitelist "
+                      << absl::StrJoin(
+                             whitelist | ql::views::transform(formatter), " ")
+                      << std::endl;
+                 },
+                 [&os, &formatter](const T& blacklist) {
+                   os << "Blacklist " << std::invoke(formatter, blacklist)
+                      << std::endl;
+                 }},
+             filter_);
 }
 
 //______________________________________________________________________________

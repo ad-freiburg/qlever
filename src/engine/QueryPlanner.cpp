@@ -2906,8 +2906,13 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
-    std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
-    auto defaultGraphBehaviourBackup = planner_.defaultGraphBehaviour_;
+    // Reset values back to original value after this.
+    absl::Cleanup resetGraphVariable{
+        [this, variable = planner_.activeGraphVariable_,
+         behaviour = planner_.defaultGraphBehaviour_]() mutable {
+          planner_.activeGraphVariable_ = std::move(variable);
+          planner_.defaultGraphBehaviour_ = behaviour;
+        }};
     auto& activeDatasets = planner_.activeDatasetClauses_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (const auto* graphIri =
@@ -2942,8 +2947,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if (datasetBackup.has_value()) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
-    planner_.activeGraphVariable_ = std::move(graphVariableBackup);
-    planner_.defaultGraphBehaviour_ = defaultGraphBehaviourBackup;
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {

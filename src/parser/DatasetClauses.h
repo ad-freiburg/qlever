@@ -14,6 +14,8 @@ namespace parsedQuery {
 // A struct for the FROM [NAMED] clause in queries, and the `USING [NAMED]` and
 // `WITH` clauses from `SPARQL Update`.
 struct DatasetClauses {
+  // TODO<RobinTF> consider using the `GraphFilter` class for this, which has
+  // similar semantics but provides a strong type.
   using Graphs = std::optional<ad_utility::HashSet<TripleComponent>>;
 
  private:
