@@ -335,6 +335,9 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     };
 
+    // Process a single input value from `TableColumnWithVocab::expandUndef`.
+    // This method performs the core logic of the transitive hull computation
+    // and runs the hull traversal with`findConnectedNodes`.
     ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
                                                      size_t currentRow,
                                                      PayloadTable& payload) {
