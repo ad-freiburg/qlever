@@ -1519,6 +1519,7 @@ void GroupByImpl::evaluateAlias(
         const std::vector<ParentAndChildIndex>&,
         std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>>>
         originalChildrenForGroupVariable;
+    originalChildrenForGroupVariable.reserve(substitutions.size());
     for (const auto& substitution : substitutions) {
       const auto& occurrences =
           get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
