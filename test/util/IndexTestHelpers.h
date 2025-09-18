@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/EncodedIriManager.h"
 #include "index/Index.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -40,6 +41,7 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // a function that takes this struct and creates an index from it.
 
 struct TestIndexConfig {
+  using TextScoringMetric = qlever::TextScoringMetric;
   // A turtle string, from which the index is built. If `nullopt`, a default
   // input will be used and the resulting index will have the following
   // properties: Its vocabulary contains the literals `"alpha", "älpha", "A",
@@ -62,6 +64,8 @@ struct TestIndexConfig {
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
+  std::optional<VocabularyType> vocabularyType = std::nullopt;
+  std::optional<EncodedIriManager> encodedIriManager = std::nullopt;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -73,11 +77,12 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType);
+    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
+                      c.usePatterns, c.usePrefixCompression,
+                      c.blocksizePermutations, c.createTextIndex,
+                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
+                      c.indexType, c.encodedIriManager);
   }
   bool operator==(const TestIndexConfig&) const = default;
 };
@@ -98,7 +103,8 @@ QueryExecutionContext* getQec(TestIndexConfig config);
 // Overload of `getQec` for the simple case where we only care about the turtle
 // input. All other settings are left at their default values.
 QueryExecutionContext* getQec(
-    std::optional<std::string> turtleInput = std::nullopt);
+    std::optional<std::string> turtleInput = std::nullopt,
+    std::optional<VocabularyType> vocabularyType = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

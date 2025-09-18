@@ -4,11 +4,13 @@
 
 #include "SparqlExpressionValueGetters.h"
 
+#include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -28,6 +30,7 @@ NumericValue NumericValueGetter::operator()(
       // functions.
       return static_cast<int64_t>(id.getBool());
     case Datatype::Undefined:
+    case Datatype::EncodedVal:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
@@ -56,6 +59,9 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
+    case Datatype::EncodedVal:
+      // This assumes that we never use this for empty IRIs.
+      return True;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
@@ -82,6 +88,10 @@ auto EffectiveBooleanValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::Bool) {
+    // Always use canonical representation when converting to string.
+    return id.getBool() ? "true" : "false";
+  }
   // `true` means that we remove the quotes and angle brackets.
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
@@ -176,19 +186,36 @@ std::string ReplacementStringGetter::convertToReplacementString(
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
-  if (id.getDatatype() == Datatype::VocabIndex) {
-    // See instantiations below for what `isSomethingFunction` is.
-    return Id::makeFromBool(std::invoke(isSomethingFunction,
-                                        context->_qec.getIndex().getVocab(),
-                                        id.getVocabIndex()));
-  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-    auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
-        context->_qec.getIndex(), id, context->_localVocab);
-    return Id::makeFromBool(word.has_value() &&
-                            word.value().first.starts_with(prefix));
-  } else {
-    return Id::makeFromBool(false);
+  switch (id.getDatatype()) {
+    case Datatype::VocabIndex:
+      // See instantiations below for what `isSomethingFunction` is.
+      return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                          context->_qec.getIndex().getVocab(),
+                                          id.getVocabIndex()));
+    case Datatype::LocalVocabIndex: {
+      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return Id::makeFromBool(word.has_value() &&
+                              word.value().first.starts_with(prefix));
+    }
+    case Datatype::EncodedVal:
+      // We currently only encode IRIs.
+      return Id::makeFromBool(prefix == isIriPrefix);
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
+      if constexpr (prefix == isLiteralPrefix) {
+        return Id::makeFromBool(true);
+      }
+    case Datatype::Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
+      return Id::makeFromBool(false);
   }
+  AD_FAIL();
 }
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
@@ -196,7 +223,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // _____________________________________________________________________________
-std::optional<string> LiteralFromIdGetter::operator()(
+std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
@@ -237,6 +264,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
+    case Datatype::EncodedVal:
       auto optString = LiteralFromIdGetter{}(id, context);
       if (optString.has_value()) {
         return std::move(optString.value());
@@ -274,6 +302,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       AD_CORRECTNESS_CHECK(dateType != nullptr);
       return Iri::fromIrirefWithoutBrackets(dateType);
     }
+    case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
       return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -337,8 +366,13 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
 
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s,
-    [[maybe_unused]] const EvaluationContext* context) const {
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return litOrIriToUnit(s);
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
   // of measurement. Because this is a rather obscure requirement, we support
   // IRIs also.
@@ -360,6 +394,7 @@ CPP_template(typename T, typename ValueGetter)(
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
+    case EncodedVal:
     case VocabIndex:
       return valueGetter(
           ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
@@ -392,7 +427,26 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<std::optional<std::string>>(id, context, *this);
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case GeoPoint:
+      // For literals without language tag, we return an empty string per
+      // standard.
+      return {""};
+    case Undefined:
+    case EncodedVal:
+    case VocabIndex:
+    case LocalVocabIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+      return getValue<std::optional<std::string>>(id, context, *this);
+  }
+  AD_FAIL();
 }
 
 //______________________________________________________________________________
@@ -404,3 +458,80 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
                           : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
                                 litOrIri.getLiteral().getContent()))};
 }
+
+//______________________________________________________________________________
+template <typename RequestedInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+std::optional<ad_utility::GeometryInfo>
+GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
+    ValueId id, const EvaluationContext* context) {
+  auto datatype = id.getDatatype();
+  if (datatype == Datatype::VocabIndex) {
+    // All geometry strings encountered during index build have a precomputed
+    // geometry info object.
+    return context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
+  }
+  return std::nullopt;
+}
+
+//______________________________________________________________________________
+template <typename RequestedInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case EncodedVal:
+    case LocalVocabIndex:
+    case VocabIndex: {
+      auto precomputed = getPrecomputedGeometryInfo(id, context);
+      if (precomputed.has_value()) {
+        return precomputed.value().getRequestedInfo<RequestedInfo>();
+      } else {
+        // No precomputed geometry info available: we have to fetch and parse
+        // the string.
+        auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+            context->_qec.getIndex(), id, context->_localVocab);
+        return GeometryInfoValueGetter{}(lit, context);
+      }
+    }
+    case GeoPoint:
+      return ad_utility::GeometryInfo::fromGeoPoint(id.getGeoPoint())
+          .getRequestedInfo<RequestedInfo>();
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+      return std::nullopt;
+  }
+  AD_FAIL();
+};
+
+//______________________________________________________________________________
+template <typename RequestedInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  // If we receive only a literal, we have no choice but to parse it and compute
+  // the geometry info ad hoc.
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
+    auto wktLiteral = litOrIri.getLiteral().toStringRepresentation();
+    return ad_utility::GeometryInfo::getRequestedInfo<RequestedInfo>(
+        wktLiteral);
+  }
+  return std::nullopt;
+};
+
+// Explicit instantiations
+namespace sparqlExpression::detail {
+template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
+template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
+template struct GeometryInfoValueGetter<ad_utility::Centroid>;
+template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
+}  // namespace sparqlExpression::detail

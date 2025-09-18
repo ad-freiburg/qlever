@@ -42,14 +42,8 @@ class NaryExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
-
-  // _________________________________________________________________________
-  std::optional<SparqlExpression*> getChildAtIndex(size_t childIndex) const {
-    return childIndex < N ? std::make_optional(children_[childIndex].get())
-                          : std::nullopt;
-  }
 
  private:
   // _________________________________________________________________________
@@ -116,7 +110,7 @@ struct NumericIdWrapper {
 // floating point) and converts it to a function, that takes the same arguments
 // and returns the same result, but the arguments and the return type are the
 // `NumericValue` variant.
-template <typename Function>
+template <typename Function, bool NanOrInfToUndef = false>
 inline auto makeNumericExpression() {
   return [](const auto&... args) {
     CPP_assert(
@@ -126,7 +120,7 @@ inline auto makeNumericExpression() {
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return Id::makeUndefined();
       } else {
-        return makeNumericId(Function{}(t...));
+        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
       }
     };
     return std::visit(visitor, args...);
@@ -189,9 +183,9 @@ ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
 
 // __________________________________________________________________________
 template <typename Op>
-[[nodiscard]] string NaryExpression<Op>::getCacheKey(
+[[nodiscard]] std::string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  string key = typeid(*this).name();
+  std::string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
       children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);

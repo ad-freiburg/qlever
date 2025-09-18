@@ -21,9 +21,11 @@ using namespace sparqlExpression::detail;
             std::is_rvalue_reference_v<decltype(e)&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
-  } else {
+  } else if (condition == EffectiveBooleanValueGetter::Result::False) {
     return AD_FWD(e);
   }
+  AD_CORRECTNESS_CHECK(condition == EffectiveBooleanValueGetter::Result::Undef);
+  return IdOrLiteralOrIri{Id::makeUndefined()};
 };
 NARY_EXPRESSION(IfExpression, 3,
                 FV<decltype(ifImpl), EffectiveBooleanValueGetter,
@@ -89,7 +91,7 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    ENABLE_UNINITIALIZED_WARNINGS
+    GCC_REENABLE_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,

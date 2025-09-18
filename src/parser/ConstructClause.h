@@ -9,7 +9,7 @@
 #include "backports/algorithm.h"
 #include "parser/SelectClause.h"
 #include "parser/data/Types.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 
 namespace parsedQuery {

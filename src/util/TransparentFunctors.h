@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 #define QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 
-#include <util/Forward.h>
-#include <util/TypeTraits.h>
-
 #include <utility>
+
+#include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Contains several function object types with templated operator() that wrap
 // overloaded functions from the standard library. This enables passing them as
@@ -62,12 +62,12 @@ struct GetImpl {
 template <typename T>
 struct GetIfImpl {
   CPP_template(typename Ptr)(requires std::is_pointer_v<
-                             std::remove_cvref_t<Ptr>>) constexpr decltype(auto)
+                             ql::remove_cvref_t<Ptr>>) constexpr decltype(auto)
   operator()(Ptr& variantPtr) const {
     return std::get_if<T>(variantPtr);
   }
   CPP_template(typename Ptr)(requires CPP_NOT(
-      std::is_pointer_v<std::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
+      std::is_pointer_v<ql::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
   operator()(Ptr& variant) const {
     return std::get_if<T>(&variant);
   }

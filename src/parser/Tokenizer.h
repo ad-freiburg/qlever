@@ -10,6 +10,7 @@
 #include <re2/re2.h>
 
 #include "parser/TurtleTokenId.h"
+#include "util/CompilerWarnings.h"
 #include "util/Log.h"
 
 using re2::RE2;

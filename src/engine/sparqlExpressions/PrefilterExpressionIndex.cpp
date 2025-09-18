@@ -37,110 +37,22 @@ static Id getIdFromColumnIndex(
       // columnIndex out of bounds
       AD_FAIL();
   }
-};
-
-//______________________________________________________________________________
-// Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
-// position (column index) defined by `ignoreIndex`. The ignored positions are
-// filled with Ids `Id::min()`. `Id::min()` is guaranteed
-// to be smaller than Ids of all other types.
-static auto getMaskedTriple(
-    const CompressedBlockMetadata::PermutedTriple& triple,
-    size_t ignoreIndex = 3) {
-  const Id& undefined = Id::min();
-  switch (ignoreIndex) {
-    case 3:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, triple.col2Id_);
-    case 2:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, undefined);
-    case 1:
-      return std::make_tuple(triple.col0Id_, undefined, undefined);
-    case 0:
-      return std::make_tuple(undefined, undefined, undefined);
-    default:
-      // ignoreIndex out of bounds
-      AD_FAIL();
-  }
-};
-
-//______________________________________________________________________________
-// Check for constant values in all columns `< evaluationColumn`
-static bool checkBlockIsInconsistent(const CompressedBlockMetadata& block,
-                                     size_t evaluationColumn) {
-  return getMaskedTriple(block.firstTriple_, evaluationColumn) !=
-         getMaskedTriple(block.lastTriple_, evaluationColumn);
 }
 
 //______________________________________________________________________________
 // Check for the following conditions.
 // (1) All `CompressedBlockMetadata` values in `input` must be unique.
 // (2) `input` must contain those `CompressedBlockMetadata` values in sorted
-// order. (3) Columns with `column index < evaluationColumn` must contain equal
+// order.
+// (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
     ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
-  const auto throwRuntimeError = [](const std::string& errorMessage) {
-    throw std::runtime_error(errorMessage);
-  };
-  // Check for duplicates.
-  if (auto it = ql::ranges::adjacent_find(input); it != input.end()) {
-    throwRuntimeError("The provided data blocks must be unique.");
-  }
-  // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
-  // satisfied.
-  const auto checkOrder = [](const CompressedBlockMetadata& b1,
-                             const CompressedBlockMetadata& b2) {
-    if (b1.blockIndex_ < b2.blockIndex_) {
-      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) <=
-                           getMaskedTriple(b2.lastTriple_));
-      return true;
-    }
-    if (b1.blockIndex_ == b2.blockIndex_) {
-      // Given the previous check detects duplicates in the input, the
-      // correctness check here will never evaluate to true.
-      // => blockIndex_ assignment issue.
-      AD_CORRECTNESS_CHECK(b1 == b2);
-    } else {
-      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) >
-                           getMaskedTriple(b2.firstTriple_));
-    }
-    return false;
-  };
-  if (!ql::ranges::is_sorted(input, checkOrder)) {
-    throwRuntimeError("The blocks must be provided in sorted order.");
-  }
-  // Helper to check for column consistency. Returns `true` if the columns for
-  // `b1` and `b2` up to the evaluation are inconsistent.
-  const auto checkColumnConsistency = [evaluationColumn](
-                                          const CompressedBlockMetadata& b1,
-                                          const CompressedBlockMetadata& b2) {
-    return checkBlockIsInconsistent(b1, evaluationColumn) ||
-           getMaskedTriple(b1.lastTriple_, evaluationColumn) !=
-               getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
-           checkBlockIsInconsistent(b2, evaluationColumn);
-  };
-  if (auto it = ql::ranges::adjacent_find(input, checkColumnConsistency);
-      it != input.end()) {
-    throwRuntimeError(
-        "The values in the columns up to the evaluation column must be "
-        "consistent.");
-  }
-};
-
-//______________________________________________________________________________
-static std::vector<CompressedBlockMetadata> getRelevantBlocks(
-    const BlockMetadataRanges& relevantBlockRanges) {
-  std::vector<CompressedBlockMetadata> relevantBlocks;
-  relevantBlocks.reserve(std::transform_reduce(relevantBlockRanges.begin(),
-                                               relevantBlockRanges.end(), 0ULL,
-                                               std::plus{}, ql::ranges::size));
-  ql::ranges::copy(relevantBlockRanges | ql::views::join,
-                   std::back_inserter(relevantBlocks));
-  return relevantBlocks;
+  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+      input, evaluationColumn);
 }
 
 namespace detail {
-
 //______________________________________________________________________________
 // Merge `BlockMetadataRange blockRange` with the previous (relevant)
 // `BlockMetadataRange`s.
@@ -165,7 +77,7 @@ static void mergeBlockRangeWithRanges(BlockMetadataRanges& blockRanges,
     // The new blockRange doesn't intersect with previous blockRange(s).
     blockRanges.push_back(blockRange);
   }
-};
+}
 
 namespace mapping {
 //______________________________________________________________________________
@@ -260,9 +172,8 @@ BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
 
 }  // namespace mapping
 
-// SECTION HELPER LOGICAL OPERATORS
 namespace logicalOps {
-
+// SECTION HELPER LOGICAL OPERATORS
 //______________________________________________________________________________
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
 // (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
@@ -333,6 +244,15 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
   return mergedRanges;
 }
 
+BlockMetadataRanges getIntersectionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<false>(r1, r2);
+}
+
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<true>(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 
@@ -341,6 +261,7 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
 // values that contain bounding `ValueId`s with different underlying datatypes.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
+  using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
@@ -349,7 +270,16 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
   const auto checkDifferentDtype = [](const auto& idPair) {
     auto firstId = idPair.begin();
-    return (*firstId).getDatatype() != (*std::next(firstId)).getDatatype();
+    auto dType1 = (*firstId).getDatatype();
+    auto dType2 = (*std::next(firstId)).getDatatype();
+    // ValueIds representing LocalVocab and Vocab entries are contained in mixed
+    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
+    // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
+    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
+        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
+      return false;
+    }
+    return dType1 != dType2;
   };
   ql::ranges::for_each(idRange | ranges::views::chunk(2) |
                            ranges::views::filter(checkDifferentDtype),
@@ -431,51 +361,49 @@ ValueId AccessValueIdFromBlockMetadata::operator()(
   return i % 2 == 0
              ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
              : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);
-};
+}
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
-std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
-    BlockMetadataSpan blockRange, size_t evaluationColumn) const {
+BlockMetadataRanges PrefilterExpression::evaluate(
+    const Vocab& vocab, BlockMetadataSpan blockRange,
+    size_t evaluationColumn) const {
   if (blockRange.size() < 3) {
-    return std::vector<CompressedBlockMetadata>(blockRange.begin(),
-                                                blockRange.end());
+    return {{blockRange.begin(), blockRange.end()}};
   }
 
-  std::optional<CompressedBlockMetadata> firstBlock = std::nullopt;
-  std::optional<CompressedBlockMetadata> lastBlock = std::nullopt;
-  if (checkBlockIsInconsistent(blockRange.front(), evaluationColumn)) {
-    firstBlock = blockRange.front();
+  std::optional<BlockMetadataRange> firstBlockRange = std::nullopt;
+  std::optional<BlockMetadataRange> lastBlockRange = std::nullopt;
+  if (blockRange.front().containsInconsistentTriples(evaluationColumn)) {
+    firstBlockRange = {blockRange.begin(), std::next(blockRange.begin())};
     blockRange = blockRange.subspan(1);
   }
-  if (checkBlockIsInconsistent(blockRange.back(), evaluationColumn)) {
-    lastBlock = blockRange.back();
+  if (blockRange.back().containsInconsistentTriples(evaluationColumn)) {
+    lastBlockRange = {std::prev(blockRange.end()), blockRange.end()};
     blockRange = blockRange.subspan(0, blockRange.size() - 1);
   }
 
-  std::vector<CompressedBlockMetadata> result;
+  BlockMetadataRanges result;
   if (!blockRange.empty()) {
     checkRequirementsBlockMetadata(blockRange, evaluationColumn);
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
-    result =
-        getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
-            evaluateImpl(idRange, blockRange),
-            // always add mixed datatype blocks
-            getRangesMixedDatatypeBlocks(idRange, blockRange)));
-    checkRequirementsBlockMetadata(result, evaluationColumn);
+    result = detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        evaluateImpl(vocab, idRange, blockRange, false),
+        // always add mixed datatype blocks
+        getRangesMixedDatatypeBlocks(idRange, blockRange));
   }
 
-  if (firstBlock.has_value()) {
-    result.insert(result.begin(), firstBlock.value());
+  if (firstBlockRange.has_value()) {
+    result.insert(result.begin(), firstBlockRange.value());
   }
-  if (lastBlock.has_value()) {
-    result.push_back(lastBlock.value());
+  if (lastBlockRange.has_value()) {
+    result.push_back(lastBlockRange.value());
   }
   return result;
-};
+}
 
 //______________________________________________________________________________
 ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
@@ -489,6 +417,89 @@ ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
                     referenceValue);
 }
 
+// SECTION PREFIX-REGEX
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> PrefixRegexExpression::logicalComplement()
+    const {
+  return make<PrefixRegexExpression>(prefixLiteral_, !isNegated_);
+}
+
+//______________________________________________________________________________
+bool PrefixRegexExpression::operator==(const PrefilterExpression& other) const {
+  const auto* otherPrefixRegex =
+      dynamic_cast<const PrefixRegexExpression*>(&other);
+  if (!otherPrefixRegex) {
+    return false;
+  }
+  return isNegated_ == otherPrefixRegex->isNegated_ &&
+         prefixLiteral_ == otherPrefixRegex->prefixLiteral_;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> PrefixRegexExpression::clone() const {
+  return make<PrefixRegexExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string PrefixRegexExpression::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter PrefixRegexExpression with prefix ",
+      prefixLiteral_.toStringRepresentation(),
+      ".\nExpression is negated: ", isNegated_ ? "true.\n" : "false.\n");
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
+  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
+  static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
+  using LVE = LocalVocabEntry;
+  LocalVocab localVocab{};
+  auto prefixQuoted =
+      absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
+  auto [lowerVocabIndex, upperVocabIndex] =
+      vocab.prefixRanges(prefixQuoted).ranges().front();
+
+  // Set lower reference.
+  const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
+  const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
+      LVE::fromStringRepresentation("<>"), localVocab);
+
+  // The `vocab.prefixRanges` returns the correct bounds only for preindexed
+  // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
+  // lowerVocabIndex]` which still match the prefix.
+  if (isNegated_) {
+    const auto& upperIdAdjusted =
+        upperVocabIndex.get() == 0
+            ? Id::makeFromVocabIndex(upperVocabIndex)
+            : Id::makeFromVocabIndex(upperVocabIndex.decremented());
+    // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
+    // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
+    return OrExpression(
+               make<LessThanExpression>(lowerIdVocab),
+               make<AndExpression>(make<GreaterThanExpression>(upperIdAdjusted),
+                                   make<LessThanExpression>(beginIdIri)))
+        .evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
+  }
+
+  // Set expression associated with the lower reference.
+  auto lowerRefExpr = lowerVocabIndex.get() == 0
+                          ? make<GreaterEqualExpression>(lowerIdVocab)
+                          : make<GreaterThanExpression>(Id::makeFromVocabIndex(
+                                lowerVocabIndex.decremented()));
+  // Set expression associated with the upper reference.
+  auto upperRefExpr =
+      upperVocabIndex.get() == vocab.size()
+          ? make<LessThanExpression>(beginIdIri)
+          : make<LessThanExpression>(Id::makeFromVocabIndex(upperVocabIndex));
+  // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
+  // Prefilter ?var > Id(prev("prefix)) && ?var < Id(next("prefix)).
+  return AndExpression(std::move(lowerRefExpr), std::move(upperRefExpr))
+      .evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
+}
+
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
 template <CompOp Comparison>
@@ -496,7 +507,7 @@ std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
   using enum CompOp;
   using namespace ad_utility;
-  using P = std::pair<CompOp, CompOp>;
+  using P = ConstexprMapPair<CompOp, CompOp>;
   // The complementation logic implemented with the following mapping
   // procedure:
   // (1) ?var < referenceValue -> ?var >= referenceValue
@@ -509,20 +520,19 @@ RelationalExpression<Comparison>::logicalComplement() const {
       {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
   return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
-};
+}
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-BlockMetadataRanges
-RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    bool getComplementOverAllDatatypes) const {
+BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
-  LocalVocab vocab{};
+  LocalVocab localVocab{};
   auto referenceId =
-      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, vocab);
+      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
   // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
@@ -534,20 +544,12 @@ RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
                                                referenceId, Comparison)
                               : getRangesForId(idRange.begin(), idRange.end(),
                                                referenceId, Comparison, false);
-  valueIdComparators::detail::simplifyRanges(relevantIdRanges);
-  return getComplementOverAllDatatypes
+  return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
              : detail::mapping::mapValueIdItRangesToBlockItRanges(
                    relevantIdRanges, idRange, blockRange);
-};
-
-//______________________________________________________________________________
-template <CompOp Comparison>
-BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
-};
+}
 
 //______________________________________________________________________________
 template <CompOp Comparison>
@@ -559,14 +561,14 @@ bool RelationalExpression<Comparison>::operator==(
     return false;
   }
   return rightSideReferenceValue_ == otherRelational->rightSideReferenceValue_;
-};
+}
 
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
     const {
   return make<RelationalExpression<Comparison>>(rightSideReferenceValue_);
-};
+}
 
 //______________________________________________________________________________
 template <CompOp Comparison>
@@ -589,7 +591,7 @@ std::string RelationalExpression<Comparison>::asString(
   referenceValueToString(stream, rightSideReferenceValue_);
   stream << " ." << std::endl;
   return stream.str();
-};
+}
 
 // SECTION ISDATATYPE
 //______________________________________________________________________________
@@ -600,14 +602,14 @@ template <IsDatatype Datatype>
 std::unique_ptr<PrefilterExpression>
 IsDatatypeExpression<Datatype>::logicalComplement() const {
   return make<IsDatatypeExpression<Datatype>>(!isNegated_);
-};
+}
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
 std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
     const {
   return make<IsDatatypeExpression<Datatype>>(*this);
-};
+}
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
@@ -619,7 +621,7 @@ bool IsDatatypeExpression<Datatype>::operator==(
     return false;
   }
   return isNegated_ == otherIsDatatype->isNegated_;
-};
+}
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
@@ -629,73 +631,21 @@ std::string IsDatatypeExpression<Datatype>::asString(
       "Prefilter IsDatatypeExpression:", "\nPrefilter for datatype: ",
       getDatatypeIsTypeStr(Datatype),
       "\nis negated: ", isNegated_ ? "true" : "false", ".\n");
-};
-
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-static BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == IRI || Datatype == LITERAL);
-  using LVE = LocalVocabEntry;
-
-  return Datatype == IRI
-             // Remark: Ids containing LITERAL values precede IRI related Ids
-             // in order. The smallest possible IRI is represented by "<>", we
-             // use its corresponding ValueId later on as a lower bound.
-             ? GreaterThanExpression(LVE::fromStringRepresentation("<>"))
-                   .evaluateOptGetCompleteComplementImpl(idRange, blockRange,
-                                                         isNegated)
-             // For pre-filtering LITERAL related ValueIds we use the ValueId
-             // representing the beginning of IRI values as an upper bound.
-             : LessThanExpression(LVE::fromStringRepresentation("<"))
-                   .evaluateOptGetCompleteComplementImpl(idRange, blockRange,
-                                                         isNegated);
 }
 
 //______________________________________________________________________________
-template <IsDatatype Datatype>
-static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == BLANK || Datatype == NUMERIC);
-
+static BlockMetadataRanges getRangesForDatatypes(const ValueIdSubrange& idRange,
+                                                 BlockMetadataSpan blockRange,
+                                                 const bool isNegated,
+                                                 ql::span<Datatype> datatypes) {
   std::vector<ValueIdItPair> relevantRanges;
-  if constexpr (Datatype == BLANK) {
-    relevantRanges = {valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::BlankNodeIndex)};
-  } else {
-    // Remark: Swapping the defined relational order for Datatype::Int
-    // to Datatype::Double ValueIds (in ValueId.h) might affect the
-    // correctness of the following lines!
-    static_assert(Datatype::Int < Datatype::Double);
-
-    const auto& rangeInt = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Int);
-    const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Double);
-    // Differentiate here regarding the adjacency of Int and Double
-    // datatype values. This is relevant w.r.t.
-    // getRelevantBlocksFromIdRanges(), because we technically add to
-    // .second + 1 for the first datatype range. If we simply add
-    // rangeInt and rangeDouble given that datatype Int and Double are
-    // stored directly next to each other, we potentially add a block
-    // twice (forbidden). Remark: This is necessary even if
-    // simplifyRanges(relevantRanges) is performed later on.
-    if (rangeInt.second == rangeDouble.first ||
-        rangeDouble.second == rangeInt.first) {
-      relevantRanges.emplace_back(
-          std::min(rangeInt.first, rangeDouble.first),
-          std::max(rangeInt.second, rangeDouble.second));
-    } else {
-      relevantRanges.emplace_back(rangeInt);
-      relevantRanges.emplace_back(rangeDouble);
-    }
+  for (Datatype datatype : datatypes) {
+    relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
+        idRange.begin(), idRange.end(), datatype));
   }
   // Sort and remove overlapping ranges.
-  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  relevantRanges =
+      valueIdComparators::detail::simplifyRanges(std::move(relevantRanges));
   return isNegated
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantRanges, idRange, blockRange)
@@ -704,19 +654,122 @@ static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
 }
 
 //______________________________________________________________________________
-template <IsDatatype Datatype>
-BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  using enum IsDatatype;
-  if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
-    return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
-                                                    isNegated_);
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::BLANK>::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  std::array datatypes{Datatype::BlankNodeIndex};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::NUMERIC>::evaluateImpl(
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  std::array datatypes{Datatype::Int, Datatype::Double};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  using LVE = LocalVocabEntry;
+  // Remark: Ids containing LITERAL values precede IRI related Ids
+  // in order. The smallest possible IRI is represented by "<>", we
+  // use its corresponding ValueId later on as a lower bound.
+  return make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
+      ->evaluateImpl(vocab, idRange, blockRange, isNegated_);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  using LVE = LocalVocabEntry;
+
+  // For pre-filtering LITERAL related ValueIds we use the ValueId representing
+  // the beginning of IRI values as an upper bound and add all the value types
+  // that are literals inlined into a compact representation.
+  std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
+                       Datatype::Bool, Datatype::GeoPoint};
+  auto inlinedRanges =
+      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  auto nonInlinedRanges =
+      make<LessThanExpression>(LVE::fromStringRepresentation("<>"))
+          ->evaluateImpl(vocab, idRange, blockRange, isNegated_);
+
+  if (isNegated_) {
+    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
+        inlinedRanges, nonInlinedRanges);
   } else {
-    static_assert(Datatype == IRI || Datatype == LITERAL);
-    return evaluateIsIriOrIsLiteralImpl<Datatype>(idRange, blockRange,
-                                                  isNegated_);
+    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        inlinedRanges, nonInlinedRanges);
   }
-};
+}
+
+// SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsInExpression::logicalComplement() const {
+  return make<IsInExpression>(referenceValues_, true);
+}
+
+//______________________________________________________________________________
+bool IsInExpression::operator==(const PrefilterExpression& other) const {
+  const auto* otherIsIn = dynamic_cast<const IsInExpression*>(&other);
+  if (!otherIsIn) {
+    return false;
+  }
+
+  return isNegated_ == otherIsIn->isNegated_ &&
+         ql::ranges::equal(referenceValues_, otherIsIn->referenceValues_);
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsInExpression::clone() const {
+  return make<IsInExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string IsInExpression::asString([[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter IsInExpression\nisNegated: ", isNegated_ ? "true" : "false",
+      "\nWith the following number of reference values: ",
+      referenceValues_.size());
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges IsInExpression::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  if (referenceValues_.empty()) {
+    if (!isNegated_) {
+      return {};
+    }
+    return {{blockRange.begin(), blockRange.end()}};
+  }
+
+  // Construct PrefilterExpression: refVal1 || refVal2 || ... || refValN.
+  auto prefilterExpr = ::ranges::fold_left_first(
+      referenceValues_ | ::ranges::views::transform([](auto&& refVal) {
+        return make<EqualExpression>(AD_FWD(refVal));
+      }),
+      [this](auto&& c1, auto&& c2) {
+        return isNegated_ ? make<AndExpression>(AD_FWD(c1), AD_FWD(c2))
+                          : make<OrExpression>(AD_FWD(c1), AD_FWD(c2));
+      });
+
+  return prefilterExpr.value()->evaluateImpl(vocab, idRange, blockRange,
+                                             isNegated_);
+}
 
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
@@ -736,24 +789,25 @@ LogicalExpression<Operation>::logicalComplement() const {
     return make<OrExpression>(child1_->logicalComplement(),
                               child2_->logicalComplement());
   }
-};
+}
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        child1_->evaluateImpl(idRange, blockRange),
-        child2_->evaluateImpl(idRange, blockRange));
+        child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
+        child2_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement));
   } else {
     static_assert(Operation == OR);
     return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        child1_->evaluateImpl(idRange, blockRange),
-        child2_->evaluateImpl(idRange, blockRange));
+        child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
+        child2_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement));
   }
-};
+}
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
@@ -766,14 +820,14 @@ bool LogicalExpression<Operation>::operator==(
   }
   return *child1_ == *otherlogical->child1_ &&
          *child2_ == *otherlogical->child2_;
-};
+}
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
     const {
   return make<LogicalExpression<Operation>>(child1_->clone(), child2_->clone());
-};
+}
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
@@ -788,7 +842,7 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
          << "child1 {" << child1Info << "}"
          << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
-};
+}
 
 // SECTION NOT-EXPRESSION
 //______________________________________________________________________________
@@ -797,13 +851,15 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
   // Therefore, we can simply return the child of the respective NOT
   // expression after undoing its previous complementation.
   return child_->logicalComplement();
-};
+}
 
 //______________________________________________________________________________
-BlockMetadataRanges NotExpression::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  return child_->evaluateImpl(idRange, blockRange);
-};
+BlockMetadataRanges NotExpression::evaluateImpl(const Vocab& vocab,
+                                                const ValueIdSubrange& idRange,
+                                                BlockMetadataSpan blockRange,
+                                                bool getTotalComplement) const {
+  return child_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
+}
 
 //______________________________________________________________________________
 bool NotExpression::operator==(const PrefilterExpression& other) const {
@@ -817,7 +873,7 @@ bool NotExpression::operator==(const PrefilterExpression& other) const {
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
   return make<NotExpression>((child_->clone()), true);
-};
+}
 
 //______________________________________________________________________________
 std::string NotExpression::asString(size_t depth) const {
@@ -901,7 +957,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
                        "the creation of PrefilterExpression on date-values: ",
                        getRelationalOpStr(comparison)));
   }
-};
+}
 
 //______________________________________________________________________________
 template <CompOp comparison>
@@ -953,7 +1009,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
       };
   return makePrefilterExpressionYearImpl(
       comparison, retrieveYearIntOrThrowErr(referenceValue));
-};
+}
 
 //______________________________________________________________________________
 template <CompOp comparison>
@@ -963,7 +1019,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
   using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
-    using P = std::pair<CompOp, CompOp>;
+    using P = ad_utility::ConstexprMapPair<CompOp, CompOp>;
     // Retrieve by map the corresponding mirrored `CompOp` value for
     // the given `CompOp comparison` template argument. E.g., this
     // procedure will transform the relational expression

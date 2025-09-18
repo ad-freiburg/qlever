@@ -5,11 +5,11 @@
 #ifndef QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H
 #define QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H
 
-#include "GroupKey.h"
-#include "LimitOffsetClause.h"
-#include "OrderKey.h"
-#include "SparqlFilter.h"
-#include "Variable.h"
+#include "parser/data/GroupKey.h"
+#include "parser/data/LimitOffsetClause.h"
+#include "parser/data/OrderKey.h"
+#include "parser/data/SparqlFilter.h"
+#include "rdfTypes/Variable.h"
 
 struct SolutionModifiers {
   std::vector<GroupKey> groupByVariables_;

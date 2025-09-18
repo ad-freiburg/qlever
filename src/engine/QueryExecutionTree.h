@@ -15,7 +15,13 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
-#include "util/stream_generator.h"
+#include "util/HashSet.h"
+
+// Strongly typed enum for controlling whether stripped variables are explicitly
+// stored as stripped in this class, or completely hidden. (this is used to
+// distinguish between subqueries and "ordinary" operations that just strip
+// columns for efficiency reasons.
+enum class HideStrippedColumns { False, True };
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
@@ -193,6 +199,15 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB);
 
+  // Return a clone/ deep copy of `qet` that only returns the specified
+  // `variables` in its result. The variables that are stripped are stored in
+  // the `strippedVariables_` of the result unless `hideStrippedColumns` is
+  // `True`.
+  static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::set<Variable>& variables,
+      HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
+
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a
@@ -208,18 +223,27 @@ class QueryExecutionTree {
     return getRootOperation()->getPrimarySortKeyVariable();
   }
 
+  // Get the set of variables that were stripped from this tree when created
+  // via `makeTreeWithStrippedColumns`. These are variables that were present
+  // before stripping but are gone afterwards.
+  const ad_utility::HashSet<Variable>& getStrippedVariables() const {
+    return strippedVariables_;
+  }
+
   // _____________________________________________________________
   friend void PrintTo(const QueryExecutionTree& tree, std::ostream* os) {
     auto& s = *os;
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+  bool supportsLimit() const {
+    return getRootOperation()->supportsLimitOffset();
+  }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    getRootOperation()->setLimit(limitOffsetClause);
+  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
     cacheKey_ = getRootOperation()->getCacheKey();
@@ -237,6 +261,10 @@ class QueryExecutionTree {
                          // operations/subtrees when pinning only the result.
 
   std::shared_ptr<const Result> cachedResult_ = nullptr;
+
+  // The variables that this tree semantically could expose, but has stripped
+  // away for performance reasons.
+  ad_utility::HashSet<Variable> strippedVariables_;
 
  public:
   // Helper class to avoid bug in g++ that leads to memory corruption when

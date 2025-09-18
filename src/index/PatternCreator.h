@@ -130,7 +130,7 @@ class PatternCreator {
 
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename, Id idOfHasPattern,
+  explicit PatternCreator(const std::string& basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},

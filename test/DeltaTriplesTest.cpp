@@ -1,8 +1,13 @@
-// Copyright 2023 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
@@ -17,7 +22,14 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
+
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+}  // namespace
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -47,7 +59,7 @@ class DeltaTriplesTest : public ::testing::Test {
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
       const std::vector<std::string>& turtles) {
-    RdfStringParser<TurtleParser<Tokenizer>> parser;
+    RdfStringParser<TurtleParser<Tokenizer>> parser{encodedIriManager()};
     ql::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
@@ -62,11 +74,14 @@ class DeltaTriplesTest : public ::testing::Test {
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
       std::array<Id, 4> ids{
-          std::move(triple.subject_).toValueId(vocab, localVocab),
+          std::move(triple.subject_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
           std::move(TripleComponent(triple.predicate_))
-              .toValueId(vocab, localVocab),
-          std::move(triple.object_).toValueId(vocab, localVocab),
-          std::move(triple.graphIri_).toValueId(vocab, localVocab)};
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.object_)
+              .toValueId(vocab, localVocab, *encodedIriManager()),
+          std::move(triple.graphIri_)
+              .toValueId(vocab, localVocab, *encodedIriManager())};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(

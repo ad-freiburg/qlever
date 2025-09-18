@@ -9,6 +9,7 @@
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"
@@ -115,7 +116,7 @@ TEST(Union, computeUnionLazy) {
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);
     ASSERT_FALSE(resultTable.isFullyMaterialized());
-    auto& result = resultTable.idTables();
+    auto result = resultTable.idTables();
 
     auto U = Id::makeUndefined();
     auto expected1 = makeIdTableFromVector({{V(1), U}, {V(2), U}, {V(3), U}});
@@ -156,7 +157,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     qec->getQueryTreeCache().clearAll();
     auto resultTable = u.computeResultOnlyForTesting(true);
     ASSERT_FALSE(resultTable.isFullyMaterialized());
-    auto& result = resultTable.idTables();
+    auto result = resultTable.idTables();
 
     auto U = Id::makeUndefined();
     auto expected1 = makeIdTableFromVector({{1, 2, 3, 4, 5}});
@@ -181,6 +182,43 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     auto U = Id::makeUndefined();
     auto expected =
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
+    EXPECT_EQ(resultTable.idTable(), expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Union, inputWithZeroColumns) {
+  auto* qec = ad_utility::testing::getQec();
+  auto leftT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+  auto rightT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+
+  Union u{qec, std::move(leftT), std::move(rightT)};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(resultTable.isFullyMaterialized());
+    auto result = resultTable.idTables();
+
+    auto expected1 = makeIdTableFromVector({{}});
+
+    auto iterator = result.begin();
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(iterator->idTable_, expected1);
+
+    ++iterator;
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(iterator->idTable_, expected1);
+
+    ASSERT_EQ(++iterator, result.end());
+  }
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting();
+    ASSERT_TRUE(resultTable.isFullyMaterialized());
+
+    auto expected = makeIdTableFromVector({{}, {}});
     EXPECT_EQ(resultTable.idTable(), expected);
   }
 }
@@ -218,7 +256,7 @@ TEST(Union, cheapMergeIfOrderNotImportant) {
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     EXPECT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto expected1 = makeIdTableFromVector({{1, 2}});
     auto expected2 = makeIdTableFromVector({{0, 0}, {2, 4}});
 
@@ -263,7 +301,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
     EXPECT_EQ(it->idTable_, expected);
@@ -296,7 +334,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
     EXPECT_EQ(it->idTable_, makeIdTableFromVector({{0}, {1}}));
@@ -350,7 +388,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
 
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
@@ -538,7 +576,9 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 1, 2, 3});
+    auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 1, 2, 3}));
     EXPECT_EQ(
@@ -554,7 +594,9 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 3, 1, 2});
+    auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 3, 1, 2}));
     EXPECT_EQ(
@@ -567,6 +609,10 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
     EXPECT_EQ(result->idTable(), expected);
+  }
+  {
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_THROW(unionOperation.makeSortedTree({}), ad_utility::Exception);
   }
 }
 
@@ -595,7 +641,7 @@ TEST(Union, checkChunkSizeSplitsProperly) {
   qec->getQueryTreeCache().clearAll();
   auto result =
       unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-  auto& idTables = result->idTables();
+  auto idTables = result->idTables();
 
   auto it = idTables.begin();
   ASSERT_NE(it, idTables.end());
@@ -619,4 +665,49 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 
   ++it;
   EXPECT_EQ(it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(Union, columnOriginatesFromGraphOrUndef) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+
+  IdTable reference{2, qec->getAllocator()};
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, reference.clone(), Vars{Var{"?a"}, Var{"?d"}}, false,
+      std::vector<ColumnIndex>{0, 1});
+
+  auto index = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
+
+  Union union1{qec, values, values};
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union2{qec, values, index};
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union3{qec, index, values};
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union4{qec, index, index};
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
 }

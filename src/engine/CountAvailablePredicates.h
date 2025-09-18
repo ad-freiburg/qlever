@@ -50,7 +50,7 @@ class CountAvailablePredicates : public Operation {
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
   std::vector<QueryExecutionTree*> getChildren() override {
-    using R = vector<QueryExecutionTree*>;
+    using R = std::vector<QueryExecutionTree*>;
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 

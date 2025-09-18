@@ -1,6 +1,7 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Authors: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
@@ -10,13 +11,14 @@
 #define QLEVER_SRC_UTIL_TYPETRAITS_H
 
 #include <concepts>
+#include <optional>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "util/Forward.h"
 
 namespace ad_utility {
@@ -29,7 +31,7 @@ This also works with aliases, that were created using `using`.
 For example:
 For
 ```
-template <typenanme... Ts>
+template <typename... Ts>
 using A = B<Ts...>;
 ```
 the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
@@ -75,40 +77,52 @@ template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};
 
 template <typename T>
-struct LastT<T> : public std::type_identity<T> {};
+struct LastT<T> : public ql::type_identity<T> {};
 
 // Implementation for First
 template <typename T, typename...>
-struct FirstWrapper : public std::type_identity<T> {};
+struct FirstWrapper : public ql::type_identity<T> {};
 
 }  // namespace detail
 
 /// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`.
-/// Examples:
-///
-/// isInstantiation<std::vector<int>, std::vector> == true;
-/// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
 CPP_concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
+/// Examples:
+static_assert(isInstantiation<std::vector<int>, std::vector>);
+static_assert(!isInstantiation<const std::vector<int>&, std::vector>);
+
+/// The concept is fulfilled iff any of the `...Ts` is an instantiation of `T`.
+template <template <typename...> typename T, typename... Ts>
+CPP_concept anyIsInstantiationOf = (... || isInstantiation<Ts, T>);
+/// Examples:
+static_assert(anyIsInstantiationOf<std::vector, std::tuple<bool, int>,
+                                   std::vector<int>, std::pair<bool, bool>>);
+static_assert(!anyIsInstantiationOf<std::vector, std::tuple<bool, int>,
+                                    std::pair<bool, bool>>);
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
-/// instantiation of `TemplatedType`. Examples:
-///
-/// similarToInstantiation<std::vector, std::vector<int>> == true;
-/// similarToInstantiation<std::vector, const std::vector<int>&> == true;
+/// instantiation of `TemplatedType`.
 template <typename T, template <typename...> typename TemplatedType>
 CPP_concept similarToInstantiation =
     isInstantiation<std::decay_t<T>, TemplatedType>;
+/// Examples:
+static_assert(similarToInstantiation<std::vector<int>, std::vector>);
+static_assert(similarToInstantiation<const std::vector<int>&, std::vector>);
+static_assert(
+    !similarToInstantiation<const std::tuple<int, bool>&, std::vector>);
 
 /// @brief The concept is fulfilled if `T` is an instantiation of any
 /// of the types passed in ...Ts
-///
-/// similarToAnyInstantiationOf<std::vector, std::vector<int>,
-/// std::vector<char>> == true
 template <typename T, template <typename...> typename... Ts>
 CPP_concept similarToAnyInstantiationOf =
     (... || similarToInstantiation<T, Ts>);
+/// Examples:
+static_assert(similarToAnyInstantiationOf<std::vector<int>, std::vector,
+                                          std::tuple, std::pair>);
+static_assert(
+    !similarToAnyInstantiationOf<std::vector<int>, std::tuple, std::pair>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -200,6 +214,11 @@ CPP_template(typename Tuple,
              typename TypeLifter)(requires isTuple<Tuple>) using LiftedTuple =
     typename detail::LiftInnerTypes<
         std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
+// Examples:
+static_assert(
+    std::is_same_v<LiftedTuple<std::tuple<int, bool, char>, std::optional>,
+                   std::tuple<std::optional<int>, std::optional<bool>,
+                              std::optional<char>>>);
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
@@ -207,10 +226,18 @@ CPP_template(typename Variant, template <typename> typename TypeLifter)(
     requires isVariant<Variant>) using LiftedVariant =
     typename detail::LiftInnerTypes<
         std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
+// Examples:
+static_assert(
+    std::is_same_v<LiftedVariant<std::variant<int, bool, char>, std::optional>,
+                   std::variant<std::optional<int>, std::optional<bool>,
+                                std::optional<char>>>);
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
 CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
     typename detail::TupleToVariantImpl<Tuple>::type;
+// Examples:
+static_assert(std::is_same_v<TupleToVariant<std::tuple<int, bool, char>>,
+                             std::variant<int, bool, char>>);
 
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
@@ -219,6 +246,12 @@ template <typename... Tuples>
 using TupleCat =
     std::enable_if_t<(isTuple<Tuples> && ...),
                      decltype(std::tuple_cat(std::declval<Tuples&>()...))>;
+/// Examples:
+static_assert(
+    std::is_same_v<TupleCat<std::tuple<int, bool>>, std::tuple<int, bool>>);
+static_assert(
+    std::is_same_v<TupleCat<std::tuple<int, bool, char>, std::tuple<bool, int>>,
+                   std::tuple<int, bool, char, bool, int>>);
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -282,9 +315,9 @@ struct InvalidInvokeResult {
 template <typename T, typename... Args>
 constexpr auto getInvokeResultImpl() {
   if constexpr (std::is_invocable_v<T, Args...>) {
-    return std::type_identity<std::invoke_result_t<T, Args...>>{};
+    return ql::type_identity<std::invoke_result_t<T, Args...>>{};
   } else {
-    return std::type_identity<InvalidInvokeResult<T, Args...>>{};
+    return ql::type_identity<InvalidInvokeResult<T, Args...>>{};
   }
 }
 }  // namespace invokeResultSfinaeFriendly::detail
@@ -363,6 +396,40 @@ CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 // Ensures that T is a floating-point type.
 template <typename T>
 CPP_concept FloatingPoint = std::is_floating_point_v<T>;
+
+// Make a variadic type unique (std::tuple containing each type once)
+namespace detail {
+template <typename...>
+struct UniqueTypesTupleImpl;
+
+template <>
+struct UniqueTypesTupleImpl<> {
+  using type = std::tuple<>;
+};
+
+template <typename T, typename... List>
+struct UniqueTypesTupleImpl<T, List...> {
+ private:
+  using tail = typename UniqueTypesTupleImpl<List...>::type;
+
+ public:
+  using type = std::conditional_t<SameAsAny<T, List...>, tail,
+                                  TupleCat<std::tuple<T>, tail>>;
+};
+}  // namespace detail
+
+// Behaves like std::variant<List...> but ensures uniqueness of the types in
+// List to avoid ambigiuity when converting from types in List to the variant.
+template <typename... List>
+using UniqueVariant = typename detail::TupleToVariantImpl<
+    typename detail::UniqueTypesTupleImpl<List...>::type>::type;
+/// Examples:
+static_assert(std::is_same_v<UniqueVariant<int, int, int, bool>,
+                             std::variant<int, bool>>);
+static_assert(
+    std::is_same_v<UniqueVariant<int, bool>, std::variant<int, bool>>);
+static_assert(std::is_same_v<UniqueVariant<>, std::variant<>>);
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TYPETRAITS_H

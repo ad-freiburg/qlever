@@ -8,8 +8,11 @@
 #include "./TripleComponentTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
+#include "index/TextIndexBuilder.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
+using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
@@ -150,7 +153,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en . <zz> <label> <zz>";
+        "\"zz\"@en . <zz> <label> <zz> .";
   }
 
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
@@ -183,17 +186,32 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.loadAllPermutations() = c.loadAllPermutations;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        c.vocabularyType.has_value() ? c.vocabularyType.value()
+                                     : VocabularyType::random());
+    if (c.encodedIriManager.has_value()) {
+      // Extract prefixes without angle brackets from the EncodedIriManager
+      std::vector<std::string> prefixes;
+      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(prefix.starts_with('<') && !prefix.ends_with('>'));
+        prefixes.push_back(prefix.substr(1));
+      }
+      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
+          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile(std::nullopt, true, TextScoringMetric::BM25,
-                                   {2.0f, 0.5f}),
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {2.0f, 0.5f}),
           ::testing::HasSubstr("Invalid values"));
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile(std::nullopt, true, TextScoringMetric::BM25,
-                                   {0.5f, -1.0f}),
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {0.5f, -1.0f}),
           ::testing::HasSubstr("Invalid values"));
       c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
       c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
@@ -203,11 +221,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       if (c.scoringMetric.value() != TextScoringMetric::BM25) {
         c.bAndKParam = std::pair{-3.f, -3.f};
       }
-      auto buildTextIndex = [&index, &c](auto wordsAndDocsfile,
-                                         bool addWordsFromLiterals) {
-        index.buildTextIndexFile(std::move(wordsAndDocsfile),
-                                 addWordsFromLiterals, c.scoringMetric.value(),
-                                 c.bAndKParam.value());
+      auto buildTextIndex = [&textIndexBuilder, &c](auto wordsAndDocsfile,
+                                                    bool addWordsFromLiterals) {
+        textIndexBuilder.buildTextIndexFile(
+            std::move(wordsAndDocsfile), addWordsFromLiterals,
+            c.scoringMetric.value(), c.bAndKParam.value());
       };
       if (c.contentsOfWordsFileAndDocsfile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
@@ -220,14 +238,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                        c.contentsOfWordsFileAndDocsfile.value().second.size());
         wordsFile.close();
         docsFile.close();
-        index.setKbName(indexBasename);
-        index.setTextName(indexBasename);
-        index.setOnDiskBase(indexBasename);
+        textIndexBuilder.setKbName(indexBasename);
+        textIndexBuilder.setTextName(indexBasename);
+        textIndexBuilder.setOnDiskBase(indexBasename);
         buildTextIndex(
             std::pair<std::string, std::string>{indexBasename + ".wordsfile",
                                                 indexBasename + ".docsfile"},
             c.addWordsFromLiterals);
-        index.buildDocsDB(indexBasename + ".docsfile");
+        textIndexBuilder.buildDocsDB(indexBasename + ".docsfile");
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
@@ -326,9 +344,11 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
 }
 
 // _____________________________________________________________________________
-QueryExecutionContext* getQec(std::optional<std::string> turtleInput) {
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
+                              std::optional<VocabularyType> vocabularyType) {
   TestIndexConfig config;
   config.turtleInput = std::move(turtleInput);
+  config.vocabularyType = vocabularyType;
   return getQec(std::move(config));
 }
 
@@ -343,7 +363,8 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index.getVocab());
+    static const EncodedIriManager encodedIriManager;
+    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

@@ -10,6 +10,7 @@
 #include <array>
 #include <tuple>
 
+#include "backports/keywords.h"
 #include "util/ConstexprUtils.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -35,7 +36,7 @@ struct IsTriviallySerializable {
 };
 
 template <typename T>
-consteval bool tupleTriviallySerializableImpl() {
+QL_CONSTEVAL bool tupleTriviallySerializableImpl() {
   bool result = true;
   ad_utility::forEachTypeInTemplateType<T>(IsTriviallySerializable{result});
   return result;
@@ -59,9 +60,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       return;
     }
   }
-  ad_utility::ConstexprForLoop(
+  ad_utility::ConstexprForLoopVi(
       std::make_index_sequence<std::tuple_size_v<Arr>>(),
-      [&serializer, &arg]<size_t I> { serializer | std::get<I>(arg); });
+      [&serializer, &arg](auto i) { serializer | std::get<i>(arg); });
 }
 }  // namespace ad_utility::serialization
 

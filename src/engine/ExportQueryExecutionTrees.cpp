@@ -7,15 +7,21 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
 #include <ranges>
 
-#include "parser/RdfEscaping.h"
+#include "index/EncodedIriManager.h"
+#include "index/IndexImpl.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
+namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.
@@ -28,6 +34,12 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
     });
   }
 }
+
+LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
+  const auto& mgr = index.getImpl().encodedIriManager();
+  return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator computeResultForAsk(
@@ -176,13 +188,17 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
+  size_t rowOffset = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
+      ConstructQueryExportContext context{i,
+                                          idTable,
+                                          pair.localVocab_,
                                           qet.getVariableColumns(),
-                                          qet.getQec()->getIndex()};
+                                          qet.getQec()->getIndex(),
+                                          rowOffset};
       using enum PositionInTriple;
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
@@ -197,6 +213,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
         cancellationHandle->throwIfCancelled();
       }
     }
+    rowOffset += idTable.size();
   }
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
@@ -322,21 +339,32 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       // We use the immediately invoked lambda here because putting this block
       // in braces confuses the test coverage tool.
       return [id] {
-        // Format as integer if fractional part is zero, let C++ decide
-        // otherwise.
-        std::stringstream ss;
         double d = id.getDouble();
-        double dIntPart;
-        if (std::modf(d, &dIntPart) == 0.0) {
-          ss << std::fixed << std::setprecision(0) << id.getDouble();
-        } else {
-          ss << d;
+        if (!std::isfinite(d)) {
+          // NOTE: We used `std::stringstream` before which is bad for two
+          // reasons. First, it would output "nan" or "inf" in lowercase, which
+          // is not legal RDF syntax. Second, creating a `std::stringstream`
+          // object is unnecessarily expensive.
+          std::string literal = [d]() {
+            if (std::isnan(d)) {
+              return "NaN";
+            }
+            AD_CORRECTNESS_CHECK(std::isinf(d));
+            return d > 0 ? "INF" : "-INF";
+          }();
+          return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
         }
-        return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+        double dIntPart;
+        // If the fractional part is zero, write number without decimal point.
+        // Otherwise, use `%g`, which uses fixed-size or exponential notation,
+        // whichever is more compact.
+        std::string out = std::modf(d, &dIntPart) == 0.0
+                              ? absl::StrFormat("%.0f", d)
+                              : absl::StrFormat("%g", d);
+        return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
-                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+      return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
@@ -346,6 +374,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
+      // TODO<joka921> This is only to make the strange `toRdfLiteral` function
+      // work in the triple component class, which is only used to create cache
+      // keys etc. Consider removing it in the future.
+    case EncodedVal:
+      return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
     default:
       AD_FAIL();
   }
@@ -400,14 +433,16 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      if (word.hasDatatype()) {
+        word.getLiteral().removeDatatypeOrLanguageTag();
+      }
       return std::move(word.getLiteral());
     }
     return std::nullopt;
   }
-
-  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
-    word.getLiteral().removeDatatypeOrLanguageTag();
-  }
+  // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
+  // neither a datatype nor a language tag, hence we don't need an `if` here.
+  word.getLiteral().removeDatatypeOrLanguageTag();
   return std::move(word.getLiteral());
 }
 
@@ -418,9 +453,20 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
     case Datatype::VocabIndex: {
-      auto entity = index.indexToString(id.getVocabIndex());
-      return LiteralOrIri::fromStringRepresentation(entity);
+      auto getEntity = [&index, id]() {
+        return index.indexToString(id.getVocabIndex());
+      };
+      // The type of entity might be `string_view` (If the vocabulary is stored
+      // uncompressed in RAM) or `string` (if it is on-disk, or compressed or
+      // both). The following code works and is efficient in all cases. In
+      // particular, the `std::string` constructor is compiled out because of
+      // RVO if `getEntity()` already returns a `string`.
+      static_assert(ad_utility::SameAsAny<decltype(getEntity()), std::string,
+                                          std::string_view>);
+      return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
+    case Datatype::EncodedVal:
+      return encodedIdToLiteralOrIri(id, index);
     default:
       AD_FAIL();
   }
@@ -484,6 +530,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab));
+    case EncodedVal:
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -504,6 +552,9 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   switch (datatype) {
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
+    case EncodedVal:
+      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index),
+                                onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
@@ -570,6 +621,7 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
+    case EncodedVal:
       return getLiteralOrIriFromVocabIndex(index, id, localVocab);
     case TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
@@ -1017,7 +1069,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     std::optional<std::string> exceptionMessage;
     try {
       for (; it != innerGenerator.end(); ++it) {
-        co_yield std::move(*it);
+        co_yield std::string{*it};
       }
     } catch (const std::exception& e) {
       exceptionMessage = e.what();
@@ -1039,12 +1091,23 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   }(std::move(streamGenerator), std::move(it));
 }
 
+void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
+    LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
+  // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
+  // to do
+  if (qet.supportsLimit()) {
+    limitOffsetClause._offset = 0;
+  }
+}
+
 // _____________________________________________________________________________
 cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  auto compute = [&]<MediaType format> {
+  auto limit = parsedQuery._limitOffset;
+  compensateForLimitOffsetClause(limit, qet);
+  auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
@@ -1054,14 +1117,13 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
       }
       return parsedQuery.hasSelectClause()
                  ? selectQueryResultToStream<format>(
-                       qet, parsedQuery.selectClause(),
-                       parsedQuery._limitOffset, std::move(cancellationHandle))
+                       qet, parsedQuery.selectClause(), limit,
+                       std::move(cancellationHandle))
                  : constructQueryResultToStream<format>(
-                       qet, parsedQuery.constructClause().triples_,
-                       parsedQuery._limitOffset, qet.getResult(true),
-                       std::move(cancellationHandle));
+                       qet, parsedQuery.constructClause().triples_, limit,
+                       qet.getResult(true), std::move(cancellationHandle));
     }
-  };
+  }};
 
   using enum MediaType;
 
@@ -1174,3 +1236,45 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   co_yield absl::StrCat("],", jsonSuffix.dump().substr(1));
 }
+
+// This function evaluates a `Variable` in the context of the `CONSTRUCT`
+// export.
+[[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
+    const Variable& var, const ConstructQueryExportContext& context,
+    [[maybe_unused]] PositionInTriple positionInTriple) {
+  size_t row = context._row;
+  const auto& variableColumns = context._variableColumns;
+  const Index& qecIndex = context._qecIndex;
+  const auto& idTable = context.idTable_;
+  if (variableColumns.contains(var)) {
+    size_t index = variableColumns.at(var).columnIndex_;
+    auto id = idTable(row, index);
+    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
+        qecIndex, id, context.localVocab_);
+    if (!optionalStringAndType.has_value()) {
+      return std::nullopt;
+    }
+    auto& [literal, type] = optionalStringAndType.value();
+    const char* i = XSD_INT_TYPE;
+    const char* d = XSD_DECIMAL_TYPE;
+    const char* b = XSD_BOOLEAN_TYPE;
+    // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
+    // "-INF", which doesn't have a short form notation.
+    if (type == nullptr || type == i || type == d ||
+        (type == b && literal.length() > 1)) {
+      return std::move(literal);
+    } else {
+      return absl::StrCat("\"", literal, "\"^^<", type, ">");
+    }
+  }
+  return std::nullopt;
+}
+
+// The following trick has the effect that `Variable::evaluate()` calls the
+// above function, without `Variable` having to link against the (heavy) export
+// module. This is a bit of a hack and will be removed in the future when we
+// improve the CONSTRUCT module for better performance.
+[[maybe_unused]] static const int initializeVariableEvaluationDummy = []() {
+  Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
+  return 42;
+}();

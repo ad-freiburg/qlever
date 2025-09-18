@@ -35,8 +35,8 @@ class Describe : public Operation {
 
   // The following functions override those from the base class `Operation`.
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
 
@@ -49,7 +49,7 @@ class Describe : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 

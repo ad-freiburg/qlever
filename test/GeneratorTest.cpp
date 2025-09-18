@@ -23,6 +23,10 @@ cppcoro::generator<int, Details> simpleGen() {
   details.end_ = true;
 };
 
+auto blubbBlabb() {
+  return []() -> cppcoro::generator<int> { co_yield 12340; };
+}
+
 // Test the behavior of the `simpleGen` above.
 TEST(Generator, details) {
   auto gen = simpleGen();

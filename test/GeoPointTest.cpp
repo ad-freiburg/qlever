@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/HashSet.h"

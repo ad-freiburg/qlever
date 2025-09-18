@@ -8,9 +8,7 @@
 #include <string>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/data/Variable.h"
-
-using std::string;
+#include "rdfTypes/Variable.h"
 
 struct Alias {
   sparqlExpression::SparqlExpressionPimpl _expression;

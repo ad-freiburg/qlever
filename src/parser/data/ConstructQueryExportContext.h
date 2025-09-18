@@ -7,7 +7,7 @@
 
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
@@ -20,6 +20,7 @@ struct ConstructQueryExportContext {
   const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
+  const size_t _rowOffset;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

@@ -29,18 +29,22 @@ using ad_utility::strIsLangTag;
 using ad_utility::utf8ToLower;
 using ad_utility::utf8ToUpper;
 
-TEST(StringUtilsTest, utf8ToLower) {
+// _____________________________________________________________________________
+TEST(StringUtils, utf8ToLower) {
   EXPECT_EQ("schindler's list", utf8ToLower("Schindler's List"));
   EXPECT_EQ("#+-_foo__bar++", utf8ToLower("#+-_foo__Bar++"));
   EXPECT_EQ("fôéßaéé", utf8ToLower("FÔÉßaéÉ"));
 }
-TEST(StringUtilsTest, utf8ToUpper) {
+
+// _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpper) {
   EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper("Schindler's List"));
   EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper("#+-_bImM__baMm++"));
   EXPECT_EQ("FÔÉSSAÉÉ", utf8ToUpper("FôéßaÉé"));
 }
 
-TEST(StringUtilsTest, getUTF8Substring) {
+// _____________________________________________________________________________
+TEST(StringUtils, getUTF8Substring) {
   // Works normally for strings with only single byte characters.
   ASSERT_EQ("fel", getUTF8Substring("Apfelsaft", 2, 3));
   ASSERT_EQ("saft", getUTF8Substring("Apfelsaft", 5, 4));
@@ -74,7 +78,7 @@ TEST(StringUtilsTest, getUTF8Substring) {
 
 // It should just work like the == operator for strings, just without
 // the typical short circuit optimization
-TEST(StringUtilsTest, constantTimeEquals) {
+TEST(StringUtils, constantTimeEquals) {
   EXPECT_TRUE(constantTimeEquals("", ""));
   EXPECT_TRUE(constantTimeEquals("Abcdefg", "Abcdefg"));
   EXPECT_FALSE(constantTimeEquals("Abcdefg", "abcdefg"));
@@ -83,7 +87,8 @@ TEST(StringUtilsTest, constantTimeEquals) {
   EXPECT_FALSE(constantTimeEquals("Abc", "defg"));
 }
 
-TEST(StringUtilsTest, listToString) {
+// _____________________________________________________________________________
+TEST(StringUtils, listToString) {
   /*
   Do the test for all overloads of `lazyStrJoin`.
   Every overload needs it's own `range`, because ranges like, for example,
@@ -148,7 +153,8 @@ TEST(StringUtilsTest, listToString) {
                         goThroughVectorGenerator(multiValueVector), ",");
 }
 
-TEST(StringUtilsTest, addIndentation) {
+// _____________________________________________________________________________
+TEST(StringUtils, addIndentation) {
   // The input strings for testing.
   static constexpr std::string_view withoutLineBreaks = "Hello\tworld!";
   static constexpr std::string_view withLineBreaks = "\nHello\nworld\n!";
@@ -172,15 +178,16 @@ TEST(StringUtilsTest, addIndentation) {
             ad_utility::addIndentation(withLineBreaks, "Not "));
 }
 
-TEST(StringUtilsTest, insertThousandSeparator) {
+// _____________________________________________________________________________
+TEST(StringUtils, insertThousandSeparator) {
   /*
   Do the tests, that are not exception tests, with the given arguments for
   `insertThousandSeparator`.
   */
-  auto doNotExceptionTest = []<const char floatingPointSignifier>(
-                                const char separatorSymbol,
-                                ad_utility::source_location l =
-                                    ad_utility::source_location::current()) {
+  auto doNotExceptionTest = [](auto valueIdentity, const char separatorSymbol,
+                               ad_utility::source_location l =
+                                   ad_utility::source_location::current()) {
+    static constexpr char floatingPointSignifier = valueIdentity.value;
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "doNotExceptionTest")};
 
@@ -189,12 +196,13 @@ TEST(StringUtilsTest, insertThousandSeparator) {
 
     /*
     @brief Make a comparison check, that the given string, given in pieces,
-    generates the wanted string, when called with `insertThousandSeparator` with
-    the arguments from `doNotExceptionTest`.
+    generates the wanted string, when called with `insertThousandSeparator`
+    with the arguments from `doNotExceptionTest`.
 
-    @param stringPieces The input for `insertThousandSeparator` are those pieces
-    concatenated and the expected output are those pieces concatenated with
-    `separatorSymbol` between them. For example: `{"This number 4", "198."}`.
+    @param stringPieces The input for `insertThousandSeparator` are those
+    pieces concatenated and the expected output are those pieces
+    concatenated with `separatorSymbol` between them. For example: `{"This
+    number 4", "198."}`.
     */
     auto simpleComparisonTest =
         [&separatorSymbol](const std::vector<std::string>& stringPieces,
@@ -217,11 +225,15 @@ TEST(StringUtilsTest, insertThousandSeparator) {
     // No numbers.
     simpleComparisonTest(
         {"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
-         "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim "
-         "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
+         "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut "
+         "enim "
+         "ad minim veniam, quis nostrud exercitation ullamco laboris nisi "
+         "ut "
          "aliquip ex ea commodo consequat. Duis aute irure dolor in "
-         "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
-         "pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
+         "reprehenderit in voluptate velit esse cillum dolore eu fugiat "
+         "nulla "
+         "pariatur. Excepteur sint occaecat cupidatat non proident, sunt "
+         "in "
          "culpa qui officia deserunt mollit anim id est laborum."});
 
     // Only whole numbers.
@@ -273,10 +285,10 @@ TEST(StringUtilsTest, insertThousandSeparator) {
                       floatingPointSignifierString,
                       "217710466665135481349068158967136466 amet, "
                       "consectetur adipiscing elit. Quippe:  876"),
-         absl::StrCat(
-             "703", floatingPointSignifierString,
-             "21 habes enim a rhetoribus; Bork Falli igitur possumus. Bonum "
-             "integritas corporis: misera debilitas 987"),
+         absl::StrCat("703", floatingPointSignifierString,
+                      "21 habes enim a rhetoribus; Bork Falli igitur "
+                      "possumus. Bonum "
+                      "integritas corporis: misera debilitas 987"),
          "654",
          "321.  Nos commodius agimus.Duo "
          "Reges : constructio interrete 42.  Quod cum dixissent, ille "
@@ -284,44 +296,43 @@ TEST(StringUtilsTest, insertThousandSeparator) {
          "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
          "insanos esse vultis.Sed haec in pueris; "});
   };
-  doNotExceptionTest.template operator()<','>(' ');
-  doNotExceptionTest.template operator()<'+'>('t');
-  doNotExceptionTest.template operator()<'t'>('+');
-  doNotExceptionTest.template operator()<'?'>('\"');
-  doNotExceptionTest.template operator()<'-'>('~');
+  using ad_utility::use_value_identity::vi;
+  doNotExceptionTest(vi<','>, ' ');
+  doNotExceptionTest(vi<'+'>, 't');
+  doNotExceptionTest(vi<'t'>, '+');
+  doNotExceptionTest(vi<'?'>, '\"');
+  doNotExceptionTest(vi<'-'>, '~');
 
   // Set the `floatingPointSignifier` to characters, that are reserved regex
   // characters.
-  auto reservedRegexCharTest = [&doNotExceptionTest]<const char... Cs>() {
-    (doNotExceptionTest.template operator()<Cs>(' '), ...);
+  auto reservedRegexCharTest = [&doNotExceptionTest](auto... valueIdentities) {
+    (doNotExceptionTest(vi<valueIdentities.value>, ' '), ...);
   };
-  reservedRegexCharTest
-      .template operator()<'.', '(', ')', '[', ']', '|', '{', '}', '*', '+',
-                           '?', '^', '$', '\\', '-', '/'>();
+  reservedRegexCharTest(vi<'.'>, vi<'('>, vi<')'>, vi<'['>, vi<']'>, vi<'|'>,
+                        vi<'{'>, vi<'}'>, vi<'*'>, vi<'+'>, vi<'?'>, vi<'^'>,
+                        vi<'$'>, vi<'\\'>, vi<'-'>, vi<'/'>);
 
   // Numbers as `separatorSymbol`, or `floatingPointSignifier`, are not allowed.
   auto forbiddenSymbolTest =
-      [&doNotExceptionTest]<const char... floatingPointSignifiers>() {
+      [&doNotExceptionTest](auto... floatingPointSignifiers) {
         for (size_t separatorSymbolNum = 0; separatorSymbolNum < 10;
              separatorSymbolNum++) {
           const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
-          (
-              [&doNotExceptionTest, &separatorSymbol]<const char c>() {
-                ASSERT_ANY_THROW(
-                    doNotExceptionTest.template operator()<c>(' '));
-                ASSERT_ANY_THROW(doNotExceptionTest.template operator()<'.'>(
-                    separatorSymbol));
-                ASSERT_ANY_THROW(
-                    doNotExceptionTest.template operator()<c>(separatorSymbol));
-              }.template operator()<floatingPointSignifiers>(),
-              ...);
+          (ad_utility::ApplyAsValueIdentity{[&doNotExceptionTest,
+                                             &separatorSymbol](auto c) {
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, ' '));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<'.'>, separatorSymbol));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, separatorSymbol));
+           }}.template operator()<floatingPointSignifiers.value>(),
+           ...);
         }
       };
-  forbiddenSymbolTest
-      .template operator()<'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'>();
+  forbiddenSymbolTest(vi<'0'>, vi<'1'>, vi<'2'>, vi<'3'>, vi<'4'>, vi<'5'>,
+                      vi<'6'>, vi<'7'>, vi<'8'>, vi<'9'>);
 }
 
-TEST(StringUtilsTest, findLiteralEnd) {
+// _____________________________________________________________________________
+TEST(StringUtils, findLiteralEnd) {
   using namespace ad_utility;
   EXPECT_EQ(findLiteralEnd("nothing", "\""), std::string_view::npos);
   EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
@@ -329,7 +340,8 @@ TEST(StringUtilsTest, findLiteralEnd) {
   EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
 }
 
-TEST(StringUtilsTest, strLangTag) {
+// _____________________________________________________________________________
+TEST(StringUtils, strLangTag) {
   // INVALID TAGS
   ASSERT_FALSE(strIsLangTag(""));
   ASSERT_FALSE(strIsLangTag("de-@"));
@@ -351,31 +363,41 @@ TEST(StringUtilsTest, strLangTag) {
   ASSERT_TRUE(strIsLangTag("en"));
 }
 
+// Constants for the tests of `constexprStrCat` below. They have to be at
+// namespace scope, because of the compilation on G++-8.
+namespace {
+constexpr std::string_view empty = "";
+constexpr std::string_view single = "single";
+constexpr std::string_view hello = "hello";
+constexpr std::string_view space = " ";
+constexpr std::string_view world = "World!";
+constexpr std::string_view h = "h";
+constexpr std::string_view i = "i";
+}  // namespace
 // _____________________________________________________________________________
-TEST(StringUtilsTest, constexprStrCat) {
+TEST(StringUtils, constexprStrCat) {
   using namespace std::string_view_literals;
   ASSERT_EQ((constexprStrCat<>()), ""sv);
-  ASSERT_EQ((constexprStrCat<"">()), ""sv);
-  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
-  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
-  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+  ASSERT_EQ((constexprStrCat<empty>()), ""sv);
+  ASSERT_EQ((constexprStrCat<single>()), "single"sv);
+  ASSERT_EQ((constexprStrCat<empty, single, empty>()), "single"sv);
+
+  ASSERT_EQ((constexprStrCat<hello, space, world>()), "hello World!"sv);
+  static_assert(constexprStrCat<hello, space, world>() == "hello World!"sv);
 }
 
 // _____________________________________________________________________________
-TEST(StringUtilsTest, constexprStrCatImpl) {
+TEST(StringUtils, constexprStrCatImpl) {
   // The coverage tools don't track the compile time usages of these internal
   // helper functions, so we test them manually.
   using namespace ad_utility::detail::constexpr_str_cat_impl;
-  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((constexprStrCatBufferImpl<h, i>()), (std::array{'h', 'i', '\0'}));
 
-  using C = ConstexprString;
-  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
-            (std::array{'h', 'i', '\0'}));
+  ASSERT_EQ((catImpl<2>(std::array{&h, &i})), (std::array{'h', 'i', '\0'}));
 }
 
-TEST(StringUtilsTest, truncateOperationString) {
+// _____________________________________________________________________________
+TEST(StringUtils, truncateOperationString) {
   auto expectTruncate = [](std::string_view test, bool willTruncate,
                            ad_utility::source_location l =
                                ad_utility::source_location::current()) {
@@ -399,4 +421,15 @@ TEST(StringUtilsTest, truncateOperationString) {
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
+}
+
+// _____________________________________________________________________________
+TEST(StringUtils, commonPrefix) {
+  EXPECT_EQ(ad_utility::commonPrefix("", ""), "");
+  EXPECT_EQ(ad_utility::commonPrefix("a", ""), "");
+  EXPECT_EQ(ad_utility::commonPrefix("", "a"), "");
+  EXPECT_EQ(ad_utility::commonPrefix("ab", "a"), "a");
+  EXPECT_EQ(ad_utility::commonPrefix("a", "ab"), "a");
+  EXPECT_EQ(ad_utility::commonPrefix("ab", "b"), "");
+  EXPECT_EQ(ad_utility::commonPrefix("b", "ab"), "");
 }

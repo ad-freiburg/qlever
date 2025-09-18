@@ -9,16 +9,17 @@
 #include <concepts>
 #include <cstdint>
 #include <string>
-#include <type_traits>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
+#include "index/EncodedIriManager.h"
 #include "parser/LiteralOrIri.h"
-#include "parser/RdfEscaping.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/RdfEscaping.h"
+#include "rdfTypes/Variable.h"
 #include "util/Date.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -70,7 +71,7 @@ class TripleComponent {
   /// `Variant`.
   CPP_template(typename FirstArg, typename... Args)(
       requires CPP_NOT(
-          std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
+          std::same_as<ql::remove_cvref_t<FirstArg>, TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
@@ -194,6 +195,9 @@ class TripleComponent {
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
 
+  // Access the underlying variant (mostly used for testing)
+  const auto& getVariant() const { return _variant; }
+
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.
@@ -206,16 +210,17 @@ class TripleComponent {
   /// Convert the `TripleComponent` to an ID if it is not a string. In case of a
   /// string return `std::nullopt`. This is used in `toValueId` below and during
   /// the index building when we haven't built the vocabulary yet.
-  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const;
+  [[nodiscard]] std::optional<Id> toValueIdIfNotString(
+      const EncodedIriManager* encodedIriManager) const;
 
   // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
   // string, the IDs are resolved using the `vocabulary`. If a string is not
   // found in the vocabulary, `std::nullopt` is returned.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary) const {
+      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
     AD_CONTRACT_CHECK(!isString());
-    std::optional<Id> vid = toValueIdIfNotString();
+    std::optional<Id> vid = toValueIdIfNotString(&evManager);
     if (vid != std::nullopt) return vid;
     AD_CORRECTNESS_CHECK(isLiteral() || isIri());
     VocabIndex idx;
@@ -236,8 +241,9 @@ class TripleComponent {
   // `std::string` when passing it to the local vocabulary.
   template <typename Vocabulary>
   [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
-                             LocalVocab& localVocab) && {
-    std::optional<Id> id = toValueId(vocabulary);
+                             LocalVocab& localVocab,
+                             const EncodedIriManager& encodedIriManager) && {
+    std::optional<Id> id = toValueId(vocabulary, encodedIriManager);
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.

@@ -28,10 +28,10 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <type_traits>
 #include <utility>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/SourceLocation.h"
@@ -209,11 +209,11 @@ struct adl_serializer<std::variant<Types...>> {
     }
 
     // Interpreting the value based on its type.
-    ad_utility::RuntimeValueToCompileTimeValue<sizeof...(Types) - 1>(
-        index, [&j, &var]<size_t Index>() {
+    ad_utility::RuntimeValueToCompileTimeValueVi<sizeof...(Types) - 1>(
+        index, [&j, &var](auto index) {
           var = j["value"]
                     .template get<std::variant_alternative_t<
-                        Index, std::variant<Types...>>>();
+                        index, std::variant<Types...>>>();
         });
   }
 };

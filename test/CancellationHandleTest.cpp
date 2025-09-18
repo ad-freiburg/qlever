@@ -8,6 +8,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "backports/keywords.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/jthread.h"
@@ -465,7 +466,7 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
 }
 
 template <typename T>
-consteval bool isMemberFunction([[maybe_unused]] T funcPtr) {
+QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
   return std::is_member_function_pointer_v<T>;
 }
 

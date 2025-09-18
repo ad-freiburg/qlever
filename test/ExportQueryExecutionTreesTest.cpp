@@ -9,10 +9,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
-#include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -27,6 +27,12 @@ using ::testing::Eq;
 using ::testing::HasSubstr;
 
 namespace {
+auto parseQuery(std::string query,
+                const std::vector<DatasetClause>& datasets = {}) {
+  static EncodedIriManager evM;
+  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
+}
+
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
 std::string runQueryStreamableResult(
@@ -42,7 +48,7 @@ std::string runQueryStreamableResult(
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
@@ -70,7 +76,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(query);
+  auto pq = parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
@@ -125,6 +131,8 @@ struct TestCaseConstructQuery {
                                     // Note: this member only contains the inner
                                     // result array with the bindings and NOT
                                     // the metadata.
+  // How many triples the construct query contains.
+  size_t numTriples = 1;
 };
 
 // Run a single test case for a SELECT query.
@@ -195,7 +203,8 @@ void runConstructQueryTestCase(
         testCase.kg, testCase.query, qleverJson, false, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
     ASSERT_EQ(resultJson["resultSizeExported"],
-              std::min(exportLimit, testCase.resultSizeExported));
+              std::min(exportLimit * testCase.numTriples,
+                       testCase.resultSizeExported));
   }
 }
 
@@ -403,7 +412,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
-  std::string kg = "<s> <p> true . <s> <p> false.";
+  std::string kg =
+      "<s> <p> true . <s> <p> false ."
+      " <s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> ."
+      " <s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -412,44 +424,72 @@ TEST(ExportQueryExecutionTrees, Bool) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
   </result>
   <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">0</literal></binding>
+  </result>
+  <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">1</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
-      kg, query, 2,
+      kg, query, 4,
       // TSV
       "?o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       // CSV
       "o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       makeExpectedQLeverJSON(
           {"\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
-           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
+           "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
                            "literal", "false"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
-                           "literal", "true")}),
+                           "literal", "0"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "true"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "1")}),
       expectedXml};
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 2,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 4, 4,
       // TSV
       "<s>\t<p>\tfalse\n"
-      "<s>\t<p>\ttrue\n",
+      "<s2>\t<p2>\t\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n"
+      "<s>\t<p>\ttrue\n"
+      "<s2>\t<p2>\t\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n",
       // CSV
       "<s>,<p>,false\n"
-      "<s>,<p>,true\n",
+      "<s2>,<p2>,\"\"\"0\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n"
+      "<s>,<p>,true\n"
+      "<s2>,<p2>,\"\"\"1\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n",
       // Turtle
       "<s> <p> false .\n"
-      "<s> <p> true .\n",
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> true .\n"
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "true"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
@@ -501,12 +541,18 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
-      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
-      "4.012934858173560e-12";
+      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 ."
+      " <s> <p> 4.012934858173560e-12 ."
+      " <s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> ."
+      " <s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> ."
+      " <s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">-INF</literal></binding>
+  </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
   </result>
@@ -515,52 +561,91 @@ TEST(ExportQueryExecutionTrees, Floats) {
   </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">INF</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">NaN</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseFloat{
-      kg, query, 3,
+      kg, query, 6,
       // TSV
       "?o\n"
+      "-INF\n"
       "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n",
+      "42.2\n"
+      "INF\n"
+      "NaN\n",
       // CSV
       "o\n"
+      "-INF\n"
       "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n",
+      "42.2\n"
+      "INF\n"
+      "NaN\n",
       makeExpectedQLeverJSON(
-          {"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+          {"\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
+           "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
+           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
+           "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>"s}),
       makeExpectedSparqlJSON(
-          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "-INF"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "-42019234865780982022144"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "4.01293e-12"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "42.2")}),
+                           "literal", "42.2"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "INF"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "NaN")}),
       expectedXml};
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 6, 6,
       // TSV
+      "<s>\t<p>\t\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
       "<s>\t<p>\t-42019234865780982022144\n"
       "<s>\t<p>\t4.01293e-12\n"
-      "<s>\t<p>\t42.2\n",
+      "<s>\t<p>\t42.2\n"
+      "<s>\t<p>\t\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
+      "<s>\t<p>\t\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>\n",
       // CSV
+      "<s>,<p>,\"\"\"-INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
       "<s>,<p>,-42019234865780982022144\n"
       "<s>,<p>,4.01293e-12\n"
-      "<s>,<p>,42.2\n",
+      "<s>,<p>,42.2\n"
+      "<s>,<p>,\"\"\"INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
+      "<s>,<p>,\"\"\"NaN\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n",
       // Turtle
+      "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> -42019234865780982022144 .\n"
       "<s> <p> 4.01293e-12 .\n"
-      "<s> <p> 42.2 .\n",
+      "<s> <p> 42.2 .\n"
+      "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
         nlohmann::json j;
+        j.push_back(std::vector{
+            "<s>"s, "<p>"s,
+            "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
+        j.push_back(
+            std::vector{"<s>"s, "<p>"s,
+                        "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
+        j.push_back(
+            std::vector{"<s>"s, "<p>"s,
+                        "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
@@ -708,7 +793,7 @@ TEST(ExportQueryExecutionTrees, Entities) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
-  std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
+  std::string kg = R"(<s> <p> "Some\"Where	Over,"@en-ca.)";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
@@ -1084,7 +1169,7 @@ TEST(ExportQueryExecutionTrees, EmptyLines) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
@@ -1150,6 +1235,51 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
       }(),
       expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
+
+  TestCaseConstructQuery testCaseConstruct{
+      "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>",
+      "CONSTRUCT { [] <p> _:a . [] <p> _:a } WHERE { ?s ?p ?o }", 8, 8,
+      // TSV
+      "_:g0_0\t<p>\t_:u0_a\n"
+      "_:g0_1\t<p>\t_:u0_a\n"
+      "_:g1_0\t<p>\t_:u1_a\n"
+      "_:g1_1\t<p>\t_:u1_a\n"
+      "_:g2_0\t<p>\t_:u2_a\n"
+      "_:g2_1\t<p>\t_:u2_a\n"
+      "_:g3_0\t<p>\t_:u3_a\n"
+      "_:g3_1\t<p>\t_:u3_a\n",
+      // CSV
+      "_:g0_0,<p>,_:u0_a\n"
+      "_:g0_1,<p>,_:u0_a\n"
+      "_:g1_0,<p>,_:u1_a\n"
+      "_:g1_1,<p>,_:u1_a\n"
+      "_:g2_0,<p>,_:u2_a\n"
+      "_:g2_1,<p>,_:u2_a\n"
+      "_:g3_0,<p>,_:u3_a\n"
+      "_:g3_1,<p>,_:u3_a\n",
+      // Turtle
+      "_:g0_0 <p> _:u0_a .\n"
+      "_:g0_1 <p> _:u0_a .\n"
+      "_:g1_0 <p> _:u1_a .\n"
+      "_:g1_1 <p> _:u1_a .\n"
+      "_:g2_0 <p> _:u2_a .\n"
+      "_:g2_1 <p> _:u2_a .\n"
+      "_:g3_0 <p> _:u3_a .\n"
+      "_:g3_1 <p> _:u3_a .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"_:g0_0"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g0_1"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g1_0"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g1_1"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g2_0"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g2_1"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g3_0"s, "<p>"s, "_:u3_a"s});
+        j.push_back(std::vector{"_:g3_1"s, "<p>"s, "_:u3_a"s});
+        return j;
+      }(),
+      2};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 // ____________________________________________________________________________
@@ -1396,8 +1526,8 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   auto* qec = ad_utility::testing::getQec(
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(
-      GetParam() == turtle ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
+  auto pq = parseQuery(GetParam() == turtle
+                           ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
                            : "SELECT * WHERE { ?x ?y ?z }");
   auto qet = qp.createExecutionTree(pq);
 
@@ -1628,7 +1758,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       "<s> <p1> 40,41,42,43,44,45,46,47,48,49"
       " ; <p2> 50,51,52,53,54,55,56,57,58,59");
   QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery(std::string{query});
+  auto pq = parseQuery(std::string{query});
   auto qet = qp.createExecutionTree(pq);
 
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -1640,7 +1770,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       pq, qet, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
-  for (std::string& chunk : jsonStream) {
+  for (std::string_view chunk : jsonStream) {
     aggregateString += chunk;
   }
   nlohmann::json json = nlohmann::json::parse(aggregateString);
@@ -1756,9 +1886,10 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
   // Test cases: Each tuple describes one test case.
   // The first element is the ID of the element to test.
   // The second element is a list of 2 configurations:
-  // 1. for literals all datatypes except for xsd:string are removed, IRIs
+  // 1. for literals all datatypes are removed, IRIs
   // are converted to literals
-  // 2. only literals with `xsd:string` or no datatype are returned
+  // 2. only literals with no datatype or`xsd:string` are returned.
+  // In the last case the datatype is removed.
   std::vector<
       std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
       testCases = {
@@ -1768,8 +1899,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
 
           // Case: Literal with datatype `xsd:string`
           {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-           {{false, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
-            {true, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"}}},
+           {{false, "\"some\""}, {true, "\"some\""}}},
 
           // Case: Literal with unknown datatype
           {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
@@ -1913,4 +2043,142 @@ TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
   EXPECT_EQ(ExportQueryExecutionTrees::blankNodeIriToString(
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
+  auto* qec = ad_utility::testing::getQec();
+
+  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, false);
+  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, true);
+
+  LimitOffsetClause limit{10, 5};
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet1);
+  EXPECT_EQ(limit._offset, 5);
+
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet2);
+  EXPECT_EQ(limit._offset, 0);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
+  // Test that encoded IRIs are properly handled during export
+
+  // Create a knowledge graph with IRIs that should be encodable
+  std::string kg =
+      "<http://example.org/123> <http://example.org/predicate456> "
+      "<http://example.org/789> ."
+      "<http://test.com/id/111> <http://example.org/predicate456> \"literal "
+      "value\" .";
+
+  // Test XML export with encoded IRIs
+  std::string query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o";
+
+  // Create test configuration with EncodedIriManager
+  auto encodedIriManager = std::make_shared<EncodedIriManager>(
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
+
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.encodedIriManager = EncodedIriManager{
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"}};
+  auto qec = ad_utility::testing::getQec(std::move(config));
+
+  // Parse query with the same EncodedIriManager
+  auto parsedQuery =
+      SparqlParser::parseQuery(encodedIriManager.get(), query, {});
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, cancellationHandle};
+  auto qet = qp.createExecutionTree(parsedQuery);
+
+  // Export as XML and verify encoded IRIs are properly converted back
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto cancellationHandle2 =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::string result;
+  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
+           std::move(cancellationHandle2))) {
+    result += chunk;
+  }
+
+  // Verify that the original IRI strings appear in the output
+  EXPECT_THAT(result, HasSubstr("http://example.org/123"));
+  EXPECT_THAT(result, HasSubstr("http://example.org/predicate456"));
+  EXPECT_THAT(result, HasSubstr("http://example.org/789"));
+  EXPECT_THAT(result, HasSubstr("http://test.com/id/111"));
+  EXPECT_THAT(result, HasSubstr("literal value"));
+
+  // Test TSV export as well
+  ad_utility::Timer tsvTimer{ad_utility::Timer::Started};
+  auto cancellationHandle3 =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::string tsvResult;
+  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
+           std::move(cancellationHandle3))) {
+    tsvResult += chunk;
+  }
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/123"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/predicate456"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://example.org/789"));
+  EXPECT_THAT(tsvResult, HasSubstr("http://test.com/id/111"));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
+  // Test the getLiteralOrIriFromVocabIndex function specifically with encoded
+  // IRIs
+
+  // Create an EncodedIriManager with test prefixes
+  std::vector<std::string> prefixes = {"http://example.org/",
+                                       "http://test.com/"};
+  EncodedIriManager encodedIriManager{prefixes};
+
+  // Create a test index config with the encoded IRI manager
+  using namespace ad_utility::testing;
+  TestIndexConfig config;
+  config.encodedIriManager = encodedIriManager;
+  auto qec = getQec(std::move(config));
+
+  // Test driver lambda to reduce code duplication
+  LocalVocab emptyLocalVocab;
+  auto testEncodedIri = [&](const std::string& iri) {
+    // Encode the IRI
+    auto encodedIdOpt = encodedIriManager.encode(iri);
+    ASSERT_TRUE(encodedIdOpt.has_value()) << "Failed to encode IRI: " << iri;
+
+    Id encodedId = *encodedIdOpt;
+    EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
+
+    // Test getLiteralOrIriFromVocabIndex with the encoded ID
+    auto result = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+        qec->getIndex(), encodedId, emptyLocalVocab);
+
+    // The result should be the original IRI
+    EXPECT_TRUE(result.isIri());
+    EXPECT_EQ(result.toStringRepresentation(), iri);
+  };
+
+  // Test multiple encoded IRIs
+  testEncodedIri("<http://example.org/123>");
+  testEncodedIri("<http://test.com/456>");
+
+  // Test that non-encodable IRIs fall back to VocabIndex handling
+  // (This test assumes the test index has some vocabulary entries)
+  if (!qec->getIndex().getVocab().size()) {
+    VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
+    Id vocabId = Id::makeFromVocabIndex(vocabIndex);
+
+    auto vocabResult = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+        qec->getIndex(), vocabId, emptyLocalVocab);
+
+    // Should successfully return some IRI or literal from vocabulary
+    EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
+  }
 }

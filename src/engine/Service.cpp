@@ -24,7 +24,7 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 SendRequestType getResultFunction)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getResultFunction_{std::move(getResultFunction)} {}
@@ -133,6 +133,9 @@ Result Service::computeResult(bool requestLaziness) {
 // ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    return makeNeutralElementResultForSilentFail();
+  }
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
@@ -158,16 +161,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       "application/sparql-results+json");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
-    std::string ctx;
-    ctx.reserve(100);
-    for (const auto& bytes : std::move(response.body_)) {
-      ctx += std::string(reinterpret_cast<const char*>(bytes.data()),
-                         bytes.size());
-      if (ctx.size() >= 100) {
-        break;
-      }
-    }
-    this->throwErrorWithContext(sv, std::string_view(ctx).substr(0, 100));
+    this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
   };
 
   // Verify status and content-type of the response.
@@ -229,7 +223,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
+                                        getIndex().encodedIriManager());
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -411,8 +406,10 @@ TripleComponent Service::bindingToTripleComponent(
   if (type == "literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     binding["datatype"].get<std::string_view>()));
+          value,
+          TripleComponent::Iri::fromIrirefWithoutBrackets(
+              binding["datatype"].get<std::string_view>()),
+          getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
@@ -573,6 +570,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
 
+  // If this operation is constrained by a `LIMIT` or `OFFSET` we can't apply
+  // the optimization.
+  if (!service->getLimitOffset().isUnconstrained()) {
+    return;
+  }
+
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
@@ -605,8 +608,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // result with subsequent calls to get(). Therefore, we do not need to
   // keep and pass an iterator to the sibling result if the max row threshold
   // is exceeded
-  auto generator =
-      moveToCachingInputRange(std::move(siblingResult->idTables()));
+  auto generator = moveToCachingInputRange(siblingResult->idTables());
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
   while (auto pairOpt = generator.get()) {
