@@ -347,7 +347,7 @@ nlohmann::json idTableToQLeverJSONRow(
 // _____________________________________________________________________________
 auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
-    const QueryExecutionTree::ColumnIndicesAndTypes columns,
+    QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
@@ -795,8 +795,8 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
   return ad_utility::InputRangeTypeErased(idTableToQLeverJSONBindings(
-      qet, limitAndOffset, selectedColumnIndices, std::move(result), resultSize,
-      std::move(cancellationHandle)));
+      qet, limitAndOffset, std::move(selectedColumnIndices), std::move(result),
+      resultSize, std::move(cancellationHandle)));
 }
 
 // _____________________________________________________________________________
