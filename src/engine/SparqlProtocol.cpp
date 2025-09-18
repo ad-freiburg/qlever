@@ -209,10 +209,16 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
+  // Graph Store Protocol with indirect graph identification
+  std::string_view methodStr = request.method_string();
+  if (request.method() == http::verb::put ||
+      request.method() == http::verb::delete_ || methodStr == "TSOP") {
+    return parseGraphStoreProtocolIndirect(request);
+  }
   throw HttpError(
       boost::beast::http::status::method_not_allowed,
       absl::StrCat(
-          "Request method \"", std::string_view{request.method_string()},
-          "\" not supported (only GET and POST are supported; PUT, DELETE, "
+          "Request method \"", methodStr,
+          "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }
