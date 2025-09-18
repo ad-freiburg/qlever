@@ -29,27 +29,28 @@ TEST(Parameters, First) {
   Parameters pack2(FloatParameter{2.0f}, IntParameter{3ull},
                    DoubleParameter{42.1}, BoolParameter{true},
                    BoolParameter2{true});
-  ASSERT_EQ(3ul, pack2.get<"SizeT">());
-  ASSERT_FLOAT_EQ(2.0, pack2.get<"Float">());
-  ASSERT_DOUBLE_EQ(42.1, pack2.get<"Double">());
-  ASSERT_TRUE(pack2.get<"Bool">());
+  ASSERT_EQ(3ul, pack2.get<IntParameterTag>());
+  ASSERT_FLOAT_EQ(2.0, pack2.get<FloatParameterTag>());
+  ASSERT_DOUBLE_EQ(42.1, pack2.get<DoubleParameterTag>());
+  ASSERT_TRUE(pack2.get<BoolParameterTag>());
 
-  pack2.set("Float", "42.0");
-  ASSERT_EQ(3ul, pack2.get<"SizeT">());
-  ASSERT_FLOAT_EQ(42.0, pack2.get<"Float">());
+  pack2.set<FloatParameterTag>(42.0);
+  ASSERT_EQ(3ul, pack2.get<IntParameterTag>());
+  ASSERT_FLOAT_EQ(42.0, pack2.get<FloatParameterTag>());
 
-  pack2.set("Double", "16.2");
-  ASSERT_DOUBLE_EQ(16.2, pack2.get<"Double">());
+  pack2.set<DoubleParameterTag>(16.2);
+  ASSERT_DOUBLE_EQ(16.2, pack2.get<DoubleParameterTag>());
 
-  pack2.set("SizeT", "134");
-  ASSERT_EQ(pack2.get<"SizeT">(), 134);
+  pack2.set<IntParameterTag>(134);
+  ASSERT_EQ(pack2.get<IntParameterTag>(), 134);
 
-  pack2.set("Bool", "false");
-  ASSERT_FALSE(pack2.get<"Bool">());
+  pack2.set<BoolParameterTag>(false);
+  ASSERT_FALSE(pack2.get<BoolParameterTag>());
 
   ASSERT_THROW(pack2.set("NoKey", "24.1"), std::runtime_error);
   // TODO<joka921>: Make this unit test work.
-  // ASSERT_THROW(pack2.set("Float", "24.nofloat1"), std::runtime_error);
+  // ASSERT_THROW(pack2.set(FloatParameterTag, "24.nofloat1"),
+  // std::runtime_error);
 
   auto map = pack2.toMap();
   ASSERT_EQ(5ul, map.size());
@@ -82,9 +83,9 @@ TEST(Parameters, MemorySizeParameter) {
   Parameters pack(Float<FloatParameterTag>{2.0f}, SizeT<IntParameterTag>{3ull},
                   Double<DoubleParameterTag>{42.1},
                   MemorySizeParameter<MemoryParameterTag>{6_GB});
-  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_GB).getBytes());
+  ASSERT_EQ(pack.get<MemoryParameterTag>().getBytes(), (6_GB).getBytes());
   pack.set("Memory", "6 MB");
-  ASSERT_EQ(pack.get<"Memory">().getBytes(), (6_MB).getBytes());
+  ASSERT_EQ(pack.get<MemoryParameterTag>().getBytes(), (6_MB).getBytes());
 }
 
 DECLARE_PAREMETER(StringParameterTag, "String");
