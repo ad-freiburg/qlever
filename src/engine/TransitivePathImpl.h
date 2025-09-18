@@ -372,6 +372,8 @@ class TransitivePathImpl : public TransitivePathBase {
       return LoopControl<NodeWithTargets>::makeContinue();
     }
 
+    // Return a range that yields `NodeWithTargets` for the current
+    // `tableColumnIt_` and `enumerateRangeIt_`.
     NodeWithTargetRange buildResultRange() {
       auto& tableColumn = *tableColumnIt_;
       const auto& [currentRow, zippedType] = *enumerateRangeIt_;
@@ -385,6 +387,8 @@ class TransitivePathImpl : public TransitivePathBase {
               }));
     }
 
+    // Initialise `enumerateRange_` and `enumerateRangeIt_` for the current
+    // `tableColumnIt_`. If there are no more table columns, we are finished.
     void buildEnumerateRange() {
       if (tableColumnIt_ == ql::ranges::end(startNodes_)) {
         finished_ = true;
@@ -405,6 +409,8 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     }
 
+    // Advance `enumerateRangeIt_` to the next value, build the next
+    // `resultRange_` and initialise `result_`.
     void getNextResultRange() {
       ++enumerateRangeIt_;
       if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
@@ -423,6 +429,9 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     }
 
+    // This method is called when `begin()` is called on this object.
+    // Initialises all ranges and prepares to yield the first value or signal
+    // that we are finished.
     void start() {
       tableColumnIt_ = ql::ranges::begin(startNodes_);
       buildEnumerateRange();
@@ -437,6 +446,8 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     }
 
+    // Advance to the next result value. If the current `resultRange_` is
+    // exhausted, initialise the next one.
     void next() {
       ++result_;
       if (result_ == resultRange_->end()) {
@@ -444,7 +455,9 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     }
 
+    // Return true if there are no more values to yield.
     bool isFinished() { return finished_; }
+    // Return the current result value.
     auto& get() { return *result_; }
     const auto& get() const { return *result_; }
   };
