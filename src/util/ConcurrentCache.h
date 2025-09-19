@@ -10,6 +10,7 @@
 #include <mutex>
 #include <utility>
 
+#include "backports/keywords.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
@@ -337,11 +338,10 @@ class ConcurrentCache {
         _inProgress;
 
     CacheAndInProgressMap() = default;
-    CPP_template_2(typename Arg, typename... Args)(
-        requires(!ql::concepts::same_as<
-                 ql::remove_cvref_t<Arg>,
-                 CacheAndInProgressMap>)) explicit(sizeof...(Args) > 0)
-        CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    CPP_template_2(typename Arg, typename... Args)(requires(
+        !ql::concepts::same_as<ql::remove_cvref_t<Arg>, CacheAndInProgressMap>))
+        QL_EXPLICIT(sizeof...(Args) > 0)
+            CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 

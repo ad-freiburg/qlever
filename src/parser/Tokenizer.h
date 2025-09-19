@@ -22,7 +22,6 @@ using namespace std::string_literals;
  */
 struct TurtleToken {
   using string = std::string;
-  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
       // them
@@ -66,8 +65,6 @@ struct TurtleToken {
         WsMultiple(grp(WsMultipleString)),
         Anon(grp(AnonString)),
         Comment(grp(CommentString)) {}
-
-  GCC_REENABLE_WARNINGS
 
   TurtleToken(const TurtleToken& other) : TurtleToken() { (void)other; }
   TurtleToken& operator=([[maybe_unused]] const TurtleToken& other) {

@@ -10,6 +10,7 @@
 
 #include <vector>
 
+#include "backports/keywords.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
@@ -51,9 +52,8 @@ class VectorWithMemoryLimit
           concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
                                  Base>)
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<
-                  Base, Args&&...>) explicit(sizeof...(Args) == 1)
-      VectorWithMemoryLimit(Args&&... args)
+              CPP_and concepts::constructible_from<Base, Args&&...>)
+      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
       : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
