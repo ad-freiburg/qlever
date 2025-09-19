@@ -102,7 +102,7 @@ std::string Qlever::query(std::string queryString,
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
+std::string Qlever::query(const QueryPlan& queryPlan,
                           ad_utility::MediaType mediaType) const {
   const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -119,10 +119,27 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
   return result;
 }
 
+// _____________________________________________________________________________
+void Qlever::pinNamedQuery(std::string queryName, std::string query) {
+  auto queryPlan = parseAndPlanQuery(std::move(query));
+  auto& [qet, qec, parsedQuery] = queryPlan;
+  qec->pinWithExplicitName() = std::move(queryName);
+  [[maybe_unused]] auto result = this->query(queryPlan);
+}
+
+// _____________________________________________________________________________
+void Qlever::clearNamedQueryCache() { namedQueryCache_.clear(); }
+
+// _____________________________________________________________________________
+void Qlever::eraseNamedQuery(const std::string& queryName) {
+  namedQueryCache_.erase(queryName);
+}
+
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
-      index_, &cache_, allocator_, sortPerformanceEstimator_);
+      index_, &cache_, allocator_, sortPerformanceEstimator_,
+      &namedQueryCache_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});
