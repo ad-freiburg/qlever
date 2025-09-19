@@ -449,7 +449,7 @@ class GroupByImpl : public Operation {
 
   // Helper function of `evaluateAlias`.
   // 1. In the Expressions for the aliases of this GROUP BY, replace all
-  //    aggregates and all occurences of the grouped variables values that have
+  //    aggregates and all occurrences of the grouped variables values that have
   //    been precomputed.
   // 2. Evaluate the (partially substituted) expressions using the
   //    `evaluationContext`, to get the final values of the aliases and store
