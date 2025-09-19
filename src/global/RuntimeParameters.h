@@ -126,8 +126,6 @@ struct RuntimeParametersNew {
                                         "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries{1000, "cache-max-num-entries"};
 
-  // TODO wrap into lambda to get over using operator limitation and use _GB
-  // operator
   MemorySizeParameter cacheMaxSize{ad_utility::MemorySize::gigabytes(30),
                                    "cache-max-size"};
   MemorySizeParameter cacheMaxSizeSingleEntry{
@@ -240,6 +238,15 @@ struct RuntimeParametersNew {
     runtimeMap_[spatialJoinPrefilterMaxSize.name()] =
         &spatialJoinPrefilterMaxSize;
     runtimeMap_[enableDistributiveUnion.name()] = &enableDistributiveUnion;
+
+    defaultQueryTimeout.setParameterConstraint(
+        [](std::chrono::seconds value, std::string_view parameterName) {
+          if (value <= std::chrono::seconds{0}) {
+            throw std::runtime_error{absl::StrCat(
+                "Parameter ", parameterName, " must be strictly positive, was ",
+                value.count(), "s")};
+          }
+        });
   }
 
   // Obtain a map from parameter names to parameter values.
