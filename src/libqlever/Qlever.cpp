@@ -59,9 +59,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
-  if (config.textIndexName_.empty() && !config.wordsfile_.empty()) {
+  if (config.textIndexName_.empty() && config.wordsfile_.has_value()) {
     config.textIndexName_ =
-        ad_utility::getLastPartOfString(config.wordsfile_, '/');
+        ad_utility::getLastPartOfString(config.wordsfile_.value(), '/');
   }
 
   // Set all other configuration options.
@@ -83,21 +83,17 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   auto textIndexBuilder = TextIndexBuilder(
       ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
   if (config.buildFromWordsOrDocsFile() || config.addWordsFromLiterals_) {
-    textIndexBuilder.buildTextIndexFile(TextIndexConfig{
-        config.wordsfile_.empty()
-            ? std::nullopt
-            : std::optional<const std::string>(config.wordsfile_),
-        config.docsfile_.empty()
-            ? std::nullopt
-            : std::optional<const std::string>(config.docsfile_),
-        config.addWordsFromLiterals_,
-        config.useWordsFromDocsfile_,
-        config.addEntitiesFromWordsfile_,
-        {config.textScoringMetric_,
-         {config.bScoringParam_, config.kScoringParam_}}});
+    textIndexBuilder.buildTextIndexFile(
+        TextIndexConfig{config.wordsfile_,
+                        config.docsfile_,
+                        config.addWordsFromLiterals_,
+                        config.useWordsFromDocsfile_,
+                        config.addEntitiesFromWordsfile_,
+                        {config.textScoringMetric_,
+                         {config.bScoringParam_, config.kScoringParam_}}});
   }
-  if (!config.docsfile_.empty()) {
-    textIndexBuilder.buildDocsDB(config.docsfile_);
+  if (config.docsfile_.has_value()) {
+    textIndexBuilder.buildDocsDB(config.docsfile_.value());
   }
 }
 
@@ -152,15 +148,22 @@ void IndexBuilderConfig::validate() const {
         "The value of bm25-b must be between and "
         "including 0 and 1");
   }
-  if (!docsfile_.empty() && wordsfile_.empty() && !useWordsFromDocsfile_) {
+  if (wordsfile_.has_value() && !docsfile_.has_value()) {
+    throw std::invalid_argument(
+        "Only specified a wordsfile without a docsfile. The wordsfile always "
+        "has to be used together with a docsfile. For details see --help.");
+  }
+
+  if (docsfile_.has_value() && !wordsfile_.has_value() &&
+      !useWordsFromDocsfile_) {
     throw std::invalid_argument(
         "A docsfile was given without a wordsfile and without the flag -D to "
         "specify building the text "
         "index from docsfile.");
   }
   if (useWordsFromDocsfile_ &&
-      (docsfile_.empty() ||
-       (!addEntitiesFromWordsfile_ && !wordsfile_.empty()))) {
+      (!docsfile_.has_value() ||
+       (!addEntitiesFromWordsfile_ && wordsfile_.has_value()))) {
     throw std::invalid_argument(
         "If the option -D to build the text index using the words from the "
         "docsfile was specified a docsfile has to be specified as well with "
@@ -168,19 +171,12 @@ void IndexBuilderConfig::validate() const {
         "-D isn't used together with -E.");
   }
   if (addEntitiesFromWordsfile_ &&
-      (!useWordsFromDocsfile_ || docsfile_.empty() || wordsfile_.empty())) {
+      (!useWordsFromDocsfile_ || !docsfile_.has_value() ||
+       !wordsfile_.has_value())) {
     throw std::invalid_argument(
         "If the option -E to only add entities from the wordsfile is given, "
         "the option -D has to be set as well. Also a wordsfile and a "
         "docsfile have to be given with -w and -d.");
-  }
-  if (!(wordsAndDocsFileSpecified() ||
-        (wordsfile_.empty() && docsfile_.empty()))) {
-    throw std::runtime_error(absl::StrCat(
-        "Only specified ", wordsfile_.empty() ? "docsfile" : "wordsfile",
-        ". Both or none of docsfile and wordsfile have to be given to build "
-        "text index. If none are given the option to add words from literals "
-        "has to be true. For details see --help."));
   }
 }
 

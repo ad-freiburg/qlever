@@ -102,8 +102,8 @@ TEST(LibQlever, fulltextIndex) {
   }
 
   // Now the same test with separately building the RDF and the text index
-  c.docsfile_ = "";
-  c.wordsfile_ = "";
+  c.docsfile_ = std::nullopt;
+  c.wordsfile_ = std::nullopt;
   c.baseName_ = "testIndexWithSeparateTextIndex";
   EXPECT_NO_THROW(Qlever::buildIndex(c));
 
@@ -144,10 +144,27 @@ TEST(IndexBuilderConfig, validate) {
   c = IndexBuilderConfig{};
   c.wordsfile_ = "blibb";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
-                               HasSubstr("Only specified wordsfile"));
+                               HasSubstr("Only specified a wordsfile"));
   c.docsfile_ = "blabb";
   EXPECT_NO_THROW(c.validate());
-  c.wordsfile_ = "";
+
+  // Docsfile only options
+  c = IndexBuilderConfig{};
+  c.useWordsFromDocsfile_ = true;
   AD_EXPECT_THROW_WITH_MESSAGE(
-      c.validate(), HasSubstr("docsfile was given without a wordsfile"));
+      c.validate(),
+      HasSubstr("a docsfile has to be specified as well with the option -d"));
+  c.useWordsFromDocsfile_ = false;
+  c.docsfile_ = "blabb";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(),
+      HasSubstr(
+          "docsfile was given without a wordsfile and without the flag -D"));
+  c.useWordsFromDocsfile_ = true;
+  EXPECT_NO_THROW(c.validate());
+  c.addEntitiesFromWordsfile_ = true;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("a wordsfile and a docsfile have to be given"));
+  c.wordsfile_ = "blubb";
+  EXPECT_NO_THROW(c.validate());
 }

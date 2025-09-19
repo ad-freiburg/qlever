@@ -119,8 +119,8 @@ struct IndexBuilderConfig : CommonConfig {
   // If set, build a full-text index for the text records specified by the
   // following two files. See `https://github.com/ad-freiburg/qlever` for
   // documentation and examples.
-  std::string wordsfile_;
-  std::string docsfile_;
+  std::optional<std::string> wordsfile_;
+  std::optional<std::string> docsfile_;
 
   // If set, use the words directly from the docsfile to build the full-text
   // index instead of the words of the wordsfile.
@@ -144,16 +144,11 @@ struct IndexBuilderConfig : CommonConfig {
   // Assert that the given configuration is valid.
   void validate() const;
 
-  // True if both of the `wordsfile_` and `docsfile_` are nonempty.
-  bool wordsAndDocsFileSpecified() const {
-    return !(wordsfile_.empty() || docsfile_.empty());
-  }
-
   // True if either both `wordsfile_` and `docsfile_` are nonempty or
   // `docsfile_` is nonempty and `useWordsFromDocsfile_` is true.
   bool buildFromWordsOrDocsFile() const {
-    return wordsAndDocsFileSpecified() ||
-           (!docsfile_.empty() && useWordsFromDocsfile_);
+    return (docsfile_.has_value() &&
+            (wordsfile_.has_value() || useWordsFromDocsfile_));
   }
 };
 
