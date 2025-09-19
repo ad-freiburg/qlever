@@ -726,8 +726,8 @@ class QueryPlanner {
 
   // Return a filter that filters the active graphs. Outside of `GRAPH` clauses,
   // the default graphs (implicit, or specified via `FROM`) are active, and
-  // inside a `GRAPH` clause, this specified via an IRI in the graph clause or
-  // via `FROM NAMED`.
+  // inside a `GRAPH` clause, the named graphs are active (specified via an
+  // explicit IRI in the `GRAPH` clause, or via `FROM NAMED`).
   qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
