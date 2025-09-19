@@ -1,0 +1,46 @@
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
+#ifndef QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
+#define QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
+
+#include "engine/Operation.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/Result.h"
+
+// An operation that owns its explicit `Result` via `shared_ptr`s and just
+// returns this result when `computeResult` is called.
+class ExplicitIdTableOperation : public Operation {
+  std::shared_ptr<const IdTable> idTable_;
+  VariableToColumnMap variables_;
+  std::vector<ColumnIndex> sortedColumns_;
+  LocalVocab localVocab_;
+
+ public:
+  ExplicitIdTableOperation(QueryExecutionContext* ctx,
+                           std::shared_ptr<const IdTable> table,
+                           VariableToColumnMap variables,
+                           std::vector<ColumnIndex> sortedColumns = {},
+                           LocalVocab localVocab = LocalVocab{});
+
+  // Const and public getter for testing.
+  size_t sizeEstimate() const { return idTable_->numRows(); }
+
+ private:
+  // Overridden methods from the `Operation` base class.
+  Result computeResult(bool requestLaziness) override;
+  std::vector<QueryExecutionTree*> getChildren() override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
+  size_t getResultWidth() const override;
+  size_t getCostEstimate() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
+  float getMultiplicity(size_t col) override;
+  bool knownEmptyResult() override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
+};
+
+#endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H

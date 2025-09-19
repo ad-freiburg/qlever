@@ -5,10 +5,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/OrderBy.h"
+#include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"

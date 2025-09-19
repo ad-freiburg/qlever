@@ -1260,6 +1260,7 @@ GraphPatternOperation Visitor::visitNamedCachedQuery(
   return namedQuery;
 }
 
+// _____________________________________________________________________________
 GraphPatternOperation Visitor::visitSpatialQuery(
     Parser::ServiceGraphPatternContext* ctx) {
   auto parseSpatialQuery = [ctx](parsedQuery::SpatialQuery& spatialQuery,

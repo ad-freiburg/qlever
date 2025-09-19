@@ -1,9 +1,10 @@
 //  Copyright 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H
+#define QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H
 
-#include "../../test/engine/ValuesForTesting.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
@@ -54,8 +55,10 @@ class NamedQueryCache {
   std::shared_ptr<const Value> get(const Key& key);
 
   // Retrieve the query result with the given `key` and convert it into an
-  // explicit `ValuesForTesting` operation that can be used as part of a
+  // `ExplicitIdTableOperation` that can be used as part of a
   // `QueryExecutionTree`.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& key, QueryExecutionContext* ctx);
 };
+
+#endif  // QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H

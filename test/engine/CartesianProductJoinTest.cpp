@@ -4,11 +4,11 @@
 
 #include <gmock/gmock.h>
 
+#include "../engine/ValuesForTesting.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 

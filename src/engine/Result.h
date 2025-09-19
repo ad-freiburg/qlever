@@ -66,7 +66,7 @@ class Result {
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
   struct IdTableSharedLocalVocabPair {
-    std::variant<std::shared_ptr<const IdTable>, IdTable> idTable_;
+    std::shared_ptr<const IdTable> idTablePtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -171,9 +171,13 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
+  // Const access to the underlying `IdTable`. Throw if this result is not fully
+  // materialized.
   const IdTable& idTable() const;
+
+  // Const access to the underlying `IdTable` via a `shared_ptr`. Throw if this
+  // result is not fully materialized.
+  const std::shared_ptr<const IdTable>& idTablePtr() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result

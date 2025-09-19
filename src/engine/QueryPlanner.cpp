@@ -16,7 +16,6 @@
 #include <range/v3/view/cartesian_product.hpp>
 #include <variant>
 
-#include "NamedQueryCache.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/Bind.h"
@@ -34,6 +33,7 @@
 #include "engine/Load.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
+#include "engine/NamedQueryCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"

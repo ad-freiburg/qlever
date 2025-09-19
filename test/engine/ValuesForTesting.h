@@ -5,64 +5,13 @@
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
-
-class ExplicitIdTableOperation : public Operation {
-  std::shared_ptr<const IdTable> idTable_;
-  VariableToColumnMap variables_;
-  std::vector<ColumnIndex> sortedColumns_;
-  LocalVocab localVocab_;
-
- public:
-  ExplicitIdTableOperation(QueryExecutionContext* ctx,
-                           std::shared_ptr<const IdTable> table,
-                           VariableToColumnMap variables,
-                           std::vector<ColumnIndex> sortedColumns = {},
-                           LocalVocab localVocab = LocalVocab{})
-      : Operation(ctx),
-        idTable_(std::move(table)),
-        variables_(std::move(variables)),
-        sortedColumns_(std::move(sortedColumns)),
-        localVocab_(std::move(localVocab)) {
-    disableStoringInCache();
-  }
-
-  // Const and public getter for testing.
-  size_t sizeEstimate() const { return idTable_->numRows(); }
-
- private:
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
-    return {idTable_, resultSortedOn(), localVocab_.clone()};
-  }
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  // This operation is never stored in the cache, so the cache key is not
-  // important (TODO<joka921> Make it random).
-  std::string getCacheKeyImpl() const override { return ""; }
-  std::string getDescriptor() const override { return "Explicitly IdTable"; }
-  size_t getResultWidth() const override { return idTable_->numColumns(); }
-  size_t getCostEstimate() override { return 0; }
-  uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate(); }
-  // TODO<joka921> Make the multiplicity configurable.
-  float getMultiplicity([[maybe_unused]] size_t col) override { return 1.0f; };
-  bool knownEmptyResult() override { return idTable_->empty(); }
-  std::unique_ptr<Operation> cloneImpl() const override {
-    return std::make_unique<ExplicitIdTableOperation>(
-        getExecutionContext(), idTable_, variables_, sortedColumns_,
-        localVocab_.clone());
-  }
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return sortedColumns_;
-  }
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    return variables_;
-  }
-};
 
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another

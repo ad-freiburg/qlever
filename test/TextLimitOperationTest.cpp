@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TextLimit.h"
+#include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 

@@ -2,12 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H
+#define QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H
 
 #include "parser/MagicServiceQuery.h"
 
 namespace parsedQuery {
-// A magic service for queries that are pinned with an explicit query name.
+// A magic SERVICE for queries that are pinned with an explicit query name.
 class NamedCachedQuery : public MagicServiceQuery {
   std::string identifier_;
 
@@ -28,7 +29,6 @@ class NamedCachedQuery : public MagicServiceQuery {
     if (childGraphPattern_.has_value()) {
       throwBecauseNotEmpty();
     }
-    AD_CORRECTNESS_CHECK(!childGraphPattern_.has_value());
     return identifier_;
   }
 
@@ -39,3 +39,5 @@ class NamedCachedQuery : public MagicServiceQuery {
   }
 };
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H

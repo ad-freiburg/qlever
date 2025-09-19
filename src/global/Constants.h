@@ -110,8 +110,8 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
                                 string_constants::detail::blank_node_prefix>();
 
 // The prefix of a SERVICE IRI that refers to a query that has been pinned with
-// an explicit name. The format currently is `ql:named-cached-query/$query-id$`.
-// NOTE: This constant does not include the leading '<'.
+// an explicit name. The format currently is
+// `ql:named-cached-query-$query-name$`.
 namespace string_constants::detail {
 constexpr inline std::string_view namedCachedQueryPrefix =
     "named-cached-query-";

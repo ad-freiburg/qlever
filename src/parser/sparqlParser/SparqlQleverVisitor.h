@@ -327,6 +327,8 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visitPathQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
+  // Visitor functions for special builtin features that are triggered via
+  // `SERVICE` requests with "magic" IRIs.
   GraphPatternOperation visitSpatialQuery(
       Parser::ServiceGraphPatternContext* ctx);
 

@@ -311,6 +311,7 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
   const bool pinWithName =
       _executionContext->pinWithExplicitName().has_value() && isRoot;
 
@@ -379,14 +380,12 @@ std::shared_ptr<const Result> Operation::getResult(
 
     if (pinWithName) {
       const auto& name = _executionContext->pinWithExplicitName().value();
-      // The query is to be pinned in the named cache. In this case we don't
-      // return the result, but only pin it.
+      // The query is to be pinned in the named cache.
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
       auto t = NamedQueryCache::Value{
-          std::make_shared<const IdTable>(actualResult.idTable().clone()),
-          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone()};
+          actualResult.idTablePtr(), getExternallyVisibleVariableColumns(),
+          actualResult.sortedBy(), actualResult.localVocab().clone()};
       _executionContext->namedQueryCache().store(name, std::move(t));
 
       runtimeInfo().addDetail("pinned-with-explicit-name", name);

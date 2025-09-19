@@ -11,7 +11,6 @@
 #include <optional>
 #include <variant>
 
-#include "./engine/ValuesForTesting.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -19,6 +18,7 @@
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"

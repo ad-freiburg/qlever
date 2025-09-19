@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./engine/ValuesForTesting.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "engine/ValuesForTesting.h"
 #include "gmock/gmock.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"

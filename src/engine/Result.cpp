@@ -69,8 +69,9 @@ void assertSortOrderIsRespected(const IdTable& idTable,
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : data_{IdTableSharedLocalVocabPair{std::move(idTable),
-                                        std::move(localVocab.localVocab_)}},
+    : data_{IdTableSharedLocalVocabPair{
+          std::make_shared<const IdTable>(std::move(idTable)),
+          std::move(localVocab.localVocab_)}},
       sortedBy_{std::move(sortedBy)} {
   AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
                     nullptr);
@@ -155,12 +156,9 @@ void Result::applyLimitOffset(
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
 
-    auto& tableOrPtr = std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
-    if (auto sharedTable =
-            std::get_if<std::shared_ptr<const IdTable>>(&tableOrPtr)) {
-      tableOrPtr = (**sharedTable).clone();
-    }
-    resizeIdTable(std::get<IdTable>(tableOrPtr), limitOffset);
+    IdTable table =
+        std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_->clone();
+    resizeIdTable(table, limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
@@ -282,19 +280,12 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const {
+const IdTable& Result::idTable() const { return *idTablePtr(); }
+
+// _____________________________________________________________________________
+const std::shared_ptr<const IdTable>& Result::idTablePtr() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  auto visitor = []<typename T>(const T& arg) -> const IdTable& {
-    if constexpr (std::is_same_v<T, IdTable>) {
-      return arg;
-    } else {
-      static_assert(std::is_same_v<T, std::shared_ptr<const IdTable>>);
-      AD_CORRECTNESS_CHECK(arg != nullptr);
-      return *arg;
-    }
-  };
-  return std::visit(visitor,
-                    std::get<IdTableSharedLocalVocabPair>(data_).idTable_);
+  return std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_;
 }
 
 // _____________________________________________________________________________
