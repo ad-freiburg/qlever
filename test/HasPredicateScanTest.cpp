@@ -7,7 +7,6 @@
 
 #include <algorithm>
 
-#include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -15,6 +14,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
+#include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 

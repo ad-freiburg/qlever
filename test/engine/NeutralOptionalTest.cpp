@@ -204,8 +204,6 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
-    dynamic_cast<ValuesForTesting*>(child->getRootOperation().get())
-        ->forceFullyMaterializedSingleTable() = false;
     NeutralOptional no{qec, std::move(child)};
     no.applyLimitOffset({std::nullopt, 1});
 
