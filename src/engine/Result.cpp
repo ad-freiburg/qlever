@@ -69,8 +69,21 @@ void assertSortOrderIsRespected(const IdTable& idTable,
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : data_{IdTableSharedLocalVocabPair{std::move(idTable),
-                                        std::move(localVocab.localVocab_)}},
+    : data_{IdTableSharedLocalVocabPair{
+          std::make_shared<const IdTable>(std::move(idTable)),
+          std::move(localVocab.localVocab_)}},
+      sortedBy_{std::move(sortedBy)} {
+  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
+                    nullptr);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
+}
+
+// _____________________________________________________________________________
+Result::Result(std::shared_ptr<const IdTable> idTablePtr,
+               std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
+    : data_{IdTableSharedLocalVocabPair{
+          std::move(idTablePtr),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
       sortedBy_{std::move(sortedBy)} {
   AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
                     nullptr);
@@ -142,8 +155,10 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    resizeIdTable(std::get<IdTableSharedLocalVocabPair>(data_).idTable_,
-                  limitOffset);
+
+    IdTable table =
+        std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_->clone();
+    resizeIdTable(table, limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
@@ -196,7 +211,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, IdTable& idTable) {
+  auto performCheck = [](const auto& map, const IdTable& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -208,8 +223,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     });
   };
   if (isFullyMaterialized()) {
-    AD_EXPENSIVE_CHECK(performCheck(
-        varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable()));
   } else {
     ad_utility::CachingTransformInputRange generator{
         idTables(),
@@ -266,9 +280,12 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const {
+const IdTable& Result::idTable() const { return *idTablePtr(); }
+
+// _____________________________________________________________________________
+const std::shared_ptr<const IdTable>& Result::idTablePtr() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
+  return std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_;
 }
 
 // _____________________________________________________________________________

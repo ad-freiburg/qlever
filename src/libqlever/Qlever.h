@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -171,6 +172,7 @@ class Qlever {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
+  mutable NamedQueryCache namedQueryCache_;
   bool enablePatternTrick_;
 
  public:
@@ -217,6 +219,15 @@ class Qlever {
   std::string query(std::string query,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
+
+  // Pin the query with the explicit name. This query can then later on be
+  // retrieved in a query via `SERVICE ql:named-cached-query-<queryName> {}`.
+  void pinNamedQuery(std::string queryName, std::string query);
+
+  // Interface to clear either a single query (via its name), or all queries
+  // from the explicit cache.
+  void eraseNamedQuery(const std::string& queryName);
+  void clearNamedQueryCache();
 };
 }  // namespace qlever
 

@@ -108,6 +108,19 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
     ad_utility::constexprStrCat<string_constants::detail::openAngle,
                                 QLEVER_INTERNAL_PREFIX_URL,
                                 string_constants::detail::blank_node_prefix>();
+
+// The prefix of a SERVICE IRI that refers to a query that has been pinned with
+// an explicit name. The format currently is
+// `ql:named-cached-query-$query-name$`.
+namespace string_constants::detail {
+constexpr inline std::string_view namedCachedQueryPrefix =
+    "named-cached-query-";
+}  // namespace string_constants::detail
+constexpr inline std::string_view NAMED_CACHED_QUERY_PREFIX =
+    ad_utility::constexprStrCat<
+        QLEVER_INTERNAL_PREFIX_URL,
+        string_constants::detail::namedCachedQueryPrefix>();
+
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
