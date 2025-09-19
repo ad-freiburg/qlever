@@ -211,7 +211,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.
-  static cppcoro::generator<QueryExecutionTree::StringTriple>
+  static ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
   constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
