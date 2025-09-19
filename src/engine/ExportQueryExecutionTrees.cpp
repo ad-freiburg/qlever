@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -11,7 +12,9 @@
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
+#include <optional>
 #include <ranges>
+#include <string_view>
 
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -23,6 +26,12 @@
 
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
+constexpr std::string_view ExceptionMessagePrefix{
+    "\n !!!!>># An error has occurred while exporting the query result."
+    " Unfortunately due to limitations in the HTTP 1.1 protocol, "
+    "there is no better way to report this than to append it to the incomplete "
+    "result. The error message was:\n "};
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -40,6 +49,177 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 }  // namespace
+
+namespace detail {
+class QueryResultTriplesLazyRange
+    : public ad_utility::InputRangeMixin<QueryResultTriplesLazyRange> {
+  using CancellationHandle = ExportQueryExecutionTrees::CancellationHandle;
+  using RowIndiciesRange = ad_utility::InputRangeTypeErased<
+      ExportQueryExecutionTrees::TableWithRange>;
+  using StringTripleRange =
+      ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>;
+  using IotaView = ql::ranges::iota_view<uint64_t, uint64_t>;
+
+ private:
+  // Input arguments
+  const QueryExecutionTree& qet_;
+  const ad_utility::sparql_types::Triples& constructTriples_;
+  uint64_t& resultSize_;
+  CancellationHandle cancellationHandle_;
+  RowIndiciesRange rowIndices_;
+  // Runtime state
+  size_t rowOffset_ = 0;
+  // Range state
+  bool finished_{false};
+  // The `resultRange_` is the range that produces the triples for
+  // the current `rowIndiciesIt_` and  `iotaViewIt_`. It is lazily initialized
+  // in `start()` and with each new value from `iotaViewIt_`. The iterator
+  // advances with each call to `next()` (i.e. the iterations of this object).
+  std::optional<StringTripleRange> resultRange_;
+  StringTripleRange::iterator result_;
+  // The `iotaView_` produces the row indices for the current `rowIndiciesIt_`.
+  // The range and iterator are reinitialised when the next value from
+  // `rowIndiciesIt_` is yielded. The iterator is advanced only when the
+  // `resultRange_` is exhausted and then built in `getNextResultRange()`.
+  IotaView iotaView_;
+  ql::ranges::iterator_t<IotaView> iotaViewIt_;
+  // This iterator points to the `rowIndices_` range and yields the
+  // `TableWithRange` values used as the `IotaView` and to create the
+  // `ConstructQueryExportContext`, in `buildContext()`. It is advanced when the
+  // `iotaView_` is exhausted.
+  RowIndiciesRange::iterator rowIndiciesIt_;
+
+ public:
+  QueryResultTriplesLazyRange(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
+      RowIndiciesRange rowIndices, uint64_t& resultSize,
+      CancellationHandle cancellationHandle)
+      : qet_(qet),
+        constructTriples_(constructTriples),
+        resultSize_(resultSize),
+        cancellationHandle_(std::move(cancellationHandle)),
+        rowIndices_(std::move(rowIndices)) {}
+
+  // Add an offset to the row indices member, used when building the context via
+  // `buildContext()`.
+  void addRowOffset(size_t offset) { rowOffset_ += offset; }
+
+  // Return the context needed to evaluate a triple pattern for the current
+  // `rowIndiciesIt_` and `iotaViewIt_.
+  ConstructQueryExportContext buildContext() {
+    return {*iotaViewIt_,
+            rowIndiciesIt_->tableWithVocab_.idTable(),
+            rowIndiciesIt_->tableWithVocab_.localVocab(),
+            qet_.getVariableColumns(),
+            qet_.getQec()->getIndex(),
+            rowOffset_};
+  }
+
+  // Return a range that produces the triples for the current
+  // `rowIndiciesIt_` and `iotaViewIt_`. This range performs the core logic on
+  // each SPARQL triple from the collection, `constructTriples_`.
+  StringTripleRange buildResultRange() {
+    return StringTripleRange(ad_utility::CachingContinuableTransformInputRange(
+        constructTriples_,
+        [this, context = buildContext()](const auto& triple) {
+          cancellationHandle_->throwIfCancelled();
+          using enum PositionInTriple;
+          auto subject = triple[0].evaluate(context, SUBJECT);
+          auto predicate = triple[1].evaluate(context, PREDICATE);
+          auto object = triple[2].evaluate(context, OBJECT);
+          if (!subject.has_value() || !predicate.has_value() ||
+              !object.has_value()) {
+            return ad_utility::LoopControl<
+                QueryExecutionTree::StringTriple>::makeContinue();
+          }
+          return ad_utility::LoopControl<QueryExecutionTree::StringTriple>::
+              yieldValue(QueryExecutionTree::StringTriple(
+                  std::move(subject.value()), std::move(predicate.value()),
+                  std::move(object.value())));
+        }));
+  }
+
+  // Build the `iotaView_` and its iterator for the current `rowIndiciesIt_`.
+  // If `rowIndiciesIt_` is at the end, we are finished.
+  void buildIotaView() {
+    if (rowIndiciesIt_ == rowIndices_.end()) {
+      // For each result from the WHERE clause, we produce up to
+      // `constructTriples.size()` triples. We do not account for triples that
+      // are filtered out because one of the components is UNDEF (it would
+      // require materializing the whole result).
+      resultSize_ *= constructTriples_.size();
+      finished_ = true;
+      return;
+    }
+
+    iotaView_ = rowIndiciesIt_->view_;
+    iotaViewIt_ = iotaView_.begin();
+
+    if (iotaViewIt_ == iotaView_.end()) {
+      addRowOffset(rowIndiciesIt_->tableWithVocab_.idTable().size());
+      // if there are no values in the current `iotaView_`, we advance to the
+      // next value of `rowIndiciesIt_` and recursively find the next valid
+      // view.
+      ++rowIndiciesIt_;
+      buildIotaView();
+    }
+  }
+
+  // Advance `iotaViewIt_` to the next value, build the next
+  // `resultRange_` and initialise `result_`.
+  void getNextResultRange() {
+    ++iotaViewIt_;
+    if (iotaViewIt_ == iotaView_.end()) {
+      addRowOffset(rowIndiciesIt_->tableWithVocab_.idTable().size());
+      ++rowIndiciesIt_;
+      buildIotaView();
+    }
+
+    if (finished_) {
+      return;
+    }
+
+    resultRange_ = buildResultRange();
+    result_ = resultRange_->begin();
+    if (result_ == resultRange_->end()) {
+      getNextResultRange();
+    }
+  }
+
+  // This method is called when `begin()` is called on this object.
+  // Initialises all ranges and prepares to yield the first value or signal
+  // that we are finished.
+  void start() {
+    rowIndiciesIt_ = rowIndices_.begin();
+    buildIotaView();
+    if (finished_) {
+      return;
+    }
+
+    resultRange_ = buildResultRange();
+    result_ = resultRange_->begin();
+    if (result_ == resultRange_->end()) {
+      getNextResultRange();
+    }
+  }
+
+  // Advance to the next result value. If the current `resultRange_` is
+  // exhausted, initialise the next one.
+  void next() {
+    ++result_;
+    if (result_ == resultRange_->end()) {
+      getNextResultRange();
+    }
+  }
+
+  // Return true if there are no more values to yield.
+  bool isFinished() { return finished_; }
+  // Return the current result value.
+  auto& get() { return *result_; }
+  const auto& get() const { return *result_; }
+};
+}  // namespace detail
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator computeResultForAsk(
@@ -88,24 +268,28 @@ ad_utility::streams::stream_generator computeResultForAsk(
 }
 
 // __________________________________________________________________________
-cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+ad_utility::InputRangeTypeErased<
+    ExportQueryExecutionTrees::TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
+  using namespace ad_utility;
   if (result.isFullyMaterialized()) {
-    TableConstRefWithVocab pair{result.idTable(), result.localVocab()};
-    co_yield pair;
-  } else {
-    for (const Result::IdTableVocabPair& pair : result.idTables()) {
-      TableConstRefWithVocab tableWithVocab{pair.idTable_, pair.localVocab_};
-      co_yield tableWithVocab;
-    }
+    return InputRangeTypeErased(lazySingleValueRange([&result]() {
+      return TableConstRefWithVocab{result.idTable(), result.localVocab()};
+    }));
   }
+
+  return InputRangeTypeErased(CachingTransformInputRange(
+      result.idTables(), [](const Result::IdTableVocabPair& pair) {
+        return TableConstRefWithVocab{pair.idTable_, pair.localVocab_};
+      }));
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
+ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result,
                                          uint64_t& resultSize) {
+  using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
   resultSize = 0;
@@ -113,7 +297,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // If the LIMIT is zero, there are no blocks to yield and the total result
   // size is zero.
   if (limitOffset._limit.value_or(1) == 0) {
-    co_return;
+    return InputRangeTypeErased(ql::span<TableWithRange>());
   }
 
   // The effective offset, limit, and export limit. These will be updated after
@@ -128,98 +312,88 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // export limit beyond the limit has no effect).
   effectiveExportLimit = std::min(effectiveExportLimit, effectiveLimit);
 
-  // Iterate over the result in blocks.
-  for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
-    // If all rows in the current block are before the effective offset, we can
-    // skip the block entirely. If not, there is at least something to count
-    // and maybe also something to yield.
-    uint64_t currentBlockSize = tableWithVocab.idTable_.numRows();
-    if (effectiveOffset >= currentBlockSize) {
-      effectiveOffset -= currentBlockSize;
-      continue;
+  auto reduceLimit = [](uint64_t& limit, uint64_t subtrahend) {
+    if (limit != std::numeric_limits<uint64_t>::max()) {
+      limit = limit > subtrahend ? limit - subtrahend : 0;
     }
-    AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
-    AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+  };
 
-    // Compute the range of rows to be exported (can by zero) and to be counted
-    // (always non-zero at this point).
-    uint64_t rangeBegin = effectiveOffset;
-    uint64_t numRowsToBeExported =
-        std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
-    uint64_t numRowsToBeCounted =
-        std::min(effectiveLimit, currentBlockSize - rangeBegin);
-    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= currentBlockSize);
-    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= currentBlockSize);
-    AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
-
-    // If there is something to be exported, yield it.
-    if (numRowsToBeExported > 0) {
-      co_yield {std::move(tableWithVocab),
-                ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
-    }
-
-    // Add to `resultSize` and update the effective offset (which becomes zero
-    // after the first non-skipped block) and limits (make sure to never go
-    // below zero and `std::numeric_limits<uint64_t>::max()` stays there).
-    resultSize += numRowsToBeCounted;
-    effectiveOffset = 0;
-    auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
-      if (limit != std::numeric_limits<uint64_t>::max()) {
-        limit = limit > subtrahend ? limit - subtrahend : 0;
-      }
-    };
-    reduceLimit(effectiveLimit, numRowsToBeCounted);
-    reduceLimit(effectiveExportLimit, numRowsToBeCounted);
-
+  using LoopControl = LoopControl<ExportQueryExecutionTrees::TableWithRange>;
+  auto makeResult = [](TableConstRefWithVocab& tableWithVocab,
+                       uint64_t rangeBegin, uint64_t numRowsToBeExported,
+                       uint64_t effectiveLimit) {
+    auto value = ExportQueryExecutionTrees::TableWithRange{
+        std::move(tableWithVocab),
+        ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     // If the effective limit is zero, there is nothing to yield and nothing
-    // to count anymore. This should come at the end of this loop and not at
+    // to count anymore. This should come at the end of the loop and not at
     // the beginning, to avoid unnecessarily fetching another block from
     // `result`.
     if (effectiveLimit == 0) {
-      co_return;
+      return numRowsToBeExported > 0 ? LoopControl::breakWithValue(value)
+                                     : LoopControl::makeBreak();
     }
-  }
+
+    // If there is something to be exported, yield it.
+    return numRowsToBeExported > 0 ? LoopControl::yieldValue(value)
+                                   : LoopControl::makeContinue();
+  };
+
+  return InputRangeTypeErased(CachingContinuableTransformInputRange(
+      getIdTables(result),
+      [&resultSize, makeResult = std::move(makeResult),
+       reduceLimit = std::move(reduceLimit), effectiveOffset = effectiveOffset,
+       effectiveLimit = effectiveLimit,
+       effectiveExportLimit = effectiveExportLimit](
+          TableConstRefWithVocab& tableWithVocab) mutable {
+        // If all rows in the current block are before the effective offset, we
+        // can skip the block entirely. If not, there is at least something to
+        // count and maybe also something to yield.
+        uint64_t currentBlockSize = tableWithVocab.idTable().numRows();
+        if (effectiveOffset >= currentBlockSize) {
+          effectiveOffset -= currentBlockSize;
+          return LoopControl::makeContinue();
+        }
+        AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
+        AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+
+        // Compute the range of rows to be exported (can be zero) and to be
+        // counted (always non-zero at this point).
+        uint64_t rangeBegin = effectiveOffset;
+        uint64_t numRowsToBeExported =
+            std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
+        uint64_t numRowsToBeCounted =
+            std::min(effectiveLimit, currentBlockSize - rangeBegin);
+        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <=
+                             currentBlockSize);
+        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <=
+                             currentBlockSize);
+        AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
+
+        // Add to `resultSize` and update the effective offset (which becomes
+        // zero after the first non-skipped block) and limits (make sure to
+        // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
+        // there).
+        resultSize += numRowsToBeCounted;
+        effectiveOffset = 0;
+        reduceLimit(effectiveLimit, numRowsToBeCounted);
+        reduceLimit(effectiveExportLimit, numRowsToBeCounted);
+
+        return makeResult(tableWithVocab, rangeBegin, numRowsToBeExported,
+                          effectiveLimit);
+      }));
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<QueryExecutionTree::StringTriple>
+ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
 ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
-  size_t rowOffset = 0;
-  for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSize)) {
-    auto& idTable = pair.idTable_;
-    for (uint64_t i : range) {
-      ConstructQueryExportContext context{i,
-                                          idTable,
-                                          pair.localVocab_,
-                                          qet.getVariableColumns(),
-                                          qet.getQec()->getIndex(),
-                                          rowOffset};
-      using enum PositionInTriple;
-      for (const auto& triple : constructTriples) {
-        auto subject = triple[0].evaluate(context, SUBJECT);
-        auto predicate = triple[1].evaluate(context, PREDICATE);
-        auto object = triple[2].evaluate(context, OBJECT);
-        if (!subject.has_value() || !predicate.has_value() ||
-            !object.has_value()) {
-          continue;
-        }
-        co_yield {std::move(subject.value()), std::move(predicate.value()),
-                  std::move(object.value())};
-        cancellationHandle->throwIfCancelled();
-      }
-    }
-    rowOffset += idTable.size();
-  }
-  // For each result from the WHERE clause, we produce up to
-  // `constructTriples.size()` triples. We do not account for triples that are
-  // filtered out because one of the components is UNDEF (it would require
-  // materializing the whole result).
-  resultSize *= constructTriples.size();
+  return ad_utility::InputRangeTypeErased(detail::QueryResultTriplesLazyRange(
+      qet, constructTriples, getRowIndices(limitAndOffset, *result, resultSize),
+      resultSize, std::move(cancellationHandle)));
 }
 
 // _____________________________________________________________________________
@@ -259,7 +433,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
@@ -269,12 +443,15 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
   auto generator = constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
-  for (auto& triple : generator) {
-    auto binding = nlohmann::json::array({std::move(triple.subject_),
-                                          std::move(triple.predicate_),
-                                          std::move(triple.object_)});
-    co_yield binding.dump();
-  }
+
+  return ad_utility::InputRangeTypeErased<std::string>(
+      ad_utility::CachingTransformInputRange(
+          std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
+            auto binding = nlohmann::json::array({std::move(triple.subject_),
+                                                  std::move(triple.predicate_),
+                                                  std::move(triple.object_)});
+            return binding.dump();
+          }));
 }
 
 // _____________________________________________________________________________
@@ -310,22 +487,48 @@ nlohmann::json idTableToQLeverJSONRow(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
-ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
+auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
-    const QueryExecutionTree::ColumnIndicesAndTypes columns,
+    QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSize)) {
-    for (uint64_t rowIndex : range) {
-      co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
-                                      pair.idTable_)
-          .dump();
-      cancellationHandle->throwIfCancelled();
-    }
-  }
+  using IotaView = ql::ranges::iota_view<uint64_t, uint64_t>;
+  using IotaViewIt = ql::ranges::iterator_t<IotaView>;
+
+  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize);
+  auto rowIndicesIt = rowIndices.begin();
+  return ad_utility::InputRangeFromGetCallable(
+      [&qet, columns = std::move(columns), result = std::move(result),
+       cancellationHandle = std::move(cancellationHandle),
+       iotaView = std::optional<IotaView>{}, iotaViewIt = IotaViewIt{},
+       rowIndices = std::move(rowIndices),
+       rowIndicesIt =
+           std::move(rowIndicesIt)]() mutable -> std::optional<std::string> {
+        while (rowIndicesIt != rowIndices.end()) {
+          auto& tableWithRange = *rowIndicesIt;
+
+          if (!iotaView.has_value()) {
+            iotaView = std::move(tableWithRange.view_);
+            iotaViewIt = ql::ranges::begin(iotaView.value());
+          }
+
+          if (iotaViewIt == ql::ranges::end(iotaView.value())) {
+            iotaView.reset();
+            ++rowIndicesIt;
+            continue;
+          }
+
+          cancellationHandle->throwIfCancelled();
+          uint64_t rowIndex = *iotaViewIt;
+          ++iotaViewIt;
+          const auto& pair = tableWithRange.tableWithVocab_;
+          return idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
+                                        rowIndex, pair.idTable())
+              .dump();
+        }
+        return std::nullopt;
+      });
 }
 
 // _____________________________________________________________________________
@@ -707,18 +910,21 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string> askQueryResultToQLeverJSON(
+ad_utility::InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
-  AD_CORRECTNESS_CHECK(result != nullptr);
-  std::string_view value = getResultForAsk(result) ? "true" : "false";
-  std::string resultLit =
-      absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
-  nlohmann::json resultJson = std::vector{std::move(resultLit)};
-  co_yield resultJson.dump();
+  return ad_utility::InputRangeTypeErased(
+      ad_utility::lazySingleValueRange([result = std::move(result)]() {
+        AD_CORRECTNESS_CHECK(result != nullptr);
+        std::string_view value = getResultForAsk(result) ? "true" : "false";
+        std::string resultLit =
+            absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
+        nlohmann::json resultJson = std::vector{std::move(resultLit)};
+        return resultJson.dump();
+      }));
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -730,9 +936,9 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  return idTableToQLeverJSONBindings(qet, limitAndOffset, selectedColumnIndices,
-                                     std::move(result), resultSize,
-                                     std::move(cancellationHandle));
+  return ad_utility::InputRangeTypeErased(idTableToQLeverJSONBindings(
+      qet, limitAndOffset, std::move(selectedColumnIndices), std::move(result),
+      resultSize, std::move(cancellationHandle)));
 }
 
 // _____________________________________________________________________________
@@ -770,7 +976,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           if (columnIndex.has_value()) {
             co_yield std::string_view{
                 reinterpret_cast<const char*>(
-                    &pair.idTable_(i, columnIndex.value().columnIndex_)),
+                    &pair.idTable()(i, columnIndex.value().columnIndex_)),
                 sizeof(Id)};
           }
         }
@@ -802,10 +1008,10 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable_(i, val.columnIndex_);
+          Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
               idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
+                  qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
@@ -935,9 +1141,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable_(i, val.columnIndex_);
+          Id id = pair.idTable()(i, val.columnIndex_);
           co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
-                                  pair.localVocab_);
+                                  pair.localVocab());
         }
       }
       co_yield "\n  </result>";
@@ -976,13 +1182,12 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
 
-  auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
-                        const LocalVocab& localVocab) {
+  auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
     nlohmann::ordered_json binding = {};
     for (const auto& column : columns) {
-      auto optionalStringAndType =
-          idToStringAndType(qet.getQec()->getIndex(),
-                            idTable(i, column->columnIndex_), localVocab);
+      auto optionalStringAndType = idToStringAndType(
+          qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
+          pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
         const auto& [stringValue, xsdType] = optionalStringAndType.value();
         binding[column->variable_] =
@@ -1005,7 +1210,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       if (columns.empty()) {
         co_yield "{}";
       } else {
-        co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+        co_yield getBinding(pair, i);
       }
       cancellationHandle->throwIfCancelled();
       isFirstRow = false;
@@ -1057,38 +1262,40 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::InputRangeTypeErased<std::string>
 ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     ad_utility::streams::stream_generator streamGenerator) {
+  using namespace ad_utility;
+  using LoopControl = ad_utility::LoopControl<std::string>;
   // Immediately throw any exceptions that occur during the computation of the
   // first block outside the actual generator. That way we get a proper HTTP
   // response with error status codes etc. at least for those exceptions.
   // Note: `begin` advances until the first block.
   auto it = streamGenerator.begin();
-  return [](auto innerGenerator, auto it) -> cppcoro::generator<std::string> {
-    std::optional<std::string> exceptionMessage;
-    try {
-      for (; it != innerGenerator.end(); ++it) {
-        co_yield std::string{*it};
-      }
-    } catch (const std::exception& e) {
-      exceptionMessage = e.what();
-    } catch (...) {
-      exceptionMessage = "A very strange exception, please report this";
-    }
-    // TODO<joka921, RobinTF> Think of a better way to propagate and log those
-    // errors. We can additionally send them via the websocket connection, but
-    // that doesn't solve the problem for users of the plain HTTP 1.1 endpoint.
-    if (exceptionMessage.has_value()) {
-      std::string prefix =
-          "\n !!!!>># An error has occurred while exporting the query result. "
-          "Unfortunately due to limitations in the HTTP 1.1 protocol, there is "
-          "no better way to report this than to append it to the incomplete "
-          "result. The error message was:\n";
-      co_yield prefix;
-      co_yield exceptionMessage.value();
-    }
-  }(std::move(streamGenerator), std::move(it));
+  return InputRangeTypeErased(InputRangeFromLoopControlGet(
+      [it = std::move(it), streamGenerator = std::move(streamGenerator),
+       exceptionMessage = std::optional<std::string>(std::nullopt)]() mutable {
+        // TODO<joka921, RobinTF> Think of a better way to propagate and log
+        // those errors. We can additionally send them via the
+        // websocketconnection,but that doesn't solve the problem for users of
+        // the plain HTTP 1.1 endpoint.
+        if (it == streamGenerator.end()) {
+          return LoopControl::makeBreak();
+        }
+
+        try {
+          std::string output{*it};
+          ++it;
+          return LoopControl::yieldValue(std::move(output));
+        } catch (const std::exception& e) {
+          exceptionMessage = e.what();
+        } catch (...) {
+          exceptionMessage = "A very strange exception, please report this";
+        }
+
+        return LoopControl::breakWithValue(absl::StrCat(
+            std::string(ExceptionMessagePrefix), exceptionMessage.value()));
+      }));
 }
 
 void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
@@ -1134,7 +1341,12 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
                                   sparqlJson, qleverJson>{}(compute, mediaType);
-  return convertStreamGeneratorForChunkedTransfer(std::move(inner));
+
+  return [](auto range) -> cppcoro::generator<std::string> {
+    for (auto&& item : range) {
+      co_yield item;
+    }
+  }(convertStreamGeneratorForChunkedTransfer(std::move(inner)));
 }
 
 // _____________________________________________________________________________
