@@ -385,7 +385,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(nlohmann::json{countAfterClear}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
-    response = createJsonResponse(RuntimeParameters().toMap(), request);
+    response =
+        createJsonResponse(runtimeParametersNew().rlock()->toMap(), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
@@ -438,7 +439,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 << " to value \"" << value.value() << "\"" << std::endl;
       runtimeParametersNew().wlock()->setFromString(key,
                                                     std::string{value.value()});
-      response = createJsonResponse(RuntimeParameters().toMap(), request);
+      response =
+          createJsonResponse(runtimeParametersNew().rlock()->toMap(), request);
     }
   }
 

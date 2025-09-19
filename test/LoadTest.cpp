@@ -100,7 +100,9 @@ TEST_F(LoadTest, computeResult) {
     // Not silent, but syntax test mode is activated.
     pq.silent_ = false;
     {
-      auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+      auto cleanup =
+          setNewRuntimeParameterForTest<&RuntimeParametersNew::syntaxTestMode>(
+              true);
       impl();
     }
     // Silent, but syntax test mode is deactivated.
@@ -243,7 +245,9 @@ TEST_F(LoadTest, computeResult) {
 
 TEST_F(LoadTest, getCacheKey) {
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setNewRuntimeParameterForTest<&RuntimeParametersNew::cacheLoadResults>(
+            true);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -260,7 +264,9 @@ TEST_F(LoadTest, getCacheKey) {
                 testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setNewRuntimeParameterForTest<&RuntimeParametersNew::cacheLoadResults>(
+            false);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -280,7 +286,9 @@ TEST_F(LoadTest, clone) {
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setNewRuntimeParameterForTest<&RuntimeParametersNew::cacheLoadResults>(
+            false);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -289,7 +297,9 @@ TEST_F(LoadTest, clone) {
   }
   // When the results are cached, we get decoupled object that is the same.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setNewRuntimeParameterForTest<&RuntimeParametersNew::cacheLoadResults>(
+            true);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));

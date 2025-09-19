@@ -1410,7 +1410,7 @@ TEST(SparqlParser, Query) {
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
   // Now test the same queries with exceptions instead of warnings.
-  RuntimeParameters().set<"throw-on-unbound-variables">(true);
+  runtimeParametersNew().wlock()->throwOnUnboundVariables.set(true);
   expectQueryFails("SELECT ?x {} GROUP BY ?x",
                    contains("?x was used by GROUP BY"));
   expectQueryFails("SELECT * { BIND (?a as ?b) }",
@@ -1419,7 +1419,7 @@ TEST(SparqlParser, Query) {
                    contains("?s was used by ORDER BY"));
 
   // Revert this (global) setting to its original value.
-  RuntimeParameters().set<"throw-on-unbound-variables">(false);
+  runtimeParametersNew().wlock()->throwOnUnboundVariables.set(false);
 }
 
 // _____________________________________________________________________________

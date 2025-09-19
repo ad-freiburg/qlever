@@ -360,7 +360,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   constexpr auto testingRequestBodyLimit = 50_kB;
 
   // Set a smaller limit for testing. The default of 100 MB is quite large.
-  RuntimeParameters().set("request-body-limit", 50_kB .asString());
+  runtimeParametersNew().wlock()->requestBodyLimit.set(50_kB);
   // Requests with bodies smaller than the request body limit are processed.
   expectRequestSucceeds(3_B);
   // Exactly the limit is allowed.
@@ -369,14 +369,14 @@ TEST(HttpServer, RequestBodySizeLimit) {
   expectRequestFails(testingRequestBodyLimit + 1_B);
 
   // Setting a smaller request-body limit.
-  RuntimeParameters().set("request-body-limit", 1_B .asString());
+  runtimeParametersNew().wlock()->requestBodyLimit.set(1_B);
   expectRequestFails(3_B);
   // Only the request body size counts. The empty body is allowed even if the
   // body is limited to 1 byte.
   expectRequestSucceeds(0_B);
 
   // Disable the request body limit, by setting it to 0.
-  RuntimeParameters().set("request-body-limit", 0_B .asString());
+  runtimeParametersNew().wlock()->requestBodyLimit.set(0_B);
   // Arbitrarily large requests are now allowed.
   expectRequestSucceeds(10_kB);
   expectRequestSucceeds(5_MB);

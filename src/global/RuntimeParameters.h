@@ -7,7 +7,7 @@
 
 #include "util/Parameters.h"
 
-inline auto& RuntimeParameters() {
+inline auto& RuntimeParametersOld() {
   using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::DurationParameter;
@@ -311,7 +311,12 @@ struct RuntimeParametersNew {
 
     return keys;
   }
-  // TODO<BMW> Delete copying and moving (to make the map work)
+
+  // no copy and move possible
+  RuntimeParametersNew(const RuntimeParametersNew&) = delete;
+  RuntimeParametersNew& operator=(const RuntimeParametersNew&) = delete;
+  RuntimeParametersNew(RuntimeParametersNew&&) = delete;
+  RuntimeParametersNew& operator=(RuntimeParametersNew&&) = delete;
 };
 
 inline ad_utility::Synchronized<RuntimeParametersNew>& runtimeParametersNew() {

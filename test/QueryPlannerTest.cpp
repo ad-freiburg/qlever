@@ -4368,7 +4368,8 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();
 
-  auto cleanup = setRuntimeParameterForTest<"enable-distributive-union">(false);
+  auto cleanup = setNewRuntimeParameterForTest<
+      &RuntimeParametersNew::enableDistributiveUnion>(false);
   auto query = parseQuery(
       "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
   auto plans = qp.createExecutionTrees(query);
