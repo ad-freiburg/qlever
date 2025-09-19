@@ -447,6 +447,22 @@ class GroupByImpl : public Operation {
       size_t dataIndex, size_t beginIndex, size_t endIndex,
       LocalVocab* localVocab, const Allocator& allocator);
 
+  // Helper function of `evaluateAlias`.
+  // 1. Substitute SPARQL expressions with precomputed values.
+  // 2. Performs evaluation of the unevaluated expression.
+  // 3. Reverts back the substitution changes.
+  //
+  // Basically, perform the fallback case if no faster approach can be chosen
+  // instead.
+  template <size_t NUM_GROUP_COLUMNS>
+  static void substituteAndEvaluate(
+      HashMapAliasInformation& alias, IdTable* result,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      LocalVocab* localVocab, const Allocator& allocator,
+      std::vector<HashMapAggregateInformation>& info,
+      const std::vector<HashMapGroupedVariableInformation>& substitutions);
+
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
   // alias
