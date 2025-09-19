@@ -73,6 +73,8 @@ struct ConstexprSmallString {
   /// Implicit conversion to std::string_view
   operator std::string_view() const { return {_characters.data(), _size}; }
 
+  operator std::string() const { return std::string{*this}; }
+
   friend std::ostream& operator<<(std::ostream& stream,
                                   const ConstexprSmallString& string) {
     stream << std::string_view{string};

@@ -152,7 +152,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   const auto& blockGraphFilter = scanConfig.graphFilter_;
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   const size_t queueSize =
-      RuntimeParameters().get<"lazy-index-scan-queue-size">();
+      GetRuntimeParameters().rlock()->lazyIndexScanQueueSize.get();
   auto blockMetadataIterator = beginBlock;
   std::mutex blockIteratorMutex;
 
@@ -197,7 +197,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   // Prepare queue for reading and decompressing blocks concurrently using
   // `numThreads` threads.
   const size_t numThreads =
-      RuntimeParameters().get<"lazy-index-scan-num-threads">();
+      GetRuntimeParameters().rlock()->lazyIndexScanNumThreads.get();
   ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
   // In case the coroutine is destroyed early we still want to have this
   // information.
@@ -758,10 +758,11 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       // whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
-      size_t divisor =
-          isComplete ? 1
-                     : RuntimeParameters()
-                           .get<"small-index-scan-size-estimate-divisor">();
+      size_t divisor = isComplete
+                           ? 1
+                           : GetRuntimeParameters()
+                                 .rlock()
+                                 ->smallIndexScanSizeEstimateDivisor.get();
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {
