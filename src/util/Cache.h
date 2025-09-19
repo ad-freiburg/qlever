@@ -11,9 +11,9 @@
 #include <concepts>
 #include <limits>
 #include <memory>
-#include <type_traits>
 #include <utility>
 
+#include "backports/type_traits.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/PriorityQueue.h"

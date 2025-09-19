@@ -8,6 +8,7 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
@@ -104,8 +105,7 @@ class ParameterToProgramOptionFactory {
    * TODO<C++17,joka921>: template-values are not supported in C++17
    */
   template <typename T>
-  auto getProgramOption(const std::string& name)
-      -> boost::program_options::typed_value<typename T::value_type>* {
+  auto getProgramOption(const std::string& name) {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
     typename T::value_type defaultValue =
@@ -141,7 +141,24 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   // Convert the string to `MemorySize` and put it into the option.
   v = VocabularyType::fromString(s);
 }
-
 }  // namespace ad_utility
+
+namespace qlever {
+// This function is required  to use `TextScoringMetric` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     TextScoringMetric*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const std::string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = getTextScoringMetricFromString(s);
+}
+}  // namespace qlever
 
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H

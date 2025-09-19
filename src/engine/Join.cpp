@@ -10,9 +10,9 @@
 
 #include <functional>
 #include <sstream>
-#include <type_traits>
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"

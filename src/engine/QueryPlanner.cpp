@@ -14,10 +14,10 @@
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
-#include <type_traits>
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
