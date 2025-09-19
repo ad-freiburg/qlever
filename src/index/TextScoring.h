@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_TEXTSCORING_H
 
 #include "index/Index.h"
+#include "index/TextScoringEnum.h"
 #include "parser/WordsAndDocsFileParser.h"
 
 // This class is used to calculate tf-idf and bm25 scores and use them in the
@@ -13,21 +14,28 @@
 class ScoreData {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
+  using TextScoringConfig = qlever::TextScoringConfig;
   ScoreData() = default;
 
-  explicit ScoreData(LocaleManager localeManager)
-      : localeManager_(std::move(localeManager)) {}
+  explicit ScoreData(const LocaleManager& localeManager)
+      : localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(std::move(scoringMetric)),
-        localeManager_(std::move(localeManager)) {}
+        localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric,
             const std::pair<float, float>& bAndKParam)
       : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
         k_(bAndKParam.second),
-        localeManager_(std::move(localeManager)) {}
+        localeManager_(localeManager){};
+
+  ScoreData(const LocaleManager& localeManager, const TextScoringConfig& config)
+      : scoringMetric_(config.scoringMetric_),
+        b_(config.bAndKParam_.first),
+        k_(config.bAndKParam_.second),
+        localeManager_(localeManager){};
 
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
@@ -49,7 +57,7 @@ class ScoreData {
   LocaleManager localeManager_;
 
   // The invertedIndex_ connects words to documents (docIds) and the term
-  // frequency of  those words inside the documents
+  // frequency of those words inside the documents
   InvertedIndex invertedIndex_;
 
   // The docLengthMap_ connects documents (docIds) to their length measured in

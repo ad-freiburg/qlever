@@ -247,22 +247,13 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 
 // _____________________________________________________________________________
 void IndexImpl::storeTextScoringParamsInConfiguration(
-    TextScoringMetric scoringMetric, float b, float k) {
-  configurationJson_["text-scoring-metric"] = scoringMetric;
-  textScoringMetric_ = scoringMetric;
-  auto bAndK = [b, k, this]() {
-    if (0 <= b && b <= 1 && 0 <= k) {
-      return std::pair{b, k};
-    } else {
-      if (textScoringMetric_ == TextScoringMetric::BM25) {
-        throw std::runtime_error{absl::StrCat(
-            "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
-            "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
-      }
-      return std::pair{0.75f, 1.75f};
-    }
-  }();
-  bAndKParamForTextScoring_ = bAndK;
-  configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;
+    const qlever::TextScoringConfig& textScoringConfig) {
+  textScoringMetric_ = textScoringConfig.scoringMetric_;
+  configurationJson_["text-scoring-metric"] = textScoringMetric_;
+  // The checking for correct values is already done during the creation of
+  // TextScoringConfig
+  bAndKParamForTextScoring_ = textScoringConfig.bAndKParam_;
+  configurationJson_["b-and-k-parameter-for-text-scoring"] =
+      bAndKParamForTextScoring_;
   writeConfiguration();
 }

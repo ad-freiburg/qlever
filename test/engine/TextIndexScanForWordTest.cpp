@@ -139,14 +139,19 @@ struct TextResult {
 
 // Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
 // text index that contains the literals from the `kg` as well as the
-// `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
-// scores can be specified.
+// `wordsFileContant` and 'docsFileContent (also above). The metrics used for
+// the text scores can be specified. It can also be specified to build the text
+// index using the docsFile and to only add entities from wordsFile.
 auto getQecWithTextIndex(
-    std::optional<TextScoringMetric> textScoring = std::nullopt) {
+    std::optional<TextScoringMetric> textScoring = std::nullopt,
+    bool useDocsFileForVocab = false, bool addEntitiesFromWordsFile = false) {
   using namespace ad_utility::testing;
   TestIndexConfig config{kg};
   config.createTextIndex = true;
-  config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
+  config.contentsOfWordsFile = wordsFileContent;
+  config.contentsOfDocsFile = docsFileContent;
+  config.useDocsFileForVocab = useDocsFileForVocab;
+  config.addEntitiesFromWordsFile = addEntitiesFromWordsFile;
   if (textScoring.has_value()) {
     config.scoringMetric = textScoring;
   }
@@ -169,7 +174,7 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
       getTextScoringMetricFromString("fail"),
       ::testing::StrEq(R"(Faulty text scoring metric given: "fail".)"),
       std::runtime_error);
-}
+}  // namespace
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQecWithTextIndex();
@@ -421,6 +426,37 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ(secondDocText, tr3.getTextRecord(0));
+}
+
+TEST(TextIndexScanForWord, DocsfileIndexBuilding) {
+  auto qec = getQecWithTextIndex(std::nullopt, true, false);
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "tester"};
+
+  ASSERT_EQ(s1.getResultWidth(), 2);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 0));
+
+  TextIndexScanForWord s2{qec, Variable{"?text1"}, "test*"};
+
+  ASSERT_EQ(s2.getResultWidth(), 3);
+
+  result = s2.computeResultOnlyForTesting();
+  auto tr = TextResult{qec, result};
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
+
+  ASSERT_EQ(withSecond("tester"), tr.getRow(0));
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"), tr.getRow(1));
+  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+            tr.getRow(2));
+  ASSERT_EQ(
+      h::combineToString("\"the test on friday was really hard\"", "test"),
+      tr.getRow(3));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {

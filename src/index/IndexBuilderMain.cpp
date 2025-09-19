@@ -159,6 +159,8 @@ int main(int argc, char** argv) {
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
+  std::string wordsfile;
+  std::string docsfile;
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
@@ -191,9 +193,23 @@ int main(int argc, char** argv) {
       "`kg-input-file`).");
 
   // Options for the text index.
-  add("text-docs-input-file,d", po::value(&config.docsfile_),
+  add("text-docs-input-file,d", po::value(&docsfile),
       "The full text of the text records from which to build the text index.");
-  add("text-words-input-file,w", po::value(&config.wordsfile_),
+  add("text-words-from-docsfile,D",
+      po::bool_switch(&config.useWordsFromDocsfile_),
+      "If set, then the word mentions for the text index are obtained by "
+      "tokenizing the `docsfile` (instead of being read from an explicit "
+      "`wordsfile`. Only works if additionally a `docsfile` is given with "
+      "the `text-docs-input-file` (-d) option.");
+  add("text-entities-from-wordsfile,E",
+      po::bool_switch(&config.addEntitiesFromWordsfile_),
+      "Can only be used together with the `text-words-from-docsfile` option. "
+      "If set, the `wordsfile` is only used to obtain entity mentions for the "
+      "text index, whereas word mentions are parsed from the `docsfile` "
+      "Only works if additionally a `docsfile` and `wordsfile` are given with "
+      "the "
+      "options -w [wordsfile] and -d [docsfile]");
+  add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W",
       po::bool_switch(&config.addWordsFromLiterals_),
@@ -272,6 +288,10 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
+    config.wordsfile_ =
+        wordsfile.empty() ? std::nullopt : std::make_optional(wordsfile);
+    config.docsfile_ =
+        docsfile.empty() ? std::nullopt : std::make_optional(docsfile);
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.validate();
