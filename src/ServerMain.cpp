@@ -92,9 +92,9 @@ int main(int argc, char** argv) {
   add("cache-max-size-lazy-result,E",
       optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
           "cache-max-size-lazy-result"),
-      "Maximum size up to which lazy results will be cached by aggregating"
-      " partial results. Caching does cause significant overhead for this"
-      " case.");
+      "Maximum size up to which lazy results will be cached by aggregating "
+      "partial results. Caching does cause significant overhead for this "
+      "case.");
   add("cache-max-num-entries,k",
       optionFactory.getProgramOption<RuntimeParameters::SizeT>(
           "cache-max-num-entries"),
@@ -106,12 +106,11 @@ int main(int argc, char** argv) {
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
   add("text,t", po::bool_switch(&text),
-      "Also load the text index. The text index must have been built before"
-      " using `IndexBuilderMain` with options `-d` and `- w`.");
+      "Also load the text index. The text index must have been built before "
+      "using `IndexBuilderMain` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&onlyPsoAndPosPermutations),
-      "Only load the PSO and POS permutations. This "
-      "disables queries with "
+      "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
       optionFactory
