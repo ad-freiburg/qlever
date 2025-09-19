@@ -29,7 +29,7 @@ namespace po = boost::program_options;
 int main(int argc, char** argv) {
   // TODO<joka921> This is a hack, because the unit tests currently don't work
   // with the strip-columns feature.
-  runtimeParametersNew().wlock()->stripColumns_.set(true);
+  GetRuntimeParameters().wlock()->stripColumns_.set(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();
@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
   ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
-      &runtimeParametersNew()};
+      &GetRuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
   auto add = [&options](auto&&... args) {
@@ -80,24 +80,23 @@ int main(int argc, char** argv) {
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
   add("cache-max-size,c",
-      optionFactory.getProgramOption<RuntimeParametersNew::Bool>(
-          "cache-max-size"),
+      optionFactory.getProgramOption<RuntimeParameters::Bool>("cache-max-size"),
       "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
       "limited by --memory-max-size.");
   add("cache-max-size-single-entry,e",
-      optionFactory.getProgramOption<RuntimeParametersNew::MemorySizeParameter>(
+      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
           "cache-max-size-single-entry"),
       "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
   add("cache-max-size-lazy-result,E",
-      optionFactory.getProgramOption<RuntimeParametersNew::MemorySizeParameter>(
+      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
           "cache-max-size-lazy-result"),
       "Maximum size up to which lazy results will be cached by aggregating"
       " partial results. Caching does cause significant overhead for this"
       " case.");
   add("cache-max-num-entries,k",
-      optionFactory.getProgramOption<RuntimeParametersNew::SizeT>(
+      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
           "cache-max-num-entries"),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
@@ -115,30 +114,30 @@ int main(int argc, char** argv) {
       "disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
-      optionFactory.getProgramOption<
-          RuntimeParametersNew::Duration<std::chrono::seconds>>(
-          "default-query-timeout"),
+      optionFactory
+          .getProgramOption<RuntimeParameters::Duration<std::chrono::seconds>>(
+              "default-query-timeout"),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
   add("service-max-value-rows,S",
-      optionFactory.getProgramOption<RuntimeParametersNew::SizeT>(
+      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
           "service-max-value-rows"),
       "The maximal number of result rows to be passed to a SERVICE operation "
       "as a VALUES clause to optimize its computation.");
   add("throw-on-unbound-variables",
-      optionFactory.getProgramOption<RuntimeParametersNew::Bool>(
+      optionFactory.getProgramOption<RuntimeParameters::Bool>(
           "throw-on-unbound-variables"),
       "If set to true, the queries that use GROUP BY, BIND, or ORDER BY with "
       "variables that are unbound in the query throw an exception. These "
       "queries technically are allowed by the SPARQL standard, but typically "
       "are the result of typos and unintended by the user");
   add("request-body-limit",
-      optionFactory.getProgramOption<RuntimeParametersNew::MemorySizeParameter>(
+      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
           "request-body-limit"),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
   add("cache-service-results",
-      optionFactory.getProgramOption<RuntimeParametersNew::Bool>(
+      optionFactory.getProgramOption<RuntimeParameters::Bool>(
           "cache-service-results"),
       "SERVICE is not cached because we have to assume that any remote "
       "endpoint might change at any point in time. If you control the "
@@ -148,24 +147,24 @@ int main(int argc, char** argv) {
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   add("syntax-test-mode",
-      optionFactory.getProgramOption<RuntimeParametersNew::Bool>(
+      optionFactory.getProgramOption<RuntimeParameters::Bool>(
           "syntax-test-mode"),
       "Make several query patterns that are syntactially valid, but otherwise "
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
   add("enable-prefilter-on-index-scans",
-      optionFactory.getProgramOption<RuntimeParametersNew::Bool>(
+      optionFactory.getProgramOption<RuntimeParameters::Bool>(
           "enable-prefilter-on-index-scans"),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
   add("spatial-join-max-num-threads",
-      optionFactory.getProgramOption<RuntimeParametersNew::SizeT>(
+      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
           "spatial-join-max-num-threads"),
       "The maximum number of threads to be used for spatial join processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
   add("spatial-join-prefilter-max-size",
-      optionFactory.getProgramOption<RuntimeParametersNew::SizeT>(
+      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
           "spatial-join-prefilter-max-size"),
       "The maximum size in square coordinates of the aggregated bounding box "
       "of the smaller join partner in a spatial join, such that prefiltering "

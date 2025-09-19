@@ -16,14 +16,14 @@ using ::testing::HasSubstr;
 
 TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      runtimeParametersNew().wlock()->defaultQueryTimeout.set(0s),
+      GetRuntimeParameters().wlock()->defaultQueryTimeout.set(0s),
       AllOf(HasSubstr("default-query-timeout"), HasSubstr("0s")),
       std::runtime_error);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      runtimeParametersNew().wlock()->defaultQueryTimeout.set(-1s),
+      GetRuntimeParameters().wlock()->defaultQueryTimeout.set(-1s),
       AllOf(HasSubstr("default-query-timeout"), HasSubstr("-1s")),
       std::runtime_error);
-  EXPECT_NO_THROW(runtimeParametersNew().wlock()->defaultQueryTimeout.set(1s));
+  EXPECT_NO_THROW(GetRuntimeParameters().wlock()->defaultQueryTimeout.set(1s));
 }
 
 namespace {

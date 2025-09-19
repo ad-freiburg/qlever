@@ -114,7 +114,7 @@ Result Join::computeResult(bool requestLaziness) {
   // This is purely for performance reasons.
   auto getCachedOrSmallResult = [](const QueryExecutionTree& tree) {
     bool isSmall = tree.getRootOperation()->getSizeEstimate() <
-                   runtimeParametersNew()
+                   GetRuntimeParameters()
                        .rlock()
                        ->lazyIndexScanMaxSizeMaterialization.get();
     // The third argument means "only get the result if it can be read from the

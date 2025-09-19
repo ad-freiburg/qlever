@@ -278,7 +278,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  if (runtimeParametersNew().rlock()->syntaxTestMode.get()) {
+  if (GetRuntimeParameters().rlock()->syntaxTestMode.get()) {
     // In the syntax test mode we silently create an expression that always
     // returns `UNDEF`.
     return std::make_unique<sparqlExpression::IdExpression>(
@@ -1754,7 +1754,7 @@ void Visitor::warnOrThrowIfUnboundVariables(
       auto message = absl::StrCat(
           "The variable ", var->name(), " was used in the expression of a ",
           clauseName, " clause but was not previously bound in the query");
-      if (runtimeParametersNew().rlock()->throwOnUnboundVariables.get()) {
+      if (GetRuntimeParameters().rlock()->throwOnUnboundVariables.get()) {
         reportError(ctx, message);
       } else {
         parsedQuery_.addWarning(std::move(message));

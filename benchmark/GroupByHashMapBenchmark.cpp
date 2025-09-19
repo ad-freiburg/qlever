@@ -242,7 +242,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   static void computeGroupBy(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> subtree,
                              bool useOptimization) {
-    runtimeParametersNew().wlock()->groupByHashMapEnabled.set(useOptimization);
+    GetRuntimeParameters().wlock()->groupByHashMapEnabled.set(useOptimization);
 
     using namespace sparqlExpression;
 
@@ -280,7 +280,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   static void computeGroupByTwoAggregates(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
       bool useOptimization) {
-    runtimeParametersNew().wlock()->groupByHashMapEnabled.set(useOptimization);
+    GetRuntimeParameters().wlock()->groupByHashMapEnabled.set(useOptimization);
 
     using namespace sparqlExpression;
 

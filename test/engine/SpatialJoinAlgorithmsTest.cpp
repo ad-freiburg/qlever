@@ -1693,7 +1693,7 @@ void testNumberOfThreads(size_t runtimeParamNumThreads,
                          size_t expectedNumberOfThreads,
                          Loc sourceLocation = Loc::current()) {
   auto cleanUp = setNewRuntimeParameterForTest<
-      &RuntimeParametersNew::spatialJoinMaxNumThreads>(runtimeParamNumThreads);
+      &RuntimeParameters::spatialJoinMaxNumThreads>(runtimeParamNumThreads);
   auto l = generateLocationTrace(sourceLocation);
   auto qec = buildMixedAreaPointQEC();
   auto leftChild =

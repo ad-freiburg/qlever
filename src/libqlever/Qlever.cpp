@@ -22,11 +22,11 @@ Qlever::Qlever(const EngineConfig& config)
       enablePatternTrick_{!config.noPatterns_} {
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
-  runtimeParametersNew().wlock()->cacheMaxNumEntries.setOnUpdateAction(
+  GetRuntimeParameters().wlock()->cacheMaxNumEntries.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  runtimeParametersNew().wlock()->cacheMaxSize.setOnUpdateAction(
+  GetRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
-  runtimeParametersNew().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
+  GetRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });

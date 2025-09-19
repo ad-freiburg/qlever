@@ -6,7 +6,7 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include "util/Parameters.h"
-struct RuntimeParametersNew {
+struct RuntimeParameters {
   using Bool = ad_utility::detail::parameterRuntimeName::Bool;
   using Double = ad_utility::detail::parameterRuntimeName::Double;
   template <typename Duration>
@@ -104,7 +104,7 @@ struct RuntimeParametersNew {
 
   std::map<std::string, ad_utility::ParameterBase*> runtimeMap_;
 
-  RuntimeParametersNew() {
+  RuntimeParameters() {
     // Here all of the newly defined parameters have to be added.
     runtimeMap_[stripColumns_.name()] = &stripColumns_;
     runtimeMap_[sortEstimateCancellationFactor.name()] = &stripColumns_;
@@ -224,14 +224,14 @@ struct RuntimeParametersNew {
   }
 
   // no copy and move possible
-  RuntimeParametersNew(const RuntimeParametersNew&) = delete;
-  RuntimeParametersNew& operator=(const RuntimeParametersNew&) = delete;
-  RuntimeParametersNew(RuntimeParametersNew&&) = delete;
-  RuntimeParametersNew& operator=(RuntimeParametersNew&&) = delete;
+  RuntimeParameters(const RuntimeParameters&) = delete;
+  RuntimeParameters& operator=(const RuntimeParameters&) = delete;
+  RuntimeParameters(RuntimeParameters&&) = delete;
+  RuntimeParameters& operator=(RuntimeParameters&&) = delete;
 };
 
-inline ad_utility::Synchronized<RuntimeParametersNew>& runtimeParametersNew() {
-  static ad_utility::Synchronized<RuntimeParametersNew> value;
+inline ad_utility::Synchronized<RuntimeParameters>& GetRuntimeParameters() {
+  static ad_utility::Synchronized<RuntimeParameters> value;
   return value;
 }
 

@@ -59,9 +59,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
-auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
-                                                 size_t numCols) const noexcept
-    -> Timer::Duration {
+auto SortPerformanceEstimator::estimatedSortTime(
+    size_t numRows, size_t numCols) const noexcept -> Timer::Duration {
   if (!_estimatesWereCalculated) {
     LOG(WARN) << "The estimates of the SortPerformanceEstimator were never set "
                  "up, Sorts will thus never time out"
@@ -197,7 +196,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     std::chrono::steady_clock::time_point deadline,
     std::string_view operationDescriptor) const {
   auto sortEstimateCancellationFactor =
-      runtimeParametersNew().rlock()->sortEstimateCancellationFactor.get();
+      GetRuntimeParameters().rlock()->sortEstimateCancellationFactor.get();
   auto now = std::chrono::steady_clock::now();
   if (now > deadline || estimatedSortTime(numRows, numColumns) >
                             (deadline - now) * sortEstimateCancellationFactor) {

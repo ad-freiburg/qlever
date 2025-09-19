@@ -338,7 +338,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
                                 const ad_utility::MemorySize& requestBodySize) {
     const ad_utility::MemorySize currentLimit =
-        runtimeParametersNew().rlock()->requestBodyLimit.get();
+        GetRuntimeParameters().rlock()->requestBodyLimit.get();
     // For large requests we get an exception while writing to the request
     // stream when going over the limit. For small requests we get the response
     // normally. We would need the HttpClient to return the response even
@@ -360,7 +360,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
   constexpr auto testingRequestBodyLimit = 50_kB;
 
   // Set a smaller limit for testing. The default of 100 MB is quite large.
-  runtimeParametersNew().wlock()->requestBodyLimit.set(50_kB);
+  GetRuntimeParameters().wlock()->requestBodyLimit.set(50_kB);
   // Requests with bodies smaller than the request body limit are processed.
   expectRequestSucceeds(3_B);
   // Exactly the limit is allowed.
@@ -369,14 +369,14 @@ TEST(HttpServer, RequestBodySizeLimit) {
   expectRequestFails(testingRequestBodyLimit + 1_B);
 
   // Setting a smaller request-body limit.
-  runtimeParametersNew().wlock()->requestBodyLimit.set(1_B);
+  GetRuntimeParameters().wlock()->requestBodyLimit.set(1_B);
   expectRequestFails(3_B);
   // Only the request body size counts. The empty body is allowed even if the
   // body is limited to 1 byte.
   expectRequestSucceeds(0_B);
 
   // Disable the request body limit, by setting it to 0.
-  runtimeParametersNew().wlock()->requestBodyLimit.set(0_B);
+  GetRuntimeParameters().wlock()->requestBodyLimit.set(0_B);
   // Arbitrarily large requests are now allowed.
   expectRequestSucceeds(10_kB);
   expectRequestSucceeds(5_MB);

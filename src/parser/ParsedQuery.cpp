@@ -531,7 +531,7 @@ void ParsedQuery::addOrderByClause(
 
 // _____________________________________________________________________________
 void ParsedQuery::addWarningOrThrow(std::string warning) {
-  if (runtimeParametersNew().rlock()->throwOnUnboundVariables.get()) {
+  if (GetRuntimeParameters().rlock()->throwOnUnboundVariables.get()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));
