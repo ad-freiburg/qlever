@@ -195,8 +195,7 @@ struct RuntimeParameters {
     } catch (const std::exception& e) {
       throw std::runtime_error("Could not set parameter " +
                                std::string{parameterName} + " to value " +
-                               // TODO solve this properly
-                               //  ParameterType(value).toString() +
+                               ParameterType(value, parameterName).toString() +
                                ". Exception was: " + e.what());
     }
   }
