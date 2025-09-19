@@ -8,10 +8,13 @@
 #include <sstream>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "util/Concepts.h"
 
 class Literal {
   std::string _stringRepresentation;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_stringRepresentation)
 
   CPP_template_2(typename T)(
       requires ad_utility::Streamable<T>) static std::string
@@ -58,7 +61,7 @@ class Literal {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
-  bool operator==(const Literal& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Literal)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

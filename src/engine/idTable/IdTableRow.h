@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "util/Enums.h"
@@ -52,6 +53,8 @@ class Row {
  private:
   Data data_;
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(data_)
+
  public:
   // Construct a row for the dynamic case (then the number of columns has to be
   // specified).
@@ -86,7 +89,7 @@ class Row {
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
-  bool operator==(const Row& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Row)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
   explicit operator std::array<T, numStaticColumns>() const
