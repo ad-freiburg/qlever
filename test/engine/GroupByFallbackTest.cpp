@@ -67,7 +67,8 @@ TEST_F(GroupByFallbackTest, EmptyInput) {
 // Mixed values: fallback should sort+uniq
 TEST_F(GroupByFallbackTest, MixedValues) {
   forceFallback();
-  IdTable table = makeIdTableFromInts({{2}, {1}, {3}, {2}, {0}});
+  IdTable table =
+      makeIdTableFromVector(VectorTable{{2}, {1}, {3}, {2}, {0}}, IntId);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -82,7 +83,8 @@ TEST_F(GroupByFallbackTest, MixedValues) {
 TEST_F(GroupByFallbackTest, MultiColumn) {
   forceFallback();
   // Table with two columns, five rows, with three distinct pairs
-  IdTable table = makeIdTableFromInts({{1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}});
+  IdTable table = makeIdTableFromVector(
+      VectorTable{{1, 1}, {1, 2}, {1, 1}, {2, 2}, {2, 2}}, IntId);
   auto gb = setupGroupBy(table, qec_);
   auto res = gb->computeResult(false);
   const auto& out = res.idTable();
@@ -102,8 +104,8 @@ TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   RuntimeParameters().set<"group-by-hash-map-group-threshold">(1'000'000);
 
-  std::vector<VectorTable> chunks{makeVT({{1, 10}, {1, 11}, {2, 12}}),
-                                  makeVT({{2, 13}, {3, 14}})};
+  std::vector<VectorTable> chunks{VectorTable({{1, 10}, {1, 11}, {2, 12}}),
+                                  VectorTable({{2, 13}, {3, 14}})};
   auto tables = createLazyIdTables(chunks);
 
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
@@ -137,7 +139,8 @@ TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {
 // row
 TEST_F(GroupByFallbackTest, ImplicitGroupOnly) {
   // Create input table with 5 rows
-  IdTable table = makeIdTableFromInts({{1}, {2}, {3}, {4}, {5}});
+  IdTable table =
+      makeIdTableFromVector(VectorTable{{1}, {2}, {3}, {4}, {5}}, IntId);
   // Build a GroupByImpl with no aliases using ValuesForTesting.
   // ValuesForTesting requires one optional<Variable> per input column.
   std::vector<std::optional<Variable>> varOpts = {Variable{"?x"}};
@@ -230,24 +233,27 @@ static std::vector<VectorTable> generateSingleColumnChunks(
 // Generators for parameterized scenarios for (a,b) where expectations can be
 // derived programmatically for COUNT.
 static std::vector<VectorTable> generateABChunks(ChunkOverlapScenario s) {
-  const VectorTable baseRows = makeVT({{1, 1}, {1, 2}, {2, 1}, {2, 2}, {3, 1}});
+  const VectorTable baseRows =
+      VectorTable({{1, 1}, {1, 2}, {2, 1}, {2, 2}, {3, 1}});
   switch (s) {
     case ChunkOverlapScenario::TwoDistinct:
-      return {baseRows, makeVT({{1, 3}, {2, 3}, {4, 1}})};
+      return {baseRows, VectorTable({{1, 3}, {2, 3}, {4, 1}})};
     case ChunkOverlapScenario::TwoSubset:
-      return {baseRows, makeVT({{1, 1}, {2, 2}, {3, 1}, {1, 2}})};
+      return {baseRows, VectorTable({{1, 1}, {2, 2}, {3, 1}, {1, 2}})};
     case ChunkOverlapScenario::TwoMixed:
-      return {baseRows, makeVT({{1, 2}, {1, 3}, {2, 1}, {3, 0}})};
+      return {baseRows, VectorTable({{1, 2}, {1, 3}, {2, 1}, {3, 0}})};
     case ChunkOverlapScenario::FiveDistinct:
-      return {makeVT({{1, 1}}), makeVT({{1, 2}}), makeVT({{2, 1}}),
-              makeVT({{2, 2}}), makeVT({{3, 1}})};
+      return {VectorTable({{1, 1}}), VectorTable({{1, 2}}),
+              VectorTable({{2, 1}}), VectorTable({{2, 2}}),
+              VectorTable({{3, 1}})};
     case ChunkOverlapScenario::FiveSubset:
-      return {baseRows, makeVT({{1, 1}, {2, 1}}), makeVT({{1, 2}, {2, 1}}),
-              makeVT({{2, 2}}), makeVT({{3, 1}, {3, 1}})};
+      return {baseRows, VectorTable({{1, 1}, {2, 1}}),
+              VectorTable({{1, 2}, {2, 1}}), VectorTable({{2, 2}}),
+              VectorTable({{3, 1}, {3, 1}})};
     case ChunkOverlapScenario::FiveMixed:
-      return {baseRows, makeVT({{1, 2}, {2, 0}, {0, 1}}),
-              makeVT({{1, 1}, {2, 3}}), makeVT({{3, 1}, {1, 4}}),
-              makeVT({{2, 5}})};
+      return {baseRows, VectorTable({{1, 2}, {2, 0}, {0, 1}}),
+              VectorTable({{1, 1}, {2, 3}}), VectorTable({{3, 1}, {1, 4}}),
+              VectorTable({{2, 5}})};
   }
   AD_FAIL();
 }

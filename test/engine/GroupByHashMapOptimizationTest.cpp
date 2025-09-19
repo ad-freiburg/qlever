@@ -591,8 +591,8 @@ TEST_F(GroupByHashMapOptimizationTest, ProcessAggregateAliasesForBlock) {
   ASSERT_EQ(result.numColumns(), 2u);  // group column + count column
 
   // Results should be sorted by group key
-  EXPECT_EQ(result(0, 0), IntId(42));    // Group key 42
+  EXPECT_EQ(result(0, 0), IntId(42));   // Group key 42
   EXPECT_EQ(result(0, 1).getInt(), 2);  // Count for group 42: 2 values
-  EXPECT_EQ(result(1, 0), IntId(84));    // Group key 84
+  EXPECT_EQ(result(1, 0), IntId(84));   // Group key 84
   EXPECT_EQ(result(1, 1).getInt(), 1);  // Count for group 84: 1 value
 }

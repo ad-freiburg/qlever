@@ -57,20 +57,6 @@ class CopyableIdTable : public TableImpl<N> {
 using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
-// Helper: construct a VectorTable from nested initializer lists of integers.
-static inline VectorTable makeVectorTable(
-    std::initializer_list<std::initializer_list<size_t>> rows) {
-  VectorTable vt;
-  for (auto rowIl : rows) {
-    VectorTable::value_type row;
-    for (auto v : rowIl) {
-      row.push_back(IntOrId(static_cast<int64_t>(v)));
-    }
-    vt.push_back(std::move(row));
-  }
-  return vt;
-}
-
 // Helper: construct a single-column VectorTable containing the inclusive
 // integer range [a, b]. If a > b, returns an empty table.
 static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
@@ -80,22 +66,6 @@ static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
     vt.push_back({IntOrId(static_cast<int64_t>(i))});
   }
   return vt;
-}
-
-// Backwards compatible alias used in some tests.
-static inline VectorTable makeVT(
-    std::initializer_list<std::initializer_list<size_t>> rows) {
-  return makeVectorTable(rows);
-}
-
-// Convenience helper: build an `IdTable` directly from nested integer
-// initializer lists, optionally supplying a transformation for plain ints.
-template <typename Transformation = decltype(ad_utility::testing::IntId)>
-IdTable makeIdTableFromInts(
-    std::initializer_list<std::initializer_list<size_t>> rows,
-    Transformation transformation = {}) {
-  return makeIdTableFromVector(makeVectorTable(rows),
-                               std::move(transformation));
 }
 
 /*

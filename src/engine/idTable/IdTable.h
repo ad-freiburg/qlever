@@ -781,9 +781,8 @@ class IdTable {
     if (numInserted == 0) return;
 
     const size_t srcSize = table.size();
-    for (size_t idx : indices) {
-      AD_CORRECTNESS_CHECK(idx < srcSize);
-    }
+    AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+        indices, [srcSize](size_t idx) { return idx < srcSize; }));
     const size_t oldSize = size();
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
@@ -794,72 +793,6 @@ class IdTable {
         destination[oldSize + k] = source[indices[k]];
       }
     }
-  }
-
-  // Merge two IdTables that are already sorted lexicographically on the
-  // columns specified by `sortCols`. The function returns a new IdTable with
-  // the concatenated, merged rows. It copies contiguous runs from the
-  // sources using `insertAtEnd` for efficiency.
-  // Merge two sorted tables without allocator constraints.
-  static IdTable mergeTwoSortedTables(const IdTable& A, const IdTable& B,
-                                      const std::vector<ColumnIndex>& sortCols,
-                                      Allocator allocator)
-      requires(!isView && columnsAreAllocatable) {
-    const size_t n1 = A.size();
-    const size_t n2 = B.size();
-
-    AD_CONTRACT_CHECK(A.numColumns() == B.numColumns());
-
-    // Create an empty merged table using the allocator-based constructor
-    IdTable merged(A.numColumns(), allocator);
-    merged.reserve(n1 + n2);
-
-    // Helper to compare two rows (one from each table) lexicographically
-    // according to `sortCols`.
-    auto rowLess = [&](const IdTable& table1, size_t index1,
-                       const IdTable& table2, size_t index2) -> bool {
-      for (auto col : sortCols) {
-        const auto va = table1(index1, col);
-        const auto vb = table2(index2, col);
-        if (va != vb) return va < vb;
-      }
-      return false;
-    };
-
-    size_t i = 0, j = 0, start = 0;
-    while (i < n1 && j < n2) {
-      if (rowLess(A, i, B, j)) {
-        start = i;
-        ++i;
-        while (i < n1 && rowLess(A, i, B, j)) ++i;
-        merged.insertAtEnd(A, start, i);
-      } else {
-        start = j;
-        ++j;
-        while (j < n2 && rowLess(B, j, A, i)) ++j;
-        merged.insertAtEnd(B, start, j);
-      }
-    }
-    if (i < n1) merged.insertAtEnd(A, i, n1);
-    if (j < n2) merged.insertAtEnd(B, j, n2);
-
-    return merged;
-  }
-
-  // Merge `other` (already sorted on `sortCols`) into `this` (also sorted) and
-  // return the result as a new sorted `IdTable`.
-  IdTable mergeSortedTable(const IdTable& other,
-                           const std::vector<ColumnIndex>& sortCols) const
-      requires(!isView && columnsAreAllocatable) {
-    return mergeTwoSortedTables(*this, other, sortCols, getAllocator());
-  }
-
-  // Merge `other` (already sorted on `sortCols`) into `this` (also sorted).
-  // The result is therefore also sorted.
-  void mergeSortedTableIntoThis(const IdTable& other,
-                                const std::vector<ColumnIndex>& sortCols)
-      requires(!isView && columnsAreAllocatable) {
-    *this = mergeSortedTable(other, sortCols);
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit

@@ -364,10 +364,7 @@ class GroupByImpl : public Operation {
     size_t rowIndex_;
     size_t groupIndex_;
 
-    friend bool operator==(const RowToGroup& lhs, const RowToGroup& rhs) {
-      return lhs.rowIndex_ == rhs.rowIndex_ &&
-             lhs.groupIndex_ == rhs.groupIndex_;
-    }
+    bool operator==(const RowToGroup&) const = default;
   };
 
   // Type returned by `getHashEntries(groupByCols, onlyInsertPreexistingKeys)`.
@@ -711,26 +708,27 @@ class GroupByImpl : public Operation {
    *
    * @tparam NUM_GROUP_COLUMNS: number of grouping columns used by the HashMap
    *   aggregation data (compile-time constant; may be 0).
-   * @tparam ChunkIterator: an input iterator type that points into the range of
+   * @tparam BlockIterator: an input iterator type that points into the range of
    *   subresults (each element is expected to be a pair/reference of the
    *   form (IdTable, LocalVocab)). This iterator is advanced from the
    *   current position to the end.
-   * @tparam ChunkEnd: the corresponding end/sentinel type for the input range.
-   * In many cases this is the same type as ChunkIterator, but it may be a
+   * @tparam BlocksEnd: the corresponding end/sentinel type for the input range.
+   * In many cases this is the same type as BlockIterator, but it may be a
    *   distinct sentinel type for ranges that use sentinels.
    *
-   * The function consumes the remaining input starting at `currentChunk`
-   * up to `endOfChunks` and returns the final `Result` consisting of the
+   * The function consumes the remaining input starting at `blockIt`
+   * up to `blocksEnd` and returns the final `Result` consisting of the
    * hash-map entries and the grouped fallback rows.
    */
-  template <size_t NUM_GROUP_COLUMNS, typename ChunkIterator, typename ChunkEnd>
-  requires std::input_iterator<ChunkIterator> &&
-           std::sentinel_for<ChunkEnd, ChunkIterator>
-  Result handleRemainderUsingHybridApproach(
-      HashMapOptimizationData data,
-      HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      HashMapTimers& timers, ChunkIterator currentChunk,
-      ChunkEnd endOfChunks) const;
+  CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
+                   typename BlocksEnd)(
+      requires std::input_iterator<BlockIterator>&&
+          std::sentinel_for<BlocksEnd, BlockIterator>) Result
+      handleRemainderUsingHybridApproach(
+          HashMapOptimizationData data,
+          HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+          HashMapTimers& timers, BlockIterator blockIt,
+          BlocksEnd blocksEnd) const;
 };
 
 // _____________________________________________________________________________

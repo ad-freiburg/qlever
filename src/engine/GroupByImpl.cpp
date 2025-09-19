@@ -375,7 +375,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
         {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
   } else {
     // Always request child operation to provide a lazy result if the aggregate
-    // expressions allow to compute the full result in chunks
+    // expressions allow to compute the full result in blocks
     metadataForUnsequentialData =
         computeUnsequentialProcessingMetadata(aggregates, _groupByVariables);
     subresult = _subtree->getResult(metadataForUnsequentialData.has_value());
@@ -1321,11 +1321,11 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   auto idx = 0;
   for (auto& aggregation : aggregationData_) {
     const auto& aggregationTypeWithData = aggregateTypeWithData_.at(idx);
-    const auto _numGroups = numGroups();
 
     std::visit(
-        [&resizeVectors, &aggregationTypeWithData, _numGroups](auto& arg) {
-          resizeVectors(arg, _numGroups, aggregationTypeWithData);
+        [&resizeVectors, &aggregationTypeWithData,
+         numGroups = numGroups()](auto& arg) {
+          resizeVectors(arg, numGroups, aggregationTypeWithData);
         },
         aggregation);
     ++idx;
@@ -1548,14 +1548,18 @@ static constexpr auto makeProcessGroupsVisitor =
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
-        auto matches = groupLookupResult.matchedRowsToGroups_;
+        const auto& matches = groupLookupResult.matchedRowsToGroups_;
         // Ensure matches are sorted by rowIndex, as we will iterate
         // through the generator in ascending order of rowIndex
-        AD_CORRECTNESS_CHECK(
+        AD_EXPENSIVE_CHECK(
             ql::ranges::is_sorted(matches.begin(), matches.end(), {},
                                   &GroupByImpl::RowToGroup::rowIndex_));
 
         // Process each matching row
+        // TODO<Benke> Potentially a waste of resources!
+        //   The code evaluates the sub-expressions for the non-matching rows
+        //   twice, because here they are evaluated then discarded, and later on
+        //   they are evaluated again from the materialized and sorted result.
         auto matchIt = matches.begin();
         size_t currentRow = 0;
         for (const auto& value : generator) {
@@ -1592,16 +1596,16 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   // Timers for hash-map lookup and aggregation
   HashMapTimers timers{ad_utility::Timer::Stopped, ad_utility::Timer::Stopped};
 
-  auto currentChunk = ql::ranges::begin(subresults);
-  auto endOfChunks = ql::ranges::end(subresults);
+  auto blockIt = ql::ranges::begin(subresults);
+  auto blocksEnd = ql::ranges::end(subresults);
 
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
   // Iterate through input blocks; buffer the rest and return result if
   // threshold exceeded
-  while (currentChunk != endOfChunks) {
-    const auto& [inputTableRef, inputLocalVocabRef] = *currentChunk;
+  while (blockIt != blocksEnd) {
+    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
@@ -1612,8 +1616,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     localVocab.mergeWith(inputLocalVocab);
     // Load all entries from inputTable into the hash map.
     updateHashMapWithTable(inputTable, data, aggregationData, timers);
-    // Advance to the next chunk.
-    ++currentChunk;
+    // Advance to the next block.
+    ++blockIt;
 
     // If the size of the hashmap (the number of groups) exceeds the
     // `groupThreshold`, we switch to a hybrid approach, where we add all
@@ -1625,7 +1629,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                    << ") > (thr: " << groupThreshold
                    << "), switching to hybrid approach" << std::endl;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
-          std::move(data), aggregationData, timers, currentChunk, endOfChunks);
+          std::move(data), aggregationData, timers, blockIt, blocksEnd);
     }
   }
   runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer_.msecs());
@@ -1636,21 +1640,22 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS, typename ChunkIterator, typename ChunkEnd>
-requires std::input_iterator<ChunkIterator> &&
-         std::sentinel_for<ChunkEnd, ChunkIterator>
-Result GroupByImpl::handleRemainderUsingHybridApproach(
-    HashMapOptimizationData data,
-    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    HashMapTimers& timers, ChunkIterator currentChunk,
-    ChunkEnd endOfChunks) const {
+CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
+                 typename BlocksEnd)(
+    requires std::input_iterator<BlockIterator>&&
+        std::sentinel_for<BlocksEnd, BlockIterator>) Result
+    GroupByImpl::handleRemainderUsingHybridApproach(
+        HashMapOptimizationData data,
+        HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+        HashMapTimers& timers, BlockIterator blockIt,
+        BlocksEnd blocksEnd) const {
   const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef_.value();
 
   IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
   // Batch existing-group rows and buffer new-group rows
-  for (; currentChunk != endOfChunks; ++currentChunk) {
-    const auto& [inputTableRef, inputLocalVocabRef] = *currentChunk;
+  for (; blockIt != blocksEnd; ++blockIt) {
+    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
@@ -1677,11 +1682,10 @@ Result GroupByImpl::handleRemainderUsingHybridApproach(
       "hybridFallback",
       absl::StrCat("hash groups=", hashResult.numRows(),
                    ", sorted tail groups=", restResult.numRows()));
-  // Build final hybrid result.
-  // Both `hashResult` and `restResult` are sorted by the grouping columns.
-  // (In `createResultFromHashMap()` and `doGroupBy()` respectively.)
-  // Therefore, we can merge them in O(n+m) time.
-  hashResult.mergeSortedTableIntoThis(restResult, data.columnIndices_.value());
+  // Build final hybrid result: append fallback rows and sort on grouping
+  // columns
+  hashResult.insertAtEnd(restResult);
+  Engine::sort(hashResult, data.columnIndices_.value());
   return Result{std::move(hashResult), data.columnIndices_.value(),
                 std::move(localVocab)};
 }
@@ -1867,3 +1871,8 @@ template
         const typename HashMapAggregationData<2>::template ArrayOrVector<
             ql::span<const Id>>&,
         size_t) const;
+
+// Explicit instantiation of `updateHashMapWithTable` used by unit tests.
+template std::vector<size_t> GroupByImpl::updateHashMapWithTable<1>(
+    const IdTable&, const HashMapOptimizationData&, HashMapAggregationData<1>&,
+    HashMapTimers&, bool) const;
