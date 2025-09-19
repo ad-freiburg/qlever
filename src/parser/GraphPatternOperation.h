@@ -92,8 +92,9 @@ struct Values {
 struct GroupGraphPattern {
   GraphPattern _child;
 
-  // Flag to indicate if a graph variable should match `ALL` graphs, or only
-  // `NAMED` ones. The default graph is not named.
+  // Flag to indicate if a graph variable should match `ALL` graphs (including
+  // the implicit default graph), or only `NAMED` graphs (excluding the implicit
+  // default graph).
   enum class GraphVariableBehaviour { ALL, NAMED };
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
   // fixed graph IRI, or with a variable.

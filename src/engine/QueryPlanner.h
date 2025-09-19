@@ -724,8 +724,10 @@ class QueryPlanner {
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
 
-  // Return a filter that filters the active graphs. 'Active' graphs are graphs
-  // that are either implicitly or explicitly requested by SPARQL query.
+  // Return a filter that filters the active graphs. Outside of `GRAPH` clauses,
+  // the default graphs (implicit, or specified via `FROM`) are active, and
+  // inside a `GRAPH` clause, this specified via an IRI in the graph clause or
+  // via `FROM NAMED`.
   qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
