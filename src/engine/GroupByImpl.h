@@ -448,9 +448,14 @@ class GroupByImpl : public Operation {
       LocalVocab* localVocab, const Allocator& allocator);
 
   // Helper function of `evaluateAlias`.
-  // 1. Substitute SPARQL expressions with precomputed values.
-  // 2. Performs evaluation of the unevaluated expression.
-  // 3. Reverts back the substitution changes.
+  // 1. In the Expressions for the aliases of this GROUP BY, replace all
+  //    aggregates and all occurences of the grouped variables values that have
+  //    been precomputed.
+  // 2. Evaluate the (partially substituted) expressions using the
+  //    `evaluationContext`, to get the final values of the aliases and store
+  //    them in the `result`.
+  // 3. Undo the substitution, s.t. we can reuse the expressions for additional
+  //    blocks of values etc.
   //
   // Basically, perform the fallback case if no faster approach can be chosen
   // instead.
