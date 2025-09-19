@@ -1031,6 +1031,56 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> IndexScan::makeSortedTree(
+    const std::vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  if (ql::ranges::any_of(
+          sortColumns,
+          [startOfAdditionalColumns = numVariables()](ColumnIndex columnIndex) {
+            return columnIndex >= startOfAdditionalColumns;
+          }) ||
+      scanSpecAndBlocksIsPrefiltered_) {
+    return std::nullopt;
+  }
+
+  Permutation::Enum newPermutation;
+  if (numVariables_ == 3) {
+    static constexpr std::array<std::array<size_t, 3>, 6> perms = {{
+        {1, 0, 2},  // PSO
+        {1, 2, 0},  // POS
+        {0, 1, 2},  // SPO
+        {0, 2, 1},  // SOP
+        {2, 1, 0},  // OPS
+        {2, 0, 1}   // OSP
+    }};
+
+    auto it = ql::ranges::find_if(perms, [&sortColumns](auto const& perm) {
+      return ql::ranges::equal(sortColumns, perm);
+    });
+
+    AD_CORRECTNESS_CHECK(it != perms.end());
+    newPermutation =
+        static_cast<Permutation::Enum>(ql::ranges::distance(perms.begin(), it));
+  } else {
+    AD_CORRECTNESS_CHECK(numVariables_ == 2);
+    auto permutationIndex = static_cast<int>(permutation_);
+    if (permutationIndex % 2 == 0) {
+      permutationIndex++;
+    } else {
+      permutationIndex--;
+    }
+    newPermutation = static_cast<Permutation::Enum>(permutationIndex);
+  }
+
+  auto clonedTree = clone();
+  auto& operation = dynamic_cast<IndexScan&>(*clonedTree);
+  operation.permutation_ = newPermutation;
+  operation.scanSpecAndBlocks_ = operation.getScanSpecAndBlocks();
+  return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                              std::move(clonedTree));
+}
+
+// _____________________________________________________________________________
 std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
   AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
   const auto& v = varsToKeep_.value();

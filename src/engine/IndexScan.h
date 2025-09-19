@@ -324,6 +324,9 @@ class IndexScan final : public Operation {
   // index 5. Then the regular column index for the additional column is 3 but
   // the permutation column index is 5.
   VariableToColumnMap computePermutationColumnIndices() const;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const std::vector<ColumnIndex>& sortColumns) const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
