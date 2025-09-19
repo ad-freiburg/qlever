@@ -14,7 +14,10 @@ class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+ public:
+  using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
+
+ private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
@@ -45,7 +48,7 @@ class IndexScan final : public Operation {
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
-            Graphs graphsToFilter = std::nullopt,
+            Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.

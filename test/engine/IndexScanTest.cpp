@@ -465,19 +465,35 @@ TEST(IndexScan, namedGraphs) {
   ad_utility::HashSet<TripleComponent> graphs{
       TripleComponent::Iri::fromIriref("<graph1>"),
       TripleComponent::Iri::fromIriref("<graph2>")};
-  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  auto scan = IndexScan{qec, Permutation::PSO, triple,
+                        IndexScan::Graphs::Whitelist(graphs)};
   using namespace testing;
-  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
+  // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
-              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
-  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+              AnyOf(HasSubstr("GRAPHS: Whitelist <graph1> <graph2>"),
+                    HasSubstr("GRAPHS: Whitelist <graph2> <graph1>")));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Whitelist(graphs)));
 
   auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
-  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
-  EXPECT_THAT(scanNoGraphs.getCacheKey(),
-              Not(HasSubstr("Filtered by Graphs:")));
-  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
-              Eq(std::nullopt));
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), IndexScan::Graphs::All());
+  EXPECT_THAT(scanNoGraphs.getCacheKey(), HasSubstr("GRAPHS: ALL"));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::All()));
+
+  TripleComponent defaultGraph{iri(DEFAULT_GRAPH_IRI)};
+
+  auto scanNamedGraphs = IndexScan{qec, Permutation::PSO, triple,
+                                   IndexScan::Graphs::Blacklist(defaultGraph)};
+  EXPECT_EQ(scanNamedGraphs.graphsToFilter(),
+            IndexScan::Graphs::Blacklist(defaultGraph));
+  EXPECT_THAT(scanNamedGraphs.getCacheKey(),
+              HasSubstr("GRAPHS: Blacklist "
+                        "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+                        "default-graph>"));
+  EXPECT_THAT(scanNamedGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
 TEST(IndexScan, getResultSizeOfScan) {
