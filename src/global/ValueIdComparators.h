@@ -359,7 +359,9 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
                     bool removeEmptyRanges = true) {
   if (removeEmptyRanges) {
     // Eliminate empty ranges
-    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+    input.erase(std::remove_if(input.begin(), input.end(),
+                           [](const auto& p) { return p.first == p.second; }),
+                input.end());
   }
   std::sort(input.begin(), input.end());
   if (input.empty()) {

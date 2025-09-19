@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -974,7 +975,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
-  // std::erase(columns, std::nullopt);
   columns.erase(std::remove(columns.begin(), columns.end(),
                              std::nullopt),
                 columns.end());

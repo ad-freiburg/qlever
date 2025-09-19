@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/QueryExecutionTree.h"
 
@@ -115,10 +116,13 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
 
   // Note: Variables that have been stripped are still semantically part of the
   // query, and thus can be prefiltered.
-  std::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
-    return !varToColMap.contains(pair.second) &&
-           !strippedVariables_.contains(pair.second);
-  });
+  prefilterPairs.erase(std::remove_if(prefilterPairs.begin(),
+                                      prefilterPairs.end(),
+                                      [&varToColMap, this](const auto& pair) {
+                                        return !varToColMap.contains(pair.second) &&
+                                               !strippedVariables_.contains(pair.second);
+                                      }),
+                       prefilterPairs.end());
 
   if (prefilterPairs.empty()) {
     return std::nullopt;
