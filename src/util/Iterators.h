@@ -287,8 +287,10 @@ class DetailsProvider {
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
 
-  // This just defines using which type the details have to be stored. The actual storage has to be in the derived class and must be exposed via a `getDetails()` member function (See for example `InputRangeFromGet`).
-  // and InputRangeTypeErased via CRPT.
+  // This just defines using which type the details have to be stored. The
+  // actual storage has to be in the derived class and must be exposed via a
+  // `getDetails()` member function (See for example `InputRangeFromGet`). and
+  // InputRangeTypeErased via CRPT.
   using DetailStorage =
       std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
 };
