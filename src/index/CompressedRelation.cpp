@@ -154,7 +154,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     LimitOffsetClause& limitOffset_;
     const CompressedRelationReader* reader_;
     ad_utility::Timer popTimer_{
-        ad_utility::timer::Timer::InitialStatus::Started};
+        ad_utility::timer::Timer::InitialStatus::Stopped};
     std::mutex blockIteratorMutex_;
     T blockMetadataIterator_;
     ad_utility::InputRangeTypeErased<
