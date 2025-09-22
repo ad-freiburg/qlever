@@ -361,7 +361,7 @@ void IndexImpl::createFromFiles(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromTurtleStringGenerator(
-    cppcoro::generator<std::string> files) {
+    InputFileServer::FileRange files) {
   auto makeParser = [this](auto&& files) -> std::unique_ptr<RdfParserBase> {
     return std::make_unique<RdfMultifileParser>(std::move(files),
                                                 &encodedIriManager());

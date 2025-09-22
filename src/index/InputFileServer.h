@@ -7,13 +7,16 @@
 
 #include <absl/functional/bind_front.h>
 
+#include "index/InputFileSpecification.h"
 #include "util/Log.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
 
 class InputFileServer {
-  ad_utility::data_structures::ThreadSafeQueue<std::string> queue{20};
+  ad_utility::data_structures::ThreadSafeQueue<
+      qlever::InputFileSpecificationWithFileContent>
+      queue{20};
   ad_utility::JThread serverThread_;
   unsigned short port = 9874;
   bool isRunning_ = false;
@@ -38,13 +41,35 @@ class InputFileServer {
           ad_utility::MediaType::textPlain));
       co_return;
     }
-    if (queue.push(request.body())) {
-      co_await send(ad_utility::httpUtils::createOkResponse(
-          "successfully registered a file for parsing", request,
-          ad_utility::MediaType::textPlain));
-    } else {
-      co_await send(ad_utility::httpUtils::createOkResponse(
-          "already called finish", request, ad_utility::MediaType::textPlain));
+    std::optional<std::string> graph = [&request]() {
+      auto it = request.find("graph");
+      return it == request.end() ? std::nullopt
+                                 : std::optional{std::string{it->value()}};
+    }();
+
+    qlever::InputFileSpecificationWithFileContent spec{
+        std::move(request.body()), qlever::Filetype::Turtle, std::move(graph)};
+    auto status = queue.pushIfNotFull(std::move(spec));
+    switch (status) {
+      using enum decltype(queue)::Status;
+      case Pushed:
+        co_await send(ad_utility::httpUtils::createOkResponse(
+            "successfully registered a file for parsing", request,
+            ad_utility::MediaType::textPlain));
+        break;
+      case Full:
+        co_await send(ad_utility::httpUtils::createHttpResponseFromString(
+            "input file queue is currently full, please send the file later",
+            http::status::too_many_requests, request,
+            ad_utility::MediaType::textPlain));
+        break;
+      case Finished:
+        co_await send(ad_utility::httpUtils::createHttpResponseFromString(
+            "tried to send a file after the signal for finishing was already "
+            "sent",
+            http::status::forbidden, request,
+            ad_utility::MediaType::textPlain));
+        break;
     }
     co_return;
   }
@@ -63,7 +88,9 @@ class InputFileServer {
     isRunning_ = true;
   }
 
-  cppcoro::generator<std::string> getFiles() {
+  using FileRange =
+      cppcoro::generator<qlever::InputFileSpecificationWithFileContent>;
+  FileRange getFiles() {
     while (auto opt = queue.pop()) {
       co_yield opt.value();
     }

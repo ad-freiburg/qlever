@@ -18,6 +18,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/EncodedIriManager.h"
 #include "index/InputFileSpecification.h"
+// TODO<joka921> Only extract the typedefs.
+#include "index/InputFileServer.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
@@ -721,7 +723,7 @@ class RdfMultifileParser : public RdfParserBase {
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
 
   // Construct the parser from a generator of turtle file contents.
-  RdfMultifileParser(cppcoro::generator<std::string> turtleFileContents,
+  RdfMultifileParser(InputFileServer::FileRange turtleFileContents,
                      const EncodedIriManager* encodedIriManager);
 
   // This function is needed for the interface, but always throws an exception.

@@ -60,6 +60,27 @@ class ThreadSafeQueue {
     return true;
   }
 
+  // TODO<joka921> Comment.
+  // TODO<joka921> do we really need to copy the data if we don't push it.
+  // TODO<joka921> code duplication with `push`.
+  enum struct Status { Full, Finished, Pushed };
+  Status pushIfNotFull(T value) {
+    std::unique_lock lock{mutex_};
+    popNotification_.wait(
+        lock, [this] { return queue_.size() < maxSize_ || finish_; });
+
+    if (finish_) {
+      return Status::Finished;
+    }
+    if (queue_.size() >= maxSize_) {
+      return Status::Full;
+    }
+    queue_.push(std::move(value));
+    lock.unlock();
+    pushNotification_.notify_one();
+    return Status::Pushed;
+  }
+
   // The semantics of pushing an exception are as follows: All subsequent
   // calls to `pop` will throw the `exception`, and all subsequent calls to
   // `push` will return `false`.

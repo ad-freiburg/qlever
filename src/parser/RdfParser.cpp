@@ -1329,46 +1329,60 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
 }
 
 RdfMultifileParser::RdfMultifileParser(
-    cppcoro::generator<std::string> turtleFileContents,
+    InputFileServer::FileRange turtleFileContents,
     const EncodedIriManager* encodedIriManager)
     : RdfParserBase(encodedIriManager) {
-  auto makeParser = [encodedIriManager](const std::string& turtleFileContent) {
+  auto makeParser = [encodedIriManager](
+                        qlever::InputFileSpecificationWithFileContent&& file) {
     // TODO<joka921> make this configurable;
-    auto parser = RdfStringParser<TurtleParser<Tokenizer>>(encodedIriManager);
-    parser.setInputStream(turtleFileContent);
+    auto graph = [file]() -> TripleComponent {
+      if (file.defaultGraph_.has_value()) {
+        return TripleComponent::Iri::fromIrirefWithoutBrackets(
+            file.defaultGraph_.value());
+      } else {
+        return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+      }
+    };
+    auto parser =
+        RdfStringParser<TurtleParser<Tokenizer>>(encodedIriManager, graph());
+    parser.setInputStream(std::move(file.fileContents_));
     return parser;
   };
 
-  auto parseFile = [this, makeParser](std::string turtleFileContent) {
-    // TODO<joka921> Code duplication.
-    try {
-      auto parser = makeParser(turtleFileContent);
-      auto batch = parser.parseAndReturnAllTriples();
-      bool active = finishedBatchQueue_.push(std::move(batch));
-      if (!active) {
-        // The queue was finished prematurely, stop this thread. This is
-        // important to avoid deadlocks.
-        return;
-      }
-    } catch (...) {
-      finishedBatchQueue_.pushException(std::current_exception());
-      return;
-    }
-    if (numActiveParsers_.fetch_sub(1) == 1) {
-      // We are the last parser, we have to notify the downstream code that the
-      // input has been parsed completely.
-      finishedBatchQueue_.finish();
-    }
-  };
+  auto parseFile =
+      [this, makeParser](
+          qlever::InputFileSpecificationWithFileContent&& turtleFileContent) {
+        // TODO<joka921> Code duplication.
+        try {
+          auto parser = makeParser(std::move(turtleFileContent));
+          auto batch = parser.parseAndReturnAllTriples();
+          bool active = finishedBatchQueue_.push(std::move(batch));
+          if (!active) {
+            // The queue was finished prematurely, stop this thread. This is
+            // important to avoid deadlocks.
+            return;
+          }
+        } catch (...) {
+          finishedBatchQueue_.pushException(std::current_exception());
+          return;
+        }
+        if (numActiveParsers_.fetch_sub(1) == 1) {
+          // We are the last parser, we have to notify the downstream code that
+          // the input has been parsed completely.
+          finishedBatchQueue_.finish();
+        }
+      };
 
   // Feed all the input files to the `parsingQueue_`.
-  auto makeParsers = [gen = std::make_shared<cppcoro::generator<std::string>>(
+  auto makeParsers = [gen = std::make_shared<InputFileServer::FileRange>(
                           std::move(turtleFileContents)),
                       this, parseFile]() {
     for (const auto& fileContent : *gen) {
       numActiveParsers_++;
       bool active = parsingQueue_.push(
-          absl::bind_front(parseFile, std::move(fileContent)));
+          [&parseFile, fileContent = std::move(fileContent)]() mutable {
+            parseFile(std::move(fileContent));
+          });
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.
