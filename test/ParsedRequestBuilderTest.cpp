@@ -154,10 +154,12 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperationDirect) {
   };
   EXPECT_FALSE(isGraphOpDirect("/"));
   EXPECT_FALSE(isGraphOpDirect("/?query=foo&access-token=bar"));
+  EXPECT_FALSE(isGraphOpDirect("/?default"));
+  EXPECT_FALSE(isGraphOpDirect("/?graph=foo"));
   EXPECT_TRUE(isGraphOpDirect(
       absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
   EXPECT_TRUE(isGraphOpDirect(
-      absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo")));
+      absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo.ttl")));
   EXPECT_TRUE(isGraphOpDirect(
       absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo?bar")));
   EXPECT_FALSE(isGraphOpDirect(

@@ -102,10 +102,12 @@ CPP_concept HttpRequest = detail::isHttpRequest<T>;
  * @return A http::response<http::string_body> which is ready to be sent.
  */
 inline http::response<http::string_body> createHttpResponseFromString(
-    std::string body, http::status status, MediaType mediaType,
+    std::string body, http::status status, std::optional<MediaType> mediaType,
     std::optional<bool> keepAlive, unsigned version) {
   http::response<http::string_body> response{status, version};
-  response.set(http::field::content_type, toString(mediaType));
+  if (mediaType.has_value()) {
+    response.set(http::field::content_type, toString(mediaType.value()));
+  }
   response.body() = std::move(body);
   if (keepAlive.has_value()) {
     response.keep_alive(keepAlive.value());
@@ -130,7 +132,8 @@ CPP_template(typename RequestType)(
                                                         http::status status,
                                                         const RequestType&
                                                             request,
-                                                        MediaType mediaType) {
+                                                        std::optional<MediaType>
+                                                            mediaType) {
   return createHttpResponseFromString(std::move(body), status, mediaType,
                                       request.keep_alive(), request.version());
 }
