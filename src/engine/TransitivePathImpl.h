@@ -311,7 +311,7 @@ class TransitivePathImpl : public TransitivePathBase {
           start.isVariable() && parent_.graphVariable_ == start.getVariable();
     }
 
-    // Return the ID of the target node when finding connected nodes.
+    // Return the ID of the target node when searching for connected nodes.
     // Returns either `startNode`, `graphId` or `targetId_`,
     // where the selection logic covers the following case:
     // SELECT * {
@@ -321,8 +321,8 @@ class TransitivePathImpl : public TransitivePathBase {
     //   }
     //   # else
     //   VALUES ?z { <d> }
-    //   ?z <c>+ <e> # where <e> would be the target id,
-    //                 or nullopt if <e> would be ?e instead.
+    //   ?z <c>+ <e> # <e> would be the target id
+    //   ?z <c>+ ?e  # std::nullopt would be the target id
     // }
     std::optional<Id> getTargetId(const Id& startNode,
                                   const Id& graphId) const {
@@ -335,9 +335,10 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     };
 
-    // Process a single input value from `TableColumnWithVocab::expandUndef`.
+    // Process an output ID pair from `TableColumnWithVocab::expandUndef`.
     // This method performs the core logic of the transitive hull computation
-    // and runs the hull traversal with`findConnectedNodes`.
+    // and runs the hull traversal with `findConnectedNodes`. It is called with
+    // each iteration of the `resultRange_`.
     ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
                                                      size_t currentRow,
                                                      PayloadTable& payload) {
