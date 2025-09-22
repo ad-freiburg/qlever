@@ -1360,9 +1360,12 @@ RdfMultifileParser::RdfMultifileParser(
           if (!active) {
             // The queue was finished prematurely, stop this thread. This is
             // important to avoid deadlocks.
+            AD_LOG_INFO << " `finishedBatchQueue` was finished prematurely"
+                        << std::endl;
             return;
           }
         } catch (...) {
+          AD_LOG_INFO << "Found an exception while parsing a file" << std::endl;
           finishedBatchQueue_.pushException(std::current_exception());
           return;
         }
@@ -1379,6 +1382,9 @@ RdfMultifileParser::RdfMultifileParser(
                       this, parseFile]() {
     for (const auto& fileContent : *gen) {
       numActiveParsers_++;
+      AD_LOG_INFO << "Parser received a file for graph "
+                  << fileContent.defaultGraph_.value_or("defaultGraph")
+                  << std::endl;
       bool active = parsingQueue_.push(
           [&parseFile, fileContent = std::move(fileContent)]() mutable {
             parseFile(std::move(fileContent));
@@ -1386,6 +1392,7 @@ RdfMultifileParser::RdfMultifileParser(
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.
+        AD_LOG_INFO << "parsingQueue was finished prematurely" << std::endl;
         return;
       }
     }
