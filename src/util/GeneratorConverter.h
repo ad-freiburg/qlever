@@ -1,7 +1,11 @@
-///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) Lewis Baker, Johannes Kalmbach (functionality to add details).
-// Licenced under MIT license. See LICENSE.txt for details.
-///////////////////////////////////////////////////////////////////////////////
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025, NN, BMW
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// BMW = Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
 #ifndef CPPCORO_GENERATOR_CONVERTER_HPP_INCLUDED
 #define CPPCORO_GENERATOR_CONVERTER_HPP_INCLUDED
 
