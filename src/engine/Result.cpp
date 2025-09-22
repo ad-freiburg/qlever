@@ -69,9 +69,8 @@ void assertSortOrderIsRespected(const IdTable& idTable,
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : data_{IdTableSharedLocalVocabPair{
-          std::make_shared<const IdTable>(std::move(idTable)),
-          std::move(localVocab.localVocab_)}},
+    : data_{IdTableSharedLocalVocabPair{std::move(idTable),
+                                        std::move(localVocab.localVocab_)}},
       sortedBy_{std::move(sortedBy)} {
   AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
                     nullptr);
@@ -79,8 +78,8 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(std::shared_ptr<const IdTable> idTablePtr,
-               std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
+Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
     : data_{IdTableSharedLocalVocabPair{
           std::move(idTablePtr),
           std::make_shared<const LocalVocab>(std::move(localVocab))}},
@@ -155,9 +154,13 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-
-    IdTable table =
-        std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_->clone();
+    auto& res = std::get<IdTableSharedLocalVocabPair>(data_);
+    // TODO<joka921> We have to fix this case, as we might very well apply a
+    // LIMIT/OFFSET to a cached result, we just need a better algorithm.
+    AD_CORRECTNESS_CHECK(
+        std::holds_alternative<IdTable>(res.idTableOrPtr_),
+        "`applyLimitOffset` may not be called on an immutable `Result`");
+    IdTable& table = std::get<IdTable>(res.idTableOrPtr_);
     resizeIdTable(table, limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
@@ -280,12 +283,19 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const { return *idTablePtr(); }
-
-// _____________________________________________________________________________
-const std::shared_ptr<const IdTable>& Result::idTablePtr() const {
+const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::get<IdTableSharedLocalVocabPair>(data_).idTablePtr_;
+  return std::visit(
+      [](const auto& arg) -> const IdTable& {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, IdTable>) {
+          return arg;
+        } else {
+          static_assert(std::is_same_v<T, IdTablePtr>);
+          return *arg;
+        }
+      },
+      std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);
 }
 
 // _____________________________________________________________________________

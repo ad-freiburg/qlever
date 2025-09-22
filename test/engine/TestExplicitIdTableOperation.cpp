@@ -43,13 +43,10 @@ std::shared_ptr<IdTable> createTestIdTable(size_t numRows, size_t numCols) {
 VariableToColumnMap createTestVariableMap(size_t numVars) {
   VariableToColumnMap map;
   for (size_t i = 0; i < numVars; ++i) {
-    map[Variable("?var" + std::to_string(i))] =
-        ColumnIndexAndTypeInfo{ColumnIndex{i}};
+    map[Variable("?var" + std::to_string(i))] = makeAlwaysDefinedColumn(i);
   }
   return map;
 }
-
-}  // namespace
 
 // Test fixture for ExplicitIdTableOperation tests
 class ExplicitIdTableOperationTest : public ::testing::Test {
@@ -272,8 +269,8 @@ TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
 // Test variable to column mapping
 TEST_F(ExplicitIdTableOperationTest, VariableToColumnMapping) {
   VariableToColumnMap customVars;
-  customVars[Variable("?subject")] = ColumnIndexAndTypeInfo{ColumnIndex{0}};
-  customVars[Variable("?predicate")] = ColumnIndexAndTypeInfo{ColumnIndex{1}};
+  customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
+  customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
 
   ExplicitIdTableOperation op(qec_, testTable_, customVars);
 
@@ -285,3 +282,4 @@ TEST_F(ExplicitIdTableOperationTest, VariableToColumnMapping) {
   EXPECT_EQ(computedVars.at(Variable("?predicate")).columnIndex_,
             ColumnIndex{1});
 }
+}  // namespace

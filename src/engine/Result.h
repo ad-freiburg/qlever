@@ -65,8 +65,9 @@ class Result {
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
+  using IdTablePtr = std::shared_ptr<const IdTable>;
   struct IdTableSharedLocalVocabPair {
-    std::shared_ptr<const IdTable> idTablePtr_;
+    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -174,10 +175,6 @@ class Result {
   // Const access to the underlying `IdTable`. Throw if this result is not fully
   // materialized.
   const IdTable& idTable() const;
-
-  // Const access to the underlying `IdTable` via a `shared_ptr`. Throw if this
-  // result is not fully materialized.
-  const std::shared_ptr<const IdTable>& idTablePtr() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
