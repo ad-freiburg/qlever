@@ -371,6 +371,7 @@ class InputRangeFromGet
   // If the `Details` type is empty, we don't need it to occupy any space.
   [[no_unique_address]] DetailStorage details_{};
 
+  // Required interface for the `DetailsProvider` mixin.
   DetailStorage& getDetails() { return details_; }
 };
 
