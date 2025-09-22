@@ -235,7 +235,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       // the query is reached. Keep track of various statistics.
       while (true) {
         popTimer_.cont();
-        auto&& item{queue_.get()};  // copy ellision
+        auto&& item{queue_.get()};  // copy elision
         popTimer_.stop();
 
         details().blockingTime_ = popTimer_.msecs();
