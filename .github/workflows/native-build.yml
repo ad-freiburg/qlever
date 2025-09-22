@@ -136,7 +136,6 @@ jobs:
 
       - name: Build
         # Build your program with the given configuration
-
         run: |
           KEEP_GOING=""
           if [[ "${{ matrix.use-keep-going }}" == "true" ]]; then
@@ -146,7 +145,14 @@ jobs:
           if [[ "${{ matrix.use-ignore-errors }}" == "true" ]]; then
           IGNORE_ERRORS="-i"
           fi
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc)
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
+        id: build
+
+      - name: Run gcc8 log analyzer on gcc8 builds
+        if: matrix.compiler == 'gcc' && matrix.compiler-version == 8
+        run: |
+          python ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
+        id: gcc8_log_analyzer
 
       - name: Test only whitelisted
         id: whitelisted_tests
