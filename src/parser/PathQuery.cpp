@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
 

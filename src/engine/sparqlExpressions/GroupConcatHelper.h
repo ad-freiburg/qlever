@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
