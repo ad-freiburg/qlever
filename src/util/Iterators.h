@@ -264,10 +264,14 @@ class InputRangeMixin {
 using cppcoro::NoDetails;
 
 // Details providing base for InputRangeFromGet and InputRangeTypeErased
+// CRTP mixin , it requires getDetails() in the derived class, which returns a
+// reference to a `std::variant<Details, Details*>`
 template <typename Derived, typename Details>
 class DetailsProvider {
  public:
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+
+  // Provide access to the details if they exist.
   CPP_member auto details() -> CPP_ret(Details&)(requires hasDetails) {
     auto& details{static_cast<Derived*>(this)->getDetails()};
     return std::holds_alternative<Details>(details)
@@ -275,7 +279,10 @@ class DetailsProvider {
                : *std::get<Details*>(details);
   }
 
-  void setDetailsPointer(Details* pointer) requires hasDetails {
+  // Allows to store a pointer to external details. Only available if
+  // `hasDetails` is true.
+  CPP_member auto setDetailsPointer(Details* pointer)
+      -> CPP_ret(void)(requires hasDetails) {
     AD_CONTRACT_CHECK(pointer != nullptr);
     static_cast<Derived*>(this)->getDetails() = pointer;
   }
