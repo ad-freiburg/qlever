@@ -18,7 +18,7 @@ def read_file_list(file_list_path: str) -> List[str]:
         return [line.strip() for line in f if line.strip()]
 
 
-def upload_file_with_retry(file_path: str, hostname: str, port: int, max_retries: int = 10) -> bool:
+def upload_file_with_retry(file_path: str, hostname: str, port: int, max_retries: int = 10, graph: str = None) -> bool:
     """
     Upload a single file with exponential backoff on 429 errors.
     Returns True if successful, False if max retries exceeded.
@@ -40,7 +40,10 @@ def upload_file_with_retry(file_path: str, hostname: str, port: int, max_retries
     
     while retry_count < max_retries:
         try:
-            response = requests.post(url, data=file_content, timeout=60)
+            headers = {}
+            if graph:
+                headers["graph"] = graph
+            response = requests.post(url, data=file_content, headers=headers, timeout=60)
             
             if response.status_code == 200:
                 print(f"Successfully uploaded: {file_path}")
@@ -106,7 +109,7 @@ def main():
     # Upload each file
     failed_files = []
     for file_path in file_list:
-        if not upload_file_with_retry(file_path, args.hostname, args.port, args.max_retries):
+        if not upload_file_with_retry(file_path, args.hostname, args.port, args.max_retries, file_path):
             failed_files.append(file_path)
     
     # Send finish signal if all files uploaded successfully
