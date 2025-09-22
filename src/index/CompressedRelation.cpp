@@ -226,7 +226,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     };
 
     std::optional<IdTable> get() override {
-      if (std::exchange(needsStart_, false) {
+      if (std::exchange(needsStart_, false)) {
         start();
       }
 
