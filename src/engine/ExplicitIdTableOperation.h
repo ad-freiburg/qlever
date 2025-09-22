@@ -27,9 +27,7 @@ class ExplicitIdTableOperation : public Operation {
   // Const and public getter for testing.
   size_t sizeEstimate() const { return idTable_->numRows(); }
 
- private:
   // Overridden methods from the `Operation` base class.
-  Result computeResult(bool requestLaziness) override;
   std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
@@ -41,6 +39,7 @@ class ExplicitIdTableOperation : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
   std::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
+  Result computeResult(bool requestLaziness) override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H

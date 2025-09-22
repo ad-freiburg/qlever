@@ -210,6 +210,13 @@ class Server {
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
 
+  // Configure named query pinning on QueryExecutionContext.
+  // Validates access token and sets pinWithExplicitName if pinNamed is
+  // provided.
+  static void configurePinnedNamedQuery(
+      const std::optional<std::string>& pinNamed, bool accessTokenOk,
+      QueryExecutionContext& qec);
+
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation,
                          const ad_utility::Timer& requestTimer,

@@ -286,15 +286,22 @@ auto Server::prepareOperation(
                             sortPerformanceEstimator_, &namedQueryCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
+  configurePinnedNamedQuery(pinNamed, accessTokenOk, qec);
+  return std::tuple{std::move(qec), std::move(cancellationHandle),
+                    std::move(cancelTimeoutOnDestruction)};
+}
+
+// _____________________________________________________________________________
+void Server::configurePinnedNamedQuery(
+    const std::optional<std::string>& pinNamed, bool accessTokenOk,
+    QueryExecutionContext& qec) {
   if (pinNamed.has_value()) {
     if (!accessTokenOk) {
       throw std::runtime_error(
           "The pinning of named queries requires a valid access token");
     }
-    qec.pinWithExplicitName() = std::move(pinNamed);
+    qec.pinWithExplicitName() = pinNamed.value();
   }
-  return std::tuple{std::move(qec), std::move(cancellationHandle),
-                    std::move(cancelTimeoutOnDestruction)};
 }
 
 // _____________________________________________________________________________

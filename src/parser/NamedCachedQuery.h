@@ -18,25 +18,15 @@ class NamedCachedQuery : public MagicServiceQuery {
       : identifier_{std::move(identifier)} {}
 
   // Currently the body of the SERVICE clause must be empty.
-  void addParameter([[maybe_unused]] const SparqlTriple& triple) override {
-    throwBecauseNotEmpty();
-  }
+  void addParameter([[maybe_unused]] const SparqlTriple& triple) override;
 
   // Return the name of the named query, and check, that the configuration is
   // valid (which currently means, that the body of the SERVICE clause was
   // empty.
-  const std::string& validateAndGetIdentifier() const {
-    if (childGraphPattern_.has_value()) {
-      throwBecauseNotEmpty();
-    }
-    return identifier_;
-  }
+  const std::string& validateAndGetIdentifier() const;
 
  private:
-  [[noreturn]] static void throwBecauseNotEmpty() {
-    throw std::runtime_error{
-        "The body of a named cache query request must be empty"};
-  }
+  [[noreturn]] static void throwBecauseNotEmpty();
 };
 }  // namespace parsedQuery
 
