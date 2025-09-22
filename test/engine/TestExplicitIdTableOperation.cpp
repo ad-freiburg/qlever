@@ -12,7 +12,7 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/QueryExecutionContext.h"
 #include "global/ValueId.h"
-#include "util/TripleComponent.h"
+#include "parser/TripleComponent.h"
 
 using ad_utility::testing::makeAllocator;
 using ad_utility::testing::VocabId;
@@ -90,7 +90,7 @@ TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
   EXPECT_EQ(op.getMultiplicity(1), 1.0f);
 
   // Test getDescriptor
-  EXPECT_EQ(op.getDescriptor(), "Explicitly IdTable");
+  EXPECT_EQ(op.getDescriptor(), "Explicit Result");
 
   // Test getCacheKeyImpl
   EXPECT_EQ(op.getCacheKeyImpl(), "");
@@ -124,7 +124,7 @@ TEST_F(ExplicitIdTableOperationTest, KnownEmptyResultWithNonEmptyTable) {
 // Test computeResult functionality
 TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
   ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
-                              testSortedColumns_, testLocalVocab_);
+                              testSortedColumns_, testLocalVocab_.clone());
 
   auto result = op.computeResult(false);
 
@@ -148,7 +148,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
 
 TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
   ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
-                              testSortedColumns_, testLocalVocab_);
+                              testSortedColumns_, testLocalVocab_.clone());
 
   // Test with requestLaziness = true (should still return materialized result)
   auto result = op.computeResult(true);
@@ -175,8 +175,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   // Check that local vocab is preserved
   const auto& resultLocalVocab = result.localVocab();
   auto words = resultLocalVocab.getAllWordsForTesting();
-  EXPECT_TRUE(std::find(words.begin(), words.end(), "\"test_word\"") !=
-              words.end());
+  EXPECT_TRUE(std::find(words.begin(), words.end(), testEntry) != words.end());
 }
 
 // Test cloneImpl functionality
@@ -224,9 +223,9 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   auto originalWords = originalLocalVocab.getAllWordsForTesting();
   auto clonedWords = clonedLocalVocab.getAllWordsForTesting();
   EXPECT_TRUE(std::find(originalWords.begin(), originalWords.end(),
-                        "\"clone_test\"") != originalWords.end());
-  EXPECT_TRUE(std::find(clonedWords.begin(), clonedWords.end(),
-                        "\"clone_test\"") != clonedWords.end());
+                        testEntry) != originalWords.end());
+  EXPECT_TRUE(std::find(clonedWords.begin(), clonedWords.end(), testEntry) !=
+              clonedWords.end());
 }
 
 // Test construction with different parameters

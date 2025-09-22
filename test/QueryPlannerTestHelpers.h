@@ -487,6 +487,10 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
+// Match an `ExplicitIdTableOperation`, but only test its size estimate (which
+// is equal to the actual number of rows in the result). More detailed tests for
+// this operation can be found in `ExplicitIdTableOperationTest.cpp` and
+// `NamedQueryCacheTest.cpp`.
 inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
   auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
                        ::testing::Eq(sizeEstimate));
