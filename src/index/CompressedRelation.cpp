@@ -226,9 +226,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     };
 
     std::optional<IdTable> get() override {
-      if (needsStart_) {
+      if (std::exchange(needsStart_, false) {
         start();
-        needsStart_ = false;
       }
 
       // Yield the blocks (in the right order) as soon as they become
