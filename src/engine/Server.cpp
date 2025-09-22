@@ -481,11 +481,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           std::move(request), send, timeLimit.value(), plannedQuery);
     }
   };
-  auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery =
-        SparqlParser::parseQuery(query.query_, query.datasetClauses_);
+    auto parsedQuery = SparqlParser::parseQuery(
+        &index_.encodedIriManager(), query.query_, query.datasetClauses_);
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
@@ -498,7 +498,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // We need to copy the update string because `visitOperation` below also
     // needs it.
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index().getBlankNodeManager(), update.update_, update.datasetClauses_);
+        index().getBlankNodeManager(), &index().encodedIriManager(),
+        update.update_, update.datasetClauses_);
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
@@ -1085,6 +1086,15 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
+  if (to_status_class(responseStatus) == http::status_class::informational ||
+      responseStatus == http::status::no_content ||
+      responseStatus == http::status::not_modified) {
+    // HTTP mandates empty response bodies for the status codes 1xx, 204 and
+    // 304.
+    auto resp =
+        createHttpResponseFromString("", responseStatus, request, std::nullopt);
+    co_return co_await send(std::move(resp));
+  }
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     if (metadata) {

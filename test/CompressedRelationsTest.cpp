@@ -97,7 +97,6 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 
   VectorTable exp;
   for (const auto& row : expected) {
-    // exp.emplace_back(row.begin(), row.end());
     exp.emplace_back();
     for (auto& el : row) {
       exp.back().push_back(el);
@@ -144,53 +143,51 @@ compressedRelationTestWriteCompressedRelations(
     });
   }));
 
-  // First create the on-disk permutation.
   addGraphColumnIfNecessary(inputs);
   size_t numColumns = getNumColumns(inputs) + 1;
   AD_CORRECTNESS_CHECK(numColumns >= 4);
-  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
-                                  blocksize};
-  std::vector<CompressedRelationMetadata> metaData;
-  {
-    size_t i = 0;
+  auto generator =
+      [&](size_t sorterBlockSize) -> cppcoro::generator<IdTableStatic<0>> {
+    IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
     for (const auto& input : inputs) {
-      std::string bufferFilename =
-          filename + ".buffers." + std::to_string(i) + ".dat";
-      IdTable buffer{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
-      size_t numBlocks = 0;
-
-      auto addBlock = [&]() {
-        if (buffer.empty()) {
-          return;
-        }
-        writer.addBlockForLargeRelation(
-            V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
-        buffer.clear();
-        ++numBlocks;
-      };
       for (const auto& arr : input.col1And2_) {
         std::vector row{V(input.col0_)};
         ql::ranges::transform(arr, std::back_inserter(row), V);
         buffer.push_back(row);
-        if (buffer.numRows() > writer.blocksize()) {
-          addBlock();
+        if (buffer.numRows() > sorterBlockSize) {
+          co_yield buffer;
+          buffer.clear();
         }
       }
-      if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
-        addBlock();
-        // The last argument is the number of distinct elements in `col1`. We
-        // store a dummy value here that we can check later.
-        metaData.push_back(writer.finishLargeRelation(i + 1));
-      } else {
-        metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
-                                                   buffer.asStaticView<0>()));
-      }
-      buffer.clear();
-      numBlocks = 0;
-      ++i;
     }
-  }
-  auto blocks = std::move(writer).getFinishedBlocks();
+    if (!buffer.empty()) {
+      co_yield buffer;
+    }
+  };
+
+  // First create the on-disk permutation.
+  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
+                                  blocksize};
+  std::vector<CompressedRelationMetadata> metaData;
+  CompressedRelationWriter::WriterAndCallback wc1{
+      writer, [&](ql::span<const CompressedRelationMetadata> metadata) {
+        metaData.insert(metaData.end(), metadata.begin(), metadata.end());
+      }};
+
+  CompressedRelationWriter twinWriter{
+      numColumns, ad_utility::File{filename + ".twinPermutation", "w"},
+      blocksize};
+  std::vector<CompressedRelationMetadata> twinMetaData;
+  CompressedRelationWriter::WriterAndCallback wc2{
+      twinWriter, [&](ql::span<const CompressedRelationMetadata> metadata) {
+        twinMetaData.insert(twinMetaData.end(), metadata.begin(),
+                            metadata.end());
+      }};
+
+  auto res = CompressedRelationWriter::createPermutationPair(
+      filename + "sorter-basename", wc1, wc2, generator(5),
+      qlever::KeyOrder{0, 1, 2, 3}, {});
+  auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
   ad_utility::serialization::ByteBufferWriteSerializer w;
   w << metaData;
@@ -200,8 +197,6 @@ compressedRelationTestWriteCompressedRelations(
   ad_utility::serialization::ByteBufferReadSerializer r{std::move(w).data()};
   r >> metaData;
   r >> blocks;
-
-  EXPECT_EQ(metaData.size(), inputs.size());
 
   for (size_t i : ad_utility::integerRange(blocks.size())) {
     EXPECT_EQ(blocks.at(i).blockIndex_, i);
@@ -318,7 +313,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   std::vector<ColumnIndex> additionalColumns;
   ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
-  auto getMetadata = [&, &metaData = metaData](size_t i) {
+  auto getMetadata = [&](size_t i) {
     Id col0 = V(inputs[i].col0_);
     auto it = ql::ranges::lower_bound(metaData, col0, {},
                                       &CompressedRelationMetadata::col0Id_);
@@ -339,10 +334,6 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       const auto& m = getMetadata(i);
       ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
       ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
-      //  The number of distinct elements in `col1` was passed in as `i + 1` for
-      //  testing purposes, so this is the expected multiplicity.
-      ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
-                      m.multiplicityCol1_);
     }
 
     // Scan for all distinct `col0` and check that we get the expected result.
@@ -719,21 +710,37 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
+                  size_t numHandledBlocksExpected,
                   source_location l = source_location::current()) {
     auto t = generateLocationTrace(l);
-    auto result = CompressedRelationReader::getBlocksForJoin(
-        joinColumn, *metadataAndBlocks);
+    auto [result, numHandledBlocks] =
+        CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                   *metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
+    EXPECT_EQ(numHandledBlocks, numHandledBlocksExpected);
   };
   // We have fixed the `col0Id` to be 42. The col1/2Ids of the matching blocks
   // are as follows (starting at `block2`)
   // [(3, 0)-(4, 12)], [(4, 13)-(6, 9)]
 
   // Tests for a fixed col0Id, so the join is on the middle column.
-  test({V(1), V(3), V(17), V(29)}, {block2});
-  test({V(2), V(3), V(4), V(5)}, {block2, block3});
-  test({V(4)}, {block2, block3});
-  test({V(6)}, {block3});
+  test({}, {}, 0);
+  // All values smaller than the smallest block.
+  test({V(1), V(2)}, {}, 0);
+  // None of the values matches a block, but the largest value is larger than
+  // the largest block.
+  test({V(1), V(2), V(7)}, {}, 2);
+
+  // Largest value contained in the first block.
+  test({V(3)}, {block2}, 1);
+
+  // Although only `block2` matches, we have also completely handled `block3`
+  // since `V(29)` is larger than the largest value in `block3`, we thus have
+  // two blocks handled.
+  test({V(1), V(3), V(17), V(29)}, {block2}, 2);
+  test({V(2), V(3), V(4), V(5)}, {block2, block3}, 2);
+  test({V(4)}, {block2, block3}, 2);
+  test({V(6)}, {block3}, 2);
 
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
@@ -741,9 +748,13 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   metadataAndBlocks.emplace(
       SpecBlocksBounds{{scanSpec, getBlockMetadataRangesfromVec(blocks)},
                        {{V(42), V(4), V(11), g}, {V(42), V(4), V(738), g}}});
-  test({V(11), V(27), V(30)}, {block2, block3});
-  test({V(12)}, {block2});
-  test({V(13)}, {block3});
+  test({V(11), V(27), V(30)}, {block2, block3}, 2);
+  test({V(12)}, {block2}, 1);
+  test({V(13)}, {block3}, 2);
+
+  // Test empty blocks edge case
+  metadataAndBlocks.emplace(SpecBlocksBounds{{scanSpec, {}}, {}});
+  test({V(1)}, {}, 0);
 }
 
 TEST(CompressedRelationReader, getBlocksForJoin) {
@@ -1068,5 +1079,116 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
+
+    // Edge case, all graphs are filtered out
+    graphs.clear();
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector({}));
+
+    // std::nullopt matches all graphs.
+    spec =
+        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    std::array additionalColumns{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector({{3, 4, 0},
+                                               {3, 4, 1},
+                                               {7, 4, 0},
+                                               {8, 4, 0},
+                                               {8, 5, 0},
+                                               {8, 5, 1},
+                                               {9, 4, 1},
+                                               {9, 5, 1}}))
+        << "Failed with blocksize " << blocksize.getBytes();
+
+    // std::nullopt matches all graphs, but without `additionalColumns` they
+    // should be deduplicated.
+    spec =
+        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
+        << "Failed with blocksize " << blocksize.getBytes();
   }
+}
+
+// _____________________________________________________________________________
+TEST(ScanSpecAndBlocks, removePrefix) {
+  using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
+  std::vector<RelationInput> inputs;
+  inputs.push_back(RelationInput{42,
+                                 {{0, 0, 0},
+                                  {1, 0, 0},
+                                  {2, 0, 0},
+                                  {3, 0, 0},
+                                  {4, 0, 0},
+                                  {5, 0, 0},
+                                  {6, 0, 0},
+                                  {7, 0, 0}}});
+  auto [blocks, metadata, reader] =
+      writeAndOpenRelations(inputs, "removePrefix", 16_B);
+  ScanSpecification spec{
+      std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
+
+  auto getSize = [](auto range) {
+    size_t counter = 0;
+    for ([[maybe_unused]] const auto& _ : range) {
+      counter++;
+    }
+    return counter;
+  };
+
+  // Run for 100 times using different splits generated by
+  // `getBlockMetadataRangesfromVec()`.
+  for (size_t i = 0; i < 100; i++) {
+    ScanSpecAndBlocks specAndBlocks{spec,
+                                    getBlockMetadataRangesfromVec(blocks)};
+
+    EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 4);
+
+    specAndBlocks.removePrefix(1);
+    EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 3);
+
+    specAndBlocks.removePrefix(2);
+    EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 1);
+
+    // Should not overrun.
+    specAndBlocks.removePrefix(3);
+    EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 0);
+
+    // Should be no-op.
+    specAndBlocks.removePrefix(12);
+    EXPECT_EQ(getSize(specAndBlocks.getBlockMetadataView()), 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedBlockMetadata, invariantChecks) {
+  std::vector<CompressedBlockMetadata> blocks;
+  blocks.emplace_back();
+  blocks.back().firstTriple_ = {V(1), V(2), V(3), V(13)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(13)};
+  blocks.emplace_back();
+  // Violates the precondition, the first triple of the second block is not
+  // larger than the last triple of the first block.
+  blocks.back().firstTriple_ = {V(1), V(2), V(3), V(13)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(13)};
+
+  EXPECT_FALSE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
+
+  // The blocks are correctly sorted, but there are duplicates (when
+  // disregarding the graph) across blocks.
+  blocks.back().firstTriple_ = {V(1), V(2), V(4), V(14)};
+  blocks.back().lastTriple_ = {V(1), V(2), V(4), V(15)};
+  EXPECT_FALSE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
+
+  // Now everything is consistent and the check should work.
+  blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
+  EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }

@@ -14,7 +14,9 @@
 #include <ctre-unicode.hpp>
 #include <iostream>
 
+#include "backports/keywords.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -35,9 +37,9 @@ class ParseableDuration {
  public:
   ParseableDuration() = default;
   // Implicit conversion is on purpose!
-  explicit(false) ParseableDuration(DurationType duration)
-      : duration_{duration} {}
-  explicit(false) operator DurationType() const { return duration_; }
+  QL_EXPLICIT(false)
+  ParseableDuration(DurationType duration) : duration_{duration} {}
+  QL_EXPLICIT(false) operator DurationType() const { return duration_; }
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.

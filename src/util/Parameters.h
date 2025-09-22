@@ -11,8 +11,9 @@
 #include <concepts>
 #include <optional>
 #include <tuple>
-#include <type_traits>
 
+#include "backports/keywords.h"
+#include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprSmallString.h"
 #include "util/HashMap.h"
@@ -266,11 +267,11 @@ class Parameters {
   static constexpr auto _nameToIndex = []() {
     size_t i = 0;
     // {firstName, 0}, {secondName, 1}, {thirdName, 2}...
-    auto arr = std::array{std::pair{ParameterTypes::name, i++}...};
+    auto arr = std::array{boost::hana::pair{ParameterTypes::name, i++}...};
 
     // Assert that the indices are in fact correct.
     for (size_t k = 0; k < arr.size(); ++k) {
-      if (arr[k].second != k) {
+      if (boost::hana::second(arr[k]) != k) {
         throw std::runtime_error{
             "Wrong order in parameter array, this should never happen."};
       }
@@ -292,8 +293,8 @@ class Parameters {
 
  public:
   Parameters() = delete;
-  explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
-      : _parameters{std::move(ts)...} {}
+  QL_EXPLICIT(sizeof...(ParameterTypes) == 1)
+  Parameters(ParameterTypes... ts) : _parameters{std::move(ts)...} {}
 
   // Get value for parameter `Name` known at compile time.
   // The parameter is returned  by value, since

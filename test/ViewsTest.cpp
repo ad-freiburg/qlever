@@ -147,95 +147,9 @@ TEST(Views, integerRange) {
 }
 
 // __________________________________________________________________________
-TEST(Views, inPlaceTransform) {
-  std::vector v{0, 1, 2, 3, 4, 5};
-  auto twice = [](int& i) { i *= 2; };
-  auto transformed = ad_utility::inPlaceTransformView(v, twice);
-  std::vector<int> res1;
-  std::vector<int> res2;
-  std::vector<int> res3;
-  for (auto it = transformed.begin(); it != transformed.end(); ++it) {
-    res1.push_back(*it);
-    res2.push_back(*it);
-    res3.push_back(*it);
-  }
-
-  EXPECT_THAT(res1, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
-  // The original range was also modified.
-  EXPECT_THAT(v, ::testing::ElementsAre(0, 2, 4, 6, 8, 10));
-
-  EXPECT_THAT(res2, ::testing::ElementsAreArray(res1));
-  EXPECT_THAT(res3, ::testing::ElementsAreArray(res1));
-}
-
-// __________________________________________________________________________
 
 std::string_view toView(ql::span<char> span) {
   return {span.data(), span.size()};
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
-  auto range =
-      std::string_view{"\nabc\ndefghij\n"} |
-      ql::views::transform([](char c) { return ql::ranges::single_view(c); });
-  auto lineByLineGenerator =
-      ad_utility::reChunkAtSeparator(std::move(range), '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "defghij");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
-  auto range = std::string_view{"abc"} | ql::views::transform([](char c) {
-                 return ql::ranges::single_view(c);
-               });
-
-  auto lineByLineGenerator =
-      ad_utility::reChunkAtSeparator(std::move(range), '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
-}
-
-// __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
-  using namespace std::string_view_literals;
-
-  auto lineByLineGenerator = ad_utility::reChunkAtSeparator(
-      std::vector{"\nabc\nd"sv, "efghij"sv, "\n"sv}, '\n');
-
-  auto iterator = lineByLineGenerator.begin();
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "abc");
-
-  ++iterator;
-  ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(toView(*iterator), "defghij");
-
-  ++iterator;
-  ASSERT_EQ(iterator, lineByLineGenerator.end());
 }
 
 TEST(Views, CallbackOnEndView) {

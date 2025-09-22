@@ -122,6 +122,8 @@ add_subdirectory(parser)
 add_subdirectory(index)
 add_subdirectory(backports)
 add_subdirectory(rdfTypes)
+add_subdirectory(joinAlgorithms)
+add_subdirectory(libqlever)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -445,7 +447,7 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(UrlParserTest)
 
-addLinkAndDiscoverTest(ServerTest engine)
+addLinkAndDiscoverTest(ServerTest engine server)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 

@@ -9,10 +9,10 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
-#include <type_traits>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "util/Exception.h"
