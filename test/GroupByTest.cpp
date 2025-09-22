@@ -2295,6 +2295,62 @@ TEST(GroupBy, countDistinctGraph) {
   EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, strOnGroupedVariableWorks) {
+  // This is a regression test for
+  // https://github.com/ad-freiburg/qlever/issues/2349
+  auto* qec = getQec();
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIdTableFromVector({{1}}, &Id::makeFromInt));
+  idTables.push_back(makeIdTableFromVector({{2}, {2}, {3}}, &Id::makeFromInt));
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{Variable{"?x"}}, true,
+      std::vector<ColumnIndex>{0});
+
+  Alias alias{SparqlExpressionPimpl{
+                  makeStrExpression(
+                      std::make_unique<VariableExpression>(Variable{"?x"})),
+                  "STR(?x) as ?y"},
+              Variable{"?y"}};
+  GroupBy groupBy{
+      qec, {Variable{"?x"}}, {std::move(alias)}, std::move(subtree)};
+
+  auto result = groupBy.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  std::vector<Result::IdTableVocabPair> resultPairs;
+  for (auto& pair : result.idTables()) {
+    resultPairs.push_back(std::move(pair));
+  }
+
+  ASSERT_EQ(resultPairs.size(), 2);
+  const auto& [idTable0, localVocab0] = resultPairs.at(0);
+  EXPECT_EQ(localVocab0.size(), 2);
+  auto localVocabIndex0 = localVocab0.getIndexOrNullopt(
+      LocalVocabEntry::fromStringRepresentation("\"1\""));
+  ASSERT_TRUE(localVocabIndex0.has_value());
+  auto localVocabIndex1 = localVocab0.getIndexOrNullopt(
+      LocalVocabEntry::fromStringRepresentation("\"2\""));
+  ASSERT_TRUE(localVocabIndex1.has_value());
+  EXPECT_EQ(idTable0,
+            makeIdTableFromVector(
+                {{Id::makeFromInt(1),
+                  Id::makeFromLocalVocabIndex(localVocabIndex0.value())},
+                 {Id::makeFromInt(2),
+                  Id::makeFromLocalVocabIndex(localVocabIndex1.value())}}));
+
+  const auto& [idTable1, localVocab1] = resultPairs.at(1);
+  EXPECT_EQ(localVocab1.size(), 1);
+  auto localVocabIndex2 = localVocab1.getIndexOrNullopt(
+      LocalVocabEntry::fromStringRepresentation("\"3\""));
+  ASSERT_TRUE(localVocabIndex2.has_value());
+  EXPECT_EQ(idTable1,
+            makeIdTableFromVector(
+                {{Id::makeFromInt(3),
+                  Id::makeFromLocalVocabIndex(localVocabIndex2.value())}}));
+}
+
 namespace {
 class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
  protected:

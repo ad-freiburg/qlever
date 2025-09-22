@@ -447,6 +447,27 @@ class GroupByImpl : public Operation {
       size_t dataIndex, size_t beginIndex, size_t endIndex,
       LocalVocab* localVocab, const Allocator& allocator);
 
+  // Helper function of `evaluateAlias`.
+  // 1. In the Expressions for the aliases of this GROUP BY, replace all
+  //    aggregates and all occurrences of the grouped variables values that have
+  //    been precomputed.
+  // 2. Evaluate the (partially substituted) expressions using the
+  //    `evaluationContext`, to get the final values of the aliases and store
+  //    them in the `result`.
+  // 3. Undo the substitution, s.t. we can reuse the expressions for additional
+  //    blocks of values etc.
+  //
+  // Basically, perform the fallback case if no faster approach can be chosen
+  // instead.
+  template <size_t NUM_GROUP_COLUMNS>
+  static void substituteAndEvaluate(
+      HashMapAliasInformation& alias, IdTable* result,
+      sparqlExpression::EvaluationContext& evaluationContext,
+      const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+      LocalVocab* localVocab, const Allocator& allocator,
+      std::vector<HashMapAggregateInformation>& info,
+      const std::vector<HashMapGroupedVariableInformation>& substitutions);
+
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
   // alias
@@ -493,11 +514,13 @@ class GroupByImpl : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
 
-  // Substitute the group values for all occurrences of a group variable.
-  static void substituteGroupVariable(
-      const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
-      size_t beginIndex, size_t count, size_t columnIndex,
-      const Allocator& allocator);
+  // Substitute the group values for all occurrences of a group variable. Return
+  // a vector of the replaced `SparqlExpression`s to potentially put them pack
+  // afterwards.
+  static std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+  substituteGroupVariable(const std::vector<ParentAndChildIndex>& occurrences,
+                          IdTable* resultTable, size_t beginIndex, size_t count,
+                          size_t columnIndex, const Allocator& allocator);
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`. Return a vector of
