@@ -7,7 +7,7 @@
 #include <absl/strings/str_split.h>
 
 #include "parser/MagicServiceIriConstants.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "parser/SparqlTriple.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
