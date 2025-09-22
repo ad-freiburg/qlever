@@ -147,8 +147,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 
   struct Generator
       : public ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
-    T beginBlock_;
-    T endBlock_;
+    const T beginBlock_;
+    const T endBlock_;
+    T blockMetadataIterator_;
     const ScanImplConfig& scanConfig_;
     CancellationHandle cancellationHandle_;
     LimitOffsetClause& limitOffset_;
@@ -156,7 +157,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     ad_utility::Timer popTimer_{
         ad_utility::timer::Timer::InitialStatus::Stopped};
     std::mutex blockIteratorMutex_;
-    T blockMetadataIterator_;
     ad_utility::InputRangeTypeErased<
         std::optional<DecompressedBlockAndMetadata>>
         queue_;
@@ -168,11 +168,11 @@ CompressedRelationReader::asyncParallelBlockGenerator(
               const CompressedRelationReader* reader)
         : beginBlock_{beginBlock},
           endBlock_{endBlock},
+          blockMetadataIterator_{beginBlock},
           scanConfig_{scanConfig},
           cancellationHandle_{cancellationHandle},
           limitOffset_{limitOffset},
-          reader_{reader},
-          blockMetadataIterator_{beginBlock} {}
+          reader_{reader} {}
 
     void start() {
       auto numThreads{RuntimeParameters().get<"lazy-index-scan-num-threads">()};
