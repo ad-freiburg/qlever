@@ -26,7 +26,7 @@ template <typename T>
 class ThreadSafeQueue {
   std::exception_ptr pushedException_;
   std::queue<T> queue_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::condition_variable pushNotification_;
   std::condition_variable popNotification_;
   bool finish_ = false;
@@ -79,6 +79,11 @@ class ThreadSafeQueue {
     lock.unlock();
     pushNotification_.notify_one();
     return Status::Pushed;
+  }
+
+  bool canPush() const {
+    std::lock_guard lock{mutex_};
+    return finish_ || queue_.size() < maxSize_;
   }
 
   // The semantics of pushing an exception are as follows: All subsequent

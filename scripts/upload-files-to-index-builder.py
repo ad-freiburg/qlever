@@ -40,17 +40,35 @@ def upload_file_with_retry(file_path: str, hostname: str, port: int, max_retries
     
     while retry_count < max_retries:
         try:
-            headers = {}
+            # First, check if we can upload with Can-Upload request
+            can_upload_headers = {"Can-Upload": "true"}
             if graph:
-                headers["graph"] = graph
-            response = requests.post(url, data=file_content, headers=headers, timeout=60)
+                can_upload_headers["graph"] = graph
+            
+            can_upload_response = requests.get(url, headers=can_upload_headers, timeout=60)
+            
+            if can_upload_response.status_code == 429:  # Too Many Requests on Can-Upload
+                retry_count += 1
+                print(f"Rate limited on Can-Upload check. Retrying in {backoff_time}s (attempt {retry_count}/{max_retries})")
+                time.sleep(backoff_time)
+                backoff_time = min(backoff_time * 2, 60)  # Cap at 60 seconds
+                continue
+            elif can_upload_response.status_code != 200:
+                print(f"Can-Upload check failed for {file_path}: HTTP {can_upload_response.status_code}", file=sys.stderr)
+                return False
+            
+            # Can-Upload returned 200, now send the actual file
+            upload_headers = {}
+            if graph:
+                upload_headers["graph"] = graph
+            response = requests.post(url, data=file_content, headers=upload_headers, timeout=60)
             
             if response.status_code == 200:
                 print(f"Successfully uploaded: {file_path}")
                 return True
-            elif response.status_code == 429:  # Too Many Requests
+            elif response.status_code == 429:  # Too Many Requests on actual upload
                 retry_count += 1
-                print(f"Rate limited. Retrying in {backoff_time}s (attempt {retry_count}/{max_retries})")
+                print(f"Rate limited on upload. Retrying in {backoff_time}s (attempt {retry_count}/{max_retries})")
                 time.sleep(backoff_time)
                 backoff_time = min(backoff_time * 2, 60)  # Cap at 60 seconds
             else:
@@ -71,7 +89,7 @@ def send_finish_signal(hostname: str, port: int) -> bool:
     headers = {"Finish-Index-Building": "true"}
     
     try:
-        response = requests.post(url, headers=headers, timeout=60)
+        response = requests.get(url, headers=headers, timeout=60)
         if response.status_code == 200:
             print("Successfully sent finish signal")
             return True

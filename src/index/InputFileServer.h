@@ -33,7 +33,18 @@ class InputFileServer {
 
   net::awaitable<void> processRequest(http::request<http::string_body> request,
                                       auto&& send) {
-    auto it = request.find("Finish-Index-Building");
+    auto it = request.find("Can-Upload");
+    if (it != request.end()) {
+      bool canPush = queue.canPush();
+      auto status =
+          canPush ? http::status::ok : http::status::too_many_requests;
+      co_await send(ad_utility::httpUtils::createHttpResponseFromString(
+          "Responding to Can-Upload query with status code ", status, request,
+          ad_utility::MediaType::textPlain));
+      co_return;
+    }
+
+    it = request.find("Finish-Index-Building");
     if (it != request.end() && it->value() == "true") {
       queue.finish();
       co_await send(ad_utility::httpUtils::createOkResponse(
