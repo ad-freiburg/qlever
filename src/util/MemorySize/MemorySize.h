@@ -409,8 +409,9 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   }
 
   // Check for overflow.
-  if (static_cast<double>(c) >
-      detail::sizeTDivision(detail::size_t_max, memoryInBytes_)) {
+  if (memoryInBytes_ > 0 &&
+      (static_cast<double>(c) >
+       detail::sizeTDivision(detail::size_t_max, memoryInBytes_))) {
     throw std::overflow_error(
         "Overflow error: Multiplicaton of the given 'MemorySize' with the "
         "given constant is not possible. It would result in a size_t "
