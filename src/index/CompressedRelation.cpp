@@ -387,7 +387,7 @@ CompressedRelationReader::lazyScan(
       createMiddleBlocksGenerator,
       yieldMiddleBlocks,
       yieldLastBlock,
-      check
+      afterLastYieldedBlock
     };
 
     using CompressedBlockMetadataIterator =
@@ -464,7 +464,7 @@ CompressedRelationReader::lazyScan(
 
           state_ = (beginBlockMetadata_ + 1 < endBlockMetadata_)
                        ? State::createMiddleBlocksGenerator
-                       : State::check;
+                       : State::afterLastYieldedBlock;
 
           if (!block.empty()) {
             return block;
@@ -496,7 +496,7 @@ CompressedRelationReader::lazyScan(
         case State::yieldLastBlock: {
           {
             auto block = getPrunedBlockAndUpdateDetails(endBlockMetadata_ - 1);
-            state_ = State::check;
+            state_ = State::afterLastYieldedBlock;
 
             if (!block.empty()) {
               return block;
@@ -505,14 +505,14 @@ CompressedRelationReader::lazyScan(
         }
           [[fallthrough]];
 
-        case State::check:
-          check();
+        case State::afterLastYieldedBlock:
+          checkInvariantsAtEnd();
       }
 
       return std::nullopt;
     }
 
-    void check() {
+    void checkInvariantsAtEnd() {
       // Some sanity checks.
       const auto& limit = originalLimit_._limit;
 
