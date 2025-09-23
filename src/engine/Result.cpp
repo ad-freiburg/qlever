@@ -78,6 +78,18 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
+Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : data_{IdTableSharedLocalVocabPair{
+          std::move(idTablePtr),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
+      sortedBy_{std::move(sortedBy)} {
+  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
+                    nullptr);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
+}
+
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), std::move(sortedBy),
@@ -142,8 +154,14 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    resizeIdTable(std::get<IdTableSharedLocalVocabPair>(data_).idTable_,
-                  limitOffset);
+    auto& res = std::get<IdTableSharedLocalVocabPair>(data_);
+    // TODO<joka921> We have to fix this case, as we might very well apply a
+    // LIMIT/OFFSET to a cached result, we just need a better algorithm.
+    AD_CORRECTNESS_CHECK(
+        std::holds_alternative<IdTable>(res.idTableOrPtr_),
+        "`applyLimitOffset` may not be called on an immutable `Result`");
+    IdTable& table = std::get<IdTable>(res.idTableOrPtr_);
+    resizeIdTable(table, limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
@@ -196,7 +214,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, IdTable& idTable) {
+  auto performCheck = [](const auto& map, const IdTable& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -208,8 +226,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     });
   };
   if (isFullyMaterialized()) {
-    AD_EXPENSIVE_CHECK(performCheck(
-        varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable()));
   } else {
     ad_utility::CachingTransformInputRange generator{
         idTables(),
@@ -268,7 +285,17 @@ void Result::runOnNewChunkComputed(
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
+  return std::visit(
+      [](const auto& arg) -> const IdTable& {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, IdTable>) {
+          return arg;
+        } else {
+          static_assert(std::is_same_v<T, IdTablePtr>);
+          return *arg;
+        }
+      },
+      std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_);
 }
 
 // _____________________________________________________________________________

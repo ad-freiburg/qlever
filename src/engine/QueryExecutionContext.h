@@ -87,6 +87,9 @@ struct QueryCacheKey {
 using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
+// Forward declaration because of cyclic dependency
+class NamedQueryCache;
+
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
@@ -95,17 +98,10 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
+      NamedQueryCache* namedCache,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      const bool pinSubtrees = false, const bool pinResult = false)
-      : _pinSubtrees(pinSubtrees),
-        _pinResult(pinResult),
-        _index(index),
-        _subtreeCache(cache),
-        _allocator(std::move(allocator)),
-        _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator),
-        updateCallback_(std::move(updateCallback)) {}
+      bool pinSubtrees = false, bool pinResult = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -164,10 +160,20 @@ class QueryExecutionContext {
     return areWebsocketUpdatesEnabled_;
   }
 
- private:
-  static bool areWebSocketUpdatesEnabled();
+  // Access the cache for explicitly named query.
+  NamedQueryCache& namedQueryCache() {
+    AD_CORRECTNESS_CHECK(namedQueryCache_ != nullptr);
+    return *namedQueryCache_;
+  }
+
+  // If this optional contains a string, then the result of the query that is
+  // executed on this context will be stored in the `namedQueryCache()` using
+  // the string as the query name. If it is `nullopt`, no such pinning is done.
+  auto& pinWithExplicitName() { return pinWithExplicitName_; }
+  const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
 
  private:
+  static bool areWebSocketUpdatesEnabled();
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -185,6 +191,12 @@ class QueryExecutionContext {
   // Cache the state of that runtime parameter to reduce the contention of the
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+
+  // A cache for named queries.
+  NamedQueryCache* namedQueryCache_ = nullptr;
+
+  // See the getter with the same name for documentation.
+  std::optional<std::string> pinWithExplicitName_ = std::nullopt;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

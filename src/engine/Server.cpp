@@ -265,24 +265,43 @@ auto Server::setupCancellationHandle(
 auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender& messageSender,
-    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit) {
+    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
+    bool accessTokenOk) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  std::optional<std::string> pinNamed =
+      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
+                         : "")
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
 
+  configurePinnedNamedQuery(pinNamed, accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
+}
+
+// _____________________________________________________________________________
+void Server::configurePinnedNamedQuery(
+    const std::optional<std::string>& pinNamed, bool accessTokenOk,
+    QueryExecutionContext& qec) {
+  if (pinNamed.has_value()) {
+    if (!accessTokenOk) {
+      throw std::runtime_error(
+          "The pinning of named queries requires a valid access token");
+    }
+    qec.pinWithExplicitName() = pinNamed.value();
+  }
 }
 
 // _____________________________________________________________________________
@@ -358,6 +377,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
+    response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
+    requireValidAccessToken("clear-named-cache");
+    logCommand(cmd, "clear the cache for named queries");
+    namedQueryCache_.clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -462,7 +486,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto [qec, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString, messageSender,
-                         parameters, timeLimit.value());
+                         parameters, timeLimit.value(), accessTokenOk);
     if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
           msg, ad_utility::truncateOperationString(operationString)));
@@ -652,6 +676,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
   result["num-pinned-entries"] = cache_.numPinnedEntries();
+  result["num-named-queries"] = namedQueryCache_.numEntries();
 
   // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
   // converter.
@@ -862,7 +887,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                                   plannedQuery.value(),
                                   plannedQuery.value().queryExecutionTree_,
                                   requestTimer, cancellationHandle);
-
   // Print the runtime info. This needs to be done after the query
   // was computed.
   LOG(INFO) << "Done processing query and sending result"
@@ -965,6 +989,7 @@ nlohmann::json Server::processUpdateImpl(
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
   cache_.clearAll();
+  namedQueryCache_.clear();
 
   return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
                                          plannedUpdate, qet, countBefore,

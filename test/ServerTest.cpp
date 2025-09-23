@@ -305,3 +305,39 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);
 }
+
+// _____________________________________________________________________________
+TEST(ServerTest, configurePinnedNamedQuery) {
+  auto qec = ad_utility::testing::getQec();
+
+  // Test with no pinNamed value - should not modify qec
+  std::optional<std::string> noPinNamed = std::nullopt;
+  Server::configurePinnedNamedQuery(noPinNamed, true, *qec);
+  EXPECT_FALSE(qec->pinWithExplicitName().has_value());
+
+  // Test with pinNamed and valid access token - should set the pin name
+  std::optional<std::string> pinNamed = "test_query_name";
+  Server::configurePinnedNamedQuery(pinNamed, true, *qec);
+  EXPECT_TRUE(qec->pinWithExplicitName().has_value());
+  EXPECT_EQ(qec->pinWithExplicitName().value(), "test_query_name");
+
+  // Reset for next test
+  qec->pinWithExplicitName() = std::nullopt;
+
+  // Test with pinNamed but invalid access token - should throw exception
+  EXPECT_THROW(Server::configurePinnedNamedQuery(pinNamed, false, *qec),
+               std::runtime_error);
+
+  // Verify the specific error message
+  try {
+    Server::configurePinnedNamedQuery(pinNamed, false, *qec);
+    FAIL() << "Expected std::runtime_error to be thrown";
+  } catch (const std::runtime_error& e) {
+    EXPECT_THAT(e.what(),
+                testing::HasSubstr(
+                    "pinning of named queries requires a valid access token"));
+  }
+
+  // Verify qec was not modified when exception was thrown
+  EXPECT_FALSE(qec->pinWithExplicitName().has_value());
+}
