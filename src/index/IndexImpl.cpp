@@ -842,14 +842,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  // TODO: remove this conversion once CompressedRelationWriter will be
-  // migrated to non coroutines
-  auto sortedTriplesGenerator{
-      cppcoro::fromInputRange(std::forward<T>(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          std::move(sortedTriplesGenerator), permutation, perBlockCallbacks);
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 

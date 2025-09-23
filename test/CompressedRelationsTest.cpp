@@ -185,7 +185,8 @@ compressedRelationTestWriteCompressedRelations(
       }};
 
   auto res = CompressedRelationWriter::createPermutationPair(
-      filename + "sorter-basename", wc1, wc2, generator(5),
+      filename + "sorter-basename", wc1, wc2,
+      ad_utility::InputRangeTypeErased{generator(5)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
