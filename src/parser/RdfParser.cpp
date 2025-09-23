@@ -1369,14 +1369,22 @@ RdfMultifileParser::RdfMultifileParser(
           finishedBatchQueue_.pushException(std::current_exception());
           return;
         }
-        if (lastFileWasPushed_ && numActiveParsers_.fetch_sub(1) == 1) {
-          // We are the last parser AND the last file has been pushed, so we
-          // have to notify the downstream code that the input has been parsed
-          // completely.
-          AD_LOG_INFO << "Finishing the `finishedBatchQueue` because we claim "
-                         "to be the last parser..."
-                      << std::endl;
-          finishedBatchQueue_.finish();
+        // TODO<joka921> This is really really really hacky.
+        bool lastWasPushed = lastFileWasPushed_;
+        auto prev = numActiveParsers_.fetch_sub(1);
+        if (lastWasPushed) {
+          AD_LOG_INFO << "Last file was pushed, " << (prev - 1)
+                      << "files are remaining in the queue" << std::endl;
+          if (prev == 1) {
+            // We are the last parser AND the last file has been pushed, so we
+            // have to notify the downstream code that the input has been parsed
+            // completely.
+            AD_LOG_INFO
+                << "Finishing the `finishedBatchQueue` because we claim "
+                   "to be the last parser..."
+                << std::endl;
+            finishedBatchQueue_.finish();
+          }
         }
       };
 
