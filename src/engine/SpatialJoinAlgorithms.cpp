@@ -650,6 +650,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
               joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
+  // TODO access cache + sanity check of cache, must have geo index, must have
+  // same variable, etc.
+
   // TODO report skipped items ; left must be point ; right must be linestring
 
   static std::optional<MutableS2ShapeIndex> cachedIndex;
