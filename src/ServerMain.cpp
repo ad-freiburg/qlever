@@ -80,24 +80,23 @@ int main(int argc, char** argv) {
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
   add("cache-max-size,c",
-      optionFactory.getProgramOption<RuntimeParameters::Bool>("cache-max-size"),
+      optionFactory.getProgramOption<&RuntimeParameters::cacheMaxSize>(),
       "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
       "limited by --memory-max-size.");
   add("cache-max-size-single-entry,e",
-      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
-          "cache-max-size-single-entry"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::cacheMaxSizeSingleEntry>(),
       "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
   add("cache-max-size-lazy-result,E",
-      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
-          "cache-max-size-lazy-result"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::cacheMaxSizeLazyResult>(),
       "Maximum size up to which lazy results will be cached by aggregating "
       "partial results. Caching does cause significant overhead for this "
       "case.");
   add("cache-max-num-entries,k",
-      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
-          "cache-max-num-entries"),
+      optionFactory.getProgramOption<&RuntimeParameters::cacheMaxNumEntries>(),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
       "this condition and the size limit specified via --cache-max-size "
@@ -113,31 +112,26 @@ int main(int argc, char** argv) {
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
-      optionFactory
-          .getProgramOption<RuntimeParameters::Duration<std::chrono::seconds>>(
-              "default-query-timeout"),
+      optionFactory.getProgramOption<&RuntimeParameters::defaultQueryTimeout>(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
   add("service-max-value-rows,S",
-      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
-          "service-max-value-rows"),
+      optionFactory.getProgramOption<&RuntimeParameters::serviceMaxValueRows>(),
       "The maximal number of result rows to be passed to a SERVICE operation "
       "as a VALUES clause to optimize its computation.");
   add("throw-on-unbound-variables",
-      optionFactory.getProgramOption<RuntimeParameters::Bool>(
-          "throw-on-unbound-variables"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::throwOnUnboundVariables>(),
       "If set to true, the queries that use GROUP BY, BIND, or ORDER BY with "
       "variables that are unbound in the query throw an exception. These "
       "queries technically are allowed by the SPARQL standard, but typically "
       "are the result of typos and unintended by the user");
   add("request-body-limit",
-      optionFactory.getProgramOption<RuntimeParameters::MemorySizeParameter>(
-          "request-body-limit"),
+      optionFactory.getProgramOption<&RuntimeParameters::requestBodyLimit>(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
   add("cache-service-results",
-      optionFactory.getProgramOption<RuntimeParameters::Bool>(
-          "cache-service-results"),
+      optionFactory.getProgramOption<&RuntimeParameters::cacheServiceResults>(),
       "SERVICE is not cached because we have to assume that any remote "
       "endpoint might change at any point in time. If you control the "
       "endpoints, you can override this setting. This will disable the sibling "
@@ -146,25 +140,24 @@ int main(int argc, char** argv) {
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   add("syntax-test-mode",
-      optionFactory.getProgramOption<RuntimeParameters::Bool>(
-          "syntax-test-mode"),
+      optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode>(),
       "Make several query patterns that are syntactially valid, but otherwise "
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
   add("enable-prefilter-on-index-scans",
-      optionFactory.getProgramOption<RuntimeParameters::Bool>(
-          "enable-prefilter-on-index-scans"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::enablePrefilterOnIndexScans>(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
   add("spatial-join-max-num-threads",
-      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
-          "spatial-join-max-num-threads"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::spatialJoinMaxNumThreads>(),
       "The maximum number of threads to be used for spatial join processing. "
       "If this option is set to `0`, the number of CPU threads will be used.");
   add("spatial-join-prefilter-max-size",
-      optionFactory.getProgramOption<RuntimeParameters::SizeT>(
-          "spatial-join-prefilter-max-size"),
+      optionFactory
+          .getProgramOption<&RuntimeParameters::spatialJoinPrefilterMaxSize>(),
       "The maximum size in square coordinates of the aggregated bounding box "
       "of the smaller join partner in a spatial join, such that prefiltering "
       "will be employed. To disable prefiltering for non-point geometries, set "

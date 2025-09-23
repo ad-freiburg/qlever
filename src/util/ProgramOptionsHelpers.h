@@ -8,6 +8,7 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "global/RuntimeParameters.h"
 #include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
@@ -101,26 +102,24 @@ class ParameterToProgramOptionFactory {
    * @return A `boost::program_options::value` with the parameter's current
    * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
-   *
-   * TODO<C++17,joka921>: template-values are not supported in C++17
    */
-  template <typename T>
-  auto getProgramOption(const std::string& name) {
+  template <auto ParameterPtr>
+  auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
-    typename T::value_type defaultValue =
-        _parameters->rlock()->template get<T>(name);
+    auto defaultValue =
+        std::invoke(ParameterPtr, *GetRuntimeParameters().rlock()).get();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
 
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
-    auto setParameterToValue{[this, name](const Type& value) {
-      _parameters->wlock()->template set<T>(name, value);
+    auto setParameterToValue{[](const Type& value) {
+      std::invoke(ParameterPtr, *GetRuntimeParameters().wlock()).set(value);
     }};
 
-    return boost::program_options::value<typename T::value_type>()
+    return boost::program_options::value<Type>()
         ->default_value(defaultValue)
         ->notifier(setParameterToValue);
   }
