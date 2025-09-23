@@ -81,7 +81,12 @@ class MutableS2ShapeIndex;
 
 // TODO explain
 struct CachedS2PolylineIndex {
-  const std::shared_ptr<MutableS2ShapeIndex> s2index_;
+  std::shared_ptr<MutableS2ShapeIndex> s2index_;
+};
+
+struct CachedGeometryIndex {
+  Variable geometryColumn_;
+  CachedS2PolylineIndex index_;
 };
 
 class SpatialJoinAlgorithms {

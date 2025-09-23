@@ -9,6 +9,8 @@
 
 #include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -379,22 +381,35 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     if (pinWithName) {
-      const auto& [name, sjIndexVar] =
+      const auto& [name, geoIndexVar] =
           _executionContext->pinWithExplicitName().value();
       // The query is to be pinned in the named cache.
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
+
+      // If a geo index is to be cached, get the respective column using the
+      // given variable and compute the index.
+      std::optional<CachedGeometryIndex> geoIndex = std::nullopt;
+      if (geoIndexVar.has_value()) {
+        auto colIndex = getExternallyVisibleVariableColumns()
+                            .at(geoIndexVar.value())
+                            .columnIndex_;
+        geoIndex = CachedGeometryIndex{
+            geoIndexVar.value(), SpatialJoinAlgorithms::makeS2PolylineIndex(
+                                     &actualResult.idTable(), colIndex,
+                                     _executionContext->getIndex())};
+      }
+
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
       // it would require great refactorings of the `Result` class.
       auto t = NamedQueryCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone(),
-          // TODO trigger building geometry cache
-      };
+          actualResult.localVocab().clone(), std::move(geoIndex)};
       _executionContext->namedQueryCache().store(name, std::move(t));
 
       runtimeInfo().addDetail("pinned-with-explicit-name", name);
+      // TODO<ullingerc> Also detail for pinned geo index
     }
 
     return result._resultPointer->resultTablePtr();

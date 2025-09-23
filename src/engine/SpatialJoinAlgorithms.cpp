@@ -22,6 +22,7 @@
 #include <set>
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/NamedQueryCache.h"
 #include "engine/SpatialJoin.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -655,6 +656,15 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   // TODO report skipped items ; left must be point ; right must be linestring
 
+  auto geoIndex = qec_->namedQueryCache().get("TODO")->cachedGeoIndex_;
+  if (!geoIndex.has_value()) {
+    throw std::runtime_error{
+        "In order to use this spatial join algorithm the result for the right "
+        "side must be precomputed with a geometry index and pinned to a name. "
+        "However, no cached geometry index was found for the given name."};
+  }
+
+  // TODO
   static std::optional<MutableS2ShapeIndex> cachedIndex;
   MutableS2ShapeIndex s2index;
 

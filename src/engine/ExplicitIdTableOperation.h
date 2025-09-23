@@ -8,6 +8,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+// #include "engine/SpatialJoinAlgorithms.h"
 
 // An operation that owns its explicit `Result` via `shared_ptr`s and just
 // returns this result when `computeResult` is called.
@@ -16,13 +17,16 @@ class ExplicitIdTableOperation : public Operation {
   VariableToColumnMap variables_;
   std::vector<ColumnIndex> sortedColumns_;
   LocalVocab localVocab_;
+  // std::optional<CachedGeometryIndex> cachedGeoIndex_;
 
  public:
-  ExplicitIdTableOperation(QueryExecutionContext* ctx,
-                           std::shared_ptr<const IdTable> table,
-                           VariableToColumnMap variables,
-                           std::vector<ColumnIndex> sortedColumns = {},
-                           LocalVocab localVocab = LocalVocab{});
+  ExplicitIdTableOperation(
+      QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
+      VariableToColumnMap variables,
+      std::vector<ColumnIndex> sortedColumns = {},
+      LocalVocab localVocab = LocalVocab{}
+      //, std::optional<CachedGeometryIndex> cachedGeoIndex = std::nullopt
+  );
 
   // Const and public getter for testing.
   size_t sizeEstimate() const { return idTable_->numRows(); }
@@ -40,6 +44,7 @@ class ExplicitIdTableOperation : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
+  // std::optional<CachedGeometryIndex> getCachedGeoIndex() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H

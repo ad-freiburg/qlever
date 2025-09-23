@@ -21,7 +21,9 @@
 
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/NamedQueryCache.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
@@ -46,6 +48,14 @@ SpatialJoin::SpatialJoin(
   }
   if (childRight.has_value()) {
     childRight_ = std::move(childRight.value());
+  } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    // If the `S2_POINT_POLYLINE` algorithm is used, there will never be a right
+    // child, it is instead fetched directly from the named query cache as an
+    // `ExplicitIdTableOperation`.
+    AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
+    childRight_ = std::make_shared<QueryExecutionTree>(
+        qec, qec->namedQueryCache().getOperation(
+                 config_.rightCacheName_.value(), qec));
   }
 }
 
