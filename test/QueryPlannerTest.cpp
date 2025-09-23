@@ -5441,7 +5441,7 @@ TEST(QueryPlanner, NamedCachedQuery) {
   std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
   qec = ad_utility::testing::getQec(
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
-  qec->pinWithExplicitName() = "dummyQuery";
+  qec->pinWithExplicitName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 

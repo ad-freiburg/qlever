@@ -379,7 +379,8 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     if (pinWithName) {
-      const auto& name = _executionContext->pinWithExplicitName().value();
+      const auto& [name, sjIndexVar] =
+          _executionContext->pinWithExplicitName().value();
       // The query is to be pinned in the named cache.
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
@@ -388,7 +389,9 @@ std::shared_ptr<const Result> Operation::getResult(
       auto t = NamedQueryCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone()};
+          actualResult.localVocab().clone(),
+          // TODO trigger building geometry cache
+      };
       _executionContext->namedQueryCache().store(name, std::move(t));
 
       runtimeInfo().addDetail("pinned-with-explicit-name", name);

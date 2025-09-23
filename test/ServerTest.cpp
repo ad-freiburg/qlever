@@ -312,12 +312,12 @@ TEST(ServerTest, configurePinnedNamedQuery) {
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedNamedQuery(noPinNamed, true, *qec);
+  Server::configurePinnedNamedQuery(noPinNamed, std::nullopt, true, *qec);
   EXPECT_FALSE(qec->pinWithExplicitName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedNamedQuery(pinNamed, true, *qec);
+  Server::configurePinnedNamedQuery(pinNamed, std::nullopt, true, *qec);
   EXPECT_TRUE(qec->pinWithExplicitName().has_value());
   EXPECT_EQ(qec->pinWithExplicitName().value(), "test_query_name");
 
@@ -325,12 +325,13 @@ TEST(ServerTest, configurePinnedNamedQuery) {
   qec->pinWithExplicitName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
-  EXPECT_THROW(Server::configurePinnedNamedQuery(pinNamed, false, *qec),
-               std::runtime_error);
+  EXPECT_THROW(
+      Server::configurePinnedNamedQuery(pinNamed, std::nullopt, false, *qec),
+      std::runtime_error);
 
   // Verify the specific error message
   try {
-    Server::configurePinnedNamedQuery(pinNamed, false, *qec);
+    Server::configurePinnedNamedQuery(pinNamed, std::nullopt, false, *qec);
     FAIL() << "Expected std::runtime_error to be thrown";
   } catch (const std::runtime_error& e) {
     EXPECT_THAT(e.what(),

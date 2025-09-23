@@ -115,7 +115,7 @@ TEST(NamedQueryCache, E2E) {
   std::string pinnedQuery =
       "SELECT * { {?s <p> <o> } UNION {VALUES ?s { <notInVocab> }}} INTERNAL "
       "SORT BY ?s";
-  qec->pinWithExplicitName() = "dummyQuery";
+  qec->pinWithExplicitName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
   [[maybe_unused]] auto pinnedResult = qet.getResult();
 

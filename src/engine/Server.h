@@ -215,7 +215,8 @@ class Server {
   // Validates access token and sets pinWithExplicitName if pinNamed is
   // provided.
   static void configurePinnedNamedQuery(
-      const std::optional<std::string>& pinNamed, bool accessTokenOk,
+      const std::optional<std::string>& pinNamed,
+      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.

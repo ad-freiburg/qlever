@@ -21,6 +21,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/HttpError.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
@@ -275,32 +276,49 @@ auto Server::prepareOperation(
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   std::optional<std::string> pinNamed =
       ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
+  std::optional<std::string> pinNamedGeoIndex =
+      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
+                                             {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
-                         : "")
+            << (pinNamed
+                    ? absl::StrCat(" [pin named as ", pinNamed.value(),
+                                   (pinNamedGeoIndex
+                                        ? absl::StrCat(" with geo index on ?",
+                                                       pinNamedGeoIndex.value())
+                                        : ""),
+                                   "]")
+                    : "")
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
-  configurePinnedNamedQuery(pinNamed, accessTokenOk, qec);
+  configurePinnedNamedQuery(pinNamed, pinNamedGeoIndex, accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
 }
 
 // _____________________________________________________________________________
 void Server::configurePinnedNamedQuery(
-    const std::optional<std::string>& pinNamed, bool accessTokenOk,
+    const std::optional<std::string>& pinNamed,
+    const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
   if (pinNamed.has_value()) {
     if (!accessTokenOk) {
       throw std::runtime_error(
           "The pinning of named queries requires a valid access token");
     }
-    qec.pinWithExplicitName() = pinNamed.value();
+    if (pinNamedGeoIndex.has_value()) {
+      qec.pinWithExplicitName() = QueryExecutionContext::PinWithExplicitName{
+          pinNamed.value(),
+          Variable{absl::StrCat("?", pinNamedGeoIndex.value())}};
+    } else {
+      qec.pinWithExplicitName() =
+          QueryExecutionContext::PinWithExplicitName{pinNamed.value()};
+    }
   }
 }
 
