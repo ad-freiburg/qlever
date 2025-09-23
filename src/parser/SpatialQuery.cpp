@@ -98,11 +98,15 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
     } else if (algo == "libspatialjoin") {
       algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+    } else if (algo == "pointPolyline") {
+      algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
+
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter `<algorithm>` does not refer to a "
           "supported spatial search algorithm. Please select either "
-          "`<baseline>`, `<s2>`, `<libspatialjoin>`, or `<boundingBox>`");
+          "`<baseline>`, `<s2>`, `<libspatialjoin>`, `<pointPolyline>` or "
+          "`<boundingBox>`");
     }
   } else if (predString == "payload") {
     if (object.isVariable()) {
