@@ -72,7 +72,7 @@ namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
-template <typename Row, template <typename, size_t...> typename Tp, size_t... I>
+template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
 };
