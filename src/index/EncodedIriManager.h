@@ -197,7 +197,6 @@ class EncodedIriManagerImpl {
   // Equality operator for use in `TestIndexConfig`.
   bool operator==(const EncodedIriManagerImpl&) const = default;
 
- private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
   static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {

@@ -223,45 +223,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle);
 
-  // Helper struct to temporarily store strings and aggregate them to avoid
-  // sending the same strings over and over again.
-  struct StringMapping {
-    // Store the actual mapping from a string to the corresponding insertion
-    // order. (The first newly inserted string will get id 0, the second id 1,
-    // and so on.)
-    ad_utility::HashMap<std::string, uint64_t> stringMapping_;
-    uint64_t numProcessedRows_ = 0;
-
-    // Serialize the internal datastructure to a string and clear it.
-    std::string flush();
-
-    // Increment the row counter by one if the mapping contains elements.
-    void nextRow() {
-      if (!stringMapping_.empty()) {
-        numProcessedRows_++;
-      }
-    }
-
-    // Convert a literal with optional datatype into an Id, which internally
-    // uses the `LocalVocab` datatype, but instead of a pointer it uses the
-    // index provided by `stringMapping_`, creating a new index if not already
-    // present.
-    Id stringToId(std::pair<std::string, const char*> optionalStringAndType);
-
-    // Return true if the datastructure has grown large enough, or wasn't
-    // cleared recently enough to avoid stalling the consumer.
-    bool needsFlush() const {
-      return numProcessedRows_ >= 100'000 || stringMapping_.size() >= 10'000;
-    }
-  };
-
-  // Convert `originalId`, which might contain references into this process'
-  // memory space to an id that completely inlines a value, or one that only has
-  // a reference to the passed `stringMapping`.
-  static Id toExportableId(Id originalId, const QueryExecutionTree& qet,
-                           const LocalVocab& localVocab,
-                           StringMapping& stringMapping);
-
   // Generate the result of a SELECT query as a CSV or TSV or binary stream.
   template <MediaType format>
   static ad_utility::streams::stream_generator selectQueryResultToStream(

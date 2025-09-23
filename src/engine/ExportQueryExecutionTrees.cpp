@@ -4,7 +4,7 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -13,6 +13,7 @@
 
 #include <ranges>
 
+#include "engine/BinaryExport.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -1013,76 +1014,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_return;
 }
 
-namespace {
-// Return a `std::string_view` wrapping the passed value.
-std::string_view raw(const std::integral auto& value) {
-  return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
-}
-
-// Return true iff the value can be serialized without a vocab entry.
-AD_ALWAYS_INLINE auto isTrivial(Id id) {
-  auto datatype = id.getDatatype();
-  return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
-         datatype == Datatype::Int || datatype == Datatype::Double ||
-         datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
-         datatype == Datatype::EncodedVal;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-std::string ExportQueryExecutionTrees::StringMapping::flush() {
-  numProcessedRows_ = 0;
-  std::vector<std::string> sortedStrings;
-  sortedStrings.resize(stringMapping_.size());
-  for (auto& [string, index] : stringMapping_) {
-    sortedStrings[index] = string;
-  }
-  stringMapping_.clear();
-
-  std::string result;
-  // Rough estimate
-  result.reserve(sortedStrings.size() * 100);
-
-  for (const std::string& string : sortedStrings) {
-    absl::StrAppend(&result, raw(string.size()), string);
-  }
-
-  return result;
-}
-
-// _____________________________________________________________________________
-Id ExportQueryExecutionTrees::StringMapping::stringToId(
-    std::pair<std::string, const char*> optionalStringAndType) {
-  auto& [stringValue, xsdType] = optionalStringAndType;
-  if (xsdType != nullptr) {
-    absl::StrAppend(&stringValue, "^^", xsdType);
-  }
-  size_t distinctIndex = 0;
-  if (stringMapping_.contains(stringValue)) {
-    distinctIndex = stringMapping_.at(stringValue);
-  } else {
-    distinctIndex = stringMapping_[std::move(stringValue)] =
-        stringMapping_.size();
-  }
-  return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(distinctIndex));
-}
-
-// _____________________________________________________________________________
-AD_ALWAYS_INLINE Id ExportQueryExecutionTrees::toExportableId(
-    Id originalId, const QueryExecutionTree& qet, const LocalVocab& localVocab,
-    StringMapping& stringMapping) {
-  if (isTrivial(originalId)) {
-    return originalId;
-  }
-  auto optionalStringAndType =
-      idToStringAndType(qet.getQec()->getIndex(), originalId, localVocab);
-  if (optionalStringAndType.has_value()) [[likely]] {
-    return stringMapping.stringToId(std::move(optionalStringAndType.value()));
-  }
-  return Id::makeUndefined();
-}
-
 // _____________________________________________________________________________
 template <>
 ad_utility::streams::stream_generator ExportQueryExecutionTrees::
@@ -1091,80 +1022,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         const parsedQuery::SelectClause& selectClause,
         LimitOffsetClause limitAndOffset,
         CancellationHandle cancellationHandle) {
-  std::shared_ptr<const Result> result = qet.getResult(true);
-  result->logResultSize();
-  AD_LOG_DEBUG << "Starting binary export..." << std::endl;
-
-  // Magic bytes
-  co_yield "QLEVER.EXPORT";
-  // Export format version.
-  co_yield raw(static_cast<uint16_t>(0));
-
-  // Export encoded values.
-  const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
-  // Make sure the size matches the format.
-  static_assert(EncodedIriManager::maxNumPrefixes_ - 1 ==
-                std::numeric_limits<uint8_t>::max());
-  co_yield raw(static_cast<uint8_t>(prefixes.size()));
-  for (const auto& prefix : prefixes) {
-    co_yield raw(prefix.length());
-    co_yield prefix;
-  }
-
-  // Get all columns with defined variables.
-  QueryExecutionTree::ColumnIndicesAndTypes columns =
-      qet.selectedVariablesToColumnIndices(selectClause, false);
-  std::erase(columns, std::nullopt);
-
-  // Export number of columns as a 16 bit unsigned int.
-  co_yield raw(static_cast<uint16_t>(columns.size()));
-
-  // Export actual variable names.
-  for (const auto& optional : columns) {
-    const auto& variableName = optional.value().variable_;
-    co_yield raw(variableName.size());
-    co_yield variableName;
-  }
-
-  // Use special undefined value that's not actually used as a real value.
-  Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
-  AD_CORRECTNESS_CHECK(Id::fromBits(vocabMarker).getDatatype() ==
-                       Datatype::Undefined);
-
-  // Maps strings to reusable ids.
-  StringMapping stringMapping;
-
-  // Iterate over the result and yield the bindings.
-  uint64_t resultSize = 0;
-  for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSize)) {
-    for (uint64_t i : range) {
-      for (const auto& column : columns) {
-        Id id = pair.idTable_(i, column->columnIndex_);
-        co_yield raw(
-            toExportableId(id, qet, pair.localVocab_, stringMapping).getBits());
-      }
-      if (stringMapping.needsFlush()) {
-        co_yield raw(vocabMarker);
-        co_yield stringMapping.flush();
-        co_yield raw(static_cast<size_t>(0));
-      }
-      cancellationHandle->throwIfCancelled();
-      stringMapping.nextRow();
-    }
-  }
-
-  std::string trailingVocab = stringMapping.flush();
-  if (!trailingVocab.empty()) {
-    co_yield raw(vocabMarker);
-    co_yield trailingVocab;
-    co_yield raw(static_cast<size_t>(0));
-  }
-
-  // If there are no variables, just export the total number of rows.
-  if (columns.empty()) {
-    co_yield raw(resultSize);
-  }
+  return qlever::binary_export::exportAsQLeverBinary(
+      qet, selectClause, limitAndOffset, std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
