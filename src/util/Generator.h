@@ -10,12 +10,10 @@
 #include <functional>
 #include <utility>
 
-#include "Iterators.h"
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Exception.h"
-#include "util/TypeTraits.h"
 
 namespace cppcoro {
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
@@ -298,14 +296,6 @@ T getSingleElement(generator<T, Details> g) {
   return t;
 }
 
-// helper function to convert ad_utility::InputRangeTypeErased<T> to
-// cppcoro::generator<T> with no details
-template <typename T>
-generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
-  for (auto& value : range) {
-    co_yield value;
-  }
-}
 }  // namespace cppcoro
 
 #endif
