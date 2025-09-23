@@ -7,6 +7,7 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 
@@ -124,6 +125,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "to be selected or `<all>`");
     }
 
+  } else if (predString == "experimentalRightCacheName") {
+    if (object.isLiteral()) {
+      rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
+    } else {
+      throw SpatialSearchException(
+          "The argument to the `<experimentalRightCacheName>` parameter must "
+          "be the name of a pinned cache entry as a string literal.");
+    }
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
@@ -176,6 +185,20 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   if (!right_.has_value()) {
     throw SpatialSearchException(
         "Missing parameter `<right>` in spatial search.");
+  }
+
+  if (rightCacheName_.has_value() &&
+      algo != SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    throw SpatialSearchException(
+        "The parameter `<experimentalRightCacheName>` is only supported by the "
+        "`<experimentalPointPolyline>` algorithm.");
+  }
+
+  if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE &&
+      !rightCacheName_.has_value()) {
+    throw SpatialSearchException(
+        "The parameter `<experimentalRightCacheName>` is mandatory for the "
+        "`<experimentalPointPolyline>` algorithm.");
   }
 
   // Only if the number of results is limited, it is mandatory that the right

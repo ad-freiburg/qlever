@@ -52,6 +52,12 @@ struct SpatialQuery : MagicServiceQuery {
   // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
 
+  // If the s2-point-polyline algorithm is used, the right side of the spatial
+  // join will be an already existing s2 index together with the fully
+  // materialized child result table. Both are pinned to the named query cache.
+  // This parameter indicates the name of the cache entry to be used.
+  std::optional<std::string> rightCacheName_;
+
   // Helper: if the spatial query was constructed from a special triple
   // <nearest-neighbors:...> for backward compatibility, we need to bypass the
   // check for the case of a nearest neighbors search with the right child not
