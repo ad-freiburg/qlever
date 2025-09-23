@@ -232,7 +232,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    ql::span<const LocatedTriple> locatedTriples) {
+    ql::span<const LocatedTriple> locatedTriples,
+    ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("adding");
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
@@ -244,7 +246,10 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     handles.emplace_back(handle);
   }
 
+  tracer.endTrace("adding");
+  tracer.beginTrace("updateMetadata");
   updateAugmentedMetadata();
+  tracer.endTrace("updateMetadata");
 
   return handles;
 }

@@ -121,6 +121,14 @@ MATCHER_P2(HasKeyMatching, key, matcher,
                    << arg[key] << ' ';
   return testing::ExplainMatchResult(matcher, arg[key], result_listener);
 }
+MATCHER_P(HasKey, key, (negation ? "has no key " : "has key ")) {
+  if (!arg.contains(key)) {
+    *result_listener << "that does not contain key \"" << key << '"';
+    return false;
+  }
+  *result_listener << "that contains key \"" << key << "\" ";
+  return true;
+}
 
 // Matcher that can be used the make assertions about objects `<<` (insert into
 // stream) operator.
