@@ -178,28 +178,13 @@ std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
   if (!str.has_value()) {
     return std::nullopt;
   }
-  /*
-  // This is the mode for the original xxx data...
-  auto res = ctre::range<
-      "(?<lng>[0-9]+\\.[0-9]+),(?<lat>[0-9]+\\.[0-9]+),([0-9]+\\.[0-9]+"
-      ")">(str.value().first);
-  // This is for "official" LINESTRINGS.
-  */
-  const auto& s = str.value().first;
-  if (!s.starts_with("\"LINESTRING")) {
+  auto line = util::geo::lineFromWKT<double>(str.value().first);
+  if (line.empty()) {
     return std::nullopt;
   }
-  auto res = ctre::range<
-      "(?<lng>[0-9]+\\.[0-9]+) (?<lat>[0-9]+\\.[0-9]+"
-      ")">(str.value().first);
   std::vector<S2LatLng> points;
-  for (const auto& match : res) {
-    auto lat = std::strtod(match.get<"lat">().data(), nullptr);
-    auto lng = std::strtod(match.get<"lng">().data(), nullptr);
-    points.push_back(S2LatLng::FromDegrees(lat, lng));
-  }
-  if (points.empty()) {
-    return std::nullopt;
+  for (const auto& coord : line) {
+    points.push_back(S2LatLng::FromDegrees(coord.getY(), coord.getX()));
   }
   return S2Polyline{points};
 };
@@ -651,8 +636,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
