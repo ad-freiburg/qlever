@@ -171,9 +171,11 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
-                                      ColumnIndex col, const Index& index) {
+std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
+    const IdTable* restable, size_t row, ColumnIndex col,
+    const Index& index) const {
   auto id = restable->at(row, col);
+  // TODO<ullingerc/joka921> Deal with local vocab
   auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
@@ -187,6 +189,14 @@ std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
     points.push_back(S2LatLng::FromDegrees(coord.getY(), coord.getX()));
   }
   return S2Polyline{points};
+};
+
+// ____________________________________________________________________________
+CachedS2PolylineIndex SpatialJoinAlgorithms::makeS2PolylineIndex(const IdTable*,
+                                                                 ColumnIndex,
+                                                                 const Index&) {
+  // TODO
+  return {nullptr};
 };
 
 // ____________________________________________________________________________

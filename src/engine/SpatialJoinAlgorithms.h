@@ -75,6 +75,15 @@ using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
 
+// Forward declaration of s2 classes
+class S2Polyline;
+class MutableS2ShapeIndex;
+
+// TODO explain
+struct CachedS2PolylineIndex {
+  const std::shared_ptr<MutableS2ShapeIndex> s2index_;
+};
+
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;
@@ -175,15 +184,21 @@ class SpatialJoinAlgorithms {
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
 
+  // TODO
+  static CachedS2PolylineIndex makeS2PolylineIndex(const IdTable* restable,
+                                                   ColumnIndex col,
+                                                   const Index& index);
+
  private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
-  /*
-std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
-                                      ColumnIndex col) const;
-                                      */
+
+  // TODO
+  std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
+                                        ColumnIndex col,
+                                        const Index& index) const;
 
   // returns everything between the first two quotes. If the string does not
   // contain two quotes, the string is returned as a whole
