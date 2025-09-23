@@ -656,7 +656,12 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   // TODO report skipped items ; left must be point ; right must be linestring
 
-  auto geoIndex = qec_->namedQueryCache().get("TODO")->cachedGeoIndex_;
+  auto geoIndex = qec_->namedQueryCache()
+                      .get(spatialJoin_.value()
+                               ->onlyForTestingGetConfig()
+                               .rightCacheName_.value()  // TODO!
+                           )
+                      ->cachedGeoIndex_;
   if (!geoIndex.has_value()) {
     throw std::runtime_error{
         "In order to use this spatial join algorithm the result for the right "
