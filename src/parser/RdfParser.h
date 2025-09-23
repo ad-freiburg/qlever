@@ -766,6 +766,7 @@ class RdfMultifileParser : public RdfParserBase {
   // The number of parsers that have started, but not yet finished. This is
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
+  std::atomic<bool> lastFileWasPushed_ = 0;
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFPARSER_H

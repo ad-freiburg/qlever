@@ -1369,9 +1369,13 @@ RdfMultifileParser::RdfMultifileParser(
           finishedBatchQueue_.pushException(std::current_exception());
           return;
         }
-        if (numActiveParsers_.fetch_sub(1) == 1) {
-          // We are the last parser, we have to notify the downstream code that
-          // the input has been parsed completely.
+        if (lastFileWasPushed_ && numActiveParsers_.fetch_sub(1) == 1) {
+          // We are the last parser AND the last file has been pushed, so we
+          // have to notify the downstream code that the input has been parsed
+          // completely.
+          AD_LOG_INFO << "Finishing the `finishedBatchQueue` because we claim "
+                         "to be the last parser..."
+                      << std::endl;
           finishedBatchQueue_.finish();
         }
       };
@@ -1380,8 +1384,24 @@ RdfMultifileParser::RdfMultifileParser(
   auto makeParsers = [gen = std::make_shared<InputFileServer::FileRange>(
                           std::move(turtleFileContents)),
                       this, parseFile]() {
-    for (const auto& fileContent : *gen) {
+    // TODO<joka921> 1. This is rather ugly with the two flags, actually this
+    // thread should just Wait until the queue has been drained, and then
+    // continue.
+    // 2. Probably the other Multifile parser (using a vector of filenames) also
+    // suffers from this problem, but makes it more rarely happen if the files
+    // are sufficiently large (in particular the first one).
+    auto it = gen->begin();
+    auto end = gen->end();
+    if (it == end) {
+      lastFileWasPushed_ = true;
+    }
+    while (it != end) {
+      auto fileContent = std::move(*it);
       numActiveParsers_++;
+      ++it;
+      if (it == end) {
+        lastFileWasPushed_ = true;
+      }
       AD_LOG_INFO << "Parser received a file for graph "
                   << fileContent.defaultGraph_.value_or("defaultGraph")
                   << std::endl;
@@ -1397,7 +1417,10 @@ RdfMultifileParser::RdfMultifileParser(
       }
     }
     AD_LOG_INFO << "Finished receiving files in the parser" << std::endl;
-    if (numActiveParsers_ == 0) {
+    if (numActiveParsers_ == 0 && lastFileWasPushed_) {
+      AD_LOG_INFO << "Finish the `finishedBatchQueue` because zero active "
+                     "parsers are remaining"
+                  << std::endl;
       finishedBatchQueue_.finish();
     }
     parsingQueue_.finish();
