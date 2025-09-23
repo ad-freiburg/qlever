@@ -640,7 +640,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
               joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
-  // Helper function to convert `GeoPoint` to `S2Point`
+  // TODO report skipped items ; left must be point ; right must be linestring
+
   static std::optional<MutableS2ShapeIndex> cachedIndex;
   MutableS2ShapeIndex s2index;
 
