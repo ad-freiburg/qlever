@@ -1,6 +1,10 @@
-//  Copyright 2025, University of Freiburg,
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #ifndef QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H
 #define QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H
 
@@ -41,7 +45,8 @@ class NamedQueryCache {
   // `value`s with the same `key` are overwritten.
   void store(const Key& key, Value value);
 
-  // Erase the explicit query result the the given `key`
+  // Erase the explicit query result with the given `key`. Has no effect if the
+  // `key` is not in the cache.
   void erase(const Key& key);
 
   // Clear the cache.

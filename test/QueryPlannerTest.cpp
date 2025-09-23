@@ -5423,6 +5423,10 @@ TEST(QueryPlanner, NamedCachedQuery) {
       ::testing::HasSubstr(
           "body of a named cache query request must be empty"));
 
+  // This query looks the same (non-empty body of the SERVICE request), but
+  // nested GROUP GRAPH patterns use a different code path in the
+  // `MagicServiceQuery` base class, so we need to test a very similar query
+  // again.
   query =
       "SELECT * { SERVICE ql:named-cached-query-3 { {<not> <allowed> <here>} "
       "}}";

@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../util/GTestHelpers.h"
 #include "parser/NamedCachedQuery.h"
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
@@ -55,30 +56,16 @@ TEST_F(NamedCachedQueryTest, ConstructionWithEmptyIdentifier) {
   EXPECT_EQ(query.validateAndGetIdentifier(), "");
 }
 
-// Test validateAndGetIdentifier with no child graph pattern
-TEST_F(NamedCachedQueryTest, ValidateAndGetIdentifierWithoutChildPattern) {
-  // When no child graph pattern is set, validateAndGetIdentifier should succeed
-  const std::string& result = query_->validateAndGetIdentifier();
-  EXPECT_EQ(result, testIdentifier_);
-}
-
 // Test validateAndGetIdentifier with child graph pattern (should throw)
 TEST_F(NamedCachedQueryTest, ValidateAndGetIdentifierWithChildPattern) {
   // Set a child graph pattern to make validation fail
   query_->childGraphPattern_ = GraphPattern{};
 
   // validateAndGetIdentifier should throw when child pattern exists
-  EXPECT_THROW(query_->validateAndGetIdentifier(), std::runtime_error);
-
-  // Verify the specific error message
-  try {
-    query_->validateAndGetIdentifier();
-    FAIL() << "Expected std::runtime_error to be thrown";
-  } catch (const std::runtime_error& e) {
-    EXPECT_THAT(e.what(),
-                ::testing::HasSubstr(
-                    "The body of a named cache query request must be empty"));
-  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      query_->validateAndGetIdentifier(),
+      ::testing::HasSubstr(
+          "The body of a named cache query request must be empty"));
 }
 
 // Test addParameter (should always throw)
@@ -86,87 +73,10 @@ TEST_F(NamedCachedQueryTest, AddParameterThrows) {
   SparqlTriple testTriple = createTestTriple();
 
   // addParameter should always throw since body must be empty
-  EXPECT_THROW(query_->addParameter(testTriple), std::runtime_error);
-
-  // Verify the specific error message
-  try {
-    query_->addParameter(testTriple);
-    FAIL() << "Expected std::runtime_error to be thrown";
-  } catch (const std::runtime_error& e) {
-    EXPECT_THAT(e.what(),
-                ::testing::HasSubstr(
-                    "The body of a named cache query request must be empty"));
-  }
-}
-
-// Test addParameter with different triple configurations
-TEST_F(NamedCachedQueryTest, AddParameterWithDifferentTriples) {
-  // Test with different types of triples - all should throw
-  using namespace ad_utility::sparql_types;
-
-  // Triple with IRIs
-  {
-    TripleComponent subject{
-        TripleComponent::Iri::fromIriref("<http://example.org/s>")};
-    VarOrPath predicate = PropertyPath::fromIri(
-        TripleComponent::Iri::fromIriref("<http://example.org/p>"));
-    TripleComponent object{
-        TripleComponent::Iri::fromIriref("<http://example.org/o>")};
-    SparqlTriple iriTriple{std::move(subject), std::move(predicate),
-                           std::move(object)};
-
-    EXPECT_THROW(query_->addParameter(iriTriple), std::runtime_error);
-  }
-
-  // Triple with literals
-  {
-    TripleComponent subject{Variable{"?s"}};
-    VarOrPath predicate = PropertyPath::fromIri(
-        TripleComponent::Iri::fromIriref("<http://example.org/p>"));
-    TripleComponent object{
-        TripleComponent::Literal::fromStringRepresentation("\"literal\"")};
-    SparqlTriple literalTriple{std::move(subject), std::move(predicate),
-                               std::move(object)};
-
-    EXPECT_THROW(query_->addParameter(literalTriple), std::runtime_error);
-  }
-}
-
-// Test throwBecauseNotEmpty static method indirectly
-TEST_F(NamedCachedQueryTest, ThrowBecauseNotEmptyBehavior) {
-  // The throwBecauseNotEmpty method is private/static, but we can test its
-  // behavior through the public methods that call it
-
-  SparqlTriple testTriple = createTestTriple();
-
-  // Verify that addParameter throws with the expected message from
-  // throwBecauseNotEmpty
-  EXPECT_THROW(query_->addParameter(testTriple), std::runtime_error);
-
-  // Set child pattern and verify validateAndGetIdentifier throws with same
-  // message
-  query_->childGraphPattern_ = GraphPattern{};
-  EXPECT_THROW(query_->validateAndGetIdentifier(), std::runtime_error);
-
-  // Both should throw with the same message (coming from throwBecauseNotEmpty)
-  std::string addParameterMessage, validateMessage;
-
-  try {
-    query_->addParameter(testTriple);
-  } catch (const std::runtime_error& e) {
-    addParameterMessage = e.what();
-  }
-
-  try {
-    query_->validateAndGetIdentifier();
-  } catch (const std::runtime_error& e) {
-    validateMessage = e.what();
-  }
-
-  EXPECT_EQ(addParameterMessage, validateMessage);
-  EXPECT_THAT(addParameterMessage,
-              ::testing::HasSubstr(
-                  "The body of a named cache query request must be empty"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      query_->addParameter(testTriple),
+      ::testing::HasSubstr(
+          "The body of a named cache query request must be empty"));
 }
 
 // Test inheritance from MagicServiceQuery
@@ -202,7 +112,7 @@ TEST_F(NamedCachedQueryTest, EdgeCases) {
 
 // Test const correctness
 TEST_F(NamedCachedQueryTest, ConstCorrectness) {
-  // Test that validateAndGetIdentifier can be called on const object
+  // Test that validateAndGetIdentifier can be called on a const object
   const NamedCachedQuery& constQuery = *query_;
   const std::string& result = constQuery.validateAndGetIdentifier();
   EXPECT_EQ(result, testIdentifier_);

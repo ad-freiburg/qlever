@@ -1,6 +1,9 @@
-//  Copyright 2025, University of Freiburg,
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "parser/NamedCachedQuery.h"
 
@@ -25,5 +28,4 @@ void NamedCachedQuery::throwBecauseNotEmpty() {
   throw std::runtime_error{
       "The body of a named cache query request must be empty"};
 }
-
 }  // namespace parsedQuery

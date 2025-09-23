@@ -68,11 +68,13 @@ TEST(LibQlever, buildIndexAndRunQuery) {
         ::testing::HasSubstr("was not pinned to the named query cache");
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
 
-    // pin again.
+    // Pin again.
     engine.pinNamedQuery("pin1", query);
     engine.pinNamedQuery("pin2", query);
     EXPECT_NO_THROW(engine.query(serviceQuery));
     EXPECT_NO_THROW(engine.query(serviceQuery2));
+
+    // Clearing erases all queries.
     engine.clearNamedQueryCache();
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);

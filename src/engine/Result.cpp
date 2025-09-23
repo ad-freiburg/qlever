@@ -123,6 +123,7 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
           })}},
       sortedBy_{std::move(sortedBy)} {}
 
+namespace {
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
@@ -140,6 +141,18 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   idTable.shrinkToFit();
 }
 
+// Apply the `LimitOffsetClause` to the `idTable`, return the result as a deep
+// copy of the table.
+IdTable makeResizedClone(const IdTable& idTable,
+                         const LimitOffsetClause& limitOffset) {
+  IdTable result{idTable.getAllocator()};
+  result.setNumColumns(idTable.numColumns());
+  result.insertAtEnd(idTable, limitOffset.actualOffset(idTable.numRows()),
+                     limitOffset.upperBound(idTable.numRows()));
+  return result;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
@@ -154,14 +167,19 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    auto& res = std::get<IdTableSharedLocalVocabPair>(data_);
-    // TODO<joka921> We have to fix this case, as we might very well apply a
-    // LIMIT/OFFSET to a cached result, we just need a better algorithm.
-    AD_CORRECTNESS_CHECK(
-        std::holds_alternative<IdTable>(res.idTableOrPtr_),
-        "`applyLimitOffset` may not be called on an immutable `Result`");
-    IdTable& table = std::get<IdTable>(res.idTableOrPtr_);
-    resizeIdTable(table, limitOffset);
+    auto& tableOrPtr =
+        std::get<IdTableSharedLocalVocabPair>(data_).idTableOrPtr_;
+    std::visit(
+        [&limitOffset](auto& arg) {
+          if constexpr (ad_utility::isSimilar<decltype(arg), IdTable>) {
+            resizeIdTable(arg, limitOffset);
+          } else {
+            static_assert(ad_utility::isSimilar<decltype(arg), IdTablePtr>);
+            arg = std::make_shared<const IdTable>(
+                makeResizedClone(*arg, limitOffset));
+          }
+        },
+        tableOrPtr);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{

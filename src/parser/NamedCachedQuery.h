@@ -1,6 +1,9 @@
-//  Copyright 2025, University of Freiburg,
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H
 #define QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H

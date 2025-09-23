@@ -167,7 +167,7 @@ class QueryExecutionContext {
   }
 
   // If this optional contains a string, then the result of the query that is
-  // executed on this context will be stored in the `namedQueryCache()` using
+  // executed using this context will be stored in the `namedQueryCache()` using
   // the string as the query name. If it is `nullopt`, no such pinning is done.
   auto& pinWithExplicitName() { return pinWithExplicitName_; }
   const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
