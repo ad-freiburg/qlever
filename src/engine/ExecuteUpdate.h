@@ -12,8 +12,8 @@
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
-// Metadata about the number of triples before and after an update as well as
-// changes by the update.
+// Metadata of a single update operation: number of inserted and deleted triples
+// before the operation, of the operation, and after the operation.
 struct UpdateMetadata {
   std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
