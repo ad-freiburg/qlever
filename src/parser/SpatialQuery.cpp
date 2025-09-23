@@ -194,11 +194,18 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "`<experimentalPointPolyline>` algorithm.");
   }
 
-  if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE &&
-      !rightCacheName_.has_value()) {
-    throw SpatialSearchException(
-        "The parameter `<experimentalRightCacheName>` is mandatory for the "
-        "`<experimentalPointPolyline>` algorithm.");
+  if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    if (!rightCacheName_.has_value()) {
+      throw SpatialSearchException(
+          "The parameter `<experimentalRightCacheName>` is mandatory for the "
+          "`<experimentalPointPolyline>` algorithm.");
+    }
+    if (childGraphPattern_.has_value()) {
+      throw SpatialSearchException(
+          "The parameter `<experimentalPointPolyline>` algorithm uses a cached "
+          "query result as its right child. Therefore a group graph pattern "
+          "for the right side may not be specified in the `SERVICE`.");
+    }
   }
 
   // Only if the number of results is limited, it is mandatory that the right
