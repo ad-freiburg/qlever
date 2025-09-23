@@ -131,6 +131,8 @@ struct TestCaseConstructQuery {
                                     // Note: this member only contains the inner
                                     // result array with the bindings and NOT
                                     // the metadata.
+  // How many triples the construct query contains.
+  size_t numTriples = 1;
 };
 
 // Run a single test case for a SELECT query.
@@ -201,7 +203,8 @@ void runConstructQueryTestCase(
         testCase.kg, testCase.query, qleverJson, false, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
     ASSERT_EQ(resultJson["resultSizeExported"],
-              std::min(exportLimit, testCase.resultSizeExported));
+              std::min(exportLimit * testCase.numTriples,
+                       testCase.resultSizeExported));
   }
 }
 
@@ -538,12 +541,18 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
-      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
-      "4.012934858173560e-12";
+      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 ."
+      " <s> <p> 4.012934858173560e-12 ."
+      " <s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> ."
+      " <s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> ."
+      " <s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">-INF</literal></binding>
+  </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
   </result>
@@ -552,52 +561,91 @@ TEST(ExportQueryExecutionTrees, Floats) {
   </result>
   <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">INF</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#double">NaN</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseFloat{
-      kg, query, 3,
+      kg, query, 6,
       // TSV
       "?o\n"
+      "-INF\n"
       "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n",
+      "42.2\n"
+      "INF\n"
+      "NaN\n",
       // CSV
       "o\n"
+      "-INF\n"
       "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n",
+      "42.2\n"
+      "INF\n"
+      "NaN\n",
       makeExpectedQLeverJSON(
-          {"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+          {"\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
+           "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
+           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s,
+           "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>"s}),
       makeExpectedSparqlJSON(
-          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "-INF"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "-42019234865780982022144"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "4.01293e-12"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "42.2")}),
+                           "literal", "42.2"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "INF"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#double", "literal",
+                           "NaN")}),
       expectedXml};
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 6, 6,
       // TSV
+      "<s>\t<p>\t\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
       "<s>\t<p>\t-42019234865780982022144\n"
       "<s>\t<p>\t4.01293e-12\n"
-      "<s>\t<p>\t42.2\n",
+      "<s>\t<p>\t42.2\n"
+      "<s>\t<p>\t\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>\n"
+      "<s>\t<p>\t\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>\n",
       // CSV
+      "<s>,<p>,\"\"\"-INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
       "<s>,<p>,-42019234865780982022144\n"
       "<s>,<p>,4.01293e-12\n"
-      "<s>,<p>,42.2\n",
+      "<s>,<p>,42.2\n"
+      "<s>,<p>,\"\"\"INF\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n"
+      "<s>,<p>,\"\"\"NaN\"\"^^<http://www.w3.org/2001/XMLSchema#double>\"\n",
       // Turtle
+      "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> -42019234865780982022144 .\n"
       "<s> <p> 4.01293e-12 .\n"
-      "<s> <p> 42.2 .\n",
+      "<s> <p> 42.2 .\n"
+      "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
         nlohmann::json j;
+        j.push_back(std::vector{
+            "<s>"s, "<p>"s,
+            "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
+        j.push_back(
+            std::vector{"<s>"s, "<p>"s,
+                        "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
+        j.push_back(
+            std::vector{"<s>"s, "<p>"s,
+                        "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
@@ -1121,7 +1169,7 @@ TEST(ExportQueryExecutionTrees, EmptyLines) {
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
@@ -1187,6 +1235,51 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
       }(),
       expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
+
+  TestCaseConstructQuery testCaseConstruct{
+      "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>",
+      "CONSTRUCT { [] <p> _:a . [] <p> _:a } WHERE { ?s ?p ?o }", 8, 8,
+      // TSV
+      "_:g0_0\t<p>\t_:u0_a\n"
+      "_:g0_1\t<p>\t_:u0_a\n"
+      "_:g1_0\t<p>\t_:u1_a\n"
+      "_:g1_1\t<p>\t_:u1_a\n"
+      "_:g2_0\t<p>\t_:u2_a\n"
+      "_:g2_1\t<p>\t_:u2_a\n"
+      "_:g3_0\t<p>\t_:u3_a\n"
+      "_:g3_1\t<p>\t_:u3_a\n",
+      // CSV
+      "_:g0_0,<p>,_:u0_a\n"
+      "_:g0_1,<p>,_:u0_a\n"
+      "_:g1_0,<p>,_:u1_a\n"
+      "_:g1_1,<p>,_:u1_a\n"
+      "_:g2_0,<p>,_:u2_a\n"
+      "_:g2_1,<p>,_:u2_a\n"
+      "_:g3_0,<p>,_:u3_a\n"
+      "_:g3_1,<p>,_:u3_a\n",
+      // Turtle
+      "_:g0_0 <p> _:u0_a .\n"
+      "_:g0_1 <p> _:u0_a .\n"
+      "_:g1_0 <p> _:u1_a .\n"
+      "_:g1_1 <p> _:u1_a .\n"
+      "_:g2_0 <p> _:u2_a .\n"
+      "_:g2_1 <p> _:u2_a .\n"
+      "_:g3_0 <p> _:u3_a .\n"
+      "_:g3_1 <p> _:u3_a .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"_:g0_0"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g0_1"s, "<p>"s, "_:u0_a"s});
+        j.push_back(std::vector{"_:g1_0"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g1_1"s, "<p>"s, "_:u1_a"s});
+        j.push_back(std::vector{"_:g2_0"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g2_1"s, "<p>"s, "_:u2_a"s});
+        j.push_back(std::vector{"_:g3_0"s, "<p>"s, "_:u3_a"s});
+        j.push_back(std::vector{"_:g3_1"s, "<p>"s, "_:u3_a"s});
+        return j;
+      }(),
+      2};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 // ____________________________________________________________________________

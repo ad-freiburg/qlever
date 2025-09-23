@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
@@ -99,6 +99,10 @@ struct CompressedBlockMetadataNoBlockIndex {
 
     template <typename T>
     friend std::true_type allowTrivialSerialization(PermutedTriple, T);
+
+    // Helper function to make `PermutedTriple` easier to compare without
+    // `graphId_`.
+    auto tieWithoutGraph() const { return std::tie(col0Id_, col1Id_, col2Id_); }
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
@@ -161,6 +165,20 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
         blockMetadata);
     str << "block index: " << blockMetadata.blockIndex_ << "\n";
     return str;
+  }
+
+  // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
+  // all the triples that are the same when disregarding the graph are in the
+  // same block.
+  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+    return ::ranges::all_of(
+        ::ranges::views::sliding(sequenceOfBlocks, 2),
+        [](const auto& adjacent) {
+          const auto& first = adjacent.front().lastTriple_;
+          const auto& second = adjacent.back().firstTriple_;
+          return (first < second) &&
+                 (first.tieWithoutGraph() != second.tieWithoutGraph());
+        });
   }
 };
 
@@ -265,7 +283,7 @@ class CompressedRelationWriter {
   // same block), after this block has been completely handled by this writer.
   // The callback is used to efficiently pass the block from a permutation to
   // its twin permutation, which only has to re-sort and write the block.
-  using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
+  using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
   // A dummy value for multiplicities that can only later be determined.
@@ -312,7 +330,7 @@ class CompressedRelationWriter {
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
@@ -323,11 +341,8 @@ class CompressedRelationWriter {
   std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
     auto blocks = std::move(*(blockBuffer_.wlock()));
-    ql::ranges::sort(
-        blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
-          return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                          bl.firstTriple_.col2Id_);
-        });
+    ql::ranges::sort(blocks, {},
+                     &CompressedBlockMetadataNoBlockIndex::firstTriple_);
 
     std::vector<CompressedBlockMetadata> result;
     result.reserve(blocks.size());
@@ -335,6 +350,9 @@ class CompressedRelationWriter {
     for (size_t i : ad_utility::integerRange(blocks.size())) {
       result.emplace_back(std::move(blocks.at(i)), i);
     }
+
+    AD_CORRECTNESS_CHECK(
+        CompressedBlockMetadata::checkInvariantsForSortedBlocks(result));
     return result;
   }
 
@@ -351,7 +369,9 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const {
-    return uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id);
+    return std::max(
+        size_t{1},
+        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
   }
 
  private:
@@ -385,8 +405,7 @@ class CompressedRelationWriter {
   // the `smallBlocksCallback_` is not empty, then
   // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
   // completely been dealt with.
-  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
-                             std::shared_ptr<IdTable> block,
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
                              bool invokeCallback);
 
   // Add a small relation that will be stored in a single block, possibly
@@ -402,7 +421,7 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, std::shared_ptr<IdTable> relation);
+  void addBlockForLargeRelation(Id col0Id, IdTable relation);
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
@@ -589,7 +608,14 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
+  // TODO: other modules are using this so, it was left untouched, should be
+  // removed when they migrate to ranges
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+
+  // TODO: rename to IdTableGenerator when other modules will migrate to non
+  // coro
+  using IdTableGeneratorInputRange =
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
  private:
   // The allocator used to allocate intermediate buffers.
@@ -668,12 +694,13 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  CompressedRelationReader::IdTableGenerator lazyScan(
-      ScanSpecification scanSpec,
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
+      const ScanSpecification& scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      ColumnIndices additionalColumns,
+      const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
@@ -804,7 +831,7 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   template <typename T>
-  IdTableGenerator asyncParallelBlockGenerator(
+  IdTableGeneratorInputRange asyncParallelBlockGenerator(
       T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
       LimitOffsetClause& limitOffset) const;

@@ -9,9 +9,9 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <type_traits>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"

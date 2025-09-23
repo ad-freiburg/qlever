@@ -28,10 +28,10 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <type_traits>
 #include <utility>
 #include <variant>
 
+#include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/SourceLocation.h"

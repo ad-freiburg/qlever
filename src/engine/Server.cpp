@@ -1086,6 +1086,15 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
+  if (to_status_class(responseStatus) == http::status_class::informational ||
+      responseStatus == http::status::no_content ||
+      responseStatus == http::status::not_modified) {
+    // HTTP mandates empty response bodies for the status codes 1xx, 204 and
+    // 304.
+    auto resp =
+        createHttpResponseFromString("", responseStatus, request, std::nullopt);
+    co_return co_await send(std::move(resp));
+  }
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     if (metadata) {

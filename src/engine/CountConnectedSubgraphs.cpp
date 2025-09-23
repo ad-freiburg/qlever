@@ -4,6 +4,8 @@
 
 #include "engine/CountConnectedSubgraphs.h"
 
+#include <bitset>
+
 #include "util/BitUtils.h"
 
 namespace countConnectedSubgraphs {
