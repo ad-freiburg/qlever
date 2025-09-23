@@ -60,12 +60,12 @@ Server::Server(unsigned short port, size_t numThreads,
       queryThreadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
-  GetRuntimeParameters().wlock()->cacheMaxNumEntries.setOnUpdateAction(
+  getRuntimeParameters().wlock()->cacheMaxNumEntries.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  // GetRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
+  // getRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
   //     [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue);
   //     });
-  // GetRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
+  // getRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
   //     [this](ad_utility::MemorySize newValue) {
   //       cache_.setMaxSizeSingleEntry(newValue);
   //     });
@@ -196,7 +196,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             std::optional<std::string_view> userTimeout, bool accessTokenOk,
             const RequestT& request, ResponseT& send) const {
   auto defaultTimeout =
-      GetRuntimeParameters().rlock()->defaultQueryTimeout.get();
+      getRuntimeParameters().rlock()->defaultQueryTimeout.get();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
@@ -343,8 +343,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
-    LOG(INFO) << "Processing command \"" << cmd.value() << "\"" << ": "
-              << actionMsg << std::endl;
+    LOG(INFO) << "Processing command \"" << cmd.value() << "\""
+              << ": " << actionMsg << std::endl;
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
@@ -386,7 +386,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response =
-        createJsonResponse(GetRuntimeParameters().rlock()->toMap(), request);
+        createJsonResponse(getRuntimeParameters().rlock()->toMap(), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
@@ -432,15 +432,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Set one or several of the runtime parameters.
-  for (auto key : GetRuntimeParameters().rlock()->getKeys()) {
+  for (auto key : getRuntimeParameters().rlock()->getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
       requireValidAccessToken("setting runtime parameters");
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
-      GetRuntimeParameters().wlock()->setFromString(key,
+      getRuntimeParameters().wlock()->setFromString(key,
                                                     std::string{value.value()});
       response =
-          createJsonResponse(GetRuntimeParameters().rlock()->toMap(), request);
+          createJsonResponse(getRuntimeParameters().rlock()->toMap(), request);
     }
   }
 
@@ -870,8 +870,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
-  LOG(INFO) << "Done processing query and sending result" << ", total time was "
-            << requestTimer.msecs().count() << " ms" << std::endl;
+  LOG(INFO) << "Done processing query and sending result"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
 
   // Log that we are done with the query and how long it took.
   //
@@ -959,8 +960,9 @@ nlohmann::json Server::processUpdateImpl(
                                    deltaTriples, cancellationHandle);
   DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
-  LOG(INFO) << "Done processing update" << ", total time was "
-            << requestTimer.msecs().count() << " ms" << std::endl;
+  LOG(INFO) << "Done processing update"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
   LOG(DEBUG) << "Runtime Info:\n"
              << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
 

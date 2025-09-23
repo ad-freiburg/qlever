@@ -5393,7 +5393,7 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
 
     // The outer cleanup will reset the original status, so we can safely
     // modify the global parameter here.
-    GetRuntimeParameters().wlock()->stripColumns_.set(doStrip);
+    getRuntimeParameters().wlock()->stripColumns_.set(doStrip);
 
     // The inner subquery should have ?z and ?w stripped (as they're not
     // selected) but since it's a subquery, the stripped variables should not be

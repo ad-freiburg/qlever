@@ -29,7 +29,7 @@ namespace po = boost::program_options;
 int main(int argc, char** argv) {
   // TODO<joka921> This is a hack, because the unit tests currently don't work
   // with the strip-columns feature.
-  GetRuntimeParameters().wlock()->stripColumns_.set(true);
+  getRuntimeParameters().wlock()->stripColumns_.set(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
   qlever::version::copyVersionInfo();
@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
   ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
-      &GetRuntimeParameters()};
+      &getRuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
   auto add = [&options](auto&&... args) {

@@ -104,6 +104,7 @@ struct RuntimeParameters {
 
   std::map<std::string, ad_utility::ParameterBase*> runtimeMap_;
 
+  // Constructor: Add all parameters to the map.
   RuntimeParameters() {
     // Here all of the newly defined parameters have to be added.
 
@@ -160,6 +161,8 @@ struct RuntimeParameters {
     return result;
   }
 
+  //  Set a parameter from a string.
+  // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value) {
     if (!runtimeMap_.contains(parameterName)) {
@@ -205,6 +208,7 @@ struct RuntimeParameters {
     return static_cast<ParameterType*>(runtimeMap_.at(parameterName))->get();
   }
 
+  // Get all parameter names.
   std::vector<std::string> getKeys() const {
     static std::vector<std::string> keys = [this]() {
       std::vector<std::string> result;
@@ -225,7 +229,7 @@ struct RuntimeParameters {
   RuntimeParameters& operator=(RuntimeParameters&&) = delete;
 };
 
-inline ad_utility::Synchronized<RuntimeParameters>& GetRuntimeParameters() {
+inline ad_utility::Synchronized<RuntimeParameters>& getRuntimeParameters() {
   static ad_utility::Synchronized<RuntimeParameters> value;
   return value;
 }

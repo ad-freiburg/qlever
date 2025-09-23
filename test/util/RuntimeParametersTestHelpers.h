@@ -12,10 +12,10 @@
 template <auto ParameterPtr, typename Value>
 [[nodiscard]] auto setNewRuntimeParameterForTest(Value&& value) {
   auto originalValue =
-      std::invoke(ParameterPtr, *GetRuntimeParameters().rlock()).get();
-  std::invoke(ParameterPtr, *GetRuntimeParameters().wlock()).set(AD_FWD(value));
+      std::invoke(ParameterPtr, *getRuntimeParameters().rlock()).get();
+  std::invoke(ParameterPtr, *getRuntimeParameters().wlock()).set(AD_FWD(value));
   return absl::Cleanup{[originalValue = std::move(originalValue)]() {
-    std::invoke(ParameterPtr, *GetRuntimeParameters().wlock())
+    std::invoke(ParameterPtr, *getRuntimeParameters().wlock())
         .set(std::move(originalValue));
   }};
 }
