@@ -106,42 +106,38 @@ struct RuntimeParameters {
 
   RuntimeParameters() {
     // Here all of the newly defined parameters have to be added.
-    runtimeMap_[stripColumns_.name()] = &stripColumns_;
-    runtimeMap_[sortEstimateCancellationFactor.name()] = &stripColumns_;
-    runtimeMap_[cacheMaxNumEntries.name()] = &cacheMaxNumEntries;
-    runtimeMap_[cacheMaxSize.name()] = &cacheMaxSize;
-    runtimeMap_[cacheMaxSizeSingleEntry.name()] = &cacheMaxSizeSingleEntry;
-    runtimeMap_[lazyIndexScanQueueSize.name()] = &lazyIndexScanQueueSize;
-    runtimeMap_[lazyIndexScanNumThreads.name()] = &lazyIndexScanNumThreads;
 
-    runtimeMap_[lazyIndexScanMaxSizeMaterialization.name()] =
-        &lazyIndexScanMaxSizeMaterialization;
-    runtimeMap_[useBinsearchTransitivePath.name()] =
-        &useBinsearchTransitivePath;
-    runtimeMap_[groupByHashMapEnabled.name()] = &groupByHashMapEnabled;
-    runtimeMap_[groupByDisableIndexScanOptimizations.name()] =
-        &groupByDisableIndexScanOptimizations;
-    runtimeMap_[serviceMaxValueRows.name()] = &serviceMaxValueRows;
-    runtimeMap_[queryPlanningBudget.name()] = &queryPlanningBudget;
-    runtimeMap_[throwOnUnboundVariables.name()] = &throwOnUnboundVariables;
-    runtimeMap_[cacheMaxSizeLazyResult.name()] = &cacheMaxSizeLazyResult;
+    auto add = [this]<typename T>(T& parameter) {
+      AD_CONTRACT_CHECK(!runtimeMap_.contains(parameter.name()));
+      runtimeMap_[parameter.name()] = &parameter;
+    };
 
-    runtimeMap_[websocketUpdatesEnabled.name()] = &websocketUpdatesEnabled;
-    runtimeMap_[smallIndexScanSizeEstimateDivisor.name()] =
-        &smallIndexScanSizeEstimateDivisor;
-    runtimeMap_[zeroCostEstimateForCachedSubtree.name()] =
-        &zeroCostEstimateForCachedSubtree;
-    runtimeMap_[requestBodyLimit.name()] = &requestBodyLimit;
-    runtimeMap_[cacheServiceResults.name()] = &cacheServiceResults;
-
-    runtimeMap_[syntaxTestMode.name()] = &syntaxTestMode;
-    runtimeMap_[divisionByZeroIsUndef.name()] = &divisionByZeroIsUndef;
-    runtimeMap_[enablePrefilterOnIndexScans.name()] =
-        &enablePrefilterOnIndexScans;
-    runtimeMap_[spatialJoinMaxNumThreads.name()] = &spatialJoinMaxNumThreads;
-    runtimeMap_[spatialJoinPrefilterMaxSize.name()] =
-        &spatialJoinPrefilterMaxSize;
-    runtimeMap_[enableDistributiveUnion.name()] = &enableDistributiveUnion;
+    add(stripColumns_);
+    add(sortEstimateCancellationFactor);
+    add(cacheMaxNumEntries);
+    add(cacheMaxSize);
+    add(cacheMaxSizeSingleEntry);
+    add(lazyIndexScanQueueSize);
+    add(lazyIndexScanNumThreads);
+    add(lazyIndexScanMaxSizeMaterialization);
+    add(useBinsearchTransitivePath);
+    add(groupByHashMapEnabled);
+    add(groupByDisableIndexScanOptimizations);
+    add(serviceMaxValueRows);
+    add(queryPlanningBudget);
+    add(throwOnUnboundVariables);
+    add(cacheMaxSizeLazyResult);
+    add(websocketUpdatesEnabled);
+    add(smallIndexScanSizeEstimateDivisor);
+    add(zeroCostEstimateForCachedSubtree);
+    add(requestBodyLimit);
+    add(cacheServiceResults);
+    add(syntaxTestMode);
+    add(divisionByZeroIsUndef);
+    add(enablePrefilterOnIndexScans);
+    add(spatialJoinMaxNumThreads);
+    add(spatialJoinPrefilterMaxSize);
+    add(enableDistributiveUnion);
 
     defaultQueryTimeout.setParameterConstraint(
         [](std::chrono::seconds value, std::string_view parameterName) {
