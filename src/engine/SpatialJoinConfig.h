@@ -66,7 +66,7 @@ enum class SpatialJoinAlgorithm {
   S2_GEOMETRY,
   BOUNDING_BOX,
   LIBSPATIALJOIN,
-  SJ_POINT_POLYLINE
+  S2_POINT_POLYLINE
 };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
