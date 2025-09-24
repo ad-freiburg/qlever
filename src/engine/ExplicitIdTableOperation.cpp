@@ -11,16 +11,12 @@
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
     VariableToColumnMap variables, std::vector<ColumnIndex> sortedColumns,
-    LocalVocab localVocab
-    // , std::optional<CachedGeometryIndex> cachedGeoIndex
-    )
+    LocalVocab localVocab)
     : Operation(ctx),
       idTable_(std::move(table)),
       variables_(std::move(variables)),
       sortedColumns_(std::move(sortedColumns)),
-      localVocab_(std::move(localVocab))
-// , cachedGeoIndex_(std::move(cachedGeoIndex))
-{
+      localVocab_(std::move(localVocab)) {
   // An explicit IdTable operation is never stored in the cache because it
   // 1. Doesn't have a valid cache key and
   // 2. Is mostly used to implement already cached results (the
@@ -88,10 +84,3 @@ VariableToColumnMap ExplicitIdTableOperation::computeVariableToColumnMap()
     const {
   return variables_;
 }
-
-// _____________________________________________________________________________
-// std::optional<CachedGeometryIndex>
-// ExplicitIdTableOperation::getCachedGeoIndex()
-//     const {
-//   return cachedGeoIndex_;
-// }

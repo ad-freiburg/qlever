@@ -75,19 +75,8 @@ using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
 
-// Forward declaration of s2 classes
+// Forward declaration of s2 class
 class S2Polyline;
-class MutableS2ShapeIndex;
-
-// TODO explain
-struct CachedS2PolylineIndex {
-  std::shared_ptr<MutableS2ShapeIndex> s2index_;
-};
-
-struct CachedGeometryIndex {
-  Variable geometryColumn_;
-  CachedS2PolylineIndex index_;
-};
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -188,11 +177,6 @@ class SpatialJoinAlgorithms {
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
-
-  // TODO
-  static CachedS2PolylineIndex makeS2PolylineIndex(const IdTable* restable,
-                                                   ColumnIndex col,
-                                                   const Index& index);
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table

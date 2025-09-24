@@ -389,15 +389,14 @@ std::shared_ptr<const Result> Operation::getResult(
 
       // If a geo index is to be cached, get the respective column using the
       // given variable and compute the index.
-      std::optional<CachedGeometryIndex> geoIndex = std::nullopt;
+      std::optional<SpatialJoinCachedIndex> geoIndex = std::nullopt;
       if (geoIndexVar.has_value()) {
         auto colIndex = getExternallyVisibleVariableColumns()
                             .at(geoIndexVar.value())
                             .columnIndex_;
-        geoIndex = CachedGeometryIndex{
-            geoIndexVar.value(), SpatialJoinAlgorithms::makeS2PolylineIndex(
-                                     &actualResult.idTable(), colIndex,
-                                     _executionContext->getIndex())};
+        geoIndex =
+            SpatialJoinCachedIndex{geoIndexVar.value(), &actualResult.idTable(),
+                                   colIndex, _executionContext->getIndex()};
       }
 
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing

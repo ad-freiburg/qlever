@@ -193,14 +193,6 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
 };
 
 // ____________________________________________________________________________
-CachedS2PolylineIndex SpatialJoinAlgorithms::makeS2PolylineIndex(const IdTable*,
-                                                                 ColumnIndex,
-                                                                 const Index&) {
-  // TODO
-  return {nullptr};
-};
-
-// ____________________________________________________________________________
 std::string_view SpatialJoinAlgorithms::betweenQuotes(
     std::string_view extractFrom) const {
   size_t pos1 = extractFrom.find("\"", 0);

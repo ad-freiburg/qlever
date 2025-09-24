@@ -10,7 +10,7 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/SpatialJoinCachedIndex.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
 
@@ -25,7 +25,7 @@ class NamedQueryCache {
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
-    std::optional<CachedGeometryIndex> cachedGeoIndex_;
+    std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
   };
 
   // The `ValueSizeGetter` currently is a dummy, as we currently don't limit the

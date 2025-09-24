@@ -45,7 +45,6 @@ class ExplicitIdTableOperation : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
-  // std::optional<CachedGeometryIndex> getCachedGeoIndex() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
