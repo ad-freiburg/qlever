@@ -153,48 +153,17 @@ struct RuntimeParameters {
   // Obtain a map from parameter names to parameter values.
   // This map only contains strings and is purely for logging
   // to human users.
-  [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const {
-    ad_utility::HashMap<std::string, std::string> result;
-    for (const auto& [name, parameter] : runtimeMap_) {
-      result[name] = parameter->toString();
-    }
-    return result;
-  }
+  [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const;
 
   //  Set a parameter from a string.
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
-                     const std::string& value) {
-    if (!runtimeMap_.contains(parameterName)) {
-      throw std::runtime_error{"No parameter with name " +
-                               std::string{parameterName} + " exists"};
-    }
-    try {
-      // Call the virtual set(std::string) function on the
-      // correct ParameterBase& in the `_runtimePointers`.
-      runtimeMap_.at(parameterName)->setFromString(value);
-    } catch (const std::exception& e) {
-      throw std::runtime_error("Could not set parameter " +
-                               std::string{parameterName} + " to value " +
-                               value + ". Exception was: " + e.what());
-    }
-  }
+                     const std::string& value);
 
   // Get all parameter names.
-  std::vector<std::string> getKeys() const {
-    static std::vector<std::string> keys = [this]() {
-      std::vector<std::string> result;
-      result.reserve(runtimeMap_.size());
-      for (const auto& [name, _] : runtimeMap_) {
-        result.push_back(name);
-      }
-      return result;
-    }();
+  std::vector<std::string> getKeys() const;
 
-    return keys;
-  }
-
-  // no copy and move possible
+  // no copy and move possibleq
   RuntimeParameters(const RuntimeParameters&) = delete;
   RuntimeParameters& operator=(const RuntimeParameters&) = delete;
   RuntimeParameters(RuntimeParameters&&) = delete;
