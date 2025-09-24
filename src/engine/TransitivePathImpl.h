@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
+#include <cstdint>
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
@@ -25,6 +26,8 @@ struct TableColumnWithVocab {
   PayloadTable payload_;
   ColumnType startNodes_;
   LocalVocab vocab_;
+
+  using column_type = ColumnType;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
@@ -235,6 +238,231 @@ class TransitivePathImpl : public TransitivePathBase {
     return connectedNodes;
   }
 
+  CPP_template(typename Node)(
+      requires ql::ranges::range<Node>) class TransitiveHullLazyRange
+      : public ad_utility::InputRangeMixin<TransitiveHullLazyRange<Node>> {
+   private:
+    using NodeWithTargetRange =
+        ad_utility::InputRangeTypeErased<NodeWithTargets>;
+    using EnumerateRangeType =
+        std::invoke_result_t<decltype(::ranges::views::enumerate),
+                             typename Node::value_type::column_type&>;
+
+    // Input arguments
+    const TransitivePathImpl<T>& parent_;
+    T edges_;
+    LocalVocab edgesVocab_;
+    Node startNodes_;
+    TripleComponent target_;
+    bool yieldOnce_;
+    // Runtime state
+    ad_utility::Timer timer_{ad_utility::Timer::Stopped};
+    LocalVocab targetHelper_;
+    LocalVocab mergedVocab_;
+    std::optional<Id> targetId_;
+    bool sameVariableOnBothSides_;
+    bool endsWithGraphVariable_;
+    bool startsWithGraphVariable_;
+    // Range state
+    bool finished_{false};
+    // The `resultRange_` yields results of this transitive hull
+    // computation. Values from `TableColumnWithVocab::expandUndef` are
+    // processed one by one. The range and iterator are reinitialised when the
+    // next value from the `enumerateRange_` is yielded. The iterator is
+    // incremented on each iteration of this object.
+    std::optional<NodeWithTargetRange> resultRange_;
+    NodeWithTargetRange::iterator result_{};
+    // The `enumerateRange_` yields `pair<index, ZippedType>` for the current
+    // table column's `startNodes_`.  The range and iterator are
+    // reinitialised when the next table column is yielded. The iterator is
+    // incremented only when the `resultRange_` is exhausted.
+    std::optional<EnumerateRangeType> enumerateRange_;
+    ql::ranges::iterator_t<EnumerateRangeType> enumerateRangeIt_{};
+    // This iterator points to the table columns of `startNodes_` and only
+    // incremented when the `enumerateRange_` is exhausted. The transitive hull
+    // computation is completed when  this iterator reaches the end of
+    // `startNodes_`.
+    ql::ranges::iterator_t<Node> tableColumnIt_{};
+
+   public:
+    TransitiveHullLazyRange(const TransitivePathImpl<T>& parent, T edges,
+                            LocalVocab edgesVocab, Node startNodes,
+                            TripleComponent start, TripleComponent target,
+                            bool yieldOnce)
+        : parent_(parent),
+          edges_(std::move(edges)),
+          edgesVocab_(std::move(edgesVocab)),
+          startNodes_(std::move(startNodes)),
+          target_(std::move(target)),
+          yieldOnce_(yieldOnce) {
+      // `targetId` is only ever used for comparisons, and never stored in the
+      // result, so we use a separate local vocabulary - `targetHelper_`.
+      const auto& index = parent_.getIndex();
+      targetId_ = target_.isVariable()
+                      ? std::nullopt
+                      : std::optional{std::move(target_).toValueId(
+                            index.getVocab(), targetHelper_,
+                            index.encodedIriManager())};
+      sameVariableOnBothSides_ =
+          !targetId_.has_value() && parent_.lhs_.value_ == parent_.rhs_.value_;
+      endsWithGraphVariable_ = !targetId_.has_value() &&
+                               parent_.graphVariable_ == target_.getVariable();
+      startsWithGraphVariable_ =
+          start.isVariable() && parent_.graphVariable_ == start.getVariable();
+    }
+
+    // Return the ID of the target node when searching for connected nodes.
+    // Returns either `startNode`, `graphId` or `targetId_`,
+    // where the selection logic covers the following case:
+    // SELECT * {
+    //   ?x <a>+ ?x . # sameVariableOnBothSides
+    //   GRAPH ?g {
+    //     ?y <b>+ ?g # endsWithGraphVariable
+    //   }
+    //   # else
+    //   VALUES ?z { <d> }
+    //   ?z <c>+ <e> # <e> would be the target id
+    //   ?z <c>+ ?e  # std::nullopt would be the target id
+    // }
+    std::optional<Id> getTargetId(const Id& startNode,
+                                  const Id& graphId) const {
+      if (sameVariableOnBothSides_) {
+        return startNode;
+      } else if (endsWithGraphVariable_) {
+        return graphId;
+      } else {
+        return targetId_;
+      }
+    };
+
+    // Process an output ID pair from `TableColumnWithVocab::expandUndef`.
+    // This method performs the core logic of the transitive hull computation
+    // and runs the hull traversal with `findConnectedNodes`. It is called with
+    // each iteration of the `resultRange_`.
+    ad_utility::LoopControl<NodeWithTargets> process(ZippedType& idPair,
+                                                     size_t currentRow,
+                                                     PayloadTable& payload) {
+      using namespace ad_utility;
+      const auto& [startNode, graphId] = idPair;
+      timer_.cont();
+      // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x }}`
+      // where both `?g` variables are not the same.
+      if (startsWithGraphVariable_ && startNode != graphId) {
+        return LoopControl<NodeWithTargets>::makeContinue();
+      }
+      edges_.setGraphId(graphId);
+      Set connectedNodes = parent_.findConnectedNodes(
+          edges_, startNode, getTargetId(startNode, graphId));
+      if (!connectedNodes.empty()) {
+        parent_.runtimeInfo().addDetail("Hull time", timer_.msecs());
+        NodeWithTargets result{startNode,
+                               graphId,
+                               std::move(connectedNodes),
+                               mergedVocab_.clone(),
+                               payload,
+                               currentRow};
+        // Reset vocab to prevent merging the same vocab over and over
+        // again.
+        if (yieldOnce_) {
+          mergedVocab_ = LocalVocab{};
+        }
+        timer_.stop();
+        return LoopControl<NodeWithTargets>::yieldValue(std::move(result));
+      }
+      timer_.stop();
+      return LoopControl<NodeWithTargets>::makeContinue();
+    }
+
+    // Return a range that yields `NodeWithTargets` for the current
+    // `tableColumnIt_` and `enumerateRangeIt_`.
+    NodeWithTargetRange buildResultRange() {
+      auto& tableColumn = *tableColumnIt_;
+      const auto& [currentRow, zippedType] = *enumerateRangeIt_;
+      return NodeWithTargetRange(
+          ad_utility::CachingContinuableTransformInputRange(
+              tableColumn.expandUndef(zippedType, edges_,
+                                      parent_.graphVariable_.has_value()),
+              [this, currentRow = currentRow,
+               payload = tableColumn.payload_](auto& idPair) mutable {
+                return process(idPair, currentRow, payload);
+              }));
+    }
+
+    // Initialise `enumerateRange_` and `enumerateRangeIt_` for the current
+    // `tableColumnIt_`. If there are no more table columns, we are finished.
+    void buildEnumerateRange() {
+      if (tableColumnIt_ == ql::ranges::end(startNodes_)) {
+        finished_ = true;
+        return;
+      }
+      auto& tableColumn = *tableColumnIt_;
+      mergedVocab_ = std::move(tableColumn.vocab_);
+      mergedVocab_.mergeWith(edgesVocab_);
+
+      enumerateRange_ = ::ranges::views::enumerate(tableColumn.startNodes_);
+      enumerateRangeIt_ = ql::ranges::begin(*enumerateRange_);
+
+      if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
+        // if there are no start nodes in this table column, we move to the
+        // next table column and recursively find the next valid range.
+        ++tableColumnIt_;
+        return buildEnumerateRange();
+      }
+    }
+
+    // Advance `enumerateRangeIt_` to the next value, build the next
+    // `resultRange_` and initialise `result_`.
+    void getNextResultRange() {
+      ++enumerateRangeIt_;
+      if (enumerateRangeIt_ == ql::ranges::end(*enumerateRange_)) {
+        ++tableColumnIt_;
+        buildEnumerateRange();
+      }
+
+      if (finished_) {
+        return;
+      }
+
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    // This method is called when `begin()` is called on this object.
+    // Initialises all ranges and prepares to yield the first value or signal
+    // that we are finished.
+    void start() {
+      tableColumnIt_ = ql::ranges::begin(startNodes_);
+      buildEnumerateRange();
+      if (finished_) {
+        return;
+      }
+
+      resultRange_ = buildResultRange();
+      result_ = resultRange_->begin();
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    // Advance to the next result value. If the current `resultRange_` is
+    // exhausted, initialise the next one.
+    void next() {
+      ++result_;
+      if (result_ == resultRange_->end()) {
+        getNextResultRange();
+      }
+    }
+
+    // Return true if there are no more values to yield.
+    bool isFinished() { return finished_; }
+    // Return the current result value.
+    auto& get() { return *result_; }
+    const auto& get() const { return *result_; }
+  };
+
   /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
@@ -259,62 +487,9 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
-    // `targetId` is only ever used for comparisons, and never stored in the
-    // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
-    const auto& index = getIndex();
-    std::optional<Id> targetId =
-        target.isVariable()
-            ? std::nullopt
-            : std::optional{std::move(target).toValueId(
-                  index.getVocab(), targetHelper, index.encodedIriManager())};
-    bool sameVariableOnBothSides =
-        !targetId.has_value() && lhs_.value_ == rhs_.value_;
-    bool endsWithGraphVariable =
-        !targetId.has_value() && graphVariable_ == target.getVariable();
-    bool startsWithGraphVariable =
-        start.isVariable() && graphVariable_ == start.getVariable();
-    for (auto&& tableColumn : startNodes) {
-      timer.cont();
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab);
-      for (const auto& [currentRow, pair] :
-           ::ranges::views::enumerate(tableColumn.startNodes_)) {
-        for (const auto& [startNode, graphId] :
-             tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
-          // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
-          // where both `?g` variables are not the same.
-          if (startsWithGraphVariable && startNode != graphId) {
-            continue;
-          }
-          if (sameVariableOnBothSides) {
-            targetId = startNode;
-          } else if (endsWithGraphVariable) {
-            targetId = graphId;
-          }
-          edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-          if (!connectedNodes.empty()) {
-            runtimeInfo().addDetail("Hull time", timer.msecs());
-            timer.stop();
-            co_yield NodeWithTargets{startNode,
-                                     graphId,
-                                     std::move(connectedNodes),
-                                     mergedVocab.clone(),
-                                     tableColumn.payload_,
-                                     static_cast<size_t>(currentRow)};
-            timer.cont();
-            // Reset vocab to prevent merging the same vocab over and over
-            // again.
-            if (yieldOnce) {
-              mergedVocab = LocalVocab{};
-            }
-          }
-        }
-      }
-      timer.stop();
-    }
+    return NodeGenerator(TransitiveHullLazyRange<Node>(
+        *this, std::move(edges), std::move(edgesVocab), std::move(startNodes),
+        std::move(start), std::move(target), yieldOnce));
   }
 
   /**
