@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
@@ -116,13 +117,10 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
 
   // Note: Variables that have been stripped are still semantically part of the
   // query, and thus can be prefiltered.
-  prefilterPairs.erase(std::remove_if(prefilterPairs.begin(),
-                                      prefilterPairs.end(),
-                                      [&varToColMap, this](const auto& pair) {
-                                        return !varToColMap.contains(pair.second) &&
-                                               !strippedVariables_.contains(pair.second);
-                                      }),
-                       prefilterPairs.end());
+  ql::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
+    return !varToColMap.contains(pair.second) &&
+           !strippedVariables_.contains(pair.second);
+  });
 
   if (prefilterPairs.empty()) {
     return std::nullopt;

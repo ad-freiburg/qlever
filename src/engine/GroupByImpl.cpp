@@ -9,6 +9,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
@@ -232,12 +233,10 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   AD_CORRECTNESS_CHECK(subtree != nullptr);
   // Remove all undefined GROUP BY variables (according to the SPARQL standard
   // they are allowed, but have no effect on the result).
-  _groupByVariables.erase(std::remove_if(_groupByVariables.begin(),
-                                          _groupByVariables.end(),
-                                          [&map = subtree->getVariableColumns()](const auto& var) {
-                                            return !map.contains(var);
-                                          }),
-                            _groupByVariables.end());
+  ql::erase_if(_groupByVariables,
+               [&map = subtree->getVariableColumns()](const auto& var) {
+                 return !map.contains(var);
+               });
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.

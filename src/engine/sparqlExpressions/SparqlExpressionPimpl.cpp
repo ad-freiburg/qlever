@@ -4,8 +4,10 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./SparqlExpressionPimpl.h"
+
 #include <algorithm>
 
+#include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -40,9 +42,8 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
 std::vector<Variable> SparqlExpressionPimpl::getUnaggregatedVariables(
     const ad_utility::HashSet<Variable>& groupedVariables) const {
   auto vars = _pimpl->getUnaggregatedVariables();
-  vars.erase(std::remove_if(vars.begin(), vars.end(),
-                            [&](const auto& var) { return groupedVariables.contains(var); }),
-             vars.end());
+  ql::erase_if(vars,
+               [&](const auto& var) { return groupedVariables.contains(var); });
   return vars;
 }
 

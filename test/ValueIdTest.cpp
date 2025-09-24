@@ -11,6 +11,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "global/ValueId.h"
 #include "index/EncodedIriManager.h"
 #include "index/LocalVocabEntry.h"
@@ -214,9 +215,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
   // the NaNs from the `double`s.
-  doubles.erase(std::remove_if(doubles.begin(), doubles.end(),
-                               [](double d) { return std::isnan(d); }),
-                doubles.end());
+  ql::erase_if(doubles, [](double d) { return std::isnan(d); });
   std::sort(doubles.begin(), doubles.end());
 
   // When sorting ValueIds that hold doubles, the NaN values form a contiguous

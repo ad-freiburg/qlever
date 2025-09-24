@@ -14,6 +14,7 @@
 
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -975,10 +976,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
-  columns.erase(std::remove(columns.begin(), columns.end(),
-                             std::nullopt),
-                columns.end());
-
+  ql::erase(columns, std::nullopt);
 
   auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
                         const LocalVocab& localVocab) {
