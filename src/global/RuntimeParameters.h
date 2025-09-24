@@ -63,7 +63,7 @@ struct RuntimeParameters {
   Bool zeroCostEstimateForCachedSubtree{
       false, "zero-cost-estimate-for-cached-subtree"};
   // Maximum size for the body of requests that the server will process.
-  MemorySizeParameter requestBodyLimit{ad_utility::MemorySize::megabytes(100),
+  MemorySizeParameter requestBodyLimit{ad_utility::MemorySize::gigabytes(1),
                                        "request-body-limit"};
   // SERVICE operations are not cached by default, but can be enabled
   // which has the downside that the sibling optimization where VALUES are

@@ -13,6 +13,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -35,10 +36,13 @@ void DeltaTriples::clear() {
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   ql::span<const IdTriple<0>> triples,
-                                  bool insertOrDelete) {
+                                  bool insertOrDelete,
+                                  ad_utility::timer::TimeTracer& tracer) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
+    tracer.beginTrace(std::string{Permutation::toString(permutation)});
+    tracer.beginTrace("locateTriples");
     auto& perm = index_.getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
@@ -46,11 +50,16 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
         triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
+    tracer.endTrace("locateTriples");
+    tracer.beginTrace("addToLocatedTriples");
     intermediateHandles[static_cast<size_t>(permutation)] =
         this->locatedTriples()[static_cast<size_t>(permutation)].add(
-            locatedTriples);
+            locatedTriples, tracer);
     cancellationHandle->throwIfCancelled();
+    tracer.endTrace("addToLocatedTriples");
+    tracer.endTrace(Permutation::toString(permutation));
   }
+  tracer.beginTrace("transformHandles");
   std::vector<DeltaTriples::LocatedTripleHandles> handles{triples.size()};
   for (auto permutation : Permutation::ALL) {
     for (size_t i = 0; i < triples.size(); i++) {
@@ -58,6 +67,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
           intermediateHandles[static_cast<size_t>(permutation)][i];
     }
   }
+  tracer.endTrace("transformHandles");
   return handles;
 }
 
@@ -78,22 +88,24 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
-                                 Triples triples) {
+                                 Triples triples,
+                                 ad_utility::timer::TimeTracer& tracer) {
   LOG(DEBUG) << "Inserting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
   modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), true,
-                    triplesInserted_, triplesDeleted_);
+                    triplesInserted_, triplesDeleted_, tracer);
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
-                                 Triples triples) {
+                                 Triples triples,
+                                 ad_utility::timer::TimeTracer& tracer) {
   LOG(DEBUG) << "Deleting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
   modifyTriplesImpl(std::move(cancellationHandle), std::move(triples), false,
-                    triplesDeleted_, triplesInserted_);
+                    triplesDeleted_, triplesInserted_, tracer);
 }
 
 // ____________________________________________________________________________
@@ -155,14 +167,20 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      Triples triples, bool insertOrDelete,
                                      TriplesToHandlesMap& targetMap,
-                                     TriplesToHandlesMap& inverseMap) {
+                                     TriplesToHandlesMap& inverseMap,
+                                     ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
+  tracer.endTrace("rewriteLocalVocabEntries");
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
   AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
                      triples.end());
+  tracer.beginTrace("removeExistingTriples");
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
+  tracer.endTrace("removeExistingTriples");
+  tracer.beginTrace("removeInverseTriples");
   ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
     auto handle = inverseMap.find(triple);
     if (handle != inverseMap.end()) {
@@ -170,19 +188,26 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
       inverseMap.erase(triple);
     }
   });
+  tracer.endTrace("removeInverseTriples");
+  tracer.beginTrace("updateMetadata");
   // Manually update the block metadata, because `eraseTripleInAllPermutations`
   // does not update them for performance reason.
   ql::ranges::for_each(locatedTriples(),
                        &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  tracer.endTrace("updateMetadata");
+  tracer.beginTrace("locatedAndAdd");
 
   std::vector<LocatedTripleHandles> handles = locateAndAddTriples(
-      std::move(cancellationHandle), triples, insertOrDelete);
+      std::move(cancellationHandle), triples, insertOrDelete, tracer);
+  tracer.endTrace("locatedAndAdd");
+  tracer.beginTrace("markTriples");
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with ql::views::zip in C++23
   for (size_t i = 0; i < triples.size(); i++) {
     targetMap.insert({triples[i], handles[i]});
   }
+  tracer.endTrace("markTriples");
 }
 
 // ____________________________________________________________________________
@@ -230,49 +255,54 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
-    bool writeToDiskAfterRequest) {
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer& tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  return deltaTriples_.withWriteLock(
-      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
-        auto updateSnapshot = [this, &deltaTriples] {
-          auto newSnapshot = deltaTriples.getSnapshot();
-          currentLocatedTriplesSnapshot_.withWriteLock(
-              [&newSnapshot](auto& currentSnapshot) {
-                currentSnapshot = std::move(newSnapshot);
-              });
-        };
-        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
-                                       writeToDiskAfterRequest]() {
-          if (writeToDiskAfterRequest) {
-            // TODO<RobinTF> Find a good way to track the time it takes to write
-            // this and store it into the corresponding metadata object.
-            deltaTriples.writeToDisk();
-          }
-          updateSnapshot();
-        };
+  tracer.beginTrace("acquiringDeltaTriplesWriteLock");
+  return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest,
+                                      &tracer](DeltaTriples& deltaTriples) {
+    auto updateSnapshot = [this, &deltaTriples] {
+      auto newSnapshot = deltaTriples.getSnapshot();
+      currentLocatedTriplesSnapshot_.withWriteLock(
+          [&newSnapshot](auto& currentSnapshot) {
+            currentSnapshot = std::move(newSnapshot);
+          });
+    };
+    auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
+                                   writeToDiskAfterRequest]() {
+      if (writeToDiskAfterRequest) {
+        tracer.beginTrace("diskWriteback");
+        deltaTriples.writeToDisk();
+        tracer.endTrace("diskWriteback");
+      }
+      tracer.beginTrace("snapshotCreation");
+      updateSnapshot();
+      tracer.endTrace("snapshotCreation");
+    };
 
-        if constexpr (std::is_void_v<ReturnType>) {
-          function(deltaTriples);
-          writeAndUpdateSnapshot();
-        } else {
-          ReturnType returnValue = function(deltaTriples);
-          writeAndUpdateSnapshot();
-          return returnValue;
-        }
-      });
+    tracer.endTrace("acquiringDeltaTriplesWriteLock");
+    if constexpr (std::is_void_v<ReturnType>) {
+      function(deltaTriples);
+      writeAndUpdateSnapshot();
+    } else {
+      ReturnType returnValue = function(deltaTriples);
+      writeAndUpdateSnapshot();
+      return returnValue;
+    }
+  });
 }
 // Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
-template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
+    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
+    ad_utility::timer::TimeTracer&);
+template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
+    const std::function<UpdateMetadata(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
