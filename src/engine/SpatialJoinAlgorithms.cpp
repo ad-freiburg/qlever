@@ -164,7 +164,7 @@ size_t SpatialJoinAlgorithms::getNumThreads() {
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
                                                         size_t row,
-                                                        ColumnIndex col) const {
+                                                        ColumnIndex col) {
   auto id = restable->at(row, col);
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
@@ -173,8 +173,7 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
-    const IdTable* restable, size_t row, ColumnIndex col,
-    const Index& index) const {
+    const IdTable* restable, size_t row, ColumnIndex col, const Index& index) {
   auto id = restable->at(row, col);
   // TODO<ullingerc/joka921> Deal with local vocab
   auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
@@ -336,7 +335,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -411,7 +410,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -566,7 +565,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
@@ -640,7 +639,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // TODO access cache + sanity check of cache, must have geo index, must have
@@ -775,7 +774,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -855,7 +854,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -1042,7 +1041,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType] = params_;
+              joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
