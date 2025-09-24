@@ -3149,9 +3149,9 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitNamedCachedQuery(
     const parsedQuery::NamedCachedQuery& arg) {
-  auto candidate = SubtreePlan{
-      planner_._qec, planner_._qec->namedQueryCache().getOperation(
-                         arg.validateAndGetIdentifier(), planner_._qec)};
+  auto candidate =
+      SubtreePlan{planner_._qec, planner_._qec->namedQueryCache().getOperation(
+                                     arg.identifier(), planner_._qec)};
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 

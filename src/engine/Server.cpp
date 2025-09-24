@@ -277,9 +277,11 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
-                         : "")
+            << (pinSubtrees ? " [pin subresults]" : "")
+            << (pinNamed
+                    ? absl::StrCat(" [pin named as ", pinNamed.value(), "]")
+                    : "")
+            << "\n"
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,

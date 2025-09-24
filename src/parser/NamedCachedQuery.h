@@ -16,17 +16,17 @@ class NamedCachedQuery : public MagicServiceQuery {
   std::string identifier_;
 
  public:
-  // Construct with the name of the named query.
-  explicit NamedCachedQuery(std::string identifier)
-      : identifier_{std::move(identifier)} {}
+  // Construct from an iri. The iri is required to have the form
+  // `ql:named-cached-query-queryName`, else an exception is thrown.
+  explicit NamedCachedQuery(const TripleComponent::Iri& iri);
 
   // Currently the body of the SERVICE clause must be empty.
   void addParameter([[maybe_unused]] const SparqlTriple& triple) override;
+  // Currently the body of the SERVICE clause must be empty.
+  void addGraph(const GraphPatternOperation& childGraphPattern) override;
 
-  // Return the name of the named query, and check, that the configuration is
-  // valid (which currently means, that the body of the SERVICE clause was
-  // empty.
-  const std::string& validateAndGetIdentifier() const;
+  // Return the name of the named query.
+  const std::string& identifier() const;
 
  private:
   [[noreturn]] static void throwBecauseNotEmpty();
