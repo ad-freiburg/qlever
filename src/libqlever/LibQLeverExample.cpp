@@ -6,6 +6,7 @@
 
 #include <iostream>
 
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
@@ -32,6 +33,8 @@ int main(int argc, char** argv) {
   qlever::IndexBuilderConfig config;
   config.inputFiles_.emplace_back(inputFile, qlever::Filetype::Turtle);
   config.baseName_ = indexBasename;
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  config.memoryLimit_ = ad_utility::MemorySize::kilobytes(500);
   try {
     qlever::Qlever::buildIndex(config);
   } catch (const std::exception& e) {

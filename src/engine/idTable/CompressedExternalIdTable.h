@@ -326,6 +326,7 @@ class CompressedExternalIdTableBase {
   // Store whether this table has previously already been iterated over (in
   // which case this member becomes `false`).
   std::atomic<bool> isFirstIteration_ = true;
+  std::atomic<bool> transformAndPushWasCalled = false;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -418,6 +419,7 @@ class CompressedExternalIdTableBase {
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
+    AD_CONTRACT_CHECK(!transformAndPushWasCalled.exchange(true));
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
@@ -642,6 +644,7 @@ class CompressedExternalIdTableSorter
       std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
     // Explanation for the second argument of `runStreamAsync`: One block is
