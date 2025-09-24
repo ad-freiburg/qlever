@@ -11,7 +11,6 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
-// #include "engine/SpatialJoinAlgorithms.h"
 
 // An operation that owns its explicit `Result` via `shared_ptr`s and just
 // returns this result when `computeResult` is called.
