@@ -12,7 +12,6 @@ std::shared_ptr<ExplicitIdTableOperation> NamedQueryCache::getOperation(
     const Key& key, QueryExecutionContext* ctx) {
   const auto& ptr = get(key);
   const auto& [table, map, sortedOn, localVocab, geoIndex] = *ptr;
-  // TODO<ullingerc> should ExplicitIdTableOperation have geoIndex?
   auto res = std::make_shared<ExplicitIdTableOperation>(
       ctx, table, map, sortedOn, localVocab.clone());
   return res;
