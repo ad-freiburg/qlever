@@ -9,8 +9,7 @@
 
 #include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoinAlgorithms.h"
-#include "engine/SpatialJoinConfig.h"
+#include "engine/SpatialJoinCachedIndex.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
