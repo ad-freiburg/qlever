@@ -11,19 +11,27 @@
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
 
-// Forward declaration of s2 classes
-class S2Polyline;
+// Forward declaration of s2 class
 class MutableS2ShapeIndex;
 
-// TODO explain
-struct SpatialJoinCachedIndex {
+// This class holds a shape index that is created once by the named cached query
+// mechanism and is then kept constant and persisted across queries.
+class SpatialJoinCachedIndex {
+ private:
   Variable geometryColumn_;
   std::shared_ptr<MutableS2ShapeIndex> s2index_;
+  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_{};
 
-  // TODO
-  SpatialJoinCachedIndex(const Variable& geometryColumn,
-                         const IdTable* restable, ColumnIndex col,
-                         const Index& index);
+ public:
+  // Constructor that builds an index from the geometries in the given column in
+  // the `IdTable`. Currently only line strings are supported for the
+  // experimental S2 point polyline algorithm.
+  SpatialJoinCachedIndex(const Variable& geometryColumn, ColumnIndex col,
+                         const IdTable* restable, const Index& index);
+
+  // Getters
+  const Variable& getGeometryColumn() const { return geometryColumn_; }
+  const MutableS2ShapeIndex& getIndex() const { return *s2index_; }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H
