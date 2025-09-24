@@ -21,7 +21,7 @@ struct RuntimeParameters {
   // This makes the queries faster, but leads to more cache misses if e.g.
   // variables in a SELECT clause change
   // between otherwise equal queries.
-  Bool stripColumns_{false, "strip-columns"};
+  Bool stripColumns{false, "strip-columns"};
 
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
@@ -113,7 +113,7 @@ struct RuntimeParameters {
       runtimeMap_[parameter.name()] = &parameter;
     };
 
-    add(stripColumns_);
+    add(stripColumns);
     add(sortEstimateCancellationFactor);
     add(cacheMaxNumEntries);
     add(cacheMaxSize);
@@ -180,34 +180,6 @@ struct RuntimeParameters {
     }
   }
 
-  template <typename ParameterType>
-  void set(const std::string& parameterName,
-           const ParameterType::value_type& value) {
-    if (!runtimeMap_.contains(parameterName)) {
-      throw std::runtime_error{"No parameter with name " +
-                               std::string{parameterName} + " exists"};
-    }
-    try {
-      // Call the virtual set(std::string) function on the
-      // correct ParameterBase& in the `_runtimePointers`.
-      static_cast<ParameterType*>(runtimeMap_.at(parameterName))->set(value);
-    } catch (const std::exception& e) {
-      throw std::runtime_error("Could not set parameter " +
-                               std::string{parameterName} + " to value " +
-                               ParameterType(value, parameterName).toString() +
-                               ". Exception was: " + e.what());
-    }
-  }
-
-  template <typename ParameterType>
-  ParameterType::value_type get(const std::string& parameterName) const {
-    if (!runtimeMap_.contains(parameterName)) {
-      throw std::runtime_error{"No parameter with name " +
-                               std::string{parameterName} + " exists"};
-    }
-    return static_cast<ParameterType*>(runtimeMap_.at(parameterName))->get();
-  }
-
   // Get all parameter names.
   std::vector<std::string> getKeys() const {
     static std::vector<std::string> keys = [this]() {
@@ -232,6 +204,18 @@ struct RuntimeParameters {
 inline ad_utility::Synchronized<RuntimeParameters>& getRuntimeParameters() {
   static ad_utility::Synchronized<RuntimeParameters> value;
   return value;
+}
+
+template <auto ParameterPtr, typename ValueType>
+void setRuntimeParameter(const ValueType& value) {
+  std::invoke(ParameterPtr, *getRuntimeParameters().wlock()).set(value);
+}
+
+template <auto ParameterPtr>
+auto getRuntimeParameter() {
+  auto& parameter{std::invoke(ParameterPtr, *getRuntimeParameters().rlock())};
+
+  return parameter.get();
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H

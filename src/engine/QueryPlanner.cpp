@@ -3188,7 +3188,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
-    if (getRuntimeParameters().rlock()->stripColumns_.get()) {
+    if (getRuntimeParameters().rlock()->stripColumns.get()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
           std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {
