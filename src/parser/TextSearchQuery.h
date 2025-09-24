@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "engine/QueryExecutionContext.h"
 #include "parser/MagicServiceQuery.h"
 #include "util/HashMap.h"
 

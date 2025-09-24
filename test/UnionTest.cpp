@@ -711,3 +711,63 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
   EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
+TEST(Union, getCostEstimate) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  IdTable oneColumn{1, qec->getAllocator()};
+  oneColumn.resize(100);
+  ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
+  IdTable twoColumns{2, qec->getAllocator()};
+  twoColumns.resize(100);
+  ql::ranges::fill(twoColumns.getColumn(0), Id::makeUndefined());
+  ql::ranges::fill(twoColumns.getColumn(1), Id::makeUndefined());
+
+  auto valuesA = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
+      std::vector<ColumnIndex>{0});
+
+  auto valuesB = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, oneColumn.clone(), Vars{Var{"?b"}}, false,
+      std::vector<ColumnIndex>{0});
+
+  auto valuesAb = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, twoColumns.clone(), Vars{Var{"?a"}, Var{"?b"}}, false,
+      std::vector<ColumnIndex>{0, 1});
+
+  Union sortedUnionWithUndefCol{qec, valuesB->clone(), valuesAb->clone(), {1}};
+  Union sortedUnionWithWrongUndefCol{
+      qec, valuesA->clone(), valuesAb->clone(), {0}};
+
+  // Second option is way cheaper because the faster implementation can be used.
+  EXPECT_LT(sortedUnionWithUndefCol.getCostEstimate(),
+            sortedUnionWithWrongUndefCol.getCostEstimate());
+
+  Union unsortedUnionWithSingleVar{qec, valuesA->clone(), valuesA->clone()};
+  Union unsortedUnionWithDifferentVars{qec, valuesA->clone(), valuesB->clone()};
+  Union sortedUnionWithSingleVar{qec, valuesA->clone(), valuesA->clone(), {0}};
+  Union sortedUnionWithTwoVars{
+      qec, valuesAb->clone(), valuesAb->clone(), {0, 1}};
+
+  EXPECT_LT(unsortedUnionWithSingleVar.getCostEstimate(),
+            unsortedUnionWithDifferentVars.getCostEstimate());
+  EXPECT_LT(unsortedUnionWithSingleVar.getCostEstimate(),
+            sortedUnionWithSingleVar.getCostEstimate());
+  EXPECT_LT(sortedUnionWithSingleVar.getCostEstimate(),
+            sortedUnionWithTwoVars.getCostEstimate());
+  sortedUnionWithSingleVar.getCostEstimate();
+  sortedUnionWithTwoVars.getCostEstimate();
+
+  IdTable oneColumnSmall{1, qec->getAllocator()};
+  oneColumn.resize(2);
+  ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
+
+  auto valuesSmall = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
+      std::vector<ColumnIndex>{0});
+  Union unsortedUnionSmall{qec, valuesSmall->clone(), valuesSmall->clone()};
+  // Union should never be free.
+  EXPECT_GT(unsortedUnionSmall.getCostEstimate(),
+            valuesSmall->getCostEstimate() * 2);
+}
