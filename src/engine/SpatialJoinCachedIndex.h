@@ -13,6 +13,7 @@
 
 // Forward declaration of s2 class
 class MutableS2ShapeIndex;
+class S2Polyline;
 
 // This class holds a shape index that is created once by the named cached query
 // mechanism and is then kept constant and persisted across queries.
@@ -20,6 +21,7 @@ class SpatialJoinCachedIndex {
  private:
   Variable geometryColumn_;
   std::shared_ptr<MutableS2ShapeIndex> s2index_;
+  std::shared_ptr<std::vector<std::pair<S2Polyline, size_t>>> lines_;
   ad_utility::HashMap<size_t, size_t> shapeIndexToRow_{};
 
  public:
@@ -31,7 +33,9 @@ class SpatialJoinCachedIndex {
 
   // Getters
   const Variable& getGeometryColumn() const { return geometryColumn_; }
-  const MutableS2ShapeIndex& getIndex() const { return *s2index_; }
+  std::shared_ptr<const MutableS2ShapeIndex> getIndex() const {
+    return s2index_;
+  }
   size_t getRow(size_t shapeIndex) { return shapeIndexToRow_.at(shapeIndex); }
 };
 

@@ -694,7 +694,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
   // Construct a query object with the given constraints
-  auto s2query = S2ClosestEdgeQuery{&s2index.value().getIndex()};
+  auto s2indexPtr = s2index.value().getIndex();
+  auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
   auto constexpr toS2Point = [](const GeoPoint& p) {
