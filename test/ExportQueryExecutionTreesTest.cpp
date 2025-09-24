@@ -310,12 +310,13 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+    ad_utility::InputRangeTypeErased<
+        ExportQueryExecutionTrees::TableConstRefWithVocab>
         generator) {
   std::vector<IdTable> result;
   for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
        generator) {
-    result.push_back(pair.idTable_.clone());
+    result.push_back(pair.idTable().clone());
   }
   return result;
 }
@@ -327,10 +328,11 @@ auto matchesIdTables(const Tables&... tables) {
 }
 
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
+    ad_utility::InputRangeTypeErased<ExportQueryExecutionTrees::TableWithRange>
+        generator) {
   std::vector<IdTable> result;
   for (const auto& [pair, range] : generator) {
-    const auto& idTable = pair.idTable_;
+    const auto& idTable = pair.idTable();
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
     result.back().insertAtEnd(idTable, *range.begin(), *(range.end() - 1) + 1);
   }
@@ -1833,19 +1835,19 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
     return res;
   };
 
-  cppcoro::generator<std::string> res;
+  std::optional<ad_utility::InputRangeTypeErased<std::string>> res;
   using namespace ::testing;
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(true))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("proper exception")));
 
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(false))));
-  EXPECT_THAT(consume(std::move(res)),
+  EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }
