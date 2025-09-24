@@ -394,9 +394,9 @@ std::shared_ptr<const Result> Operation::getResult(
         auto colIndex = getExternallyVisibleVariableColumns()
                             .at(geoIndexVar.value())
                             .columnIndex_;
-        geoIndex =
-            SpatialJoinCachedIndex{geoIndexVar.value(), &actualResult.idTable(),
-                                   colIndex, _executionContext->getIndex()};
+        geoIndex = SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
+                                          &actualResult.idTable(),
+                                          _executionContext->getIndex()};
       }
 
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
