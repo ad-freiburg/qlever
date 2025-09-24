@@ -487,42 +487,25 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  using IotaView = ql::ranges::iota_view<uint64_t, uint64_t>;
-  using IotaViewIt = ql::ranges::iterator_t<IotaView>;
 
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize);
-  auto rowIndicesIt = rowIndices.begin();
-  return ad_utility::InputRangeFromGetCallable(
-      [&qet, columns = std::move(columns), result = std::move(result),
-       cancellationHandle = std::move(cancellationHandle),
-       iotaView = std::optional<IotaView>{}, iotaViewIt = IotaViewIt{},
-       rowIndices = std::move(rowIndices),
-       rowIndicesIt =
-           std::move(rowIndicesIt)]() mutable -> std::optional<std::string> {
-        while (rowIndicesIt != rowIndices.end()) {
-          auto& tableWithRange = *rowIndicesIt;
-
-          if (!iotaView.has_value()) {
-            iotaView = std::move(tableWithRange.view_);
-            iotaViewIt = ql::ranges::begin(iotaView.value());
-          }
-
-          if (iotaViewIt == ql::ranges::end(iotaView.value())) {
-            iotaView.reset();
-            ++rowIndicesIt;
-            continue;
-          }
-
-          cancellationHandle->throwIfCancelled();
-          uint64_t rowIndex = *iotaViewIt;
-          ++iotaViewIt;
-          const auto& pair = tableWithRange.tableWithVocab_;
-          return idTableToQLeverJSONRow(qet, columns, pair.localVocab(),
-                                        rowIndex, pair.idTable())
-              .dump();
-        }
-        return std::nullopt;
-      });
+  auto rowIndicies = getRowIndices(limitAndOffset, *result, resultSize);
+  return ql::views::join(ql::ranges::transform_view(
+      ad_utility::OwningView(std::move(rowIndicies)),
+      [qet, myColumns = std::move(columns), result = std::move(result),
+       myCancellationHandle = std::move(cancellationHandle)](
+          const ExportQueryExecutionTrees::TableWithRange& tableWithRange) {
+        return ql::ranges::transform_view(
+            tableWithRange.view_, [qet, &myColumns, &myCancellationHandle,
+                                   &tableWithRange](uint64_t rowIndex) {
+              myCancellationHandle->throwIfCancelled();
+              TableConstRefWithVocab tableWithVocab =
+                  tableWithRange.tableWithVocab_;
+              return idTableToQLeverJSONRow(qet, myColumns,
+                                            tableWithVocab.localVocab(),
+                                            rowIndex, tableWithVocab.idTable())
+                  .dump();
+            });
+      }));
 }
 
 // _____________________________________________________________________________
