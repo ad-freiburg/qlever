@@ -2405,6 +2405,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
 std::optional<std::tuple<size_t, size_t>>
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
+#ifdef QLEVER_STRIP_FEATURES_CPP_17
+  (void)jcs;
+  (void)leftSideTransitivePath;
+  return std::nullopt;
+#else
   // If there are more than two pairs of join columns, we have a graph
   // variable. In that case, we compute the full transitive hull (followed by a
   // multi-column join).
@@ -2447,6 +2452,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
   return std::tuple{transitiveColB, otherColB};
+#endif
 }
 
 // __________________________________________________________________________________________________________________
@@ -2454,6 +2460,12 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
+#ifdef QLEVER_STRIP_FEATURES_CPP_17
+  (void)a;
+  (void)b;
+  (void)jcs;
+  return std::nullopt;
+#else
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
   auto bTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
@@ -2493,6 +2505,7 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;
+#endif
 }
 
 // ______________________________________________________________________________________
@@ -3044,6 +3057,12 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     parsedQuery::TransPath& arg) {
+#ifdef QLEVER_STRIP_FEATURES_CPP_17
+  (void)arg;
+  throw std::runtime_error(
+      "Transitive Paths are not supported in this restricted version of "
+      "QLever");
+#else
   auto candidatesIn = planner_.optimize(&arg._childGraphPattern);
   std::vector<SubtreePlan> candidatesOut;
 
@@ -3065,6 +3084,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
+#endif
 }
 
 // _______________________________________________________________
