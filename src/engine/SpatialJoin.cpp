@@ -443,7 +443,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
                                    getMaxDist(),      getMaxResults(),
-                                   config_.joinType_};
+                                   config_.joinType_, config_.rightCacheName_};
 }
 
 // ____________________________________________________________________________
