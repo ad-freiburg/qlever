@@ -3483,6 +3483,15 @@ TEST(QueryPlanner, TextSearchService) {
           "<score>. The second match variable given was: ?score2. The "
           "config variable was: ?conf"));
 
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 " {}"
+                 "}"
+                 "}"),
+      ::testing::HasSubstr("nested group graph patterns are not supported"));
+
   // toConfigs errors
   // No word or entity
   ParsedQuery pq = parseQuery(
