@@ -32,6 +32,7 @@ class SpatialJoinCachedIndex {
   // Getters
   const Variable& getGeometryColumn() const { return geometryColumn_; }
   const MutableS2ShapeIndex& getIndex() const { return *s2index_; }
+  size_t getRow(size_t shapeIndex) { return shapeIndexToRow_.at(shapeIndex); }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H
