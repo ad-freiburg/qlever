@@ -17,7 +17,11 @@ add_library(engine
         Describe.cpp GraphStoreProtocol.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
+qlever_target_link_libraries(engine util index parser sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
+if (NOT STRIP_FEATURES_CPP_17)
+    target_link_libraries(engine http)
+endif()
 
 add_library(server Server.cpp)
 qlever_target_link_libraries(server engine util index parser http SortPerformanceEstimator)
+

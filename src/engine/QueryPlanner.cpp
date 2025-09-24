@@ -2935,11 +2935,21 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
   } else if constexpr (std::is_same_v<T, p::Service>) {
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
+#else
+    throw std::runtime_error(
+        "SERVICE is not supported in this restricted version of QLever");
+#endif
   } else if constexpr (std::is_same_v<T, p::Load>) {
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
+#else
+    throw std::runtime_error(
+        "LOAD is not supported in this restricted version of QLever");
+#endif
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {

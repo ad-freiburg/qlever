@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_SERVICE_H
 #define QLEVER_SRC_ENGINE_SERVICE_H
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
+
 #include <functional>
 
 #include "engine/Operation.h"
@@ -164,5 +166,11 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
+#else
+struct Service {
+  template <typename... Ts>
+  static void precomputeSiblingResult(Ts&&...) {}
+};
+#endif  // QLEVER_STRIP_FEATURES_CPP_17
 
 #endif  // QLEVER_SRC_ENGINE_SERVICE_H

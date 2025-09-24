@@ -4,6 +4,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
@@ -190,3 +191,4 @@ bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {
   getResultFunction_ = std::move(func);
 }
+#endif
