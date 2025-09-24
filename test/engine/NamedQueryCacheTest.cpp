@@ -43,7 +43,9 @@ TEST(NamedQueryCache, basicWorkflow) {
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
-        localVocab.clone()};
+        localVocab.clone(),
+        std::nullopt};
+    // TODO<ullingerc> Add parameter to this lambda for geo index
   };
   // store something in the cache and check that it's there
   {
@@ -52,11 +54,13 @@ TEST(NamedQueryCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
+    EXPECT_EQ(outGeoIndex, std::nullopt);
   }
   // overwrite with a different value
   {
@@ -65,7 +69,8 @@ TEST(NamedQueryCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -86,12 +91,16 @@ TEST(NamedQueryCache, basicWorkflow) {
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
+    EXPECT_EQ(outGeoIndex, std::nullopt);
+    EXPECT_EQ(outGeoIndex, std::nullopt);
   }
+  // TODO<ullingerc> Test with geo index
   // Erase only the second query, but not the first one
   {
     cache.erase("query-2");
