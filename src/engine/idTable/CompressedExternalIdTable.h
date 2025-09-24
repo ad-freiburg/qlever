@@ -378,10 +378,12 @@ class CompressedExternalIdTableBase {
       compressAndWriteFuture_.get();
     }
     if (block.empty()) {
-      // BUGFIX: It's important to set the future, even if it does nothing
-      // (otherwise the assertion in `transformAndPushLastBlock` fails).
-      compressAndWriteFuture_ = std::async(
-          std::launch::deferred, [this]() { });
+      if (numBlocksPushed_ > 0) {
+        // BUGFIX: It's important to set the future, even if it does nothing
+        // (otherwise the assertion in `transformAndPushLastBlock` fails).
+        compressAndWriteFuture_ =
+            std::async(std::launch::deferred, [this]() {});
+      }
       return;
     }
     ++numBlocksPushed_;
@@ -404,10 +406,9 @@ class CompressedExternalIdTableBase {
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
-    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
-                         compressAndWriteFuture_.valid(),
-                         numBlocksPushed_, " | ",
-                         compressAndWriteFuture_.valid());
+    AD_CORRECTNESS_CHECK(
+        (numBlocksPushed_ == 0) != compressAndWriteFuture_.valid(),
+        numBlocksPushed_, " | ", compressAndWriteFuture_.valid());
     // Optimization for inputs that are smaller than the blocksize, do not use
     // the external file, but simply sort and return the single block.
     if (numBlocksPushed_ == 0) {
