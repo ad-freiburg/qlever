@@ -75,6 +75,7 @@ TEST(NamedQueryCache, basicWorkflow) {
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
+    EXPECT_EQ(outGeoIndex, std::nullopt);
     auto op = cache.getOperation("query-1", qec);
     EXPECT_THAT(op->computeResultOnlyForTesting().idTable(),
                 matchesIdTable(table2));
@@ -97,7 +98,6 @@ TEST(NamedQueryCache, basicWorkflow) {
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
-    EXPECT_EQ(outGeoIndex, std::nullopt);
     EXPECT_EQ(outGeoIndex, std::nullopt);
   }
   // TODO<ullingerc> Test with geo index
