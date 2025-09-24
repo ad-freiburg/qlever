@@ -1024,7 +1024,7 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
           if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
             auto d = tok_.view();
             LOG(ERROR) << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                       << " Within " << (BZIP2_MAX_TOTAL_BUFFER_SIZE >> 10)
+                       << " Within " << (BZIP2_MAX_TOTAL_BUFFER_SIZE >> 20)
                        << "MB of Turtle input\n";
             LOG(ERROR) << "If you really have Turtle input with such a "
                           "long structure please recompile with adjusted "
