@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 #define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include <coroutine>
 #include <exception>
 #include <sstream>
@@ -276,6 +277,73 @@ stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
 
 // Use 1MiB buffer size by default
 using stream_generator = basic_stream_generator<1u << 20>;
+
 }  // namespace ad_utility::streams
+using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;
+using STREAMABLE_YIELDER_TYPE = int;
+#define STREAMABLE_YIELDER_ARG_DECL \
+  STREAMABLE_YIELDER_TYPE streamableYielder = {}
+#define STREAMABLE_YIELD(...) co_yield __VA_ARGS__
+#define STREAMABLE_RETURN co_return
+
+#else
+
+template <size_t BUFFER_SIZE>
+class StreamConsumer {
+  using ExternalCallback = std::function<void(std::string_view)>;
+  ExternalCallback callback_;
+  std::array<char, BUFFER_SIZE> data_;
+  size_t currentIndex_ = 0;
+  static_assert(BUFFER_SIZE > 0, "Buffer size must be greater than zero");
+  // Temporarily store data that didn't fit into the buffer so far.
+  std::string_view overflow_;
+
+ public:
+  explicit StreamConsumer(ExternalCallback callback)
+      : callback_(std::move(callback)) {}
+  // TODO<joka921> Delete this default constructor, as it is dangerous. We need
+  // other means to make the syntax consistent.
+  StreamConsumer() = default;
+  void operator()(std::string_view value) {
+    auto sizeToCopy = fittingSize(value);
+    std::memcpy(data_.data() + currentIndex_, value.data(), sizeToCopy);
+    currentIndex_ += sizeToCopy;
+    if (currentIndex_ == BUFFER_SIZE) {
+      commit();
+    }
+    if (sizeToCopy < value.size()) {
+      value.remove_prefix(sizeToCopy);
+      (*this)(value);
+    }
+  }
+
+  void operator()(char c) { (*this)(std::string_view{&c, 1}); }
+
+  void finish() {
+    if (currentIndex_ > 0) {
+      commit();
+    }
+  }
+  ~StreamConsumer() { finish(); }
+
+ private:
+  size_t fittingSize(std::string_view value) const {
+    return std::min(value.size(), BUFFER_SIZE - currentIndex_);
+  }
+  void commit() {
+    callback_(std::string_view{data_.data(), currentIndex_});
+    currentIndex_ = 0;
+  }
+};
+
+using STREAMABLE_GENERATOR_TYPE = void;
+using STREAMABLE_YIELDER_TYPE = StreamConsumer<1u << 20>;
+#define STREAMABLE_YIELDER_ARG_DECL STREAMABLE_YIELDER_TYPE streamableYielder
+#define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
+#define STREAMABLE_RETURN     \
+  streamableYielder.finish(); \
+  return;
+
+#endif
 
 #endif  // QLEVER_SRC_UTIL_STREAM_GENERATOR_H

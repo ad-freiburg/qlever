@@ -110,12 +110,21 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  std::string result;
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       parsedQuery, *qet, mediaType, timer, std::move(handle));
-  std::string result;
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
+#else
+  STREAMABLE_YIELDER_TYPE yielder{
+      [&result](std::string_view batch) { result.append(batch); }};
+  ExportQueryExecutionTrees::computeResult(parsedQuery, *qet, mediaType, timer,
+                                           std::move(handle),
+                                           std::move(yielder));
+
+#endif
   return result;
 }
 
