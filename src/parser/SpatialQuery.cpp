@@ -219,7 +219,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
         "} }.");
   } else if (!ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
-             !payloadVariables_.isAll() && !payloadVariables_.empty()) {
+             !payloadVariables_.isAll() && !payloadVariables_.empty() &&
+             algo != SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
     throw SpatialSearchException(
         "The right variable for the spatial search is declared outside the "
         "SERVICE, but the <payload> parameter was set. Please move the "
