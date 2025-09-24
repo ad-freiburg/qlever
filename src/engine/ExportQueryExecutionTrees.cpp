@@ -27,12 +27,6 @@
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-constexpr std::string_view ExceptionMessagePrefix{
-    "\n !!!!>># An error has occurred while exporting the query result."
-    " Unfortunately due to limitations in the HTTP 1.1 protocol, "
-    "there is no better way to report this than to append it to the incomplete "
-    "result. The error message was:\n "};
-
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -1293,8 +1287,13 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           exceptionMessage = "A very strange exception, please report this";
         }
 
-        return LoopControl::breakWithValue(absl::StrCat(
-            std::string(ExceptionMessagePrefix), exceptionMessage.value()));
+        std::string prefix =
+            "\n !!!!>># An error has occurred while exporting the query "
+            "result. Unfortunately due to limitations in the HTTP 1.1 "
+            "protocol, there is no better way to report this than to append it "
+            "to the incomplete result. The error message was:\n";
+        return LoopControl::breakWithValue(
+            absl::StrCat(prefix, exceptionMessage.value()));
       }));
 }
 
