@@ -325,19 +325,10 @@ TEST(ServerTest, configurePinnedNamedQuery) {
   qec->pinWithExplicitName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
-  EXPECT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       Server::configurePinnedNamedQuery(pinNamed, std::nullopt, false, *qec),
-      std::runtime_error);
-
-  // Verify the specific error message
-  try {
-    Server::configurePinnedNamedQuery(pinNamed, std::nullopt, false, *qec);
-    FAIL() << "Expected std::runtime_error to be thrown";
-  } catch (const std::runtime_error& e) {
-    EXPECT_THAT(e.what(),
-                testing::HasSubstr(
-                    "pinning of named queries requires a valid access token"));
-  }
+      testing::HasSubstr(
+          "pinning of named queries requires a valid access token"));
 
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinWithExplicitName().has_value());

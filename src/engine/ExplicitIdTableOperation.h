@@ -1,6 +1,9 @@
-//  Copyright 2023, University of Freiburg,
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
 #define QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
@@ -13,20 +16,18 @@
 // An operation that owns its explicit `Result` via `shared_ptr`s and just
 // returns this result when `computeResult` is called.
 class ExplicitIdTableOperation : public Operation {
+ private:
   std::shared_ptr<const IdTable> idTable_;
   VariableToColumnMap variables_;
   std::vector<ColumnIndex> sortedColumns_;
   LocalVocab localVocab_;
-  // std::optional<CachedGeometryIndex> cachedGeoIndex_;
 
  public:
-  ExplicitIdTableOperation(
-      QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
-      VariableToColumnMap variables,
-      std::vector<ColumnIndex> sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{}
-      //, std::optional<CachedGeometryIndex> cachedGeoIndex = std::nullopt
-  );
+  ExplicitIdTableOperation(QueryExecutionContext* ctx,
+                           std::shared_ptr<const IdTable> table,
+                           VariableToColumnMap variables,
+                           std::vector<ColumnIndex> sortedColumns,
+                           LocalVocab localVocab);
 
   // Const and public getter for testing.
   size_t sizeEstimate() const { return idTable_->numRows(); }

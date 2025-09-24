@@ -211,9 +211,10 @@ class Server {
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
 
-  // Configure named query pinning on QueryExecutionContext.
-  // Validates access token and sets pinWithExplicitName if pinNamed is
-  // provided.
+  // Configure named query pinning on the `qec`. If `pinNamed` is set, then the
+  // `qec` is configured such that the query result will be stored in the named
+  // query cache. Throws if named pinning is required, but the access token is
+  // not okay.
   static void configurePinnedNamedQuery(
       const std::optional<std::string>& pinNamed,
       const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,

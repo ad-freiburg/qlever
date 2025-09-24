@@ -314,10 +314,10 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  const bool pinWithName =
+  const bool pinWithExplicitName =
       _executionContext->pinWithExplicitName().has_value() && isRoot;
 
-  if (pinWithName) {
+  if (pinWithExplicitName) {
     computationMode = ComputationMode::FULLY_MATERIALIZED;
   }
 
@@ -380,10 +380,10 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
-    if (pinWithName) {
+    if (pinWithExplicitName) {
+      // The query is to be pinned in the named query cache.
       const auto& [name, geoIndexVar] =
           _executionContext->pinWithExplicitName().value();
-      // The query is to be pinned in the named cache.
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
 

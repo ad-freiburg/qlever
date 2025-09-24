@@ -65,6 +65,12 @@ class Result {
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
+  // If this `Result` is fully materialized, then the result can either be
+  // stored as a plain `IdTable` or as a `shared_ptr<const IdTable>`. The former
+  // is useful when the result is still being constructed (because it is
+  // mutable), the latter is useful when the result is read from a cache (e.g.
+  // the named query cache), because the shared ownership doesn't require a copy
+  // of the result.
   using IdTablePtr = std::shared_ptr<const IdTable>;
   struct IdTableSharedLocalVocabPair {
     std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;

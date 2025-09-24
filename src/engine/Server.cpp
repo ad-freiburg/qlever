@@ -306,19 +306,20 @@ void Server::configurePinnedNamedQuery(
     const std::optional<std::string>& pinNamed,
     const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
-  if (pinNamed.has_value()) {
-    if (!accessTokenOk) {
-      throw std::runtime_error(
-          "The pinning of named queries requires a valid access token");
-    }
-    if (pinNamedGeoIndex.has_value()) {
-      qec.pinWithExplicitName() = QueryExecutionContext::PinWithExplicitName{
-          pinNamed.value(),
-          Variable{absl::StrCat("?", pinNamedGeoIndex.value())}};
-    } else {
-      qec.pinWithExplicitName() =
-          QueryExecutionContext::PinWithExplicitName{pinNamed.value()};
-    }
+  if (!pinNamed.has_value()) {
+    return;
+  }
+  if (!accessTokenOk) {
+    throw std::runtime_error(
+        "The pinning of named queries requires a valid access token");
+  }
+  if (pinNamedGeoIndex.has_value()) {
+    qec.pinWithExplicitName() = QueryExecutionContext::PinWithExplicitName{
+        pinNamed.value(),
+        Variable{absl::StrCat("?", pinNamedGeoIndex.value())}};
+  } else {
+    qec.pinWithExplicitName() =
+        QueryExecutionContext::PinWithExplicitName{pinNamed.value()};
   }
 }
 

@@ -1,6 +1,9 @@
-//  Copyright 2023, University of Freiburg,
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -105,17 +108,18 @@ TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
   EXPECT_TRUE(varMap.contains(Variable("?var1")));
 }
 
-TEST_F(ExplicitIdTableOperationTest, KnownEmptyResultWithEmptyTable) {
-  auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
-  ExplicitIdTableOperation op(qec_, emptyTable, testVariables_);
-
-  EXPECT_TRUE(op.knownEmptyResult());
-}
-
-TEST_F(ExplicitIdTableOperationTest, KnownEmptyResultWithNonEmptyTable) {
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_);
-
-  EXPECT_FALSE(op.knownEmptyResult());
+TEST_F(ExplicitIdTableOperationTest, KnownEmptyResult) {
+  {
+    auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
+    ExplicitIdTableOperation op(qec_, emptyTable, testVariables_, {},
+                                LocalVocab{});
+    EXPECT_TRUE(op.knownEmptyResult());
+  }
+  {
+    ExplicitIdTableOperation op(qec_, testTable_, testVariables_, {},
+                                LocalVocab{});
+    EXPECT_FALSE(op.knownEmptyResult());
+  }
 }
 
 // Test computeResult functionality
@@ -129,16 +133,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
   ASSERT_TRUE(result.isFullyMaterialized());
   const auto& resultTable = result.idTable();
 
-  EXPECT_EQ(resultTable.numRows(), 3u);
-  EXPECT_EQ(resultTable.numColumns(), 2u);
-
-  // Check content matches original table
-  for (size_t row = 0; row < resultTable.numRows(); ++row) {
-    for (size_t col = 0; col < resultTable.numColumns(); ++col) {
-      EXPECT_EQ(resultTable(row, col), (*testTable_)(row, col));
-    }
-  }
-
+  EXPECT_THAT(resultTable, matchesIdTable(*testTable_));
   // Check sorted columns are preserved
   EXPECT_THAT(result.sortedBy(), ElementsAre(ColumnIndex{0}));
 }
@@ -157,6 +152,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
   EXPECT_EQ(resultTable.numColumns(), 2u);
 }
 
+// _____________________________________________________________________________
 TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   LocalVocab localVocab;
   LocalVocabEntry testEntry{
@@ -202,45 +198,21 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   auto originalResult = original.computeResult(false);
   auto clonedResult = clonedOp->computeResult(false);
 
-  const auto& originalTable = originalResult.idTable();
-  const auto& clonedTable = clonedResult.idTable();
-
-  EXPECT_EQ(originalTable.numRows(), clonedTable.numRows());
-  EXPECT_EQ(originalTable.numColumns(), clonedTable.numColumns());
-
-  for (size_t row = 0; row < originalTable.numRows(); ++row) {
-    for (size_t col = 0; col < originalTable.numColumns(); ++col) {
-      EXPECT_EQ(originalTable(row, col), clonedTable(row, col));
-    }
-  }
+  EXPECT_THAT(clonedResult.idTable(), matchesIdTable(originalResult.idTable()));
 
   // Test that local vocab is cloned properly
   const auto& originalLocalVocab = originalResult.localVocab();
   const auto& clonedLocalVocab = clonedResult.localVocab();
   auto originalWords = originalLocalVocab.getAllWordsForTesting();
   auto clonedWords = clonedLocalVocab.getAllWordsForTesting();
-  EXPECT_TRUE(std::find(originalWords.begin(), originalWords.end(),
-                        testEntry) != originalWords.end());
-  EXPECT_TRUE(std::find(clonedWords.begin(), clonedWords.end(), testEntry) !=
-              clonedWords.end());
-}
-
-// Test construction with different parameters
-TEST_F(ExplicitIdTableOperationTest, ConstructionWithDefaults) {
-  // Test with minimal parameters (using defaults)
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_);
-
-  EXPECT_EQ(op.sizeEstimate(), 3u);
-  EXPECT_EQ(op.getResultWidth(), 2u);
-  EXPECT_THAT(op.resultSortedOn(), IsEmpty());
-
-  auto result = op.computeResult(false);
-  EXPECT_TRUE(result.localVocab().empty());
+  EXPECT_TRUE(ad_utility::contains(originalWords, testEntry));
+  EXPECT_TRUE(ad_utility::contains(clonedWords, testEntry));
 }
 
 TEST_F(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
   std::vector<ColumnIndex> sortedCols = {ColumnIndex{1}, ColumnIndex{0}};
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_, sortedCols);
+  ExplicitIdTableOperation op(qec_, testTable_, testVariables_, sortedCols,
+                              LocalVocab{});
 
   EXPECT_THAT(op.resultSortedOn(), ElementsAre(ColumnIndex{1}, ColumnIndex{0}));
 }
@@ -250,7 +222,8 @@ TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with single row
   auto singleRowTable = createTestIdTable(1, 3);
   auto singleRowVars = createTestVariableMap(3);
-  ExplicitIdTableOperation singleRowOp(qec_, singleRowTable, singleRowVars);
+  ExplicitIdTableOperation singleRowOp(qec_, singleRowTable, singleRowVars, {},
+                                       {});
 
   EXPECT_EQ(singleRowOp.sizeEstimate(), 1u);
   EXPECT_EQ(singleRowOp.getResultWidth(), 3u);
@@ -259,7 +232,7 @@ TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with many rows
   auto largeTable = createTestIdTable(100, 1);
   auto largeTableVars = createTestVariableMap(1);
-  ExplicitIdTableOperation largeOp(qec_, largeTable, largeTableVars);
+  ExplicitIdTableOperation largeOp(qec_, largeTable, largeTableVars, {}, {});
 
   EXPECT_EQ(largeOp.sizeEstimate(), 100u);
   EXPECT_EQ(largeOp.getResultWidth(), 1u);
@@ -272,7 +245,7 @@ TEST_F(ExplicitIdTableOperationTest, VariableToColumnMapping) {
   customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
   customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
 
-  ExplicitIdTableOperation op(qec_, testTable_, customVars);
+  ExplicitIdTableOperation op(qec_, testTable_, customVars, {}, {});
 
   auto computedVars = op.computeVariableToColumnMap();
   EXPECT_EQ(computedVars.size(), 2u);

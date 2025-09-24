@@ -5,13 +5,11 @@
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
-#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
-#include "util/TransparentFunctors.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
