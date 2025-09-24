@@ -8,6 +8,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/IndexImpl.h"
+#include "index/InputFileServer.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
 
@@ -77,8 +78,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
-    AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    if (!config.inputFiles_.empty()) {
+      AD_CORRECTNESS_CHECK(!config.getTurtleFilesViaServer_);
+      index.createFromFiles(config.inputFiles_);
+    } else {
+      AD_CORRECTNESS_CHECK(config.getTurtleFilesViaServer_);
+      auto server = InputFileServer{};
+      server.run();
+      index.getImpl().createFromTurtleStringGenerator(server.getFiles());
+    }
   }
   auto textIndexBuilder = TextIndexBuilder(
       ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
