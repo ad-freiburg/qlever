@@ -83,7 +83,7 @@ std::vector<std::string> Operation::collectWarnings() const {
 
 // _____________________________________________________________________________
 void Operation::addWarningOrThrow(std::string warning) const {
-  if (getRuntimeParameters().rlock()->throwOnUnboundVariables.get()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));
@@ -248,9 +248,9 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto result = runComputation(timer, computationMode);
   auto maxSize =
       isRoot ? cache.getMaxSizeSingleEntry()
-             : std::min(
-                   getRuntimeParameters().rlock()->cacheMaxSizeLazyResult.get(),
-                   cache.getMaxSizeSingleEntry());
+             : std::min(getRuntimeParameter<
+                            &RuntimeParameters::cacheMaxSizeLazyResult>(),
+                        cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);

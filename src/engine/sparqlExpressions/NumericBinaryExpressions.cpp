@@ -364,7 +364,7 @@ SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2) {
-  if (getRuntimeParameters().rlock()->divisionByZeroIsUndef.get()) {
+  if (getRuntimeParameter<&RuntimeParameters::divisionByZeroIsUndef>()) {
     return std::make_unique<DivideExpressionByZeroIsUndef>(std::move(child1),
                                                            std::move(child2));
   } else {

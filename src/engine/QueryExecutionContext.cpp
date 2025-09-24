@@ -7,5 +7,5 @@
 #include "global/RuntimeParameters.h"
 
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
-  return getRuntimeParameters().rlock()->websocketUpdatesEnabled.get();
+  return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled>();
 }

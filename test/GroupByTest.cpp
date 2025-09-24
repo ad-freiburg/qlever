@@ -830,11 +830,11 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
               avgDistinctAggregate);
   // Optimization has to be enabled
-  getRuntimeParameters().wlock()->groupByHashMapEnabled.set(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
 
   // Support for MIN & MAX & SUM
-  getRuntimeParameters().wlock()->groupByHashMapEnabled.set(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(true);
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
@@ -884,7 +884,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  getRuntimeParameters().wlock()->groupByHashMapEnabled.set(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
@@ -966,7 +966,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  getRuntimeParameters().wlock()->groupByHashMapEnabled.set(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesCountStar,
                                      join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -1667,7 +1667,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
   // Calculate result with optimization, after calculating it without,
   // since optimization changes tree
   qec->clearCacheUnpinnedOnly();
-  getRuntimeParameters().wlock()->groupByHashMapEnabled.set(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 

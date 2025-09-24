@@ -1039,9 +1039,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   // TODO<C++23> Use `std::optional::or_else`.
-  if (!getRuntimeParameters()
-           .rlock()
-           ->groupByDisableIndexScanOptimizations.get()) {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::groupByDisableIndexScanOptimizations>()) {
     if (auto result = computeGroupByForSingleIndexScan()) {
       return result;
     }
@@ -1103,7 +1102,7 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
 std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::checkIfHashMapOptimizationPossible(
     std::vector<Aggregate>& aliases) const {
-  if (!getRuntimeParameters().rlock()->groupByHashMapEnabled.get()) {
+  if (!getRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>()) {
     return std::nullopt;
   }
 

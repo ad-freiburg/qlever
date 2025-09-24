@@ -197,7 +197,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     std::chrono::steady_clock::time_point deadline,
     std::string_view operationDescriptor) const {
   auto sortEstimateCancellationFactor =
-      getRuntimeParameters().rlock()->sortEstimateCancellationFactor.get();
+      getRuntimeParameter<&RuntimeParameters::sortEstimateCancellationFactor>();
   auto now = std::chrono::steady_clock::now();
   if (now > deadline || estimatedSortTime(numRows, numColumns) >
                             (deadline - now) * sortEstimateCancellationFactor) {

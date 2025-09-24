@@ -890,8 +890,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Compute (large) sibling -> sibling result is computed
   const auto maxValueRowsDefault =
-      getRuntimeParameters().rlock()->serviceMaxValueRows.get();
-  getRuntimeParameters().wlock()->serviceMaxValueRows.set(0);
+      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>();
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>(0);
   Service::precomputeSiblingResult(sibling, service, true, false);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -900,7 +900,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  getRuntimeParameters().wlock()->serviceMaxValueRows.set(maxValueRowsDefault);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>(
+      maxValueRowsDefault);
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
@@ -917,7 +918,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
-  getRuntimeParameters().wlock()->serviceMaxValueRows.set(0);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>(0);
   Service::precomputeSiblingResult(service, sibling, false, true);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
@@ -926,7 +927,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                    ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  getRuntimeParameters().wlock()->serviceMaxValueRows.set(maxValueRowsDefault);
+  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>(
+      maxValueRowsDefault);
 
   // consume the sibling result-generator
   for ([[maybe_unused]] auto& _ :

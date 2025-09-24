@@ -62,13 +62,12 @@ Server::Server(unsigned short port, size_t numThreads,
   // values of the parameters to the cache.
   getRuntimeParameters().wlock()->cacheMaxNumEntries.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  // getRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
-  //     [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue);
-  //     });
-  // getRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
-  //     [this](ad_utility::MemorySize newValue) {
-  //       cache_.setMaxSizeSingleEntry(newValue);
-  //     });
+  getRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
+      [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
+  getRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
+      [this](ad_utility::MemorySize newValue) {
+        cache_.setMaxSizeSingleEntry(newValue);
+      });
 }
 
 // __________________________________________________________________________
@@ -196,7 +195,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             std::optional<std::string_view> userTimeout, bool accessTokenOk,
             const RequestT& request, ResponseT& send) const {
   auto defaultTimeout =
-      getRuntimeParameters().rlock()->defaultQueryTimeout.get();
+      getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout>();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
