@@ -647,13 +647,12 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   // TODO report skipped items ; left must be point ; right must be linestring
 
-  auto geoIndex = qec_->namedQueryCache()
-                      .get(spatialJoin_.value()
-                               ->onlyForTestingGetConfig()
-                               .rightCacheName_.value()  // TODO!
-                           )
-                      ->cachedGeoIndex_;
-  if (!geoIndex.has_value()) {
+  // TODO also allow ad-hoc?
+
+  AD_CORRECTNESS_CHECK(rightCacheName.has_value());
+  auto s2index =
+      qec_->namedQueryCache().get(rightCacheName.value())->cachedGeoIndex_;
+  if (!s2index.has_value()) {
     throw std::runtime_error{
         "In order to use this spatial join algorithm the result for the right "
         "side must be precomputed with a geometry index and pinned to a name. "
@@ -661,41 +660,41 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   }
 
   // TODO
-  static std::optional<MutableS2ShapeIndex> cachedIndex;
-  MutableS2ShapeIndex s2index;
+  // static std::optional<MutableS2ShapeIndex> cachedIndex;
+  // MutableS2ShapeIndex s2index;
 
   bool indexOfRight = true;
-  auto indexTable = indexOfRight ? idTableRight : idTableLeft;
-  auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
+  // auto indexTable = indexOfRight ? idTableRight : idTableLeft;
+  // auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
-  ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
+  // ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
 
-  // Populate the index
-  std::vector<std::pair<S2Polyline, size_t>> lines;
+  // // Populate the index
+  // std::vector<std::pair<S2Polyline, size_t>> lines;
   ad_utility::Timer t{ad_utility::Timer::Started};
   ad_utility::Timer t2{ad_utility::Timer::Started};
 
-  for (size_t row = 0; row < indexTable->size(); row++) {
-    auto p = getPolyline(indexTable, row, indexJoinCol,
-                         spatialJoin_.value()->getIndex());
-    if (p.has_value()) {
-      lines.emplace_back(std::move(p.value()), row);
-    }
-  }
-  spatialJoin_.value()->runtimeInfo().addDetail("time for reading polylines",
-                                                t.msecs().count());
-  t.reset();
-  for (auto& [line, row] : lines) {
-    shapeIndexToRow[shapeIndexToRow.size()] = row;
-    s2index.Add(std::make_unique<S2Polyline::Shape>(&line));
-  }
-  spatialJoin_.value()->runtimeInfo().addDetail("time for s2 index building",
-                                                t.msecs().count());
+  // for (size_t row = 0; row < indexTable->size(); row++) {
+  //   auto p = getPolyline(indexTable, row, indexJoinCol,
+  //                        spatialJoin_.value()->getIndex());
+  //   if (p.has_value()) {
+  //     lines.emplace_back(std::move(p.value()), row);
+  //   }
+  // }
+  // spatialJoin_.value()->runtimeInfo().addDetail("time for reading polylines",
+  //                                               t.msecs().count());
+  // t.reset();
+  // for (auto& [line, row] : lines) {
+  //   shapeIndexToRow[shapeIndexToRow.size()] = row;
+  //   s2index.Add(std::make_unique<S2Polyline::Shape>(&line));
+  // }
+  // spatialJoin_.value()->runtimeInfo().addDetail("time for s2 index building",
+  //                                               t.msecs().count());
   // Performs a nearest neighbor search on the index and returns the closest
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
   // Construct a query object with the given constraints
-  auto s2query = S2ClosestEdgeQuery{&s2index};
+  auto s2query = S2ClosestEdgeQuery{&s2index.value().getIndex()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
   auto constexpr toS2Point = [](const GeoPoint& p) {
@@ -746,7 +745,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
       // criteria
-      auto indexRow = shapeIndexToRow.at(neighbor.shape_id());
+      auto indexRow = s2index.value().getRow(neighbor.shape_id());
       auto dist = S2Earth::ToKm(neighbor.distance());
       deduplicatedSet[indexRow] = dist;
     }
