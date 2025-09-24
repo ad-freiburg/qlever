@@ -7,7 +7,25 @@
 
 #include "parser/NamedCachedQuery.h"
 
+namespace {
+// Helper function for the constructor that takes an IRI. check that the IRI has
+// the expected format and extract the query name.
+std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
+  auto view = asStringViewUnsafe(iri.getContent());
+  AD_CORRECTNESS_CHECK(
+      view.starts_with(NAMED_CACHED_QUERY_PREFIX),
+      "The target IRI of a named cached query must start with `",
+      NAMED_CACHED_QUERY_PREFIX, "`, but was `", view, "`");
+  // Remove the prefix
+  view.remove_prefix(NAMED_CACHED_QUERY_PREFIX.size());
+  return std::string{view};
+}
+}  // namespace
 namespace parsedQuery {
+
+// _____________________________________________________________________________
+NamedCachedQuery::NamedCachedQuery(const TripleComponent::Iri& iri)
+    : identifier_{extractQueryNameFromIri(iri)} {}
 
 // _____________________________________________________________________________
 void NamedCachedQuery::addParameter(
@@ -16,12 +34,12 @@ void NamedCachedQuery::addParameter(
 }
 
 // _____________________________________________________________________________
-const std::string& NamedCachedQuery::validateAndGetIdentifier() const {
-  if (childGraphPattern_.has_value()) {
-    throwBecauseNotEmpty();
-  }
-  return identifier_;
+void NamedCachedQuery::addGraph(
+    [[maybe_unused]] const GraphPatternOperation& childGraphPattern) {
+  throwBecauseNotEmpty();
 }
+// _____________________________________________________________________________
+const std::string& NamedCachedQuery::identifier() const { return identifier_; }
 
 // _____________________________________________________________________________
 void NamedCachedQuery::throwBecauseNotEmpty() {

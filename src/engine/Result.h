@@ -27,6 +27,8 @@
 // evaluated.
 class Result {
  public:
+  using IdTablePtr = std::shared_ptr<const IdTable>;
+
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;
@@ -71,7 +73,6 @@ class Result {
   // mutable), the latter is useful when the result is read from a cache (e.g.
   // the named query cache), because the shared ownership doesn't require a copy
   // of the result.
-  using IdTablePtr = std::shared_ptr<const IdTable>;
   struct IdTableSharedLocalVocabPair {
     std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
     // The local vocabulary of the result.

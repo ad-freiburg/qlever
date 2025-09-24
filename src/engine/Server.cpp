@@ -292,6 +292,7 @@ auto Server::prepareOperation(
                                         : ""),
                                    "]")
                     : "")
+            << "\n"
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,

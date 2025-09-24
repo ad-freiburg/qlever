@@ -84,8 +84,12 @@ Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
           std::move(idTablePtr),
           std::make_shared<const LocalVocab>(std::move(localVocab))}},
       sortedBy_{std::move(sortedBy)} {
-  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
+  const auto& materializedResult = std::get<IdTableSharedLocalVocabPair>(data_);
+  AD_CONTRACT_CHECK(std::get<IdTablePtr>(materializedResult.idTableOrPtr_) !=
                     nullptr);
+  // Note: This second check can never throw because of how we initialize the
+  // pointer above, but it still increases confidence.
+  AD_CORRECTNESS_CHECK(materializedResult.localVocab_ != nullptr);
   assertSortOrderIsRespected(this->idTable(), sortedBy_);
 }
 

@@ -1348,7 +1348,7 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter `<start>` has already been set to variable "
                 "`?start1` and cannot be set to variable `?start2`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1398,7 +1398,7 @@ TEST(QueryPlanner, PathSearchMultipleEnds) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter `<end>` has already been set to variable `?end1`"
                 " and cannot be set to variable `?end2`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1423,7 +1423,7 @@ TEST(QueryPlanner, PathSearchStartNotVariable) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The value `<error>` for parameter `<start>`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1447,7 +1447,7 @@ TEST(QueryPlanner, PathSearchPredicateNotIri) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
                                         HasSubstr("Parameters must be IRIs"),
-                                        parsedQuery::MagicServiceException);
+                                        InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1473,7 +1473,7 @@ TEST(QueryPlanner, PathSearchUnsupportedArgument) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Unsupported argument <unsupportedArgument> in PathSearch"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1525,8 +1525,9 @@ TEST(QueryPlanner, PathSearchUnsupportedElement) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("Unsupported element in pathSearch"),
-      parsedQuery::PathSearchException);
+      HasSubstr(
+          "Unsupported element in a magic service query of type `path search`"),
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1552,7 +1553,7 @@ TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Unsupported algorithm in pathSearch"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1579,7 +1580,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <cartesian> expects a boolean"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1606,7 +1607,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1632,7 +1633,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The <algorithm> value has to be an IRI"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // _____________________________________________________________________________
@@ -2261,7 +2262,8 @@ TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
                 "SERVICE <http://example.com/> { ?a <something> <else> }"
                 " }}",
                 ::testing::_),
-      ::testing::ContainsRegex("Unsupported element in spatialQuery"));
+      ::testing::ContainsRegex("Unsupported element in a magic service query "
+                               "of type `spatial join`"));
 }
 
 // _____________________________________________________________________________
@@ -3310,9 +3312,8 @@ TEST(QueryPlanner, TextSearchService) {
                  "}"
                  "}"
                  "}"),
-      ::testing::HasSubstr(
-          "Unsupported element in textSearchQuery. textSearchQuery may only "
-          "consist of triples for configuration"));
+      ::testing::HasSubstr("Unsupported element in a magic service query of "
+                           "type `full text search`"));
 
   // Predicate contains
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -5438,7 +5439,8 @@ TEST(QueryPlanner, NamedCachedQuery) {
   query = "SELECT * { SERVICE ql:named-cached-query-3 { VALUES ?x {3 4 5} }}";
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::parseAndPlan(query, qec),
-      ::testing::HasSubstr("Unsupported element in named cached query"));
+      ::testing::HasSubstr("Unsupported element in a magic service query of "
+                           "type `named cached query`"));
 
   // Now pin a query to the named query cache, and check that the query planning
   // works as expected.

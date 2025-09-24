@@ -612,3 +612,8 @@ INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultDefinednessTest,
 INSTANTIATE_TEST_SUITE_P(
     FailureCases, ResultDefinednessTest,
     Combine(Values(false), Values(&wrongTable1, &wrongTable2, &wrongTable3)));
+
+// _____________________________________________________________________________
+TEST(Result, assertionOnNullptrConstruction) {
+  EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
+}
