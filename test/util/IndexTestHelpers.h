@@ -55,6 +55,9 @@ struct TestIndexConfig {
   ad_utility::MemorySize blocksizePermutations = 16_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
+  // Deliberately chosen this small to see if multiple blocks for small test
+  // data work fine.
+  size_t textBlockSize = 2;
   std::optional<std::pair<std::string, std::string>>
       contentsOfWordsFileAndDocsfile = std::nullopt;
   // The following buffer size can be increased, if larger triples are to be
@@ -77,12 +80,12 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedIriManager);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.textBlockSize,
+        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
+        c.bAndKParam, c.indexType, c.encodedIriManager);
   }
   bool operator==(const TestIndexConfig&) const = default;
 };

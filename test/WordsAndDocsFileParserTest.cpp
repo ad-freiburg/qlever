@@ -7,12 +7,14 @@
 #include <cstdio>
 #include <fstream>
 
-#include "./WordsAndDocsFileLineCreator.h"
+#include "./engine/TextIndexScanTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "parser/WordsAndDocsFileParser.h"
 
 // All lambdas and type aliases used in this file contained here
 namespace {
+
+namespace h = textIndexScanTestHelpers;
 
 /// Type aliases
 
@@ -110,11 +112,11 @@ TEST(WordsAndDocsFileParserTest, wordsFileParserTest) {
   std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
 
   std::fstream f("_testtmp.contexts.tsv", std::ios_base::out);
-  f << createWordsFileLineAsString("Foo", false, 0, 2)
-    << createWordsFileLineAsString("foo", false, 0, 2)
-    << createWordsFileLineAsString("Bär", true, 0, 1)
-    << createWordsFileLineAsString("Äü", false, 0, 1)
-    << createWordsFileLineAsString("X", false, 1, 1);
+  f << h::createWordsFileLineAsString("Foo", false, 0, 2)
+    << h::createWordsFileLineAsString("foo", false, 0, 2)
+    << h::createWordsFileLineAsString("Bär", true, 0, 1)
+    << h::createWordsFileLineAsString("Äü", false, 0, 1)
+    << h::createWordsFileLineAsString("X", false, 1, 1);
   f.close();
 
   WordLineVec expected = {{"foo", false, 0, 2},
@@ -132,10 +134,10 @@ TEST(WordsAndDocsFileParser, docsFileParserTest) {
   std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
 
   std::fstream f("_testtmp.documents.tsv", std::ios_base::out);
-  f << createDocsFileLineAsString(4, "This TeSt is OnlyCharcters")
-    << createDocsFileLineAsString(7, "Wh4t h4pp3ns t0 num83rs")
-    << createDocsFileLineAsString(8, "An( sp@ci*l ch.ar,:act=_er+s")
-    << createDocsFileLineAsString(190293, "Large docId");
+  f << h::createDocsFileLineAsString(4, "This TeSt is OnlyCharcters")
+    << h::createDocsFileLineAsString(7, "Wh4t h4pp3ns t0 num83rs")
+    << h::createDocsFileLineAsString(8, "An( sp@ci*l ch.ar,:act=_er+s")
+    << h::createDocsFileLineAsString(190293, "Large docId");
   f.close();
 
   DocLineVec expected = {{4, "This TeSt is OnlyCharcters"},
