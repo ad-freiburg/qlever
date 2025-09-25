@@ -207,11 +207,21 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
           textIndexBuilder.buildTextIndexFile(
-              std::nullopt, true, TextScoringMetric::BM25, {2.0f, 0.5f}),
+              TextIndexConfig{std::nullopt,
+                              std::nullopt,
+                              true,
+                              false,
+                              false,
+                              {TextScoringMetric::BM25, {2.0f, 0.5f}}}),
           ::testing::HasSubstr("Invalid values"));
       AD_EXPECT_THROW_WITH_MESSAGE(
           textIndexBuilder.buildTextIndexFile(
-              std::nullopt, true, TextScoringMetric::BM25, {0.5f, -1.0f}),
+              TextIndexConfig{std::nullopt,
+                              std::nullopt,
+                              true,
+                              false,
+                              false,
+                              {TextScoringMetric::BM25, {0.5f, -1.0f}}}),
           ::testing::HasSubstr("Invalid values"));
       c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
       c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
@@ -221,33 +231,38 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       if (c.scoringMetric.value() != TextScoringMetric::BM25) {
         c.bAndKParam = std::pair{-3.f, -3.f};
       }
-      auto buildTextIndex = [&textIndexBuilder, &c](auto wordsAndDocsfile,
+      auto buildTextIndex = [&textIndexBuilder, &c](auto wordsFile,
+                                                    auto docsFile,
                                                     bool addWordsFromLiterals) {
         textIndexBuilder.buildTextIndexFile(
-            std::move(wordsAndDocsfile), addWordsFromLiterals,
-            c.scoringMetric.value(), c.bAndKParam.value());
+            TextIndexConfig{std::move(wordsFile),
+                            std::move(docsFile),
+                            addWordsFromLiterals,
+                            c.useDocsFileForVocab,
+                            c.addEntitiesFromWordsFile,
+                            {c.scoringMetric.value(), c.bAndKParam.value()}});
       };
-      if (c.contentsOfWordsFileAndDocsfile.has_value()) {
+      if (c.contentsOfDocsFile.has_value() &&
+          (c.contentsOfWordsFile.has_value() || c.useDocsFileForVocab)) {
+        AD_CONTRACT_CHECK(!c.addEntitiesFromWordsFile || c.useDocsFileForVocab);
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(c.contentsOfWordsFileAndDocsfile.value().first.c_str(),
-                        c.contentsOfWordsFileAndDocsfile.value().first.size());
-        docsFile.write(c.contentsOfWordsFileAndDocsfile.value().second.c_str(),
-                       c.contentsOfWordsFileAndDocsfile.value().second.size());
+        wordsFile.write(c.contentsOfWordsFile.value().c_str(),
+                        c.contentsOfWordsFile.value().size());
+        docsFile.write(c.contentsOfDocsFile.value().c_str(),
+                       c.contentsOfDocsFile.value().size());
         wordsFile.close();
         docsFile.close();
         textIndexBuilder.setKbName(indexBasename);
         textIndexBuilder.setTextName(indexBasename);
         textIndexBuilder.setOnDiskBase(indexBasename);
-        buildTextIndex(
-            std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                indexBasename + ".docsfile"},
-            c.addWordsFromLiterals);
+        buildTextIndex(indexBasename + ".wordsfile",
+                       indexBasename + ".docsfile", c.addWordsFromLiterals);
         textIndexBuilder.buildDocsDB(indexBasename + ".docsfile");
       } else if (c.addWordsFromLiterals) {
-        buildTextIndex(std::nullopt, true);
+        buildTextIndex(std::nullopt, std::nullopt, true);
       }
     }
   }

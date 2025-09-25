@@ -10,6 +10,8 @@
 // This class contains all the code that is only required when building the
 // fulltext index
 class TextIndexBuilder : public IndexImpl {
+  using TextIndexConfig = qlever::TextIndexConfig;
+
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
                             const std::string& onDiskBase)
@@ -22,31 +24,39 @@ class TextIndexBuilder : public IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(
-      const std::optional<std::pair<std::string, std::string>>&
-          wordsAndDocsFile,
-      bool addWordsFromLiterals,
-      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
-      std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
+  void buildTextIndexFile(TextIndexConfig config);
 
   // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const std::string& docsFile) const;
+  void buildDocsDB(const std::string& docsFileName) const;
 
  private:
-  size_t processWordsForVocabulary(const std::string& contextFile,
-                                   bool addWordsFromLiterals);
+  // Creates a vocabulary filled with the words given in the respective words-
+  // or docsfile and/or the literals of the index (for details see
+  // TextIndexConfig). Returns the number of words read (counting multiple
+  // occurrences)
+  size_t processWordsForVocabulary(const TextIndexConfig& textIndexConfig);
 
-  void processWordsForInvertedLists(const std::string& contextFile,
-                                    bool addWordsFromLiterals, TextVec& vec);
+  // Fills the given 'vec' with all occurrences of entities and words in the
+  // respective TextRecords. Depending on the configuration the words and
+  // entities are read from different files and/or added from literals (for
+  // details see TextIndexConfig).
+  void processWordsForInvertedLists(const TextIndexConfig& textIndexConfig,
+                                    TextVec& vec);
 
-  // Generator that returns all words in the given context file (if not empty)
-  // and then all words in all literals (if second argument is true).
+  // This function is used when the TextIndexConfig specifies to add words from
+  // the docsfile but entities from the wordsfile. In this case both files are
+  // parsed in parallel to ensure a correct TextRecordIndex for the entities.
+  template <typename T>
+  void wordsFromDocsFileEntitiesFromWordsFile(
+      const std::string& wordsFile, const std::string& docsFile,
+      const LocaleManager& localeManager, T processLine) const;
+
+  // Generator that returns all words in all literals.
   //
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<WordsFileLine> wordsInTextRecords(
-      std::string contextFile, bool addWordsFromLiterals) const;
+  cppcoro::generator<WordsFileLine> wordsInLiterals(size_t startIndex) const;
 
   void processEntityCaseDuringInvertedListProcessing(
       const WordsFileLine& line,

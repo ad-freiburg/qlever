@@ -21,6 +21,7 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+using TextIndexConfig = qlever::TextIndexConfig;
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead. Using the parameter
@@ -55,8 +56,10 @@ struct TestIndexConfig {
   ad_utility::MemorySize blocksizePermutations = 16_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
-  std::optional<std::pair<std::string, std::string>>
-      contentsOfWordsFileAndDocsfile = std::nullopt;
+  bool useDocsFileForVocab = false;
+  bool addEntitiesFromWordsFile = false;
+  std::optional<std::string> contentsOfWordsFile = std::nullopt;
+  std::optional<std::string> contentsOfDocsFile = std::nullopt;
   // The following buffer size can be increased, if larger triples are to be
   // parsed
   //(like large geometry literals for testing spatial operations).
@@ -80,9 +83,10 @@ struct TestIndexConfig {
     return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
                       c.usePatterns, c.usePrefixCompression,
                       c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedIriManager);
+                      c.addWordsFromLiterals, c.useDocsFileForVocab,
+                      c.addEntitiesFromWordsFile, c.contentsOfWordsFile,
+                      c.contentsOfDocsFile, c.parserBufferSize, c.scoringMetric,
+                      c.bAndKParam, c.indexType, c.encodedIriManager);
   }
   bool operator==(const TestIndexConfig&) const = default;
 };

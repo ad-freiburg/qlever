@@ -239,8 +239,8 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getNofNonLiteralsInTextIndex() const {
-  return pimpl_->getNofNonLiteralsInTextIndex();
+size_t Index::getLastTextRecordIndexOfNonLiterals() const {
+  return pimpl_->getLastTextRecordIndexOfNonLiterals();
 }
 
 // ____________________________________________________________________________
