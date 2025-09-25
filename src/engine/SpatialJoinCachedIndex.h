@@ -11,7 +11,7 @@
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
 
-// Forward declaration of s2 class
+// Forward declaration of s2 classes
 class MutableS2ShapeIndex;
 class S2Polyline;
 
