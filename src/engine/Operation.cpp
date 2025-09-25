@@ -388,22 +388,24 @@ std::shared_ptr<const Result> Operation::getResult(
 
       // If a geo index is to be cached, get the respective column using the
       // given variable and compute the index.
-      std::optional<SpatialJoinCachedIndex> geoIndex = std::nullopt;
-      if (geoIndexVar.has_value()) {
+      auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
+        if (!geoIndexVar.has_value()) {
+          return std::nullopt;
+        }
         auto colIndex = getExternallyVisibleVariableColumns()
                             .at(geoIndexVar.value())
                             .columnIndex_;
-        geoIndex = SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                          &actualResult.idTable(),
-                                          _executionContext->getIndex()};
-      }
+        return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
+                                      &actualResult.idTable(),
+                                      _executionContext->getIndex()};
+      };
 
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
       // it would require great refactorings of the `Result` class.
       auto valueForNamedCache = NamedQueryCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone(), std::move(geoIndex)};
+          actualResult.localVocab().clone(), geoIndex()};
       _executionContext->namedQueryCache().store(name,
                                                  std::move(valueForNamedCache));
 
