@@ -175,7 +175,6 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const IdTable* restable, size_t row, ColumnIndex col, const Index& index) {
   auto id = restable->at(row, col);
-  // TODO<ullingerc/joka921> Deal with local vocab
   auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
@@ -562,19 +561,19 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 }
 
 // ____________________________________________________________________________
+S2Point SpatialJoinAlgorithms::toS2Point(const GeoPoint& p) {
+  auto lat = p.getLat();
+  auto lng = p.getLng();
+  auto latlng = S2LatLng::FromDegrees(lat, lng);
+  return S2Point{latlng};
+};
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
               joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
-
-  // Helper function to convert `GeoPoint` to `S2Point`
-  auto constexpr toS2Point = [](const GeoPoint& p) {
-    auto lat = p.getLat();
-    auto lng = p.getLng();
-    auto latlng = S2LatLng::FromDegrees(lat, lng);
-    return S2Point{latlng};
-  };
 
   S2PointIndex<size_t> s2index;
 
@@ -652,39 +651,15 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
   auto s2index =
       qec_->namedQueryCache().get(rightCacheName.value())->cachedGeoIndex_;
-  AD_CORRECTNESS_CHECK(!s2index.has_value());
+  AD_CORRECTNESS_CHECK(s2index.has_value());
 
-  // TODO
-  // static std::optional<MutableS2ShapeIndex> cachedIndex;
-  // MutableS2ShapeIndex s2index;
+  AD_CORRECTNESS_CHECK(!maxResults.has_value());
 
   bool indexOfRight = true;
-  // auto indexTable = indexOfRight ? idTableRight : idTableLeft;
-  // auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
-  // ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
-
-  // // Populate the index
-  // std::vector<std::pair<S2Polyline, size_t>> lines;
   ad_utility::Timer t{ad_utility::Timer::Started};
   ad_utility::Timer t2{ad_utility::Timer::Started};
 
-  // for (size_t row = 0; row < indexTable->size(); row++) {
-  //   auto p = getPolyline(indexTable, row, indexJoinCol,
-  //                        spatialJoin_.value()->getIndex());
-  //   if (p.has_value()) {
-  //     lines.emplace_back(std::move(p.value()), row);
-  //   }
-  // }
-  // spatialJoin_.value()->runtimeInfo().addDetail("time for reading polylines",
-  //                                               t.msecs().count());
-  // t.reset();
-  // for (auto& [line, row] : lines) {
-  //   shapeIndexToRow[shapeIndexToRow.size()] = row;
-  //   s2index.Add(std::make_unique<S2Polyline::Shape>(&line));
-  // }
-  // spatialJoin_.value()->runtimeInfo().addDetail("time for s2 index building",
-  //                                               t.msecs().count());
   // Performs a nearest neighbor search on the index and returns the closest
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
@@ -692,22 +667,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   auto s2indexPtr = s2index.value().getIndex();
   auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
 
-  // Helper function to convert `GeoPoint` to `S2Point`
-  auto constexpr toS2Point = [](const GeoPoint& p) {
-    auto lat = p.getLat();
-    auto lng = p.getLng();
-    auto latlng = S2LatLng::FromDegrees(lat, lng);
-    return S2Point{latlng};
-  };
-
-  t.reset();
-  t.cont();
-
-  if (maxResults.has_value()) {
-    AD_FAIL();
-    s2query.mutable_options()->set_max_results(
-        static_cast<int>(maxResults.value()));
-  }
   if (maxDist.has_value()) {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
         util::units::Meters(static_cast<float>(maxDist.value()))));

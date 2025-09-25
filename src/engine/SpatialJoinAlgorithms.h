@@ -77,6 +77,7 @@ using Value = std::pair<Box, RtreeEntry>;
 
 // Forward declaration of s2 class
 class S2Polyline;
+class S2Point;
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -178,12 +179,16 @@ class SpatialJoinAlgorithms {
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
 
+  // Helper function to convert `GeoPoint` objects to `S2Point`.
+  static S2Point toS2Point(const GeoPoint& point);
+
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
   static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                           ColumnIndex col);
 
-  // TODO
+  // Helper function to retrieve and parse a line string from the given cell of
+  // an `IdTable` and convert it to an `S2Polyline`.
   static std::optional<S2Polyline> getPolyline(const IdTable* restable,
                                                size_t row, ColumnIndex col,
                                                const Index& index);
