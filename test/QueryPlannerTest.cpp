@@ -2659,6 +2659,8 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
             "\"?wrongVariableHere\" as the right join variable"));
   }
 
+  // todo tests for new wrong config checks
+
   //   std::string queryToPin = "SELECT * { ?s <p> ?o}";
   //   auto qec = ad_utility::testing::getQec(kb);
   //   qec->pinWithExplicitName() = {"dummyQuery", V{"?o"}};
