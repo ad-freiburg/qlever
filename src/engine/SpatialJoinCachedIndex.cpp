@@ -32,4 +32,5 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
     auto shapeIndex = s2index_->Add(std::make_unique<S2Polyline::Shape>(&line));
     shapeIndexToRow_[shapeIndex] = row;
   }
+  // TODO<ullingerc> Run query against index to force building
 };
