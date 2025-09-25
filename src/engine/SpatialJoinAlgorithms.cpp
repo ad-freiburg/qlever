@@ -562,10 +562,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
 // ____________________________________________________________________________
 S2Point SpatialJoinAlgorithms::toS2Point(const GeoPoint& p) {
-  auto lat = p.getLat();
-  auto lng = p.getLng();
-  auto latlng = S2LatLng::FromDegrees(lat, lng);
-  return S2Point{latlng};
+  return {S2LatLng::FromDegrees(p.getLat(), p.getLng())};
 };
 
 // ____________________________________________________________________________
@@ -641,45 +638,24 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
               joinType, rightCacheName] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
-  // TODO access cache + sanity check of cache, must have geo index, must have
-  // same variable, etc.
-
-  // TODO report skipped items ; left must be point ; right must be linestring
-
-  // TODO also allow ad-hoc?
-
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
   auto s2index =
       qec_->namedQueryCache().get(rightCacheName.value())->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
-
-  AD_CORRECTNESS_CHECK(!maxResults.has_value());
-
-  bool indexOfRight = true;
-
-  ad_utility::Timer t{ad_utility::Timer::Started};
-  ad_utility::Timer t2{ad_utility::Timer::Started};
-
-  // Performs a nearest neighbor search on the index and returns the closest
-  // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
+  AD_CORRECTNESS_CHECK(!maxResults.has_value() && maxDist.has_value());
 
   // Construct a query object with the given constraints
   auto s2indexPtr = s2index.value().getIndex();
   auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
+  s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
+      util::units::Meters(static_cast<float>(maxDist.value()))));
 
-  if (maxDist.has_value()) {
-    s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-        util::units::Meters(static_cast<float>(maxDist.value()))));
-  }
+  ad_utility::Timer t{ad_utility::Timer::Started};
+  ad_utility::Timer t2{ad_utility::Timer::Started};
 
-  auto searchTable = indexOfRight ? idTableLeft : idTableRight;
-  auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
-
-  t.reset();
-  t2.reset();
   // Use the index to lookup the points of the other table
-  for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
-    auto p = getPoint(searchTable, searchRow, searchJoinCol);
+  for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
+    auto p = getPoint(idTableLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
     }
@@ -688,13 +664,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
-    // for (size_t i = 0; i < 1000; ++i) {
-    //   p.value() =
-    //       GeoPoint{p.value().getLat() + 0.01, p.value().getLng() + 0.01};
-    //   s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
-    //   auto res3 = s2query.FindClosestEdges(&s2target);
-    //   ql::ranges::move(res3, std::back_inserter(res));
-    // }
     t.stop();
     AD_LOG_DEBUG << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
@@ -707,8 +676,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     t.stop();
     t2.cont();
     for (auto [indexRow, dist] : deduplicatedSet) {
-      auto rowLeft = indexOfRight ? searchRow : indexRow;
-      auto rowRight = indexOfRight ? indexRow : searchRow;
+      auto rowRight = indexRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
                           Id::makeFromDouble(dist));
     }
@@ -719,8 +687,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   spatialJoin_.value()->runtimeInfo().addDetail("time for result writing",
                                                 t2.msecs().count());
 
-  return Result(std::move(result), std::vector<ColumnIndex>{},
-                Result::getMergedLocalVocab(*resultLeft, *resultRight));
+  return Result{std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight)};
 }
 
 // ____________________________________________________________________________

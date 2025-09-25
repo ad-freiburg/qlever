@@ -75,7 +75,7 @@ using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
 
-// Forward declaration of s2 class
+// Forward declaration of s2 classes
 class S2Polyline;
 class S2Point;
 
