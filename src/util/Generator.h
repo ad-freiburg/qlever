@@ -295,23 +295,6 @@ T getSingleElement(generator<T, Details> g) {
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
 }
-
-// helper function to convert ad_utility::InputRangeTypeErasedWithDetails<T,
-// Details> to cppcoro::generator<T, Details> with preserved details
-template <typename T, typename Details>
-generator<T, Details> fromInputRangeWithDetails(
-    ad_utility::InputRangeTypeErasedWithDetails<T, Details> rangeWithDetails) {
-  Details& outerDetails = co_await getDetails;
-  // Copy the initial details
-  outerDetails = rangeWithDetails.details();
-
-  for (auto& value : rangeWithDetails) {
-    // Update details before each yield to keep them in sync during lazy
-    // iteration
-    outerDetails = rangeWithDetails.details();
-    co_yield std::move(value);
-  }
-}
 }  // namespace cppcoro
 
 #endif

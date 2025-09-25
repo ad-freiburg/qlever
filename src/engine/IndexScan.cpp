@@ -14,6 +14,7 @@
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 #include "util/Generator.h"
+#include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
@@ -386,28 +387,55 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
-  // Check if we need to apply column subset
-  auto applySubset = makeApplyColumnSubset();
-  if (!varsToKeep_.has_value()) {
-    return lazyScanAllCols;
-  }
+  // Extract a pointer/reference to the details of the previous scan
+  auto& originalDetails = lazyScanAllCols.details();
 
-  // Extract details from the original generator
-  auto originalDetails = lazyScanAllCols.details();
+  // Create a details-aware transforming wrapper that applies column subsetting
+  struct DetailsAwareTransform
+      : ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    Permutation::IdTableGenerator originalGenerator_;
+    std::function<IdTable(IdTable&&)> transform_;
+    mutable typename Permutation::IdTableGenerator::iterator it_;
+    mutable bool initialized_ = false;
 
-  // Apply transformation using CachingTransformInputRange and preserve details
-  auto transformedRange = ad_utility::CachingTransformInputRange(
-      std::move(lazyScanAllCols), std::move(applySubset));
+    DetailsAwareTransform(Permutation::IdTableGenerator gen,
+                          std::function<IdTable(IdTable&&)> transform)
+        : originalGenerator_(std::move(gen)),
+          transform_(std::move(transform)) {}
 
-  // Create InputRangeTypeErasedWithDetails to preserve the details
-  auto rangeWithDetails =
-      ad_utility::InputRangeTypeErasedWithDetails<IdTable, LazyScanMetadata>(
-          ad_utility::InputRangeTypeErased<IdTable>(
-              std::move(transformedRange)),
-          std::move(originalDetails));
+    std::optional<IdTable> get() override {
+      if (!initialized_) {
+        it_ = originalGenerator_.begin();
+        initialized_ = true;
+      }
 
-  // Convert back to generator while preserving details
-  return cppcoro::fromInputRangeWithDetails(std::move(rangeWithDetails));
+      if (it_ != originalGenerator_.end()) {
+        IdTable result = std::move(*it_);
+        ++it_;
+
+        // Copy details from the original generator
+        details() = originalGenerator_.details();
+
+        return transform_(std::move(result));
+      }
+
+      return std::nullopt;
+    }
+  };
+
+  // Create the wrapper
+  auto wrapper = std::make_unique<DetailsAwareTransform>(
+      std::move(lazyScanAllCols), makeApplyColumnSubset());
+
+  // Set up an InputRangeTypeErased<IdTable, LazyScanMetadata>
+  auto rangeTypeErased =
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
+          std::move(wrapper));
+
+  // Call setDetailsPointer on that range before returning it
+  rangeTypeErased.setDetailsPointer(&originalDetails);
+
+  return cppcoro::fromInputRange(std::move(rangeTypeErased));
 };
 
 // _____________________________________________________________________________
