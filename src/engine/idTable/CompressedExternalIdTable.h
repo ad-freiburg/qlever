@@ -328,6 +328,8 @@ class CompressedExternalIdTableBase {
   std::atomic<bool> isFirstIteration_ = true;
   // std::atomic<size_t> transformAndPushWasCalled = 0;
   std::string timeOfCreation = ad_utility::Log::getTimeStamp();
+  static inline size_t numInstances = 0;
+  size_t instanceNumber = numInstances++;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -424,7 +426,8 @@ class CompressedExternalIdTableBase {
     AD_LOG_INFO
         << "calling transformAndPushLastBlock for an external idTable with "
         << this->size() << "elements that was created at "
-        << this->timeOfCreation << std::endl;
+        << this->timeOfCreation << "and instance number " << instanceNumber
+        << std::endl;
     ;
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
