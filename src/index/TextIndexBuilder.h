@@ -45,7 +45,7 @@ class TextIndexBuilder : public IndexImpl {
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<WordsFileLine> wordsInTextRecords(
+  ad_utility::InputRangeTypeErased<WordsFileLine> wordsInTextRecords(
       std::string contextFile, bool addWordsFromLiterals) const;
 
   void processEntityCaseDuringInvertedListProcessing(
