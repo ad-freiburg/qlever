@@ -8,6 +8,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include "engine/BinaryExport.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -155,10 +156,13 @@ Result Service::computeResultImpl(bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
+  std::string accept =
+      "application/qlever-export+octet-stream;q=0.9,application/"
+      "sparql-results+json;q=0.1";
+  accept = "application/sparql-results+json";
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
-      serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      serviceQuery, "application/sparql-query", accept);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -170,6 +174,12 @@ Result Service::computeResultImpl(bool requestLaziness) {
         "SERVICE responded with HTTP status code: ",
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
+  }
+
+  // TODO<joka921> Very experimental... and code duplicaty....
+  if (ad_utility::utf8ToLower(response.contentType_)
+          .starts_with("application/qlever-export+octet-stream")) {
+    return computeBinaryResult(requestLaziness, std::move(response));
   }
   if (!ad_utility::utf8ToLower(response.contentType_)
            .starts_with("application/sparql-results+json")) {
@@ -201,6 +211,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
                       resultSortedOn()};
 }
 
+// _____________________________________________________________________________
+Result Service::computeBinaryResult(bool requestLaziness,
+                                    HttpOrHttpsResponse response) {
+  return qlever::binary_export::importBinaryHttpResponse(
+      requestLaziness, std::move(response), *getExecutionContext(),
+      resultSortedOn());
+}
+
+// _____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
                               const nlohmann::json& partJson,

@@ -4,7 +4,7 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -13,6 +13,7 @@
 
 #include <ranges>
 
+#include "engine/BinaryExport.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -762,17 +763,16 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
+    std::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          if (columnIndex.has_value()) {
-            co_yield std::string_view{
-                reinterpret_cast<const char*>(
-                    &pair.idTable_(i, columnIndex.value().columnIndex_)),
-                sizeof(Id)};
-          }
+          co_yield std::string_view{
+              reinterpret_cast<const char*>(
+                  &pair.idTable_(i, columnIndex.value().columnIndex_)),
+              sizeof(Id)};
         }
         cancellationHandle->throwIfCancelled();
       }
@@ -962,8 +962,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
-  auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
@@ -1017,6 +1015,18 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    selectQueryResultToStream<ad_utility::MediaType::binaryQleverExport>(
+        const QueryExecutionTree& qet,
+        const parsedQuery::SelectClause& selectClause,
+        LimitOffsetClause limitAndOffset,
+        CancellationHandle cancellationHandle) {
+  return qlever::binary_export::exportAsQLeverBinary(
+      qet, selectClause, limitAndOffset, std::move(cancellationHandle));
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::constructQueryResultToStream(
@@ -1027,8 +1037,10 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
-                format == MediaType::qleverJson);
-  if constexpr (format == MediaType::octetStream) {
+                format == MediaType::qleverJson ||
+                format == MediaType::binaryQleverExport);
+  if constexpr (format == MediaType::octetStream ||
+                format == MediaType::binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
   } else if constexpr (format == MediaType::sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
@@ -1128,12 +1140,14 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
+      csv,       tsv,        octetStream, turtle,
+      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>{}(compute, mediaType);
+                                  sparqlJson, qleverJson, binaryQleverExport>{}(
+          compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 
