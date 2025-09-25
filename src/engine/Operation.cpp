@@ -410,7 +410,10 @@ std::shared_ptr<const Result> Operation::getResult(
                                                  std::move(valueForNamedCache));
 
       runtimeInfo().addDetail("pinned-with-explicit-name", name);
-      // TODO<ullingerc> Also detail for pinned geo index
+      if (geoIndexVar.has_value()) {
+        runtimeInfo().addDetail("pinned-geo-index-on-var",
+                                geoIndexVar.value().name());
+      }
     }
 
     return result._resultPointer->resultTablePtr();
