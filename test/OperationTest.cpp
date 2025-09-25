@@ -304,16 +304,16 @@ TEST(OperationTest, estimatesForCachedResults) {
   // set to `true`, the cost estimate should be zero. The size estimate does not
   // change (see the `getCostEstimate` function for details on why).
   {
-    auto restoreWhenScopeEnds = setNewRuntimeParameterForTest<
-        &RuntimeParameters::zeroCostEstimateForCachedSubtree>(true);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
   {
-    auto restoreWhenScopeEnds = setNewRuntimeParameterForTest<
-        &RuntimeParameters::zeroCostEstimateForCachedSubtree>(false);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(false);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
@@ -674,8 +674,9 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // Too small for storage, make sure to change back before consuming
     // generator to additionally assert sure it is not re-read on every
     // iteration.
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::cacheMaxSizeLazyResult>(1_B);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
@@ -742,8 +743,9 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
         }};
     qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
 
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::cacheMaxSizeLazyResult>(runtimeParameterLimit);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            runtimeParameterLimit);
 
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 

@@ -82,7 +82,7 @@ size_t QueryExecutionTree::getCostEstimate() {
   // to `true`, we set the cost estimate to zero.
   if (cachedResult_ &&
       getRuntimeParameter<
-          &RuntimeParameters::zeroCostEstimateForCachedSubtree>()) {
+          &RuntimeParameters::zeroCostEstimateForCachedSubtree_>()) {
     return 0;
   }
 

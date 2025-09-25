@@ -466,7 +466,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(undef, divByZeroInputsInt, D(0));
 
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef>(
+      setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
           false);
   testDivide(nanAndInf, divByZeroInputsDouble, I(0));
   testDivide(nanAndInf, divByZeroInputsInt, I(0));

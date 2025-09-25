@@ -101,8 +101,7 @@ TEST_F(LoadTest, computeResult) {
     pq.silent_ = false;
     {
       auto cleanup =
-          setNewRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode>(
-              true);
+          setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
       impl();
     }
     // Silent, but syntax test mode is deactivated.
@@ -246,8 +245,7 @@ TEST_F(LoadTest, computeResult) {
 TEST_F(LoadTest, getCacheKey) {
   {
     auto cleanup =
-        setNewRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults>(
-            true);
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -265,7 +263,7 @@ TEST_F(LoadTest, getCacheKey) {
   }
   {
     auto cleanup =
-        setNewRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults>(
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
             false);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
@@ -287,7 +285,7 @@ TEST_F(LoadTest, clone) {
   // The cache breaker will be different.
   {
     auto cleanup =
-        setNewRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults>(
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
             false);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
@@ -298,8 +296,7 @@ TEST_F(LoadTest, clone) {
   // When the results are cached, we get decoupled object that is the same.
   {
     auto cleanup =
-        setNewRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults>(
-            true);
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));

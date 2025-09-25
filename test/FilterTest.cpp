@@ -47,8 +47,8 @@ void checkSetPrefilterExpressionVariablePair(
     SparqlTripleSimple triple,
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
     bool prefilterIsApplicable, bool enablePrefilterForFilter = true) {
-  [[maybe_unused]] const auto& rtp = setNewRuntimeParameterForTest<
-      &RuntimeParameters::enablePrefilterOnIndexScans>(
+  [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(
       enablePrefilterForFilter);
   auto subtree =
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);

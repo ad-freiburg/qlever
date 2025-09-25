@@ -8,5 +8,5 @@
 #include "global/RuntimeParameters.h"
 
 ad_utility::MemorySize getRequestBodyLimit() {
-  return getRuntimeParameter<&RuntimeParameters::requestBodyLimit>();
+  return getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
 }

@@ -382,8 +382,8 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
   bool keepJoinCol = GetParam();
   auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -421,8 +421,8 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -464,8 +464,8 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -518,8 +518,8 @@ TEST_P(JoinTestParametrized, joinTwoScans) {
   auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec(
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
     auto scanP = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
@@ -571,8 +571,8 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
       " <x> <p2> <2> <g2> ."};
   config.indexType = qlever::Filetype::NQuad;
   auto qec = ad_utility::testing::getQec(config);
-  auto cleanup = setNewRuntimeParameterForTest<
-      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   using ad_utility::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
       qec, POS,
@@ -614,8 +614,8 @@ TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
   auto qec = ad_utility::testing::getQec(
       "<x> <p1> <1> . <x> <p1> <2> . <x> <p1> <3> . <x> <p1> <4> ."
       " <x> <p2> <5>");
-  auto cleanup = setNewRuntimeParameterForTest<
-      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   using ad_utility::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
       qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Var{"?o1"}});
@@ -668,8 +668,8 @@ TEST_P(JoinTestParametrized, joinTwoLazyOperationsWithAndWithoutUndefValues) {
     IdTable expected = expectedIn.clone();
     auto l = generateLocationTrace(loc);
     auto qec = ad_utility::testing::getQec();
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
     auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(leftTables), Vars{Variable{"?s"}}, false,
         std::vector<ColumnIndex>{0});
@@ -761,8 +761,8 @@ TEST_P(JoinTestParametrized,
     auto l = generateLocationTrace(loc);
     IdTable expected = expectedIn.clone();
     auto qec = ad_utility::testing::getQec();
-    auto cleanup = setNewRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
     auto leftTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
             qec, std::move(leftTable), Vars{Variable{"?s"}}, false,
@@ -837,8 +837,8 @@ TEST_P(JoinTestParametrized,
 TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
   auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec();
-  auto cleanup = setNewRuntimeParameterForTest<
-      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   auto leftTree =
       ad_utility::makeExecutionTree<AlwaysFailOperation>(qec, Variable{"?s"});
   auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -860,8 +860,8 @@ TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
   auto keepJoinCol = GetParam();
   auto qec =
       ad_utility::testing::getQec("<x> <p> <g>. <x2> <p> <h>. <x> <a> <i>.");
-  auto cleanup = setNewRuntimeParameterForTest<
-      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>(0);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   auto U = Id::makeUndefined();
   {
     auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(

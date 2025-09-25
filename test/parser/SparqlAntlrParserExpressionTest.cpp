@@ -487,7 +487,7 @@ TEST(SparqlParser, FunctionCall) {
   // Check that arbitrary nonexisting functions with a single argument silently
   // return an `IdExpression(UNDEF)` in the syntax test mode.
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode>(true);
+      setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
   expectFunctionCall(
       absl::StrCat(prefixNexistepas, "nada>(?x)"),
       matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,

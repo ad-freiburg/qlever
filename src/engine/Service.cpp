@@ -31,7 +31,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults>()) {
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
     return absl::StrCat(
         "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
@@ -133,7 +133,7 @@ Result Service::computeResult(bool requestLaziness) {
 // ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
-  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode>()) {
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeNeutralElementResultForSilentFail();
   }
   ad_utility::httpUtils::Url serviceUrl{
@@ -554,7 +554,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // - or exactly one of the operations is a Service. If we could estimate
   // the result size of a Service, the Service with the smaller result could
   // be used as a sibling here.
-  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults>() ||
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>() ||
       (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;
@@ -589,7 +589,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   if (siblingResult->isFullyMaterialized()) {
     bool resultIsSmall =
         siblingResult->idTable().size() <=
-        getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>();
+        getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
@@ -611,7 +611,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // is exceeded
   auto generator = moveToCachingInputRange(siblingResult->idTables());
   const size_t maxValueRows =
-      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows>();
+      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
   while (auto pairOpt = generator.get()) {
     auto& pair = pairOpt.value();
     rows += pair.idTable_.size();

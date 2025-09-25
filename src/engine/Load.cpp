@@ -16,11 +16,11 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
       loadClause_(std::move(loadClause)),
       getResultFunction_(std::move(getResultFunction)),
       loadResultCachingEnabled_(
-          getRuntimeParameter<&RuntimeParameters::cacheLoadResults>()) {}
+          getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {}
 
 // _____________________________________________________________________________
 std::string Load::getCacheKeyImpl() const {
-  if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults>()) {
+  if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
     return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
                         loadClause_.silent_ ? " SILENT" : "");
   }
@@ -77,7 +77,7 @@ Result Load::computeResult(bool requestLaziness) {
   // In the syntax test mode we don't even try to compute the result, as this
   // could run into timeouts which would be a waste of time and is hard to
   // properly recover from.
-  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode>()) {
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeSilentResult();
   }
   try {

@@ -32,7 +32,7 @@ Filter::Filter(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans>()) {
+  if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
 }

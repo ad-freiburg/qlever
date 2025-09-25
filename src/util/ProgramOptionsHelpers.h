@@ -108,7 +108,7 @@ class ParameterToProgramOptionFactory {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
     auto defaultValue =
-        std::invoke(ParameterPtr, *getRuntimeParameters().rlock()).get();
+        std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
@@ -116,7 +116,7 @@ class ParameterToProgramOptionFactory {
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
     auto setParameterToValue{[](const Type& value) {
-      std::invoke(ParameterPtr, *getRuntimeParameters().wlock()).set(value);
+      std::invoke(ParameterPtr, *globalRuntimeParameters.wlock()).set(value);
     }};
 
     return boost::program_options::value<Type>()

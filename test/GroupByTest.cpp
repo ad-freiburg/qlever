@@ -817,7 +817,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   // Enable optimization
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   // Top operation must be SORT
@@ -830,11 +830,11 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
               avgDistinctAggregate);
   // Optimization has to be enabled
-  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
 
   // Support for MIN & MAX & SUM
-  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(true);
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
@@ -877,14 +877,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 
   // Calculate result with optimization
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
@@ -896,7 +896,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
   /* Setup query:
   SELECT ?x (AVG(?y) as ?avg) WHERE {
@@ -959,14 +959,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
 
   // Calculate result with optimization
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(false);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesCountStar,
                                      join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -980,7 +980,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesInExpression) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1040,7 +1040,7 @@ TEST_F(GroupByOptimizations,
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariables) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1096,7 +1096,7 @@ TEST_F(GroupByOptimizations,
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesOutOfOrder) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1151,7 +1151,7 @@ TEST_F(GroupByOptimizations,
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1223,7 +1223,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Make sure we are calculating the correct result when a grouped variable
   // occurs in an expression.
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1291,7 +1291,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   // Test for support of min, max and sum when using the HashMap optimization.
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1367,7 +1367,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   // Test for support of min, max and sum when using the HashMap optimization.
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) (SUM(?b) as ?w) WHERE {
@@ -1448,7 +1448,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   std::string turtleInput =
@@ -1493,7 +1493,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   // Test for support of min, max and sum when using the HashMap optimization.
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   parsedQuery::SparqlValues input;
@@ -1535,7 +1535,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
   std::string turtleInput =
@@ -1658,7 +1658,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
 
   // Clear cache, calculate result without optimization
   auto cleanup =
-      setNewRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled>(
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
@@ -1667,7 +1667,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
   // Calculate result with optimization, after calculating it without,
   // since optimization changes tree
   qec->clearCacheUnpinnedOnly();
-  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled>(true);
+  setRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 

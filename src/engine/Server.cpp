@@ -62,11 +62,11 @@ Server::Server(unsigned short port, size_t numThreads,
       queryThreadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
-  getRuntimeParameters().wlock()->cacheMaxNumEntries.setOnUpdateAction(
+  globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
       [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
-  getRuntimeParameters().wlock()->cacheMaxSize.setOnUpdateAction(
+  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) { cache_.setMaxSize(newValue); });
-  getRuntimeParameters().wlock()->cacheMaxSizeSingleEntry.setOnUpdateAction(
+  globalRuntimeParameters.wlock()->cacheMaxSizeSingleEntry_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
@@ -197,7 +197,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             std::optional<std::string_view> userTimeout, bool accessTokenOk,
             const RequestT& request, ResponseT& send) const {
   auto defaultTimeout =
-      getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout>();
+      getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
@@ -388,8 +388,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(json(countAfterClear), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
-    response = createJsonResponse(json(getRuntimeParameters().rlock()->toMap()),
-                                  request);
+    response = createJsonResponse(
+        json(globalRuntimeParameters.rlock()->toMap()), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
@@ -435,15 +435,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Set one or several of the runtime parameters.
-  for (auto key : getRuntimeParameters().rlock()->getKeys()) {
+  for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
       requireValidAccessToken("setting runtime parameters");
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
-      getRuntimeParameters().wlock()->setFromString(key,
-                                                    std::string{value.value()});
+      globalRuntimeParameters.wlock()->setFromString(
+          key, std::string{value.value()});
       response = createJsonResponse(
-          json(getRuntimeParameters().rlock()->toMap()), request);
+          json(globalRuntimeParameters.rlock()->toMap()), request);
     }
   }
 

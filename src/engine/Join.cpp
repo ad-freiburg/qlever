@@ -116,7 +116,7 @@ Result Join::computeResult(bool requestLaziness) {
     bool isSmall =
         tree.getRootOperation()->getSizeEstimate() <
         getRuntimeParameter<
-            &RuntimeParameters::lazyIndexScanMaxSizeMaterialization>();
+            &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
 
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, or is

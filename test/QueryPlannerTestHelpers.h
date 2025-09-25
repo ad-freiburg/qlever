@@ -597,11 +597,11 @@ void expectWithGivenBudget(std::string query, auto matcher,
                            size_t queryPlanningBudget,
                            source_location l = source_location::current()) {
   auto budgetBackup =
-      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget>();
-  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget>(
+      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
+  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
       queryPlanningBudget);
   auto cleanup = absl::Cleanup{[budgetBackup]() {
-    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget>(budgetBackup);
+    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));

@@ -185,8 +185,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   auto vIdGkAllee = getValId(nMap, "gk-allee");
 
   {
-    auto cleanUp = setNewRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize>(2'500);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -211,8 +211,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   EXPECT_LT(bbSize, 10'000);
 
   {
-    auto cleanUp = setNewRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize>(10'000);
+    auto cleanUp = setRuntimeParameterForTest<
+        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.

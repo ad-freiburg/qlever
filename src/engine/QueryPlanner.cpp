@@ -1746,7 +1746,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       g.push_back(&plan);
     }
     const size_t budget =
-        getRuntimeParameter<&RuntimeParameters::queryPlanningBudget>();
+        getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
     bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
       LOG(INFO)
@@ -2358,7 +2358,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
   // Disable this optimization.
-  if (!getRuntimeParameter<&RuntimeParameters::enableDistributiveUnion>()) {
+  if (!getRuntimeParameter<&RuntimeParameters::enableDistributiveUnion_>()) {
     return candidates;
   }
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
@@ -3188,7 +3188,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto setSelectedVariables = [&select](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
-    if (getRuntimeParameter<&RuntimeParameters::stripColumns>()) {
+    if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
           std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {
