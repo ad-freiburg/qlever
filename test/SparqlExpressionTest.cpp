@@ -636,7 +636,7 @@ TEST(SparqlExpression, stringOperators) {
   checkStr(Ids{I(1), I(2), I(3)},
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
   checkStr(Ids{D(-1.0), D(1.0), D(2.34), D(NAN), D(INFINITY), D(-INFINITY)},
-           IdOrLiteralOrIriVec{lit("-1.0"), lit("1.0"), lit("2.34"), lit("NaN"),
+           IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34"), lit("NaN"),
                                lit("INF"), lit("-INF")});
   checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
                Id::makeBoolFromZeroOrOne(false)},
