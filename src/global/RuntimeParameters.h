@@ -93,12 +93,6 @@ inline auto& RuntimeParameters() {
         // prefilter-free baseline, or for debugging, as wrong results may be
         // related to the `PrefilterExpression`s.
         Bool<"enable-prefilter-on-index-scans">{true},
-        // If set, then unneeded variables will not be emitted as the result of
-        // each operation.
-        // This makes the queries faster, but leads to more cache misses if e.g.
-        // variables in a SELECT clause change
-        // between otherwise equal queries.
-        Bool<"strip-columns">{false},
         // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
         SizeT<"spatial-join-max-num-threads">{8},
         // The maximum size of the `prefilterBox` for
@@ -110,6 +104,65 @@ inline auto& RuntimeParameters() {
     };
   }();
   return params;
+}
+
+struct RuntimeParametersNew {
+  using Bool = ad_utility::detail::parameterRuntimeName::Bool;
+  using Double = ad_utility::detail::parameterRuntimeName::Double;
+  template <typename Duration>
+  using Duration =
+      ad_utility::detail::parameterRuntimeName::DurationParameter<Duration>;
+  using MemorySizeParameter =
+      ad_utility::detail::parameterRuntimeName::MemorySizeParameter;
+  using SizeT = ad_utility::detail::parameterRuntimeName::SizeT;
+
+  // If set, then unneeded variables will not be emitted as the result of
+  // each operation.
+  // This makes the queries faster, but leads to more cache misses if e.g.
+  // variables in a SELECT clause change
+  // between otherwise equal queries.
+  Bool stripColumns_{false, "strip-columns"};
+
+  std::map<std::string, ad_utility::ParameterBase*> runtimeMap_;
+
+  RuntimeParametersNew() {
+    // Here all of the newly defined parameters have to be added.
+    runtimeMap_[stripColumns_.name()] = &stripColumns_;
+  }
+
+  // Obtain a map from parameter names to parameter values.
+  // This map only contains strings and is purely for logging
+  // to human users.
+  [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const {
+    ad_utility::HashMap<std::string, std::string> result;
+    for (const auto& [name, parameter] : runtimeMap_) {
+      result[name] = parameter->toString();
+    }
+    return result;
+  }
+
+  void set(const std::string& parameterName, const std::string& value) {
+    if (!runtimeMap_.contains(parameterName)) {
+      throw std::runtime_error{"No parameter with name " +
+                               std::string{parameterName} + " exists"};
+    }
+    try {
+      // Call the virtual set(std::string) function on the
+      // correct ParameterBase& in the `_runtimePointers`.
+      runtimeMap_.at(parameterName)->setFromString(value);
+    } catch (const std::exception& e) {
+      throw std::runtime_error("Could not set parameter " +
+                               std::string{parameterName} + " to value " +
+                               value + ". Exception was: " + e.what());
+    }
+  }
+
+  // TODO<BMW> Delete copying and moving (to make the map work)
+};
+
+inline ad_utility::Synchronized<RuntimeParametersNew>& runtimeParametersNew() {
+  static ad_utility::Synchronized<RuntimeParametersNew> value;
+  return value;
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H
