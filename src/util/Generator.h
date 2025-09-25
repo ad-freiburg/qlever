@@ -16,6 +16,12 @@
 #include "util/Exception.h"
 
 namespace cppcoro {
+
+struct SuspendAlways {
+  constexpr bool await_ready() const noexcept { return false; }
+  constexpr void await_suspend([[maybe_unused]] auto handle) const noexcept {}
+  constexpr void await_resume() const noexcept {}
+};
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
 // generator). For an example see `GeneratorTest.cpp`.
@@ -26,11 +32,15 @@ static constexpr GetDetails getDetails;
 // there are no details
 struct NoDetails {};
 
-template <typename T, typename Details = NoDetails>
+template <typename T, typename Details = NoDetails,
+          template <typename...> typename GeneratorHandle =
+              std::coroutine_handle>
 class generator;
 
 namespace detail {
-template <typename T, typename Details = NoDetails>
+template <typename T, typename Details = NoDetails,
+          template <typename...> typename GeneratorHandle =
+              std::coroutine_handle>
 class generator_promise {
  public:
   // Even if the generator only yields `const` values, the `value_type`
@@ -42,19 +52,23 @@ class generator_promise {
 
   generator_promise() = default;
 
-  generator<T, Details> get_return_object() noexcept;
+  generator<T, Details, GeneratorHandle> get_return_object() noexcept;
 
-  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
-  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
+  constexpr cppcoro::SuspendAlways initial_suspend() const noexcept {
+    return {};
+  }
+  constexpr cppcoro::SuspendAlways final_suspend() const noexcept { return {}; }
 
   template <typename U = T,
             std::enable_if_t<!std::is_rvalue_reference<U>::value, int> = 0>
-  std::suspend_always yield_value(std::remove_reference_t<T>& value) noexcept {
+  cppcoro::SuspendAlways yield_value(
+      std::remove_reference_t<T>& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }
 
-  std::suspend_always yield_value(std::remove_reference_t<T>&& value) noexcept {
+  cppcoro::SuspendAlways yield_value(
+      std::remove_reference_t<T>&& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }
@@ -83,7 +97,7 @@ class generator_promise {
   struct DetailAwaiter {
     generator_promise& promise_;
     bool await_ready() const { return true; }
-    bool await_suspend(std::coroutine_handle<>) const noexcept { return false; }
+    bool await_suspend(GeneratorHandle<>) const noexcept { return false; }
     Details& await_resume() noexcept { return promise_.details(); }
   };
 
@@ -117,10 +131,12 @@ class generator_promise {
 
 struct generator_sentinel {};
 
-template <typename T, typename Details, bool ConstDummy = false>
+template <typename T, typename Details,
+          template <typename...> typename GeneratorHandle,
+          bool ConstDummy = false>
 class generator_iterator {
-  using promise_type = generator_promise<T, Details>;
-  using coroutine_handle = std::coroutine_handle<promise_type>;
+  using promise_type = generator_promise<T, Details, GeneratorHandle>;
+  using coroutine_handle = GeneratorHandle<promise_type>;
 
  public:
   using iterator_category = std::input_iterator_tag;
@@ -178,11 +194,13 @@ class generator_iterator {
 };
 }  // namespace detail
 
-template <typename T, typename Details>
+template <typename T, typename Details,
+          template <typename...> typename GeneratorHandle>
 class [[nodiscard]] generator {
  public:
-  using promise_type = detail::generator_promise<T, Details>;
-  using iterator = detail::generator_iterator<T, Details, false>;
+  using promise_type = detail::generator_promise<T, Details, GeneratorHandle>;
+  using iterator =
+      detail::generator_iterator<T, Details, GeneratorHandle, false>;
   // TODO<joka921> Check if this fixes anything wrt ::ranges
   // using const_iterator = detail::generator_iterator<T, Details, true>;
   using value_type = typename iterator::value_type;
@@ -250,45 +268,47 @@ class [[nodiscard]] generator {
   }
 
  private:
-  friend class detail::generator_promise<T, Details>;
+  friend class detail::generator_promise<T, Details, GeneratorHandle>;
 
   // In the case of an empty, default-constructed `generator` object we still
   // want the call to `details` to return a valid object that in this case is
   // owned directly by the generator itself.
   [[no_unique_address]] Details m_details_if_default_constructed;
 
-  explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept
+  explicit generator(GeneratorHandle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
 
-  std::coroutine_handle<promise_type> m_coroutine;
+  GeneratorHandle<promise_type> m_coroutine;
 };
 
-template <typename T>
-void swap(generator<T>& a, generator<T>& b) {
+template <typename T, typename D, template <typename...> typename H>
+void swap(generator<T, D, H>& a, generator<T, D, H>& b) {
   a.swap(b);
 }
 
 namespace detail {
-template <typename T, typename Details>
-generator<T, Details>
-generator_promise<T, Details>::get_return_object() noexcept {
-  using coroutine_handle = std::coroutine_handle<generator_promise<T, Details>>;
-  return generator<T, Details>{coroutine_handle::from_promise(*this)};
+template <typename T, typename Details, template <typename...> typename H>
+generator<T, Details, H>
+generator_promise<T, Details, H>::get_return_object() noexcept {
+  using coroutine_handle = H<generator_promise<T, Details, H>>;
+  return generator<T, Details, H>{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
 
-template <typename FUNC, typename T>
-generator<
-    std::invoke_result_t<FUNC&, typename generator<T>::iterator::reference>>
-fmap(FUNC func, generator<T> source) {
+template <typename FUNC, typename T, typename D,
+          template <typename...> typename H>
+generator<std::invoke_result_t<
+              FUNC&, typename generator<T, D, H>::iterator::reference>,
+          D, H>
+fmap(FUNC func, generator<T, D, H> source) {
   for (auto&& value : source) {
     co_yield std::invoke(func, static_cast<decltype(value)>(value));
   }
 }
 
 // Get the first element of a generator and verify that it's the only one.
-template <typename T, typename Details>
-T getSingleElement(generator<T, Details> g) {
+template <typename T, typename Details, template <typename...> typename H>
+T getSingleElement(generator<T, Details, H> g) {
   auto it = g.begin();
   AD_CORRECTNESS_CHECK(it != g.end());
   T t = std::move(*it);
@@ -297,5 +317,232 @@ T getSingleElement(generator<T, Details> g) {
 }
 
 }  // namespace cppcoro
+
+// ____________________________________________________________________________
+// Infrastructure for coroutines in C++17
+struct HandleFrame {
+  using F = void(void*);
+  using B = bool(void*);
+  void* target;
+  F* resumeFunc;
+  F* destroyFunc;
+  B* doneFunc;
+};
+
+template <typename Promise = void>
+struct Handle {
+  HandleFrame* ptr;
+  void resume() { ptr->resumeFunc(ptr->target); }
+
+  static Handle from_promise(Promise& p) {
+    // TODO<joka921> This has to take into account the alignment.
+    auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
+                                              sizeof(HandleFrame));
+    /*
+    std::cerr << "Address of frame computed " << reinterpret_cast<intptr_t>(ptr)
+              << std::endl;
+              */
+    return Handle{ptr};
+  }
+
+  operator bool() const { return static_cast<bool>(ptr); }
+
+  bool done() const { return ptr->doneFunc(ptr->target); }
+
+  // TODO<joka921> This has to take into account the alignment.
+  Promise& promise() {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  const Promise& promise() const {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  void destroy() { ptr->destroyFunc(ptr->target); }
+};
+
+template <typename T>
+inline constexpr bool alwaysFalse = false;
+
+bool co_await_impl(auto&& awaiter, auto handle) {
+  if (awaiter.await_ready()) {
+    return true;
+  }
+  using type = decltype(awaiter.await_suspend(handle));
+  static_assert(std::is_void_v<decltype(awaiter.await_resume())>);
+  if constexpr (std::is_void_v<type>) {
+    awaiter.await_suspend(handle);
+    return false;
+  } else if constexpr (std::same_as<type, bool>) {
+    return !awaiter.await_suspend(handle);
+  } else {
+    static_assert(alwaysFalse<type>,
+                  "await_suspend with symmetric transfer is not yet supported");
+  }
+}
+
+#define CO_YIELD(index, value)                            \
+  {                                                       \
+    auto&& awaiter = promise().yield_value(value);        \
+    this->curState = index;                               \
+    if (!co_await_impl(awaiter, Hdl::from_promise(pt))) { \
+      return;                                             \
+    }                                                     \
+  }                                                       \
+  [[fallthrough]];                                        \
+  case index:
+
+namespace blubbi {
+template <typename T>
+using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+}
+
+#define CO_YIELD_BUFFERED(index, value)                                        \
+  {                                                                            \
+    using BufT##index = blubbi::remove_cvref_t<decltype(value)>;               \
+    using PtrT##index =                                                        \
+        std::add_pointer_t<std::remove_reference_t<decltype(value)>>;          \
+    new (state.yieldBuffer) std::remove_reference_t<decltype(value)>{value};   \
+    CO_YIELD(index, static_cast<std::add_rvalue_reference_t<decltype(value)>>( \
+                        *reinterpret_cast<PtrT##index>(state.yieldBuffer)))    \
+    reinterpret_cast<PtrT##index>(state.yieldBuffer)->~BufT##index();          \
+  }                                                                            \
+  void()
+
+template <typename Derived, typename PromiseType>
+struct CoroImpl {
+  HandleFrame frm;
+  PromiseType pt;
+
+  static void CHECK() {
+    static_assert(offsetof(CoroImpl, pt) - offsetof(CoroImpl, frm) ==
+                  sizeof(HandleFrame));
+  }
+
+  size_t curState = 0;
+  using Hdl = Handle<PromiseType>;
+
+  PromiseType& promise() { return pt; }
+
+  static auto cast(void* blubb) {
+    return static_cast<Derived*>(reinterpret_cast<CoroImpl*>(
+        reinterpret_cast<char*>(blubb) - offsetof(CoroImpl, frm)));
+  }
+
+  static void resume(void* blubb) { cast(blubb)->doStep(); }
+
+  // TODO<joka921> Allocator support.
+  static void destroy(void* blubb) { delete (cast(blubb)); }
+
+  static bool done([[maybe_unused]] void* blubb) {
+    // TODO extend to more general things.
+    return false;
+  }
+
+  CoroImpl() {
+    CHECK();
+    frm.target = this;
+    frm.resumeFunc = &CoroImpl::resume;
+    frm.destroyFunc = &CoroImpl::destroy;
+    frm.doneFunc = &CoroImpl::done;
+  }
+
+  static auto make() {
+    // TODO allocator support
+    auto* frame = new Derived;
+    return frame->pt.get_return_object();
+  }
+};
+
+#define COROUTINE_HEADER(returnType, StateType)        \
+  using PromiseType = returnType::promise_type;        \
+  struct GeneratorStateMachine                         \
+      : CoroImpl<GeneratorStateMachine, PromiseType> { \
+    StateType state;                                   \
+    void doStep() {                                    \
+      switch (this->curState) {                        \
+        case 0:
+#define COROUTINE_FOOTER(...)                                 \
+  }                                                           \
+  }                                                           \
+  }                                                           \
+  ;                                                           \
+  auto* frame = new GeneratorStateMachine{{}, {__VA_ARGS__}}; \
+  return frame->pt.get_return_object();
+
+#define FOR_LOOP_HEADER(N)
+
+template <typename Ref, bool isOwningStorage>
+struct _coro_storage {
+  static constexpr bool isOwning = isOwningStorage;
+  using Storage = std::conditional_t<isOwning, std::decay_t<Ref>,
+                                     std::add_pointer_t<std::decay_t<Ref>>>;
+  alignas(Storage) char buffer[sizeof(Storage)];
+  bool constructed = false;
+
+  struct Val {
+    Ref ref_;
+  };
+
+  template <typename... Args>
+  void construct(Args&&... args) {
+    if constexpr (!isOwning) {
+      new (buffer) Storage(&args...);
+    } else {
+      new (buffer) Storage(std::forward<Args>(args)...);
+    }
+    constructed = true;
+  }
+
+  void destroy() {
+    if (constructed) {
+      reinterpret_cast<Storage*>(buffer)->~Storage();
+      constructed = false;
+    }
+  }
+
+  Val get() {
+    Storage& storage = *reinterpret_cast<Storage*>(buffer);
+    if constexpr (isOwning) {
+      return Val{static_cast<Ref>(storage)};
+    } else {
+      return Val{static_cast<Ref>(*storage)};
+    }
+  }
+
+  ~_coro_storage() { destroy(); }
+};
+
+#define CO_BRACED_INIT(mem, ...)                                   \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      &__VA_ARGS__};                                               \
+  this->state.mem.constructed = true
+#define CO_BRACED_INIT_OWNING(mem, ...)                            \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      __VA_ARGS__};                                                \
+  this->state.mem.constructed = true
+#define CO_PAREN_INIT(mem, ...)                                    \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage{ \
+      &__VA_ARGS__};                                               \
+  this->state.mem.constructed = true
+#define CO_PAREN_INIT_OWNING(mem, ...)                             \
+  new (this->state.mem.buffer) decltype(this->state.mem)::Storage( \
+      __VA_ARGS__);                                                \
+  this->state.mem.constructed = true
+
+template <typename Ref, bool isOwning>
+struct coro_for_loop_storage {
+  _coro_storage<Ref, isOwning> range_;
+  // TODO<joka921> This doesn't work for nonmember begin and end, but that
+  // should work for most cases now.
+  using Begin = decltype(std::declval<Ref>().begin());
+  using End = decltype(std::declval<Ref>().end());
+  _coro_storage<Begin&, true> begin_;
+  _coro_storage<End&, true> end_;
+};
+
+#define CO_GET(arg) this->state.arg.get().ref_
 
 #endif
