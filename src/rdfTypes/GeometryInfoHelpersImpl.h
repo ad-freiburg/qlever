@@ -10,12 +10,14 @@
 
 #include <array>
 #include <string_view>
+#include <type_traits>
 
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -189,6 +191,72 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
+
+// Generate a WKT literal for the custom `AnyGeometry` container type from
+// `pb_util`, which can dynamically hold any geometry type.
+inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
+  switch (geom.getType()) {
+    case 0:
+      return getWKT(geom.getPoint());
+    case 1:
+      return getWKT(geom.getLine());
+    case 2:
+      return getWKT(geom.getPolygon());
+    case 3:
+      return getWKT(geom.getMultiLine());
+    case 4:
+      return getWKT(geom.getMultiPolygon());
+    case 5:
+      return getWKT(geom.getCollection());
+    case 6:
+      return getWKT(geom.getMultiPoint());
+    default:
+      AD_FAIL();
+  }
+}
+
+// Extract the n-th geometry from a parsed geometry collection using a 1-based
+// index `n`.
+inline std::optional<std::string> getGeometryN(const ParsedWkt& geom,
+                                               int64_t n) {
+  if (n < 1) {
+    return std::nullopt;
+  }
+  // TODO: Should 1 on a non-collection-type return the geometry itself.
+  // TODO 0- or 1-indexed?
+
+  static_assert(!isVector<Line<CoordType>>);
+  static_assert(isVector<Collection<CoordType>>);
+
+  return std::visit(
+      [n](const auto& g) -> std::optional<std::string> {
+        using T = std::decay_t<decltype(g)>;
+
+        // Is this geometry a collection type?
+        if constexpr (isVector<T>) {
+          // Index range check
+          if (n - 1 >= static_cast<int64_t>(g.size())) {
+            return std::nullopt;
+          }
+
+          if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+            return getWktAnyGeometry(g.at(n - 1));
+          } else {
+            return getWKT(g.at(n - 1));
+          }
+        } else {
+          static_assert(!std::is_same_v<T, AnyGeometry<CoordType>>);
+
+          // For non collection types, only index 1 is defined and returns the
+          // geometry itself.
+          if (n == 1) {
+            return getWKT(g);
+          }
+          return std::nullopt;
+        }
+      },
+      geom);
+}
 
 }  // namespace ad_utility::detail
 
