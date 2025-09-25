@@ -329,7 +329,7 @@ class CompressedExternalIdTableBase {
   // std::atomic<size_t> transformAndPushWasCalled = 0;
   std::string timeOfCreation = ad_utility::Log::getTimeStamp();
   static inline size_t numInstances = 0;
-  size_t instanceNumber = numInstances++;
+  size_t instanceNumber = absl::bit_cast<size_t>(this);
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
