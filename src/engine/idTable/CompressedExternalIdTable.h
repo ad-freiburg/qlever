@@ -326,7 +326,8 @@ class CompressedExternalIdTableBase {
   // Store whether this table has previously already been iterated over (in
   // which case this member becomes `false`).
   std::atomic<bool> isFirstIteration_ = true;
-  std::atomic<bool> transformAndPushWasCalled = false;
+  // std::atomic<size_t> transformAndPushWasCalled = 0;
+  std::string timeOfCreation = ad_utility::Log::getTimeStamp();
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -419,7 +420,12 @@ class CompressedExternalIdTableBase {
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
-    AD_CONTRACT_CHECK(!transformAndPushWasCalled.exchange(true));
+
+    AD_LOG_INFO
+        << "calling transformAndPushLastBlock for an external idTable with "
+        << this->size() << "elements that was created at "
+        << this->timeOfCreation << std::endl;
+    ;
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
