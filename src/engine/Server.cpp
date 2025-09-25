@@ -344,8 +344,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
-    LOG(INFO) << "Processing command \"" << cmd.value() << "\"" << ": "
-              << actionMsg << std::endl;
+    LOG(INFO) << "Processing command \"" << cmd.value() << "\""
+              << ": " << actionMsg << std::endl;
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
@@ -873,8 +873,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
-  LOG(INFO) << "Done processing query and sending result" << ", total time was "
-            << requestTimer.msecs().count() << " ms" << std::endl;
+  LOG(INFO) << "Done processing query and sending result"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
 
   // Log that we are done with the query and how long it took.
   //
@@ -1025,8 +1026,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               updateMetadata, tracer));
           tracer.reset();
 
-          LOG(INFO) << "Done processing update" << ", total time was "
-                    << requestTimer.msecs().count() << " ms" << std::endl;
+          LOG(INFO) << "Done processing update"
+                    << ", total time was " << requestTimer.msecs().count()
+                    << " ms" << std::endl;
           LOG(DEBUG) << "Runtime Info:\n"
                      << plannedUpdate->queryExecutionTree_.getRootOperation()
                             ->runtimeInfo()
