@@ -652,12 +652,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
   auto s2index =
       qec_->namedQueryCache().get(rightCacheName.value())->cachedGeoIndex_;
-  if (!s2index.has_value()) {
-    throw std::runtime_error{
-        "In order to use this spatial join algorithm the result for the right "
-        "side must be precomputed with a geometry index and pinned to a name. "
-        "However, no cached geometry index was found for the given name."};
-  }
+  AD_CORRECTNESS_CHECK(!s2index.has_value());
 
   // TODO
   // static std::optional<MutableS2ShapeIndex> cachedIndex;

@@ -53,9 +53,32 @@ SpatialJoin::SpatialJoin(
     // child, it is instead fetched directly from the named query cache as an
     // `ExplicitIdTableOperation`.
     AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
+
+    auto key = config_.rightCacheName_.value();
     childRight_ = std::make_shared<QueryExecutionTree>(
-        qec, qec->namedQueryCache().getOperation(
-                 config_.rightCacheName_.value(), qec));
+        qec, qec->namedQueryCache().getOperation(key, qec));
+
+    // Early check that the query was pinned together with a geometry index
+    const auto& geoIndex = qec->namedQueryCache().get(key)->cachedGeoIndex_;
+    if (!geoIndex.has_value()) {
+      throw std::runtime_error{absl::StrCat(
+          "In order to use this spatial join algorithm the result for the "
+          "right side must be precomputed by a query pinned to "
+          "a name together with a geometry index. There is a pinned query with "
+          "the name \"",
+          key,
+          "\". However, no cached geometry index was found for the given "
+          "name.")};
+    }
+
+    auto geoIndexVar = geoIndex.value().getGeometryColumn();
+    if (geoIndexVar != config_.right_) {
+      throw std::runtime_error{
+          absl::StrCat("The geometry index for the pinned query \"", key,
+                       "\" was built on the column \"", geoIndexVar.name(),
+                       "\" but this query requests \"", config_.right_.name(),
+                       "\" as the right join variable.")};
+    }
   }
 }
 
