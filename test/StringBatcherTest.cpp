@@ -24,6 +24,36 @@ class MockBatchCallback {
   void operator()(std::string_view batch) const { call(batch); }
 };
 
+// First some example tests on how to use the `STREAMABLE_` macros:
+namespace {
+STREAMABLE_GENERATOR_TYPE yieldSomething(size_t i,
+                                         STREAMABLE_YIELDER_ARG_DECL) {
+  for (size_t j = 0; j < i; ++j) {
+    STREAMABLE_YIELD("hello");
+  }
+  STREAMABLE_RETURN;  // could also be omitted.
+}
+}  // namespace
+
+#ifdef QLEVER_STRIP_FEATURES_CPP_17
+TEST(StringBatcher, StreamMacros) {
+  std::string result;
+  StringBatcher batcher{[&result](const auto& batch) { result.append(batch); }};
+  yieldSomething(3, std::ref(batcher));
+  batcher.finish();
+  EXPECT_EQ(result, "hellohellohello");
+}
+#else
+TEST(StringBatcher, StreamMacros) {
+  std::vector<std::string> result;
+  for (const auto& batch : yieldSomething(3)) {
+    result.emplace_back(batch);
+  };
+  EXPECT_THAT(result, ::testing::ElementsAre("hellohellohello"));
+}
+
+#endif
+
 // _____________________________________________________________________________
 TEST(StringBatcher, EmptyBatcherCallsCallbackOnFinish) {
   StrictMock<MockBatchCallback> mockCallback;

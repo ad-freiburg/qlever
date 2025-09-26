@@ -18,6 +18,8 @@
 // use the facilities of the `stream_generator` (see 1. above)` or the
 // `StringBatcher` (see 2. above), depending on whether C++17 or C++20 is being
 // used.
+
+#include <cstring>
 #ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include <coroutine>
 #include <exception>
@@ -375,6 +377,25 @@ class StringBatcher {
 };
 }  // namespace ad_utility::streams
 
+// This section defines the macros to implement a coroutine(-like) generator,
+// that batches strings together. The following discusses the macros for both
+// modes (C++20 first)
+//  1. STREAMABLE_GENERATOR_TYPE is `stream_generator`(C++20) or `void`(C++17).
+//  (In C++20 it defines the coroutine mechanics, and in C++17 the "yielding"
+//  is done via a callback argument.
+//  2. STREAMABLE_YIELDER_TYPE is the type of a mandatory argument with the
+//  hardcoded name `streamableYielder`, that each function needs to have. It has
+//  to be the last argument (s.t. it can be defaulted). In C++20 it is `int` (an
+//  unused dummy), in C++17 it is `reference_wrappper<StringBatcher>` (the
+//  actual callback that is invoked for each "yielded" string.
+//  3. STREAMABLE_YIELDER_ARG_DECL  declares the `streamableYielder` argument
+//  with the proper attributes (it can be defaulted in C++20 mode, where it is a
+//  dummy.
+//  4. STREAMABLE_YIELD(someString) is either `co_yield someString` (20) or
+//  `streamableYielder(someString)` (17).
+//  5. STREAMABLE_RETURN is either `co_return`(20) or `return`(17).
+// To see these macros in action, see the examples in `StringBatcherTest.cpp`
+
 #ifndef QLEVER_STRIP_FEATURES_CPP_17
 using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;
 using STREAMABLE_YIELDER_TYPE = int;
@@ -390,9 +411,7 @@ using STREAMABLE_YIELDER_TYPE =
     std::reference_wrapper<ad_utility::streams::StringBatcher<>>;
 #define STREAMABLE_YIELDER_ARG_DECL STREAMABLE_YIELDER_TYPE streamableYielder
 #define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
-#define STREAMABLE_RETURN           \
-  streamableYielder.get().finish(); \
-  return;
+#define STREAMABLE_RETURN return;
 
 #endif
 
