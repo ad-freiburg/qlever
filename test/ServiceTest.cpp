@@ -642,6 +642,11 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
+ 
+  //Test that we can read pre SPARQL 1.1 sparql-results 
+  EXPECT_EQ(
+      bTTC({{"type", "typed-literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
+      TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
   EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
