@@ -21,7 +21,7 @@
 
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
@@ -56,10 +56,10 @@ SpatialJoin::SpatialJoin(
 
     auto key = config_.rightCacheName_.value();
     childRight_ = std::make_shared<QueryExecutionTree>(
-        qec, qec->namedQueryCache().getOperation(key, qec));
+        qec, qec->namedResultCache().getOperation(key, qec));
 
     // Early check that the query was pinned together with a geometry index
-    const auto& geoIndex = qec->namedQueryCache().get(key)->cachedGeoIndex_;
+    const auto& geoIndex = qec->namedResultCache().get(key)->cachedGeoIndex_;
     if (!geoIndex.has_value()) {
       throw std::runtime_error{absl::StrCat(
           "In order to use this spatial join algorithm the result for the "

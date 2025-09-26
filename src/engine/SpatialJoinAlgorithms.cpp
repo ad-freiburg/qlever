@@ -22,7 +22,7 @@
 #include <set>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/SpatialJoin.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -640,7 +640,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
   auto s2index =
-      qec_->namedQueryCache().get(rightCacheName.value())->cachedGeoIndex_;
+      qec_->namedResultCache().get(rightCacheName.value())->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
   AD_CORRECTNESS_CHECK(!maxResults.has_value() && maxDist.has_value());
 
