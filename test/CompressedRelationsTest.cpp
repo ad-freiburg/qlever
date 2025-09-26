@@ -314,26 +314,41 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   std::vector<ColumnIndex> additionalColumns;
   ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
-  auto getMetadata = [&](size_t i) {
-    Id col0 = V(inputs[i].col0_);
+  // Get a pair<optional<RelationMetadata>, bool>` for the given `col0`, where
+  // the `bool` is true if the `col0` is a "large" relation, meaning that the
+  // metadata is explicitly stored and not extracted from the compressed data on
+  // the fly.
+  auto getMetadataFromId = [&](Id col0) {
     auto it = ql::ranges::lower_bound(metaData, col0, {},
                                       &CompressedRelationMetadata::col0Id_);
     if (it != metaData.end() && it->col0Id_ == col0) {
-      return *it;
+      return std::pair{std::optional{*it}, true};
     }
-    return reader
-        .getMetadataForSmallRelation(
+    return std::pair{
+        reader.getMetadataForSmallRelation(
             ScanSpecAndBlocks{
                 ScanSpecification{col0, std::nullopt, std::nullopt}, blocks},
-            col0, locatedTriples)
-        .value();
+            col0, locatedTriples),
+        false};
   };
+
+  AD_EXPECT_NULLOPT(getMetadataFromId(V(Id::maxIndex - 1)).first);
+
+  // return a `pair<RelationMetadata, bool>` (see above), but for the `i`-th
+  // relation specified by the `inputs`.
+  auto getMetadata = [&](size_t i) {
+    Id col0 = V(inputs[i].col0_);
+    auto [optMetadata, isLarge] = getMetadataFromId(col0);
+    return std::pair{std::move(optMetadata).value(), isLarge};
+  };
+
   for (size_t i = 0; i < inputs.size(); ++i) {
-    // The metadata does not include the located triples, so we can only test it
-    // if there are no located triples.
-    if (locatedTriplesProbability == 0) {
-      const auto& m = getMetadata(i);
-      ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
+    const auto& [m, isLarge] = getMetadata(i);
+    ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
+    // For large relations the metadata is currently not updated when
+    // `LocatedTriples` are added or deleted. We thus have to exclude this case
+    // here.
+    if (locatedTriplesProbability == 0 || !isLarge) {
       ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
     }
 
