@@ -319,14 +319,14 @@ void Server::configurePinnedResultWithName(
     throw std::runtime_error(
         "Pinning a result with a name requires a valid access token");
   }
-  if (pinNamedGeoIndex.has_value()) {
-    qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
-        pinResultWithName.value(),
-        Variable{absl::StrCat("?", pinNamedGeoIndex.value())}};
-  } else {
-    qec.pinResultWithName() =
-        QueryExecutionContext::PinResultWithName{pinResultWithName.value()};
-  }
+  auto getGeoCacheVar = [&]() -> std::optional<Variable> {
+    if (!pinNamedGeoIndex.has_value()) {
+      return std::nullopt;
+    }
+    return Variable{absl::StrCat("?", pinNamedGeoIndex.value())};
+  };
+  qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
+      pinResultWithName.value(), getGeoCacheVar()};
 }
 
 // _____________________________________________________________________________
