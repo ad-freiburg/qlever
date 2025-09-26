@@ -1,3 +1,7 @@
+// Copyright 2025, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Benke Hargitai <hargitab@cs.uni-freiburg.de>
+
 #ifndef QLEVER_GROUPBY_STRATEGY_HELPERS_H
 #define QLEVER_GROUPBY_STRATEGY_HELPERS_H
 
@@ -34,7 +38,9 @@ using ad_utility::testing::IntId;
 // duplication between the eager and lazy setups.
 template <typename Tables>
 inline std::unique_ptr<GroupByImpl> setupGroupByGeneric(
-    Tables&& tables, QueryExecutionContext* qec) {
+    Tables&& tables, QueryExecutionContext* qec,
+    std::vector<Variable> groupVars = {},
+    std::optional<std::vector<ColumnIndex>> sortCols = std::nullopt) {
   using Decayed = std::remove_reference_t<Tables>;
   size_t numCols = 0;
   if constexpr (std::is_same_v<Decayed, IdTable>) {
@@ -45,34 +51,39 @@ inline std::unique_ptr<GroupByImpl> setupGroupByGeneric(
     numCols = tables[0].numColumns();
   }
 
-  std::vector<Variable> groupVars;
-  std::vector<ColumnIndex> sortCols;
-  groupVars.reserve(numCols);
-  sortCols.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    groupVars.emplace_back(std::string("?") + static_cast<char>('a' + i));
-    sortCols.emplace_back(static_cast<ColumnIndex>(i));
+  if (groupVars.empty()) {
+    groupVars.reserve(numCols);
+    // By default, group by all columns, naming them ?a, ?b, ?c, ...
+    for (size_t i = 0; i < numCols; ++i) {
+      groupVars.emplace_back(std::string("?") + static_cast<char>('a' + i));
+    }
+  }
+  if (!sortCols.has_value()) {
+    // By default, sort by all grouping variables.
+    sortCols = std::vector<ColumnIndex>(groupVars.size());
+    std::iota(sortCols->begin(), sortCols->end(), 0);
+  }
+  // Build the vector of optional Variables (required by ValuesForTesting).
+  // Don't claim sortedness here.
+  std::vector<std::optional<Variable>> optionalVariables;
+  for (auto& var : groupVars) {
+    optionalVariables.emplace_back(var);
   }
 
-  // Build ValuesForTesting op. Don't claim sortedness here.
-  std::vector<std::optional<Variable>> varOpts;
-  for (auto& var : groupVars) varOpts.emplace_back(var);
-
-  std::shared_ptr<Operation> valuesOp;
+  std::shared_ptr<QueryExecutionTree> subtree;
   if constexpr (std::is_same_v<Decayed, IdTable>) {
     // If `tables` is a single IdTable, move it to avoid copying.
-    valuesOp = std::make_shared<ValuesForTesting>(qec, std::move(tables),
-                                                  std::move(varOpts), false,
-                                                  std::vector<ColumnIndex>{});
+    subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(tables), std::move(optionalVariables), false,
+        sortCols.value());
   } else {
     // If `tables` is a vector of IdTables, forward as is.
-    valuesOp = std::make_shared<ValuesForTesting>(
-        qec, std::forward<Tables>(tables), std::move(varOpts), false,
-        std::vector<ColumnIndex>{});
+    subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::forward<Tables>(tables), std::move(optionalVariables), false,
+        sortCols.value());
   }
-  auto subtree = std::make_shared<QueryExecutionTree>(qec, valuesOp);
-  if (!sortCols.empty()) {
-    subtree = QueryExecutionTree::createSortedTree(subtree, sortCols);
+  if (!sortCols.value().empty()) {
+    subtree = QueryExecutionTree::createSortedTree(subtree, sortCols.value());
   }
   return std::make_unique<GroupByImpl>(qec, groupVars, std::vector<Alias>{},
                                        subtree);
@@ -83,15 +94,19 @@ inline std::unique_ptr<GroupByImpl> setupGroupByGeneric(
 
 // Setup a GroupByImpl that groups on all columns and takes a single
 // materialized input table.
-inline std::unique_ptr<GroupByImpl> setupGroupBy(IdTable& table,
-                                                 QueryExecutionContext* qec) {
-  return setupGroupByGeneric(table, qec);
+inline std::unique_ptr<GroupByImpl> setupGroupBy(
+    IdTable& table, QueryExecutionContext* qec,
+    std::vector<Variable> groupVars = {},
+    std::optional<std::vector<ColumnIndex>> sortCols = std::nullopt) {
+  return setupGroupByGeneric(table, qec, groupVars, sortCols);
 }
 
 // Setup a GroupByImpl that groups on all columns and takes lazy input chunks.
 inline std::unique_ptr<GroupByImpl> setupLazyGroupBy(
-    std::vector<IdTable>&& tables, QueryExecutionContext* qec) {
-  return setupGroupByGeneric(std::move(tables), qec);
+    std::vector<IdTable>&& tables, QueryExecutionContext* qec,
+    std::vector<Variable> groupVars = {},
+    std::optional<std::vector<ColumnIndex>> sortCols = std::nullopt) {
+  return setupGroupByGeneric(std::move(tables), qec, groupVars, sortCols);
 }
 
 #endif  // QLEVER_GROUPBY_STRATEGY_HELPERS_H

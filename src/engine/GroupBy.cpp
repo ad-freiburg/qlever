@@ -70,7 +70,14 @@ VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 Result GroupBy::computeResult(bool requestLaziness) {
-  return _impl->computeResult(requestLaziness);
+  auto result = _impl->computeResult(requestLaziness);
+  // Copy detailed timing information from the impl to this operation's runtime
+  // info
+  const auto& implRuntimeInfo = _impl->runtimeInfo();
+  for (const auto& [key, value] : implRuntimeInfo.details_.items()) {
+    runtimeInfo().addDetail(key, value);
+  }
+  return result;
 }
 
 // _____________________________________________________________________________

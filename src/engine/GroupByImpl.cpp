@@ -1593,8 +1593,9 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       getExecutionContext()->getAllocator(), data.aggregateAliases_,
       numColumns);
 
-  // Timers for hash-map lookup and aggregation
+  // Timers for hash-map lookup, aggregation and for detailed measurements
   HashMapTimers timers{ad_utility::Timer::Stopped, ad_utility::Timer::Stopped};
+  ad_utility::Timer initialProcessingTimer{ad_utility::Timer::Started};
 
   auto blockIt = ql::ranges::begin(subresults);
   auto blocksEnd = ql::ranges::end(subresults);
@@ -1602,12 +1603,18 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   size_t groupThreshold =
       RuntimeParameters().get<"group-by-hash-map-group-threshold">();
 
+  size_t blocksProcessedBeforeFallback = 0;
+  size_t totalRowsBeforeFallback = 0;
+
   // Iterate through input blocks; buffer the rest and return result if
   // threshold exceeded
   while (blockIt != blocksEnd) {
     const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
+    blocksProcessedBeforeFallback++;
+    totalRowsBeforeFallback += inputTable.numRows();
 
     // Merge the local vocab of each input block.
     //
@@ -1624,6 +1631,17 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // entries with existing groups to the hash map, and then perform a
     // sort-based grouping on the remaining entries.
     if (aggregationData.numGroups() > groupThreshold) {
+      initialProcessingTimer.stop();
+      // Record statistics about the fallback trigger
+      runtimeInfo().addDetail("hybridTriggerBlocks",
+                              blocksProcessedBeforeFallback);
+      runtimeInfo().addDetail("hybridTriggerRows", totalRowsBeforeFallback);
+      runtimeInfo().addDetail("hybridTriggerGroups",
+                              aggregationData.numGroups());
+      runtimeInfo().addDetail("hybridTriggerThreshold", groupThreshold);
+      runtimeInfo().addDetail("hybridInitialProcessing",
+                              initialProcessingTimer.msecs());
+
       AD_LOG_DEBUG << "GroupBy HashMap groups: (est: "
                    << aggregationData.numGroups()
                    << ") > (thr: " << groupThreshold
@@ -1632,6 +1650,9 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
           std::move(data), aggregationData, timers, blockIt, blocksEnd);
     }
   }
+  initialProcessingTimer.stop();
+  runtimeInfo().addDetail("hashMapOnlyProcessing",
+                          initialProcessingTimer.msecs());
   runtimeInfo().addDetail("timeMapLookup", timers.lookupTimer_.msecs());
   runtimeInfo().addDetail("timeAggregation", timers.aggregationTimer_.msecs());
   IdTable resultTable = createResultFromHashMap(
@@ -1652,40 +1673,102 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef_.value();
 
+  // Detailed timing for hybrid fallback steps
+  using ad_utility::Timer;
+  ad_utility::Timer remainderProcessingTimer{Timer::Started},
+      vocabMergeTimer{Timer::Stopped}, bufferingTimer{Timer::Stopped},
+      restSortTimer{Timer::Stopped}, restGroupByTimer{Timer::Stopped},
+      hashResultTimer{Timer::Stopped}, finalMergeTimer{Timer::Stopped},
+      finalSortTimer{Timer::Stopped};
+
   IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+  size_t totalRowsProcessed = 0;
+  size_t totalNonMatchingRows = 0;
+
   // Batch existing-group rows and buffer new-group rows
   for (; blockIt != blocksEnd; ++blockIt) {
     const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
+    totalRowsProcessed += inputTable.numRows();
+
     // Merge the local vocab of each input block.
+    vocabMergeTimer.cont();
     localVocab.mergeWith(inputLocalVocab);
+    vocabMergeTimer.stop();
 
     // Process only existing groups and collect non-matching rows
     auto nonMatchingRows =
         updateHashMapWithTable(inputTable, data, aggregationData, timers, true);
+
+    totalNonMatchingRows += nonMatchingRows.size();
+
     // Copy the non-matching rows to the restTable
+    bufferingTimer.cont();
     restTable.insertSubsetAtEnd(inputTable, nonMatchingRows);
+    bufferingTimer.stop();
   }
+
   // perform sort-based grouping on buffered new groups
+  restSortTimer.cont();
   Engine::sort(restTable, data.columnIndices_.value());
+  restSortTimer.stop();
+
+  restGroupByTimer.cont();
   IdTable restResult = CALL_FIXED_SIZE((std::array{inWidth, getResultWidth()}),
                                        &GroupByImpl::doGroupBy, this, restTable,
                                        data.columnIndices_.value(),
                                        data.aggregates_.value(), &localVocab);
+  restGroupByTimer.stop();
 
+  hashResultTimer.cont();
   IdTable hashResult = createResultFromHashMap(
       aggregationData, data.aggregateAliases_, &localVocab);
+  hashResultTimer.stop();
 
+  std::string mergeStrategy =
+      RuntimeParameters().get<"group-by-hybrid-merge-strategy">();
+  // Build final hybrid result: append fallback rows and sort on grouping
+  // columns
+  if (mergeStrategy == "sort") {
+    finalMergeTimer.cont();
+    hashResult.insertAtEnd(restResult);
+    finalMergeTimer.stop();
+
+    finalSortTimer.cont();
+    Engine::sort(hashResult, data.columnIndices_.value());
+    finalSortTimer.stop();
+  } else {
+    finalMergeTimer.cont();
+    // Build final hybrid result.
+    // Both `hashResult` and `restResult` are sorted by the grouping columns.
+    // (In `createResultFromHashMap()` and `doGroupBy()` respectively.)
+    // Therefore, we can merge them in O(n+m) time.
+    hashResult.mergeSortedTableIntoThis(restResult,
+                                        data.columnIndices_.value());
+    finalMergeTimer.stop();
+  }
+
+  remainderProcessingTimer.stop();
+
+  // Record all the detailed timings
+  runtimeInfo().addDetail("hybridRemainderTotal",
+                          remainderProcessingTimer.msecs());
+  runtimeInfo().addDetail("hybridVocabMerge", vocabMergeTimer.msecs());
+  runtimeInfo().addDetail("hybridBuffering", bufferingTimer.msecs());
+  runtimeInfo().addDetail("hybridRestSort", restSortTimer.msecs());
+  runtimeInfo().addDetail("hybridRestGroupBy", restGroupByTimer.msecs());
+  runtimeInfo().addDetail("hybridHashResult", hashResultTimer.msecs());
+  runtimeInfo().addDetail("hybridFinalMerge", finalMergeTimer.msecs());
+  runtimeInfo().addDetail("hybridFinalSort", finalSortTimer.msecs());
+  runtimeInfo().addDetail("hybridRowsProcessed", totalRowsProcessed);
+  runtimeInfo().addDetail("hybridNonMatchingRows", totalNonMatchingRows);
   runtimeInfo().addDetail(
       "hybridFallback",
       absl::StrCat("hash groups=", hashResult.numRows(),
                    ", sorted tail groups=", restResult.numRows()));
-  // Build final hybrid result: append fallback rows and sort on grouping
-  // columns
-  hashResult.insertAtEnd(restResult);
-  Engine::sort(hashResult, data.columnIndices_.value());
+
   return Result{std::move(hashResult), data.columnIndices_.value(),
                 std::move(localVocab)};
 }
