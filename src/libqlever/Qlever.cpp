@@ -130,7 +130,9 @@ void Qlever::queryAndPinResultWithName(
 
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
-  queryAndPinResultWithName({std::move(name)}, std::move(query));
+  queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{std::move(name)},
+      std::move(query));
 }
 
 // _____________________________________________________________________________
