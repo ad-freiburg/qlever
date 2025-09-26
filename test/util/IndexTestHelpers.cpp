@@ -96,8 +96,6 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
           size_t objectColIdx) {
-        auto cancellationDummy =
-            std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
             ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
@@ -125,15 +123,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
 
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot);
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot);
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }

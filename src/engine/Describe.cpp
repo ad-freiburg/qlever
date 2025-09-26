@@ -162,9 +162,12 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       getExecutionContext(), std::move(input),
       std::vector<std::optional<Variable>>{subjectVar});
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
+  auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::SPO, triple,
-      describe_.datasetClauses_.activeDefaultGraphs());
+      activeGraphs.has_value()
+          ? IndexScan::Graphs::Whitelist(std::move(activeGraphs).value())
+          : IndexScan::Graphs::All());
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
   auto join = ad_utility::makeExecutionTree<Join>(

@@ -50,10 +50,12 @@ class TransitivePathTest
     qec->clearCacheUnpinnedOnly();
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
-    return {TransitivePathBase::makeTransitivePath(
-                qec, std::move(subtree), std::move(left), std::move(right),
-                minDist, maxDist, useBinSearch, {}, graphVariable),
-            qec};
+    return {
+        TransitivePathBase::makeTransitivePath(
+            qec, std::move(subtree), std::move(left), std::move(right), minDist,
+            maxDist, useBinSearch,
+            qlever::index::GraphFilter<TripleComponent>::All(), graphVariable),
+        qec};
   }
 
   // ___________________________________________________________________________
