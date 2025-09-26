@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
 #include "util/GeneratorConverter.h"
@@ -53,6 +54,8 @@ class Url {
   std::string port_;
   std::string target_;
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(protocol_, host_, port_, target_)
+
  public:
   // Construct from given URL.
   explicit Url(std::string_view url);
@@ -75,7 +78,7 @@ class Url {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 
-  bool operator==(const Url&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(Url)
 };
 
 // A concept for `http::request`

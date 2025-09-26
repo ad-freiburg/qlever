@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
@@ -38,7 +39,9 @@ class PropertyPath {
     std::vector<PropertyPath> children_;
     Modifier modifier_;
 
-    bool operator==(const ModifiedPath&) const = default;
+    QL_DEFINE_CLASS_MEMBERS_AS_TIE(children_, modifier_)
+
+    QL_DEFINE_EQUALITY_OPERATOR(ModifiedPath)
 
     void writeToStream(std::ostream& out) const;
   };
@@ -83,6 +86,8 @@ class PropertyPath {
   std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
       path_;
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(path_)
+
   // Private constructor that initializes the path with a variant type.
   explicit PropertyPath(
       std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
@@ -116,7 +121,7 @@ class PropertyPath {
   // before the negation.
   static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
-  bool operator==(const PropertyPath& other) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(PropertyPath)
 
   // Serialize this object into an output stream.
   void writeToStream(std::ostream& out) const;

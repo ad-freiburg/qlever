@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "backports/three_way_comparison.h"
 #include "util/DateYearDuration.h"
 #include "util/json.h"
 
@@ -20,6 +21,8 @@ struct IndexFormatVersion {
   // The date of the last breaking change of the index format.
   DateYearOrDuration date_{Date{1900, 1, 1}};
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(prNumber_, date_)
+
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const IndexFormatVersion& version) {
     j["date"] = version.date_.toStringAndType().first;
@@ -31,7 +34,8 @@ struct IndexFormatVersion {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
     version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
-  bool operator==(const IndexFormatVersion&) const = default;
+
+  QL_DEFINE_EQUALITY_OPERATOR(IndexFormatVersion)
 };
 
 // The actual index version. Change it once the binary format of the index

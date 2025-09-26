@@ -16,6 +16,7 @@
 #include <string_view>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -65,12 +66,15 @@ class Vocabulary {
    private:
     Ranges ranges_{};
 
+    QL_DEFINE_CLASS_MEMBERS_AS_TIE(ranges_)
+
    public:
     PrefixRanges() = default;
     explicit PrefixRanges(const Ranges& ranges);
     const Ranges& ranges() const { return ranges_; }
-    bool operator==(const PrefixRanges& ranges) const = default;
     bool contain(IndexT index) const;
+
+    QL_DEFINE_EQUALITY_OPERATOR(PrefixRanges)
   };
 
  private:

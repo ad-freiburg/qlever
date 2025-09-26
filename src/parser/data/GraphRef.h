@@ -7,6 +7,7 @@
 
 #include <variant>
 
+#include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 
 using GraphRef = ad_utility::triple_component::Iri;
@@ -14,18 +15,21 @@ using GraphRef = ad_utility::triple_component::Iri;
 // graph.
 struct DEFAULT {
   // For testing
-  bool operator==(const DEFAULT&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
+  QL_DEFINE_EQUALITY_OPERATOR(DEFAULT)
 };
 // Denotes the target graphs for an operation. Here the target are all named
 // graphs.
 struct NAMED {
   // For testing
-  bool operator==(const NAMED&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
+  QL_DEFINE_EQUALITY_OPERATOR(NAMED)
 };
 // Denotes the target graphs for an operation. Here the target are all graphs.
 struct ALL {
   // For testing
-  bool operator==(const ALL&) const = default;
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
+  QL_DEFINE_EQUALITY_OPERATOR(ALL)
 };
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;

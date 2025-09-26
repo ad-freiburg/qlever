@@ -11,6 +11,7 @@
 #include <limits>
 #include <optional>
 
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 // Represents the data returned by a limitOffsetClause.
@@ -19,6 +20,8 @@ struct LimitOffsetClause {
   uint64_t _offset = 0;
   std::optional<uint64_t> textLimit_ = std::nullopt;
   std::optional<uint64_t> exportLimit_ = std::nullopt;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_limit, textLimit_, exportLimit_)
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
@@ -64,7 +67,7 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  bool operator==(const LimitOffsetClause&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(LimitOffsetClause)
 
   // Merge two clauses together. This adds the offsets and takes the minimum of
   // both limits. If the other limit is not set, the current limit is kept.

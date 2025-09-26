@@ -15,6 +15,7 @@
 #include <iostream>
 
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
@@ -31,6 +32,8 @@ class ParseableDuration {
  private:
   DurationType duration_{};
 
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(duration_)
+
   template <typename Other>
   friend class ParseableDuration;
 
@@ -43,18 +46,22 @@ class ParseableDuration {
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.
-  auto operator<=>(const ParseableDuration& other) const noexcept {
-    return duration_.count() <=> other.duration_.count();
-  }
+  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+      ParseableDuration, (const ParseableDuration& other) const noexcept, {
+        return ql::compareThreeWay(duration_.count(), other.duration_.count());
+      })
 
   template <typename Other>
-  auto operator<=>(const ParseableDuration<Other>& other) const noexcept {
-    using CommonType = std::common_type_t<DurationType, Other>;
-    return CommonType{duration_}.count() <=>
-           CommonType{other.duration_}.count();
-  }
+  using CommonType = std::common_type_t<DurationType, Other>;
 
-  bool operator==(const ParseableDuration&) const noexcept = default;
+  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_TMPL(
+      template <typename Other>, ParseableDuration<Other>,
+      (const ParseableDuration<Other>& other) const noexcept, {
+        return ql::compareThreeWay(CommonType<Other>{duration_}.count(),
+                                   CommonType<Other>{other.duration_}.count());
+      })
+
+  QL_DEFINE_EQUALITY_OPERATOR(ParseableDuration)
 
   // ___________________________________________________________________________
   template <typename CharT>

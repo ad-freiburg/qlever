@@ -5,6 +5,7 @@
 #ifndef QLEVER_DATES_AND_DURATION_H
 #define QLEVER_DATES_AND_DURATION_H
 
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Date.h"
 #include "util/Duration.h"
@@ -40,6 +41,8 @@ class DateYearOrDuration {
   using NBit = ad_utility::NBitInteger<numPayloadDateBits - numTypeBits>;
   // The bits.
   uint64_t bits_;
+
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(bits_)
 
  public:
   enum struct Type { Year = 0, YearMonth, Date, DateTime };
@@ -139,7 +142,8 @@ class DateYearOrDuration {
 
   // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
-  auto operator<=>(const DateYearOrDuration&) const = default;
+  QL_DEFINE_EQUALITY_OPERATOR(DateYearOrDuration)
+  QL_DEFINE_THREEWAY_OPERATOR(DateYearOrDuration)
 
   // Bitwise hashing.
   template <typename H>
