@@ -5,6 +5,22 @@
 #ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 #define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
+// This file consists of
+// 1. The implementation of `ad_utility::streams::stream_generator`, a
+// `generator`-like coroutine type in which you `co_yield` `string_view`s, and
+// the `stream_generator` first concatenates those `string_view`s to larger
+// batches before actually yielding those batches to the consumer. (only enabled
+// in C++20 mode).
+// 2. A class `ad_utility::streams::StringBatcher`, which is a callable type
+// that concatenates the `string_view`s with which into it is invoked into
+// larger batches. For each batch a callback is invoked.
+// 3. Several macros that can be used to make a generator-like function either
+// use the facilities of the `stream_generator` (see 1. above)` or the
+// `StringBatcher` (see 2. above), depending on whether C++17 or C++20 is being
+// used.
+
+#include <cstring>
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include <coroutine>
 #include <exception>
 #include <sstream>
@@ -276,6 +292,128 @@ stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
 
 // Use 1MiB buffer size by default
 using stream_generator = basic_stream_generator<1u << 20>;
+
 }  // namespace ad_utility::streams
+#endif
+
+namespace ad_utility::streams {
+// This class stores a `callback` for batches. When being invoked with a
+// `string_view`, then the `string_view is appended to the current batch, and
+// for batches that reach the `BATCH_SIZE`, the callback is invoked. Note the
+// following:
+// 1. original strings might be split up between batches.
+// 2. After pushing the first string, there remains an incomplete batch for
+// which
+//    the callback hasn't been called yet. This is done either in the
+//    destructor, or via an explicit call to `finish()`.
+template <size_t BATCH_SIZE = 1u << 20>
+class StringBatcher {
+  using CallbackForBatches = std::function<void(std::string_view)>;
+  CallbackForBatches callbackForBatches_;
+  std::array<char, BATCH_SIZE> currentBatch_;
+  size_t currentBatchSize_ = 0;
+  static_assert(BATCH_SIZE > 0, "Buffer size must be greater than zero");
+
+ public:
+  // Construct by specifying the callback.
+  explicit StringBatcher(CallbackForBatches callback)
+      : callbackForBatches_(std::move(callback)) {}
+
+  // Add a string to the current batch, invoke the callback if the batch is
+  // full.
+  void operator()(std::string_view value) {
+    auto sizeToCopy = fittingSize(value);
+    std::memcpy(currentBatch_.data() + currentBatchSize_, value.data(),
+                sizeToCopy);
+    currentBatchSize_ += sizeToCopy;
+    if (currentBatchSize_ == BATCH_SIZE) {
+      commit();
+    }
+    // If the `value` was only partially stored in the previous batch, call this
+    // function again with the unconsumed remainder.
+    if (sizeToCopy < value.size()) {
+      value.remove_prefix(sizeToCopy);
+      (*this)(value);
+    }
+  }
+
+  // Overload for pushing a single character.
+  void operator()(char c) { (*this)(std::string_view{&c, 1}); }
+
+  // Commit the last batch after the last string has been pushed. Is also
+  // invoked by the destructor.
+  void finish() {
+    if (currentBatchSize_ > 0) {
+      commit();
+    }
+  }
+
+  // The destructor also commits the last incomplete batch. If this is not
+  // desired, make sure to explicitly call `finish` before destroying the
+  // `StringBatcher`.
+  ~StringBatcher() { finish(); }
+
+  // Disallow copying or moving, because there are no clear semantics as for how
+  // the remaining partial batches should behave.
+  StringBatcher(const StringBatcher&) = delete;
+  StringBatcher& operator=(const StringBatcher&) = delete;
+  StringBatcher(StringBatcher&&) = delete;
+  StringBatcher& operator=(StringBatcher&&) = delete;
+
+ private:
+  // Return the size of a substring of `value` that can be stored in the current
+  // batch without the batch exceeding the `BATCH_SIZE`.
+  size_t fittingSize(std::string_view value) const {
+    return std::min(value.size(), BATCH_SIZE - currentBatchSize_);
+  }
+
+  // Invoke the callback with the `currentBatch_`, and reset the
+  // `currentBatch_`.
+  void commit() {
+    callbackForBatches_(
+        std::string_view{currentBatch_.data(), currentBatchSize_});
+    currentBatchSize_ = 0;
+  }
+};
+}  // namespace ad_utility::streams
+
+// This section defines the macros to implement a coroutine(-like) generator,
+// that batches strings together. The following discusses the macros for both
+// modes (C++20 first)
+//  1. STREAMABLE_GENERATOR_TYPE is `stream_generator`(C++20) or `void`(C++17).
+//  (In C++20 it defines the coroutine mechanics, and in C++17 the "yielding"
+//  is done via a callback argument.
+//  2. STREAMABLE_YIELDER_TYPE is the type of a mandatory argument with the
+//  hardcoded name `streamableYielder`, that each function needs to have. It has
+//  to be the last argument (s.t. it can be defaulted). In C++20 it is `int` (an
+//  unused dummy), in C++17 it is `reference_wrappper<StringBatcher>` (the
+//  actual callback that is invoked for each "yielded" string.
+//  3. STREAMABLE_YIELDER_ARG_DECL  declares the `streamableYielder` argument
+//  with the proper attributes (it can be defaulted in C++20 mode, where it is a
+//  dummy.
+//  4. STREAMABLE_YIELD(someString) is either `co_yield someString` (20) or
+//  `streamableYielder(someString)` (17).
+//  5. STREAMABLE_RETURN is either `co_return`(20) or `return`(17).
+// To see these macros in action, see the examples in `StringBatcherTest.cpp`,
+// and their usage in `ExportQueryExecutionTrees.h/.cpp`.
+
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
+using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;
+using STREAMABLE_YIELDER_TYPE = int;
+#define STREAMABLE_YIELDER_ARG_DECL \
+  [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder = {}
+#define STREAMABLE_YIELD(...) co_yield __VA_ARGS__
+#define STREAMABLE_RETURN co_return
+
+#else
+
+using STREAMABLE_GENERATOR_TYPE = void;
+using STREAMABLE_YIELDER_TYPE =
+    std::reference_wrapper<ad_utility::streams::StringBatcher<>>;
+#define STREAMABLE_YIELDER_ARG_DECL STREAMABLE_YIELDER_TYPE streamableYielder
+#define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
+#define STREAMABLE_RETURN return;
+
+#endif
 
 #endif  // QLEVER_SRC_UTIL_STREAM_GENERATOR_H
