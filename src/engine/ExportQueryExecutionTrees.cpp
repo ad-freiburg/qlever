@@ -355,11 +355,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
           return std::pair{std::move(literal), XSD_DOUBLE_TYPE};
         }
         double dIntPart;
-        // If the fractional part is zero, write number without decimal point.
-        // Otherwise, use `%g`, which uses fixed-size or exponential notation,
-        // whichever is more compact.
+        // If the fractional part is zero, write number with one decimal place
+        // to make it distinct from integers. Otherwise, use `%g`, which uses
+        // fixed-size or exponential notation, whichever is more compact.
         std::string out = std::modf(d, &dIntPart) == 0.0
-                              ? absl::StrFormat("%.0f", d)
+                              ? absl::StrFormat("%.1f", d)
                               : absl::StrFormat("%g", d);
         return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
