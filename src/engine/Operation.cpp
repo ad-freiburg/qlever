@@ -397,7 +397,7 @@ std::shared_ptr<const Result> Operation::getResult(
                             .at(geoIndexVar.value())
                             .columnIndex_;
         return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                      &actualResult.idTable(),
+                                      actualResult.idTable(),
                                       _executionContext->getIndex()};
       };
 

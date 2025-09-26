@@ -9,36 +9,69 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
+// An instance of this type erased class holds the actual data for each
+// `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
+// well as the storage of the geometries since the index works on pointers to
+// them. Furthermore, because the index does not support payload, the
+// `shapeIndexToRow_` associates s2's shape ids with rows in the respective
+// `IdTable`.
+class SpatialJoinCachedIndexImpl {
+ public:
+  MutableS2ShapeIndex s2index_;
+  std::vector<std::pair<S2Polyline, size_t>> lines_;
+  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
+
+  SpatialJoinCachedIndexImpl(ColumnIndex col, const IdTable& restable,
+                             const Index& index) {
+    // Populate the index from the given `IdTable`
+    lines_.reserve(restable.size());
+    for (size_t row = 0; row < restable.size(); row++) {
+      auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
+      if (p.has_value()) {
+        // We need to store the geometries ourselves because the index takes a
+        // pointer to them.
+        lines_.emplace_back(std::move(p.value()), row);
+      }
+    }
+    lines_.shrink_to_fit();
+
+    for (const auto& [line, row] : lines_) {
+      auto shapeIndex =
+          s2index_.Add(std::make_unique<S2Polyline::Shape>(&line));
+      shapeIndexToRow_[shapeIndex] = row;
+    }
+
+    // S2 adds geometries to its index data structure lazily and only updates
+    // the data structure as soon as a lookup is performed. This is intended to
+    // make many subsequent updates fast by not updating the data structure in
+    // every step. However since we build the index only once and then use it
+    // without making changes, we force the updating of its internal data
+    // structure here to ensure good performance also for the first query.
+    s2index_.ForceBuild();
+  }
+};
+
 // ____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
                                                ColumnIndex col,
-                                               const IdTable* restable,
+                                               const IdTable& restable,
                                                const Index& index)
     : geometryColumn_{geometryColumn},
-      s2index_{std::make_shared<MutableS2ShapeIndex>()},
-      lines_{std::make_shared<std::vector<std::pair<S2Polyline, size_t>>>()} {
-  // Populate the index from the given `IdTable`
-  lines_->reserve(restable->size());
-  for (size_t row = 0; row < restable->size(); row++) {
-    auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
-    if (p.has_value()) {
-      // We need to store the geometries ourselves because the index takes a
-      // pointer to them.
-      lines_->emplace_back(std::move(p.value()), row);
-    }
-  }
-  lines_->shrink_to_fit();
+      pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>(col, restable,
+                                                          index)} {};
 
-  for (const auto& [line, row] : *lines_) {
-    auto shapeIndex = s2index_->Add(std::make_unique<S2Polyline::Shape>(&line));
-    shapeIndexToRow_[shapeIndex] = row;
-  }
+// ____________________________________________________________________________
+const Variable& SpatialJoinCachedIndex::getGeometryColumn() const {
+  return geometryColumn_;
+}
 
-  // S2 adds geometries to its index data structure lazily and only updates the
-  // data structure as soon as a lookup is performed. This is intended to make
-  // many subsequent updates fast by not updating the data structure in every
-  // step. However since we build the index only once and then use it without
-  // making changes, we force the updating of its internal data structure here
-  // to ensure good performance also for the first query.
-  s2index_->ForceBuild();
-};
+// ____________________________________________________________________________
+std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
+    const {
+  return {pimpl_, &pimpl_->s2index_};
+}
+
+// ____________________________________________________________________________
+size_t SpatialJoinCachedIndex::getRow(size_t shapeIndex) const {
+  return pimpl_->shapeIndexToRow_.at(shapeIndex);
+}
