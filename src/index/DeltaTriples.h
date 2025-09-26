@@ -14,6 +14,7 @@
 
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
@@ -280,6 +281,15 @@ class DeltaTriplesManager {
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.
   SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
+
+  // Force creation of a new snapshot, regardless of the update-no-snapshots
+  // parameter. This is used when the parameter changes from true to false.
+  void forceSnapshotCreation();
+
+  // Force update of augmented metadata for all permutations, regardless of
+  // the update-no-snapshots parameter. This is used when the parameter
+  // changes from true to false.
+  void forceMetadataUpdate();
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

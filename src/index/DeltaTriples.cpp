@@ -192,8 +192,11 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("updateMetadata");
   // Manually update the block metadata, because `eraseTripleInAllPermutations`
   // does not update them for performance reason.
-  ql::ranges::for_each(locatedTriples(),
-                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  // Only update metadata if update-no-snapshots parameter is false
+  if (!RuntimeParameters().get<"update-no-snapshots">()) {
+    ql::ranges::for_each(locatedTriples(),
+                         &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  }
   tracer.endTrace("updateMetadata");
   tracer.beginTrace("locatedAndAdd");
 
@@ -264,11 +267,15 @@ ReturnType DeltaTriplesManager::modify(
   return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest,
                                       &tracer](DeltaTriples& deltaTriples) {
     auto updateSnapshot = [this, &deltaTriples] {
-      auto newSnapshot = deltaTriples.getSnapshot();
-      currentLocatedTriplesSnapshot_.withWriteLock(
-          [&newSnapshot](auto& currentSnapshot) {
-            currentSnapshot = std::move(newSnapshot);
-          });
+      // Only create a new snapshot if the update-no-snapshots parameter is
+      // false
+      if (!RuntimeParameters().get<"update-no-snapshots">()) {
+        auto newSnapshot = deltaTriples.getSnapshot();
+        currentLocatedTriplesSnapshot_.withWriteLock(
+            [&newSnapshot](auto& currentSnapshot) {
+              currentSnapshot = std::move(newSnapshot);
+            });
+      }
     };
     auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
                                    writeToDiskAfterRequest]() {
@@ -310,6 +317,26 @@ void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 // _____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
   return *currentLocatedTriplesSnapshot_.rlock();
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::forceSnapshotCreation() {
+  deltaTriples_.withWriteLock([this](DeltaTriples& deltaTriples) {
+    auto newSnapshot = deltaTriples.getSnapshot();
+    currentLocatedTriplesSnapshot_.withWriteLock(
+        [&newSnapshot](auto& currentSnapshot) {
+          currentSnapshot = std::move(newSnapshot);
+        });
+  });
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::forceMetadataUpdate() {
+  deltaTriples_.withWriteLock([](DeltaTriples& deltaTriples) {
+    // Update augmented metadata for all 6 permutations
+    ql::ranges::for_each(deltaTriples.locatedTriples(),
+                         &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  });
 }
 
 // _____________________________________________________________________________

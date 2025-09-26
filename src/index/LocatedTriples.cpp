@@ -11,6 +11,7 @@
 #include "index/LocatedTriples.h"
 
 #include "backports/algorithm.h"
+#include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
@@ -248,7 +249,10 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
 
   tracer.endTrace("adding");
   tracer.beginTrace("updateMetadata");
-  updateAugmentedMetadata();
+  // Only update metadata if update-no-snapshots parameter is false
+  if (!RuntimeParameters().get<"update-no-snapshots">()) {
+    updateAugmentedMetadata();
+  }
   tracer.endTrace("updateMetadata");
 
   return handles;

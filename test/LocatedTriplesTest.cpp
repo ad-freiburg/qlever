@@ -13,6 +13,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
@@ -716,6 +717,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 }
 
 TEST_F(LocatedTriplesTest, augmentedMetadata) {
+  // Ensure the update-no-snapshots parameter is false for this test
+  RuntimeParameters().set<"update-no-snapshots">(false);
+
   // Create a vector that is automatically converted to a span.
   using Span = std::vector<IdTriple<0>>;
 
@@ -817,6 +821,9 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
 // _____________________________________________________________________________
 TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
+  // Ensure the update-no-snapshots parameter is false for this test
+  RuntimeParameters().set<"update-no-snapshots">(false);
+
   // Create a vector that is automatically converted to a span.
   using Span = std::vector<IdTriple<0>>;
 

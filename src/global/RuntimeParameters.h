@@ -107,6 +107,10 @@ inline auto& RuntimeParameters() {
         // Push joins into both children of unions if this leads to a cheaper
         // cost-estimate.
         Bool<"enable-distributive-union">{true},
+        // If set to `true`, update operations will not create new snapshots,
+        // meaning that the changes from updates will not be visible to new
+        // queries until this parameter is set back to `false`.
+        Bool<"update-no-snapshots">{false},
     };
   }();
   return params;
