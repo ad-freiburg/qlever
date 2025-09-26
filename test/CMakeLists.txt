@@ -244,6 +244,8 @@ addLinkAndDiscoverTest(StreamableBodyTest http)
 
 addLinkAndDiscoverTest(StreamableGeneratorTest)
 
+addLinkAndDiscoverTestNoLibs(StringBatcherTest)
+
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
