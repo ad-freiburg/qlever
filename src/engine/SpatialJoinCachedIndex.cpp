@@ -28,9 +28,17 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
     }
   }
   lines_->shrink_to_fit();
+
   for (const auto& [line, row] : *lines_) {
     auto shapeIndex = s2index_->Add(std::make_unique<S2Polyline::Shape>(&line));
     shapeIndexToRow_[shapeIndex] = row;
   }
-  // TODO<ullingerc> Run query against index to force building
+
+  // S2 adds geometries to its index data structure lazily and only updates the
+  // data structure as soon as a lookup is performed. This is intended to make
+  // many subsequent updates fast by not updating the data structure in every
+  // step. However since we build the index only once and then use it without
+  // making changes, we force the updating of its internal data structure here
+  // to ensure good performance also for the first query.
+  s2index_->ForceBuild();
 };
