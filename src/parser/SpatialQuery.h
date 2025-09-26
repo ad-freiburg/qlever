@@ -83,6 +83,15 @@ struct SpatialQuery : MagicServiceQuery {
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
 };
 
+namespace detail {
+
+// Convert a string like `libspatialjoin` to the corresponding enum element.
+// Throws a `SpatialSearchException` for invalid inputs.
+SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
+    std::string_view identifier);
+
+}  // namespace detail
+
 }  // namespace parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_SPATIALQUERY_H

@@ -90,24 +90,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "to employ. Currently supported are `<baseline>`, `<s2>`, "
           "`<libspatialjoin>`, or `<boundingBox>`");
     }
-    auto algo = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (algo == "baseline") {
-      algo_ = SpatialJoinAlgorithm::BASELINE;
-    } else if (algo == "s2") {
-      algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
-    } else if (algo == "boundingBox") {
-      algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
-    } else if (algo == "libspatialjoin") {
-      algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-    } else if (algo == "experimentalPointPolyline") {
-      algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
-    } else {
-      throw SpatialSearchException(
-          "The IRI given for the parameter `<algorithm>` does not refer to a "
-          "supported spatial search algorithm. Please select either "
-          "`<baseline>`, `<s2>`, `<libspatialjoin>`, "
-          "`<experimentalPointPolyline>` or `<boundingBox>`");
-    }
+    algo_ = detail::spatialJoinAlgorithmFromString(
+        extractParameterName(object, SPATIAL_SEARCH_IRI));
   } else if (predString == "payload") {
     if (object.isVariable()) {
       // Single selected variable
@@ -304,5 +288,31 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
                           "`<max-distance-in-meters:50>`"));
   }
 }
+
+namespace detail {
+
+// _____________________________________________________________________________
+SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
+    std::string_view identifier) {
+  using enum SpatialJoinAlgorithm;
+  static const ad_utility::HashMap<std::string, SpatialJoinAlgorithm>
+      nameToAlgorithmMap{
+          {"baseline", BASELINE},
+          {"s2", S2_GEOMETRY},
+          {"boundingBox", BOUNDING_BOX},
+          {"libspatialjoin", LIBSPATIALJOIN},
+          {"experimentalPointPolyline", S2_POINT_POLYLINE},
+      };
+  if (nameToAlgorithmMap.contains(identifier)) {
+    return nameToAlgorithmMap.at(identifier);
+  } else {
+    throw SpatialSearchException(
+        "The IRI given for the parameter `<algorithm>` does not refer to a "
+        "supported spatial search algorithm. Please select either "
+        "`<baseline>`, `<s2>`, `<libspatialjoin>`, "
+        "`<experimentalPointPolyline>` or `<boundingBox>`");
+  }
+}
+}  // namespace detail
 
 }  // namespace parsedQuery
