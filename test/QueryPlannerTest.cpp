@@ -2629,12 +2629,12 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
       "qlss:algorithm qlss:experimentalPointPolyline ;"
       "qlss:experimentalRightCacheName \"dummy\" ."
       "} }";
-  // TODO linestrings
 
   // Requested query for right child not pinned
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect(testQuery, ::testing::_),
-      ::testing::HasSubstr("was not pinned to the named query cache"));
+      ::testing::HasSubstr(
+          "\"dummy\" is not contained in the named result cache"));
 
   // Requested query for right child pinned but without the cached geometry
   // index
@@ -5641,7 +5641,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::parseAndPlan(query, qec),
       ::testing::HasSubstr("Unsupported element in a magic service query of "
-                           "type `named cached query`"));
+                           "type `named cached result`"));
 
   // Now pin a query to the named result cache, and check that the query
   // planning works as expected.
