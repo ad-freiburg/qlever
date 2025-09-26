@@ -390,42 +390,10 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // Extract a pointer/reference to the details of the previous scan
   auto& originalDetails = lazyScanAllCols.details();
 
-  // Create a details-aware transforming wrapper that applies column subsetting
-  struct DetailsAwareTransform
-      : ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
-    Permutation::IdTableGenerator originalGenerator_;
-    std::function<IdTable(IdTable&&)> transform_;
-    mutable typename Permutation::IdTableGenerator::iterator it_;
-    mutable bool initialized_ = false;
-
-    DetailsAwareTransform(Permutation::IdTableGenerator gen,
-                          std::function<IdTable(IdTable&&)> transform)
-        : originalGenerator_(std::move(gen)),
-          transform_(std::move(transform)) {}
-
-    std::optional<IdTable> get() override {
-      if (!initialized_) {
-        it_ = originalGenerator_.begin();
-        initialized_ = true;
-      }
-
-      if (it_ != originalGenerator_.end()) {
-        IdTable result = std::move(*it_);
-        ++it_;
-
-        // Copy details from the original generator
-        details() = originalGenerator_.details();
-
-        return transform_(std::move(result));
-      }
-
-      return std::nullopt;
-    }
-  };
-
-  // Create the wrapper
-  auto wrapper = std::make_unique<DetailsAwareTransform>(
-      std::move(lazyScanAllCols), makeApplyColumnSubset());
+  // Create a transforming wrapper using the reusable template
+  auto wrapper = std::make_unique<ad_utility::CachingTransformInputRangeFromGet<
+      Permutation::IdTableGenerator, decltype(makeApplyColumnSubset()),
+      LazyScanMetadata>>(std::move(lazyScanAllCols), makeApplyColumnSubset());
 
   // Set up an InputRangeTypeErased<IdTable, LazyScanMetadata>
   auto rangeTypeErased =
