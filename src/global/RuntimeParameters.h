@@ -154,11 +154,16 @@ void setRuntimeParameter(const ValueType& value) {
 
 // Get the current value of the runtime parameter specified by the
 // `ParameterPtr` (see `setRuntimeParameter` above for details).
+// The value has to be returned as an object, otherwise we might get data races.
+// That's why the return type is `auto` and not `decltype(auto)` or `const
+// auto&`.
 template <auto ParameterPtr>
 auto getRuntimeParameter() {
-  auto& parameter{std::invoke(ParameterPtr, *globalRuntimeParameters.rlock())};
-
-  return parameter.get();
+  // It is important that we make the deep copy of the reference that `get()`
+  // returns before the lock is released because the `rlock()` object is
+  // destroyed. This is achieved by directly returning a copy of the parameter
+  // value (the function returns `auto`, see above).
+  return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H
