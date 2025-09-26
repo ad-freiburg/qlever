@@ -80,18 +80,25 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
     index.createFromFiles(config.inputFiles_);
   }
-  auto textIndexBuilder = TextIndexBuilder(
-      ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
     textIndexBuilder.buildTextIndexFile(
         config.wordsAndDocsFileSpecified()
             ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
             : std::nullopt,
         config.addWordsFromLiterals_, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
-  }
-  if (!config.docsfile_.empty()) {
-    textIndexBuilder.buildDocsDB(config.docsfile_);
+    if (!config.docsfile_.empty()) {
+      textIndexBuilder.buildDocsDB(config.docsfile_);
+    }
+#else
+    throw std::runtime_error(
+        "Building a fulltext index is not supported using this restricted "
+        "version of QLever");
+#endif
   }
 }
 

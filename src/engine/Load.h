@@ -7,6 +7,7 @@
 #ifndef QLEVER_LOAD_H
 #define QLEVER_LOAD_H
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include <string>
 
 #include "engine/Operation.h"
@@ -89,4 +90,5 @@ class Load final : public Operation {
   void resetGetResultFunctionForTesting(SendRequestType func);
 };
 
+#endif
 #endif  // QLEVER_LOAD_H

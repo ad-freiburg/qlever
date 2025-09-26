@@ -4,6 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
+
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
@@ -458,3 +460,5 @@ class TransitivePathImpl : public TransitivePathBase {
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
+
+#endif

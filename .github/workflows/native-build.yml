@@ -145,6 +145,7 @@ jobs:
           if [[ "${{ matrix.use-ignore-errors }}" == "true" ]]; then
           IGNORE_ERRORS="-i"
           fi
+          set -o pipefail # the `tee` will never fail, but the `build` command might. We want to fail if the build fails.
           cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
         id: build
 

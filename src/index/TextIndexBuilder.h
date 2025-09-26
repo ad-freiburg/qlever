@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 #define QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 
@@ -83,4 +84,5 @@ class TextIndexBuilder : public IndexImpl {
   void calculateBlockBoundaries();
 };
 
+#endif
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H

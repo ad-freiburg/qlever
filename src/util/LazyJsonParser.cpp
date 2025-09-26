@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 #include "util/LazyJsonParser.h"
 
 #include <absl/strings/ascii.h>
@@ -299,3 +300,4 @@ void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
 }
 
 }  // namespace ad_utility
+#endif
