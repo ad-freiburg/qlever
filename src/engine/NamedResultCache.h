@@ -9,6 +9,7 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
+#include "engine/SpatialJoinCachedIndex.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
 
@@ -26,6 +27,7 @@ class NamedResultCache {
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
+    std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
   };
 
   // The size of a cached result, which currently is just a dummy value of 1,
