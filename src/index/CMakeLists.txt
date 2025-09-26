@@ -8,4 +8,4 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp)
-qlever_target_link_libraries(index util parser vocabulary)
+qlever_target_link_libraries(index util parser vocabulary global)

@@ -7,7 +7,7 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function(linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file

@@ -81,7 +81,8 @@ size_t QueryExecutionTree::getCostEstimate() {
   // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
   // to `true`, we set the cost estimate to zero.
   if (cachedResult_ &&
-      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
+      getRuntimeParameter<
+          &RuntimeParameters::zeroCostEstimateForCachedSubtree_>()) {
     return 0;
   }
 

@@ -9,14 +9,18 @@
 
 #include "global/RuntimeParameters.h"
 
-// Set a runtime parameter to a specific value for the duration of the current
-// scope. The original value is restored when the scope is left.
-template <ad_utility::ParameterName Name, typename Value>
+// Set the runtime parameter specified by the `ParameterPtr` to the given
+// `Value` and return a cleanup that will restore the original value of the
+// parameter when it is destroyed.
+template <auto ParameterPtr, typename Value>
 [[nodiscard]] auto setRuntimeParameterForTest(Value&& value) {
-  auto originalValue = RuntimeParameters().get<Name>();
-  RuntimeParameters().set<Name>(AD_FWD(value));
+  auto originalValue =
+      std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+  std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
+      .set(AD_FWD(value));
   return absl::Cleanup{[originalValue = std::move(originalValue)]() {
-    RuntimeParameters().set<Name>(originalValue);
+    std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
+        .set(std::move(originalValue));
   }};
 }
 

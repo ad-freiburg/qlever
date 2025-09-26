@@ -84,7 +84,7 @@ std::vector<std::string> Operation::collectWarnings() const {
 
 // _____________________________________________________________________________
 void Operation::addWarningOrThrow(std::string warning) const {
-  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));
@@ -249,7 +249,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto result = runComputation(timer, computationMode);
   auto maxSize =
       isRoot ? cache.getMaxSizeSingleEntry()
-             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+             : std::min(getRuntimeParameter<
+                            &RuntimeParameters::cacheMaxSizeLazyResult_>(),
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {

@@ -1,2 +1,2 @@
-add_library(dummyCompilation DummyCompilation.cpp)
-qlever_target_link_libraries(dummyCompilation)
+add_library(global RuntimeParameters.cpp)
+qlever_target_link_libraries(global)

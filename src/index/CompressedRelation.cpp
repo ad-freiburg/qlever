@@ -175,8 +175,10 @@ CompressedRelationReader::asyncParallelBlockGenerator(
           reader_{reader} {}
 
     void start() {
-      auto numThreads{RuntimeParameters().get<"lazy-index-scan-num-threads">()};
-      auto queueSize{RuntimeParameters().get<"lazy-index-scan-queue-size">()};
+      auto numThreads{
+          getRuntimeParameter<&RuntimeParameters::lazyIndexScanNumThreads_>()};
+      auto queueSize{
+          getRuntimeParameter<&RuntimeParameters::lazyIndexScanQueueSize_>()};
       auto producer{std::bind(&Generator::readAndDecompressBlock, this)};
 
       // Prepare queue for reading and decompressing blocks concurrently using
@@ -902,9 +904,10 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
-          isComplete ? 1
-                     : RuntimeParameters()
-                           .get<"small-index-scan-size-estimate-divisor">();
+          isComplete
+              ? 1
+              : getRuntimeParameter<
+                    &RuntimeParameters::smallIndexScanSizeEstimateDivisor_>();
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {
