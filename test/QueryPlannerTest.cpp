@@ -2716,8 +2716,6 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
             "built on the column \"?o\" but this query requests "
             "\"?wrongVariableHere\" as the right join variable"));
   }
-
-  // todo tests for new wrong config checks
 }
 
 // _____________________________________________________________________________
