@@ -221,7 +221,7 @@ class Qlever {
                         ad_utility::MediaType::sparqlJson) const;
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
-  // with the given `name`. This result can then be re-used in a query as
+  // with the given `name`. This result can then be reused in a query as
   // follows: `SERVICE ql:cached-result-with-name-<name> {}`.
   void queryAndPinResultWithName(std::string name, std::string query);
 
