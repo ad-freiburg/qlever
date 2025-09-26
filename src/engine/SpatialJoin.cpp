@@ -269,6 +269,7 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
+  using enum SpatialJoinAlgorithm;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }
@@ -277,9 +278,9 @@ size_t SpatialJoin::getCostEstimate() {
     auto n = childLeft_->getSizeEstimate();
     auto m = childRight_->getSizeEstimate();
 
-    if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
+    if (config_.algo_ == BASELINE) {
       return n * m;
-    } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    } else if (config_.algo_ == LIBSPATIALJOIN) {
       // We take the cost estimate to be `4 * (n + m)`, where `n` and `m` are
       // the size of the left and right table, respectively. Reasoning:
       //
@@ -297,9 +298,9 @@ size_t SpatialJoin::getCostEstimate() {
       return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
-          config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX ||
-              config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE,
+          ad_utility::contains(
+              std::array{S2_GEOMETRY, BOUNDING_BOX, S2_POINT_POLYLINE},
+              config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.

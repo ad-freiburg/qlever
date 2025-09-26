@@ -9,6 +9,7 @@
 
 #include <spatialjoin/Sweeper.h>
 #include <spatialjoin/WKTParse.h>
+#include <util/geo/Geo.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -78,6 +79,19 @@ using Value = std::pair<Box, RtreeEntry>;
 // Forward declaration of s2 classes
 class S2Polyline;
 class S2Point;
+class S2LatLng;
+
+// Helper functions to convert between the representations of geometries used by
+// different libraries.
+namespace GeometryConverters {
+
+// Helper function to convert `libspatialjoin` `DPoint` objects to `S2LatLng`.
+S2LatLng toS2LatLng(const util::geo::DPoint& point);
+
+// Helper function to convert `GeoPoint` objects to `S2Point`.
+S2Point toS2Point(const GeoPoint& point);
+
+}  // namespace GeometryConverters
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -178,9 +192,6 @@ class SpatialJoinAlgorithms {
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
-
-  // Helper function to convert `GeoPoint` objects to `S2Point`.
-  static S2Point toS2Point(const GeoPoint& point);
 
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint

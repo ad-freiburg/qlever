@@ -30,6 +30,7 @@
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
+using namespace GeometryConverters;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
@@ -183,11 +184,8 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   if (line.empty()) {
     return std::nullopt;
   }
-  std::vector<S2LatLng> points;
-  for (const auto& coord : line) {
-    points.push_back(S2LatLng::FromDegrees(coord.getY(), coord.getX()));
-  }
-  return S2Polyline{points};
+  return S2Polyline{
+      ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
 };
 
 // ____________________________________________________________________________
@@ -560,10 +558,17 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
 
+namespace GeometryConverters {
 // ____________________________________________________________________________
-S2Point SpatialJoinAlgorithms::toS2Point(const GeoPoint& p) {
+S2Point toS2Point(const GeoPoint& p) {
   return S2LatLng::FromDegrees(p.getLat(), p.getLng()).ToPoint();
-};
+}
+
+// ____________________________________________________________________________
+S2LatLng toS2LatLng(const util::geo::DPoint& point) {
+  return S2LatLng::FromDegrees(point.getY(), point.getX());
+}
+}  // namespace GeometryConverters
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
@@ -633,6 +638,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
+  using namespace GeometryConverters;
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
               joinType, rightCacheName] = params_;
