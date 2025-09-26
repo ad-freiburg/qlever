@@ -2573,7 +2573,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   // index
   {
     auto qec = ad_utility::testing::getQec(kb);
-    qec->pinWithExplicitName() = {"dummy", std::nullopt};
+    qec->pinResultWithName() = {"dummy", std::nullopt};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
 
@@ -2594,7 +2594,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   // Requested query for right child correctly pinned
   {
     auto qec = ad_utility::testing::getQec(kb);
-    qec->pinWithExplicitName() = {"dummy", V{"?o"}};
+    qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
 
@@ -2637,7 +2637,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   // request the correct column to be used
   {
     auto qec = ad_utility::testing::getQec(kb);
-    qec->pinWithExplicitName() = {"dummy", V{"?o"}};
+    qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
 
@@ -5615,7 +5615,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
   qec = ad_utility::testing::getQec(
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
-  qec->pinResultWithName() = "dummyQuery";
+  qec->pinResultWithName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
