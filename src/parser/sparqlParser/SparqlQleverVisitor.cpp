@@ -37,7 +37,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
-#include "parser/NamedCachedQuery.h"
+#include "parser/NamedCachedResult.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -1244,10 +1244,10 @@ GraphPatternOperation Visitor::visitPathQuery(
 }
 
 // _____________________________________________________________________________
-GraphPatternOperation Visitor::visitNamedCachedQuery(
+GraphPatternOperation Visitor::visitNamedCachedResult(
     const TripleComponent::Iri& target,
     Parser::ServiceGraphPatternContext* ctx) {
-  parsedQuery::NamedCachedQuery namedQuery{target};
+  parsedQuery::NamedCachedResult namedQuery{target};
   parseBodyOfMagicServiceQuery(namedQuery, ctx, "named cached query");
   return namedQuery;
 }
@@ -1308,8 +1308,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitTextSearchQuery(ctx);
   } else if (asStringViewUnsafe(serviceIri.getContent())
-                 .starts_with(NAMED_CACHED_QUERY_PREFIX)) {
-    return visitNamedCachedQuery(serviceIri, ctx);
+                 .starts_with(CACHED_RESULT_WITH_NAME_PREFIX)) {
+    return visitNamedCachedResult(serviceIri, ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them

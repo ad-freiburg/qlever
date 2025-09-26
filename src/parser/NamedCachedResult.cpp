@@ -5,7 +5,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
 
-#include "parser/NamedCachedQuery.h"
+#include "parser/NamedCachedResult.h"
 
 namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has
@@ -13,36 +13,36 @@ namespace {
 std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
   auto view = asStringViewUnsafe(iri.getContent());
   AD_CORRECTNESS_CHECK(
-      view.starts_with(NAMED_CACHED_QUERY_PREFIX),
+      view.starts_with(CACHED_RESULT_WITH_NAME_PREFIX),
       "The target IRI of a named cached query must start with `",
-      NAMED_CACHED_QUERY_PREFIX, "`, but was `", view, "`");
+      CACHED_RESULT_WITH_NAME_PREFIX, "`, but was `", view, "`");
   // Remove the prefix
-  view.remove_prefix(NAMED_CACHED_QUERY_PREFIX.size());
+  view.remove_prefix(CACHED_RESULT_WITH_NAME_PREFIX.size());
   return std::string{view};
 }
 }  // namespace
 namespace parsedQuery {
 
 // _____________________________________________________________________________
-NamedCachedQuery::NamedCachedQuery(const TripleComponent::Iri& iri)
+NamedCachedResult::NamedCachedResult(const TripleComponent::Iri& iri)
     : identifier_{extractQueryNameFromIri(iri)} {}
 
 // _____________________________________________________________________________
-void NamedCachedQuery::addParameter(
+void NamedCachedResult::addParameter(
     [[maybe_unused]] const SparqlTriple& triple) {
   throwBecauseNotEmpty();
 }
 
 // _____________________________________________________________________________
-void NamedCachedQuery::addGraph(
+void NamedCachedResult::addGraph(
     [[maybe_unused]] const GraphPatternOperation& childGraphPattern) {
   throwBecauseNotEmpty();
 }
 // _____________________________________________________________________________
-const std::string& NamedCachedQuery::identifier() const { return identifier_; }
+const std::string& NamedCachedResult::identifier() const { return identifier_; }
 
 // _____________________________________________________________________________
-void NamedCachedQuery::throwBecauseNotEmpty() {
+void NamedCachedResult::throwBecauseNotEmpty() {
   throw std::runtime_error{
       "The body of a named cache query request must be empty"};
 }

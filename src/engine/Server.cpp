@@ -289,10 +289,10 @@ auto Server::prepareOperation(
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, &namedResultCache,
+                            sortPerformanceEstimator_, &namedResultCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
-  configurePinnedNamedQuery(pinResultWithName, accessTokenOk, qec);
+  configurePinnedResultWithName(pinResultWithName, accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
 }
@@ -308,7 +308,7 @@ void Server::configurePinnedResultWithName(
     throw std::runtime_error(
         "Pinning a result with a name requires a valid access token");
   }
-  qec.pinResultWithExplicitName() = pinResultWithName.value();
+  qec.pinResultWithName() = pinResultWithName.value();
 }
 
 // _____________________________________________________________________________
@@ -388,7 +388,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
-    namedResultCache.clear();
+    namedResultCache_.clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -685,7 +685,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-results-unpinned"] = cache_.numNonPinnedEntries();
   result["num-results-pinned-unnamed"] = cache_.numPinnedEntries();
-  result["num-results-pinned-named"] = namedResultCache.size();
+  result["num-results-pinned-named"] = namedResultCache_.numEntries();
 
   // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
   // converter.
@@ -981,7 +981,7 @@ UpdateMetadata Server::processUpdateImpl(
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
   cache_.clearAll();
-  namedResultCache.clear();
+  namedResultCache_.clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;

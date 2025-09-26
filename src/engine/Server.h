@@ -41,7 +41,7 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
-  FRIEND_TEST(ServerTest, configurePinnedNamedResult);
+  FRIEND_TEST(ServerTest, configurePinnedResultWithName);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,

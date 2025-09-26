@@ -12,7 +12,7 @@ std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
   const auto& result = get(name);
   const auto& [table, map, sortedOn, localVocab] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
-      ctx, table, map, sortedOn, localVocab.clone());
+      qec, table, map, sortedOn, localVocab.clone());
   return resultAsOperation;
 }
 
@@ -24,7 +24,7 @@ auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
         absl::StrCat("The cached result with name \"", name,
                      "\" is not contained in the named result cache.")};
   }
-  return (*l)[name];
+  return (*lock)[name];
 }
 
 // _____________________________________________________________________________

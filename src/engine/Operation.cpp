@@ -389,7 +389,7 @@ std::shared_ptr<const Result> Operation::getResult(
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
           actualResult.localVocab().clone()};
-      _executionContext->namedQueryCache().store(
+      _executionContext->namedResultCache().store(
           name, std::move(valueForNamedResultCache));
 
       runtimeInfo().addDetail("pinned-with-name", name);

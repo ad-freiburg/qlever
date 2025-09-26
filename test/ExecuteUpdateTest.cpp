@@ -8,7 +8,7 @@
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/GTestHelpers.h"
@@ -73,11 +73,12 @@ TEST(ExecuteUpdate, executeUpdate) {
         Index index = ad_utility::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
-        NamedQueryCache namedQueryCache;
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedQueryCache);
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         expectExecuteUpdateHelper(update, qec, index);
         index.deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -92,11 +93,12 @@ TEST(ExecuteUpdate, executeUpdate) {
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
-        NamedQueryCache namedQueryCache;
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedQueryCache);
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };

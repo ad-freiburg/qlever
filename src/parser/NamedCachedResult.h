@@ -12,13 +12,13 @@
 
 namespace parsedQuery {
 // A magic SERVICE for queries that are pinned with an explicit query name.
-class NamedCachedQuery : public MagicServiceQuery {
+class NamedCachedResult : public MagicServiceQuery {
   std::string identifier_;
 
  public:
   // Construct from an iri. The iri is required to have the form
-  // `ql:named-cached-query-queryName`, else an exception is thrown.
-  explicit NamedCachedQuery(const TripleComponent::Iri& iri);
+  // `ql:cached-result-with-name-queryName`, else an exception is thrown.
+  explicit NamedCachedResult(const TripleComponent::Iri& iri);
 
   // Currently the body of the SERVICE clause must be empty.
   void addParameter([[maybe_unused]] const SparqlTriple& triple) override;

@@ -7,15 +7,15 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 
 namespace {
-TEST(NamedQueryCache, basicWorkflow) {
-  NamedQueryCache cache;
+TEST(NamedResultCache, basicWorkflow) {
+  NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
-      ::testing::HasSubstr("was not pinned to the named query cache"));
+      ::testing::HasSubstr("is not contained in the named result cache"));
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
@@ -39,7 +39,7 @@ TEST(NamedQueryCache, basicWorkflow) {
 
   auto qec = ad_utility::testing::getQec();
   auto getCacheValue = [&varColMap, &localVocab](const auto& table) {
-    return NamedQueryCache::Value{
+    return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
@@ -77,7 +77,7 @@ TEST(NamedQueryCache, basicWorkflow) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.getOperation("query-2", qec),
-      ::testing::HasSubstr("was not pinned to the named query cache"));
+      ::testing::HasSubstr("is not contained in the named result cache"));
 
   // store a second value in the cache
   {
@@ -98,7 +98,7 @@ TEST(NamedQueryCache, basicWorkflow) {
     EXPECT_EQ(cache.numEntries(), 1);
     AD_EXPECT_THROW_WITH_MESSAGE(
         cache.getOperation("query-2", qec),
-        ::testing::HasSubstr("was not pinned to the named query cache"));
+        ::testing::HasSubstr("is not contained in the named result cache"));
     EXPECT_NO_THROW(cache.getOperation("query-1", qec));
   }
 
@@ -106,22 +106,22 @@ TEST(NamedQueryCache, basicWorkflow) {
   EXPECT_EQ(cache.numEntries(), 0);
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
-      ::testing::HasSubstr("was not pinned to the named query cache"));
+      ::testing::HasSubstr("is not contained in the named result cache"));
 }
 
-TEST(NamedQueryCache, E2E) {
+TEST(NamedResultCache, E2E) {
   auto qec = ad_utility::testing::getQec(
       "<s> <p> <o>. <s2> <p> <o> . <s3> <p2> <o2>.");
   std::string pinnedQuery =
       "SELECT * { {?s <p> <o> } UNION {VALUES ?s { <notInVocab> }}} INTERNAL "
       "SORT BY ?s";
-  qec->pinWithExplicitName() = "dummyQuery";
+  qec->pinResultWithName() = "dummyQuery";
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
   [[maybe_unused]] auto pinnedResult = qet.getResult();
 
-  qec->pinWithExplicitName() = std::nullopt;
+  qec->pinResultWithName() = std::nullopt;
   std::string query =
-      "SELECT ?s { SERVICE ql:named-cached-query-dummyQuery {}}";
+      "SELECT ?s { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
   // `false` means `not lazy` so `fully materialized`.
   auto result = qet.getResult(false);

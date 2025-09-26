@@ -123,15 +123,15 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
   auto queryPlan = parseAndPlanQuery(std::move(query));
   auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinWithExplicitName() = std::move(queryName);
+  qec->pinResultWithName() = std::move(name);
   [[maybe_unused]] auto result = this->query(queryPlan);
 }
 
 // _____________________________________________________________________________
-void Qlever::clearNamedResultCache() { namedQueryCache_.clear(); }
+void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
 
 // _____________________________________________________________________________
-void Qlever::eraseResultWithName(const std::string& name) {
+void Qlever::eraseResultWithName(std::string name) {
   namedResultCache_.erase(name);
 }
 

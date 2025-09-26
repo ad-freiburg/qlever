@@ -16,7 +16,6 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
-#include "src/engine/NamedResultCache.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
@@ -167,9 +166,9 @@ class QueryExecutionContext {
     return *namedResultCache_;
   }
 
-  // Accessors; see `pinWithExplicitName_` for an explanation.
-  auto& pinWithExplicitName() { return pinWithExplicitName_; }
-  const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
+  // Accessors; see `pinResultWithName_` for an explanation.
+  auto& pinResultWithName() { return pinResultWithName_; }
+  const auto& pinResultWithName() const { return pinResultWithName_; }
 
  private:
   static bool areWebSocketUpdatesEnabled();
@@ -196,7 +195,7 @@ class QueryExecutionContext {
 
   // Name under which the result of the query that is executed using this
   // context should be cached. When `std::nullopt`, the result is not cached.
-  std::optional<std::string> pinWithExplicitName_ = std::nullopt;
+  std::optional<std::string> pinResultWithName_ = std::nullopt;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

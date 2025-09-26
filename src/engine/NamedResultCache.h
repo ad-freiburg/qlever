@@ -12,6 +12,9 @@
 #include "util/Cache.h"
 #include "util/Synchronized.h"
 
+// Forward declarations
+class QueryExecutionContext;
+
 // A simple thread-safe cache that caches query results with an explicit
 // name.
 class NamedResultCache {
@@ -65,7 +68,7 @@ class NamedResultCache {
   // it into an `ExplicitIdTableOperation` that can be used as part of a
   // `QueryExecutionTree`.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
-      const Key& key, QueryExecutionContext* ctx);
+      const Key& name, QueryExecutionContext* qec);
 };
 
-#endif  // QLEVER_SRC_ENGINE_NAMEDQUERYCACHE_H
+#endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

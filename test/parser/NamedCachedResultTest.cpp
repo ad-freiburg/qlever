@@ -7,7 +7,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/NamedCachedQuery.h"
+#include "parser/NamedCachedResult.h"
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 
@@ -27,35 +27,35 @@ SparqlTriple createTestTriple() {
 
 }  // namespace
 
-// Test fixture for NamedCachedQuery tests
-class NamedCachedQueryTest : public ::testing::Test {
+// Test fixture for NamedCachedResult tests
+class NamedCachedResultTest : public ::testing::Test {
  protected:
   void SetUp() override {
     testIdentifier_ = "test_query_name";
     testIdentifierAsIri_ = TripleComponent::Iri::fromIrirefWithoutBrackets(
-        absl::StrCat(NAMED_CACHED_QUERY_PREFIX, testIdentifier_));
-    query_ = std::make_unique<NamedCachedQuery>(testIdentifierAsIri_);
+        absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, testIdentifier_));
+    query_ = std::make_unique<NamedCachedResult>(testIdentifierAsIri_);
   }
 
   TripleComponent::Iri testIdentifierAsIri_;
   std::string testIdentifier_;
-  std::unique_ptr<NamedCachedQuery> query_;
+  std::unique_ptr<NamedCachedResult> query_;
 };
 
 // Test constructor
-TEST_F(NamedCachedQueryTest, Construction) {
+TEST_F(NamedCachedResultTest, Construction) {
   AD_EXPECT_THROW_WITH_MESSAGE(
-      NamedCachedQuery(
+      NamedCachedResult(
           TripleComponent::Iri::fromIriref("<someIRIThatIsNotACacheRequest>")),
       ::testing::HasSubstr("must start with"));
   // Test construction with identifier
-  NamedCachedQuery query(TripleComponent::Iri::fromIrirefWithoutBrackets(
-      absl::StrCat(NAMED_CACHED_QUERY_PREFIX, "my_query")));
+  NamedCachedResult query(TripleComponent::Iri::fromIrirefWithoutBrackets(
+      absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, "my_query")));
   EXPECT_EQ(query.identifier(), "my_query");
 }
 
 // Test addParameter (should always throw)
-TEST_F(NamedCachedQueryTest, AddParameterThrows) {
+TEST_F(NamedCachedResultTest, AddParameterThrows) {
   SparqlTriple testTriple = createTestTriple();
 
   // addParameter should always throw since body must be empty
@@ -66,8 +66,8 @@ TEST_F(NamedCachedQueryTest, AddParameterThrows) {
 }
 
 // Test inheritance from MagicServiceQuery
-TEST_F(NamedCachedQueryTest, InheritanceFromMagicServiceQuery) {
-  // Test that NamedCachedQuery properly inherits from MagicServiceQuery
+TEST_F(NamedCachedResultTest, InheritanceFromMagicServiceQuery) {
+  // Test that NamedCachedResult properly inherits from MagicServiceQuery
   MagicServiceQuery* basePtr = query_.get();
   ASSERT_NE(basePtr, nullptr);
 
@@ -77,9 +77,9 @@ TEST_F(NamedCachedQueryTest, InheritanceFromMagicServiceQuery) {
 }
 
 // Test const correctness
-TEST_F(NamedCachedQueryTest, ConstCorrectness) {
+TEST_F(NamedCachedResultTest, ConstCorrectness) {
   // Test that validateAndGetIdentifier can be called on a const object
-  const NamedCachedQuery& constQuery = *query_;
+  const NamedCachedResult& constQuery = *query_;
   const std::string& result = constQuery.identifier();
   EXPECT_EQ(result, testIdentifier_);
 
@@ -88,7 +88,7 @@ TEST_F(NamedCachedQueryTest, ConstCorrectness) {
 }
 
 // Test sequence of operations
-TEST_F(NamedCachedQueryTest, SequenceOfOperations) {
+TEST_F(NamedCachedResultTest, SequenceOfOperations) {
   // Multiple calls to validateAndGetIdentifier should work
   EXPECT_EQ(query_->identifier(), testIdentifier_);
   EXPECT_EQ(query_->identifier(), testIdentifier_);
