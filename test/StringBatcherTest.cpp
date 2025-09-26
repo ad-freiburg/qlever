@@ -72,13 +72,20 @@ TEST(StringBatcher, SingleStringFittingInBatchCallsCallbackOnDestruction) {
 TEST(StringBatcher, StringExactlyFillingBatchCallsCallbackImmediately) {
   StrictMock<MockBatchCallback> mockCallback;
 
-  EXPECT_CALL(mockCallback, call(std::string_view("1234567890")));
+  {
+    StringBatcher<TEST_BATCH_SIZE> batcher{
+        [&mockCallback](std::string_view batch) { mockCallback(batch); }};
 
-  StringBatcher<TEST_BATCH_SIZE> batcher{
-      [&mockCallback](std::string_view batch) { mockCallback(batch); }};
+    // Set expectation right before the operation that should trigger it
+    // immediately
+    EXPECT_CALL(mockCallback, call(std::string_view("1234567890")));
+    batcher("1234567890");  // Exactly TEST_BATCH_SIZE characters, should
+                            // trigger callback immediately
 
-  batcher("1234567890");  // Exactly TEST_BATCH_SIZE characters
-  // No need to call finish() as batch is already complete
+    // Verify the expectation was satisfied immediately, not by destructor
+    ::testing::Mock::VerifyAndClearExpectations(&mockCallback);
+    // No need to call finish() as batch is already complete
+  }
 }
 
 // _____________________________________________________________________________
@@ -105,13 +112,18 @@ TEST(StringBatcher, StringLargerThanBatchSplitsAcrossMultipleBatches) {
 TEST(StringBatcher, MultipleSmallStringsBatchedTogether) {
   StrictMock<MockBatchCallback> mockCallback;
 
-  EXPECT_CALL(mockCallback, call(std::string_view("helloworld")));
+  {
+    StringBatcher<TEST_BATCH_SIZE> batcher{
+        [&mockCallback](std::string_view batch) { mockCallback(batch); }};
 
-  StringBatcher<TEST_BATCH_SIZE> batcher{
-      [&mockCallback](std::string_view batch) { mockCallback(batch); }};
+    batcher("hello");  // 5 chars
 
-  batcher("hello");  // 5 chars
-  batcher("world");  // 5 chars, total = 10 = TEST_BATCH_SIZE
+    // Callback should be triggered immediately when buffer becomes full
+    EXPECT_CALL(mockCallback, call(std::string_view("helloworld")));
+    batcher("world");  // 5 chars, total = 10 = TEST_BATCH_SIZE
+
+    ::testing::Mock::VerifyAndClearExpectations(&mockCallback);
+  }
 }
 
 // _____________________________________________________________________________
@@ -142,14 +154,21 @@ TEST(StringBatcher, MultipleStringsExceedingBatchSize) {
 TEST(StringBatcher, SingleCharacterHandling) {
   StrictMock<MockBatchCallback> mockCallback;
 
-  EXPECT_CALL(mockCallback, call(std::string_view("abcdefghij")));
+  {
+    StringBatcher<TEST_BATCH_SIZE> batcher{
+        [&mockCallback](std::string_view batch) { mockCallback(batch); }};
 
-  StringBatcher<TEST_BATCH_SIZE> batcher{
-      [&mockCallback](std::string_view batch) { mockCallback(batch); }};
+    // Add single characters to fill exactly one batch
+    for (char c = 'a'; c <= 'i'; ++c) {  // 'a' to 'i' = 9 chars
+      batcher(c);
+    }
 
-  // Add single characters to fill exactly one batch
-  for (char c = 'a'; c <= 'j'; ++c) {
-    batcher(c);
+    // Callback should be triggered immediately when the 10th character fills
+    // the batch
+    EXPECT_CALL(mockCallback, call(std::string_view("abcdefghij")));
+    batcher('j');  // 10th character, should trigger callback immediately
+
+    ::testing::Mock::VerifyAndClearExpectations(&mockCallback);
   }
 }
 
@@ -324,15 +343,22 @@ TEST(StringBatcher, MultipleFinishCallsAreSafe) {
 TEST(StringBatcher, BatchSizeOfOne) {
   StrictMock<MockBatchCallback> mockCallback;
 
-  InSequence seq;
-  EXPECT_CALL(mockCallback, call(std::string_view("a")));
-  EXPECT_CALL(mockCallback, call(std::string_view("b")));
-  EXPECT_CALL(mockCallback, call(std::string_view("c")));
+  {
+    StringBatcher<1> batcher{
+        [&mockCallback](std::string_view batch) { mockCallback(batch); }};
 
-  StringBatcher<1> batcher{
-      [&mockCallback](std::string_view batch) { mockCallback(batch); }};
+    // Each character should trigger a callback immediately as the batch size is
+    // 1
+    InSequence seq;
+    EXPECT_CALL(mockCallback, call(std::string_view("a")));
+    EXPECT_CALL(mockCallback, call(std::string_view("b")));
+    EXPECT_CALL(mockCallback, call(std::string_view("c")));
 
-  batcher("abc");  // Each character should trigger a separate callback
+    batcher("abc");  // Each character should trigger a separate callback
+                     // immediately
+
+    ::testing::Mock::VerifyAndClearExpectations(&mockCallback);
+  }
 }
 
 // _____________________________________________________________________________
@@ -343,17 +369,23 @@ TEST(StringBatcher, LargeBatchSize) {
   std::string largeContent(LARGE_BATCH_SIZE - 1, 'X');
   largeContent += "Y";  // Exactly LARGE_BATCH_SIZE characters
 
-  EXPECT_CALL(mockCallback, call(std::string_view(largeContent)));
+  {
+    StringBatcher<LARGE_BATCH_SIZE> batcher{
+        [&mockCallback](std::string_view batch) { mockCallback(batch); }};
 
-  StringBatcher<LARGE_BATCH_SIZE> batcher{
-      [&mockCallback](std::string_view batch) { mockCallback(batch); }};
+    // Add content in smaller chunks
+    for (size_t i = 0; i < 10; ++i) {
+      batcher(std::string(99, 'X'));
+    }
+    batcher(std::string(9, 'X'));
 
-  // Add content in smaller chunks
-  for (size_t i = 0; i < 10; ++i) {
-    batcher(std::string(99, 'X'));
+    // Callback should be triggered immediately when buffer becomes exactly full
+    EXPECT_CALL(mockCallback, call(std::string_view(largeContent)));
+    batcher("Y");  // This should complete the batch and trigger callback
+                   // immediately
+
+    ::testing::Mock::VerifyAndClearExpectations(&mockCallback);
   }
-  batcher(std::string(9, 'X'));
-  batcher("Y");  // This should complete the batch and trigger callback
 }
 
 // _____________________________________________________________________________

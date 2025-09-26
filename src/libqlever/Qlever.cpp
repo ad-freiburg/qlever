@@ -118,11 +118,11 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
     result += batch;
   }
 #else
-  STREAMABLE_YIELDER_TYPE yielder{
+  ad_utility::streams::StringBatcher yielder{
       [&result](std::string_view batch) { result.append(batch); }};
   ExportQueryExecutionTrees::computeResult(parsedQuery, *qet, mediaType, timer,
                                            std::move(handle),
-                                           std::move(yielder));
+                                           std::ref(yielder));
 
 #endif
   return result;

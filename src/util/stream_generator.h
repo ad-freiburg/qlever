@@ -304,7 +304,7 @@ namespace ad_utility::streams {
 // which
 //    the callback hasn't been called yet. This is done either in the
 //    destructor, or via an explicit call to `finish()`.
-template <size_t BATCH_SIZE>
+template <size_t BATCH_SIZE = 1u << 20>
 class StringBatcher {
   using CallbackForBatches = std::function<void(std::string_view)>;
   CallbackForBatches callbackForBatches_;
@@ -375,22 +375,23 @@ class StringBatcher {
 };
 }  // namespace ad_utility::streams
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_20
+#ifndef QLEVER_STRIP_FEATURES_CPP_17
 using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;
 using STREAMABLE_YIELDER_TYPE = int;
 #define STREAMABLE_YIELDER_ARG_DECL \
-  STREAMABLE_YIELDER_TYPE streamableYielder = {}
+  [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder = {}
 #define STREAMABLE_YIELD(...) co_yield __VA_ARGS__
 #define STREAMABLE_RETURN co_return
 
 #else
 
 using STREAMABLE_GENERATOR_TYPE = void;
-using STREAMABLE_YIELDER_TYPE = std::reference_wrapper<StreamBatcher<1u << 20>>;
+using STREAMABLE_YIELDER_TYPE =
+    std::reference_wrapper<ad_utility::streams::StringBatcher<>>;
 #define STREAMABLE_YIELDER_ARG_DECL STREAMABLE_YIELDER_TYPE streamableYielder
 #define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
-#define STREAMABLE_RETURN     \
-  streamableYielder.finish(); \
+#define STREAMABLE_RETURN           \
+  streamableYielder.get().finish(); \
   return;
 
 #endif

@@ -39,14 +39,13 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const Index& index) {
   const auto& mgr = index.getImpl().encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
-}  // namespace
 
 // _____________________________________________________________________________
 STREAMABLE_GENERATOR_TYPE computeResultForAsk(
     [[maybe_unused]] const ParsedQuery& parsedQuery,
     const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
-    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder = {}) {
+    STREAMABLE_YIELDER_ARG_DECL) {
   // Compute the result of the ASK query.
   bool result = getResultForAsk(qet.getResult(true));
 
@@ -87,6 +86,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
           "ASK queries are not supported for TSV or CSV or binary format."};
   }
 }
+}  // namespace
 
 // __________________________________________________________________________
 cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
