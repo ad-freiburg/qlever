@@ -31,11 +31,13 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "generated/SparqlAutomaticParser.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/NamedCachedResult.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -1202,60 +1204,65 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
-GraphPatternOperation Visitor::visitPathQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
-                           const parsedQuery::GraphPatternOperation& op) {
+// _____________________________________________________________________________
+void Visitor::parseBodyOfMagicServiceQuery(
+    parsedQuery::MagicServiceQuery& target,
+    Parser::ServiceGraphPatternContext* ctx, std::string_view operationName) {
+  auto parseGraphPattern = [operationName](
+                               parsedQuery::MagicServiceQuery& pathQuery,
+                               const parsedQuery::GraphPatternOperation& op) {
     if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
       pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
     } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
       pathQuery.addGraph(op);
     } else {
-      throw parsedQuery::PathSearchException(
-          "Unsupported element in pathSearch."
-          "PathQuery may only consist of triples for configuration"
-          "And a { group graph pattern } specifying edges.");
+      throw std::runtime_error{absl::StrCat(
+          "Unsupported element in a magic service query of type `",
+          operationName,
+          "`. Only triples and `{ group graph patterns }` are allowed ")};
     }
   };
 
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
-  parsedQuery::PathQuery pathQuery;
-  for (const auto& op : graphPattern._graphPatterns) {
-    parsePathQuery(pathQuery, op);
+  try {
+    for (const auto& op : graphPattern._graphPatterns) {
+      parseGraphPattern(target, op);
+    }
+  } catch (const std::exception& e) {
+    // Annotate the occurring exceptions with the correct position inside the
+    // query.
+    reportError(ctx->groupGraphPattern(), e.what());
   }
+}
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitPathQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  parsedQuery::PathQuery pathQuery;
+  parseBodyOfMagicServiceQuery(pathQuery, ctx, "path search");
   return pathQuery;
 }
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitNamedCachedResult(
+    const TripleComponent::Iri& target,
+    Parser::ServiceGraphPatternContext* ctx) {
+  parsedQuery::NamedCachedResult namedQuery{target};
+  parseBodyOfMagicServiceQuery(namedQuery, ctx, "named cached query");
+  return namedQuery;
+}
+
+// _____________________________________________________________________________
 GraphPatternOperation Visitor::visitSpatialQuery(
     Parser::ServiceGraphPatternContext* ctx) {
-  auto parseSpatialQuery = [ctx](parsedQuery::SpatialQuery& spatialQuery,
-                                 const parsedQuery::GraphPatternOperation& op) {
-    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      spatialQuery.addBasicPattern(
-          std::get<parsedQuery::BasicGraphPattern>(op));
-    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-      spatialQuery.addGraph(op);
-    } else {
-      reportError(
-          ctx,
-          "Unsupported element in spatialQuery."
-          "spatialQuery may only consist of triples for configuration"
-          "And a { group graph pattern } specifying the right join table.");
-    }
-  };
-
-  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery::SpatialQuery spatialQuery;
-  for (const auto& op : graphPattern._graphPatterns) {
-    parseSpatialQuery(spatialQuery, op);
-  }
+  parseBodyOfMagicServiceQuery(spatialQuery, ctx, "spatial join");
 
   try {
     // We convert the spatial query to a spatial join configuration and discard
     // its result here to detect errors early and report them to the user with
     // highlighting. It's only a small struct so not much is wasted.
-    spatialQuery.toSpatialJoinConfiguration();
+    [[maybe_unused]] auto&& _ = spatialQuery.toSpatialJoinConfiguration();
   } catch (const std::exception& ex) {
     reportError(ctx, ex.what());
   }
@@ -1265,25 +1272,8 @@ GraphPatternOperation Visitor::visitSpatialQuery(
 
 GraphPatternOperation Visitor::visitTextSearchQuery(
     Parser::ServiceGraphPatternContext* ctx) {
-  auto parseTextSearchQuery =
-      [ctx](parsedQuery::TextSearchQuery& textSearchQuery,
-            const parsedQuery::GraphPatternOperation& op) {
-        if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-          textSearchQuery.addBasicPattern(
-              std::get<parsedQuery::BasicGraphPattern>(op));
-        } else {
-          reportError(
-              ctx,
-              "Unsupported element in textSearchQuery. "
-              "textSearchQuery may only consist of triples for configuration");
-        }
-      };
-
-  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery::TextSearchQuery textSearchQuery;
-  for (const auto& op : graphPattern._graphPatterns) {
-    parseTextSearchQuery(textSearchQuery, op);
-  }
+  parseBodyOfMagicServiceQuery(textSearchQuery, ctx, "full text search");
 
   return textSearchQuery;
 }
@@ -1317,6 +1307,9 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitSpatialQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitTextSearchQuery(ctx);
+  } else if (asStringViewUnsafe(serviceIri.getContent())
+                 .starts_with(CACHED_RESULT_WITH_NAME_PREFIX)) {
+    return visitNamedCachedResult(serviceIri, ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them

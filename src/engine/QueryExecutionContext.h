@@ -87,6 +87,9 @@ struct QueryCacheKey {
 using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
+// Forward declaration because of cyclic dependency
+class NamedResultCache;
+
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
@@ -95,17 +98,10 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
+      NamedResultCache* namedResultCache,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      const bool pinSubtrees = false, const bool pinResult = false)
-      : _pinSubtrees(pinSubtrees),
-        _pinResult(pinResult),
-        _index(index),
-        _subtreeCache(cache),
-        _allocator(std::move(allocator)),
-        _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator),
-        updateCallback_(std::move(updateCallback)) {}
+      bool pinSubtrees = false, bool pinResult = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -164,10 +160,18 @@ class QueryExecutionContext {
     return areWebsocketUpdatesEnabled_;
   }
 
- private:
-  static bool areWebSocketUpdatesEnabled();
+  // Access the cache for explicitly named query.
+  NamedResultCache& namedResultCache() {
+    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
+    return *namedResultCache_;
+  }
+
+  // Accessors; see `pinResultWithName_` for an explanation.
+  auto& pinResultWithName() { return pinResultWithName_; }
+  const auto& pinResultWithName() const { return pinResultWithName_; }
 
  private:
+  static bool areWebSocketUpdatesEnabled();
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -185,6 +189,13 @@ class QueryExecutionContext {
   // Cache the state of that runtime parameter to reduce the contention of the
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+
+  // The cache for named results.
+  NamedResultCache* namedResultCache_ = nullptr;
+
+  // Name under which the result of the query that is executed using this
+  // context should be cached. When `std::nullopt`, the result is not cached.
+  std::optional<std::string> pinResultWithName_ = std::nullopt;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

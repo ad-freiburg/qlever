@@ -18,6 +18,7 @@
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -486,6 +487,16 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
+// Match an `ExplicitIdTableOperation`, but only test its size estimate (which
+// is equal to the actual number of rows in the result). More detailed tests for
+// this operation can be found in `ExplicitIdTableOperationTest.cpp` and
+// `NamedResultCacheTest.cpp`.
+inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
+                       ::testing::Eq(sizeEstimate));
+  return RootOperation<::ExplicitIdTableOperation>(p);
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
@@ -581,9 +592,12 @@ inline QueryExecutionTree parseAndPlan(std::string query,
   ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
-  return QueryPlannerClass{qec,
-                           std::make_shared<ad_utility::CancellationHandle<>>()}
-      .createExecutionTree(pq);
+  auto tree =
+      QueryPlannerClass{qec,
+                        std::make_shared<ad_utility::CancellationHandle<>>()}
+          .createExecutionTree(pq);
+  tree.isRoot() = true;
+  return tree;
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and

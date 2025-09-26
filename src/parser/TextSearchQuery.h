@@ -188,6 +188,10 @@ struct TextSearchQuery : MagicServiceQuery {
   // TextSearchConfig.
   void addParameter(const SparqlTriple& triple) override;
 
+  // Override `addGraph` to throw an exception, because only triples are
+  // supported in the configuration of a `TextSearchQuery`.
+  void addGraph(const GraphPatternOperation& childGraphPattern) override;
+
   // Convert each config of configVarToConfigs_ to either word search config
   // or entity search config. Check all query mistakes that can only be checked
   // once the complete query is parsed.
