@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -311,6 +312,13 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
+  const bool pinResultWithName =
+      _executionContext->pinResultWithName().has_value() && isRoot;
+
+  if (pinResultWithName) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
+
   // If pinned there's no point in computing the result lazily.
   if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
     computationMode = ComputationMode::FULLY_MATERIALIZED;
@@ -368,6 +376,23 @@ std::shared_ptr<const Result> Operation::getResult(
                 "columns than expected. There's something wrong with the cache "
                 "key.");
       updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
+
+    // Pin result to the named result cache if so requested.
+    if (pinResultWithName) {
+      const auto& name = _executionContext->pinResultWithName().value();
+      const auto& actualResult = result._resultPointer->resultTable();
+      AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
+      // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
+      // it would require a mojor refactoring of the `Result` class.
+      auto valueForNamedResultCache = NamedResultCache::Value{
+          std::make_shared<const IdTable>(actualResult.idTable().clone()),
+          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
+          actualResult.localVocab().clone()};
+      _executionContext->namedResultCache().store(
+          name, std::move(valueForNamedResultCache));
+
+      runtimeInfo().addDetail("pinned-with-name", name);
     }
 
     return result._resultPointer->resultTablePtr();

@@ -14,6 +14,7 @@
 
 #include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
@@ -40,6 +41,7 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
+  FRIEND_TEST(ServerTest, configurePinnedResultWithName);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -79,6 +81,7 @@ class Server {
   unsigned short port_;
   std::string accessToken_;
   QueryResultCache cache_;
+  NamedResultCache namedResultCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
@@ -201,11 +204,19 @@ class Server {
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit);
+                        TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
+
+  // Configure pinned of named results on the `qec`. If `pinResultWithName` is
+  // set, then the `qec` is configured such that the query result will be stored
+  // in the named query cache. Throws if named pinning is required, but the
+  // access token is not okay.
+  static void configurePinnedResultWithName(
+      const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+      QueryExecutionContext& qec);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation,
