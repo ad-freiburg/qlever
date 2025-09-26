@@ -45,7 +45,6 @@ TEST(NamedResultCache, basicWorkflow) {
         {1, 0},
         localVocab.clone(),
         std::nullopt};
-    // TODO with geo
   };
   // store something in the cache and check that it's there
   {
