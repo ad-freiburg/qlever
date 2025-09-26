@@ -43,7 +43,9 @@ TEST(NamedResultCache, basicWorkflow) {
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
-        localVocab.clone()};
+        localVocab.clone(),
+        std::nullopt};
+    // TODO with geo
   };
   // store something in the cache and check that it's there
   {
@@ -52,7 +54,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -65,7 +68,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -86,7 +90,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
