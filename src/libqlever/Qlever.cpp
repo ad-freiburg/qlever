@@ -123,8 +123,8 @@ std::string Qlever::query(const QueryPlan& queryPlan,
 void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
   auto queryPlan = parseAndPlanQuery(std::move(query));
   auto& [qet, qec, parsedQuery] = queryPlan;
-  qec->pinResultWithName() =
-      std::move(name);  // TODO support for geo index cache pinning
+  qec->pinResultWithName() = {
+      std::move(name)};  // TODO support for geo index cache pinning
 
   [[maybe_unused]] auto result = this->query(queryPlan);
 }
