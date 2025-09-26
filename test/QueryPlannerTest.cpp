@@ -2472,7 +2472,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <http://example.com/some-nonsense> ;"
+                "spatialSearch:joinType <http://example.com/some-nonsense> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2487,7 +2487,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <intersects> ;"
+                "spatialSearch:joinType <intersects> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2506,7 +2506,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:numNearestNeighbors 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <within-dist> ;"
+                "spatialSearch:joinType <within-dist> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2524,13 +2524,80 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:numNearestNeighbors 5 ;"
                 "spatialSearch:algorithm spatialSearch:s2 ;"
-                "spatialSearch:joinType <within-dist> ;"
+                "spatialSearch:joinType <within-dist> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
       ::testing::HasSubstr(
           "The selected algorithm does not support the `<joinType>` option"));
-  // TODO<ullingerc> Test exp algo with body, without cache name, ...
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:experimentalRightCacheName \"dummy\" . "
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "`<experimentalRightCacheName>` is only supported by the "
+          "`<experimentalPointPolyline>` algorithm"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ;"
+          "spatialSearch:experimentalRightCacheName <http://example.com> . "
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "must be the name of a pinned cache entry as a string literal"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ."
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "parameter `<experimentalRightCacheName>` is mandatory"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ;"
+          "spatialSearch:experimentalRightCacheName \"dummy\" . "
+          " { ?a <p> ?b . }"
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "a group graph pattern for the right side may not be specified"));
 }
 
 // _____________________________________________________________________________
@@ -2580,15 +2647,6 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(testQuery, ::testing::_, qec),
         ::testing::HasSubstr("no cached geometry index was found"));
-
-    // // Query planning goes through in this case
-    // h::expect(testQuery, ::testing::_, qec);
-
-    // // But query processing fails
-    // auto testQueryPlan = h::parseAndPlan(testQuery, qec);
-    // AD_EXPECT_THROW_WITH_MESSAGE(
-    //    testQueryPlan.getResult(),
-    //     ::testing::HasSubstr("no cached geometry index was found"));
   }
 
   // Requested query for right child correctly pinned
@@ -2660,31 +2718,6 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   }
 
   // todo tests for new wrong config checks
-
-  //   std::string queryToPin = "SELECT * { ?s <p> ?o}";
-  //   auto qec = ad_utility::testing::getQec(kb);
-  //   qec->pinWithExplicitName() = {"dummyQuery", V{"?o"}};
-
-  //   query = "SELECT * { SERVICE ql:named-cached-query-3 { VALUES ?x {3 4 5}
-  //   }}"; AD_EXPECT_THROW_WITH_MESSAGE(
-  //       h::parseAndPlan(query, qec),
-  //       ::testing::HasSubstr("Unsupported element in a magic service query of
-  //       "
-  //                            "type `named cached query`"));
-
-  //   // Now pin a query to the named query cache, and check that the query
-  //   planning
-  //   // works as expected.
-  //   qec->pinWithExplicitName() = {"dummyQuery"};
-  //   auto plan = h::parseAndPlan(queryToPin, qec);
-  //   [[maybe_unused]] auto pinResult = plan.getResult();
-
-  //   query = "SELECT * { SERVICE ql:named-cached-query-dummyQuery {}}";
-  //   // We only check the size estimate (which in this case is exact), because
-  //   // more detailed tests in `NamedQueryCacheTest.cpp` check the correct
-  //   contents
-  //   // etc. of cached queries.
-  //   h::expect(query, h::ExplicitIdTableOperation(3), qec);
 }
 
 // _____________________________________________________________________________
