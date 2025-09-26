@@ -21,6 +21,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/HttpError.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
 #include "global/RuntimeParameters.h"
@@ -278,12 +279,20 @@ auto Server::prepareOperation(
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
+  std::optional<std::string> pinNamedGeoIndex =
+      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
+                                             {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "")
             << (pinResultWithName
                     ? absl::StrCat(" [pin result with name \"",
-                                   pinResultWithName.value(), "\"]")
+                                   pinResultWithName.value(),
+                                   (pinNamedGeoIndex
+                                        ? absl::StrCat(" with geo index on ?",
+                                                       pinNamedGeoIndex.value())
+                                        : ""),
+                                   "\"]")
                     : "")
             << "\n"
             << ad_utility::truncateOperationString(operationSPARQL)
@@ -292,14 +301,16 @@ auto Server::prepareOperation(
                             sortPerformanceEstimator_, &namedResultCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
-  configurePinnedResultWithName(pinResultWithName, accessTokenOk, qec);
+  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
 }
 
 // _____________________________________________________________________________
 void Server::configurePinnedResultWithName(
-    const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+    const std::optional<std::string>& pinResultWithName,
+    const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
   if (!pinResultWithName.has_value()) {
     return;
@@ -308,7 +319,14 @@ void Server::configurePinnedResultWithName(
     throw std::runtime_error(
         "Pinning a result with a name requires a valid access token");
   }
-  qec.pinResultWithName() = pinResultWithName.value();
+  auto getGeoCacheVar = [&]() -> std::optional<Variable> {
+    if (!pinNamedGeoIndex.has_value()) {
+      return std::nullopt;
+    }
+    return Variable{absl::StrCat("?", pinNamedGeoIndex.value())};
+  };
+  qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
+      pinResultWithName.value(), getGeoCacheVar()};
 }
 
 // _____________________________________________________________________________

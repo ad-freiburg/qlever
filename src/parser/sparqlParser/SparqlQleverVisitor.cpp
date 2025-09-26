@@ -1248,7 +1248,7 @@ GraphPatternOperation Visitor::visitNamedCachedResult(
     const TripleComponent::Iri& target,
     Parser::ServiceGraphPatternContext* ctx) {
   parsedQuery::NamedCachedResult namedQuery{target};
-  parseBodyOfMagicServiceQuery(namedQuery, ctx, "named cached query");
+  parseBodyOfMagicServiceQuery(namedQuery, ctx, "named cached result");
   return namedQuery;
 }
 
