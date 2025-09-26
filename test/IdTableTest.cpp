@@ -376,6 +376,91 @@ TEST(IdTable, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
+TEST(IdTable, insertSubsetAtEnd) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+
+    Table src{3, std::move(additionalArgs.at(0))...};
+    src.push_back({make(10), make(11), make(12)});
+    src.push_back({make(20), make(21), make(22)});
+    src.push_back({make(30), make(31), make(32)});
+
+    Table dst{3, std::move(additionalArgs.at(1))...};
+    dst.push_back({make(1), make(2), make(3)});
+
+    // insert indices 2 and 0 (order-preserving)
+    std::vector<size_t> indices{2, 0};
+    dst.insertSubsetAtEnd(src, indices);
+
+    // expected rows: original dst row, then src row 2, then src row 0
+    ASSERT_EQ(dst.size(), 3u);
+    EXPECT_EQ(dst[0][0], make(1));
+    EXPECT_EQ(dst[1][0], make(30));
+    EXPECT_EQ(dst[2][0], make(10));
+    EXPECT_EQ(dst[1][1], make(31));
+    EXPECT_EQ(dst[2][1], make(11));
+  };
+  runTestForDifferentTypes<2>(runTestForIdTable,
+                              "idTableTest.insertSubsetAtEnd");
+}
+
+TEST(IdTable, mergeTwoSortedTables_and_member_wrappers) {
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = typename decltype(t)::type;
+    // Only compile merge calls when storage supports allocatable columns
+    if constexpr (!Table::columnsAreAllocatable) {
+      return;  // skip for BufferedVector storage
+    } else {
+      // Two input tables that are already sorted lexicographically on (col0,
+      // col1)
+      Table a{2, std::move(additionalArgs.at(0))...};
+      Table b{2, std::move(additionalArgs.at(0))...};
+
+      a.push_back({make(1), make(10)});
+      a.push_back({make(3), make(30)});
+      a.push_back({make(5), make(50)});
+
+      b.push_back({make(2), make(20)});
+      b.push_back({make(3), make(31)});
+      b.push_back({make(6), make(60)});
+
+      // Expected merged order: (1,10),(2,20),(3,30),(3,31),(5,50),(6,60)
+      Table expected{2, std::move(additionalArgs.at(0))...};
+      expected.push_back({make(1), make(10)});
+      expected.push_back({make(2), make(20)});
+      expected.push_back({make(3), make(30)});
+      expected.push_back({make(3), make(31)});
+      expected.push_back({make(5), make(50)});
+      expected.push_back({make(6), make(60)});
+
+      std::vector<ColumnIndex> sortCols{ColumnIndex(0), ColumnIndex(1)};
+      // Member that returns a new merged table
+      Table merged = a.mergeSortedTable(b, sortCols);
+      EXPECT_EQ(merged, expected);
+      // Ensure original tables unchanged
+      EXPECT_EQ(a.size(), 3u);
+      EXPECT_EQ(b.size(), 3u);
+      // In-place merge
+      Table a2 = clone(a, std::move(additionalArgs.at(0))...);
+      a2.mergeSortedTableIntoThis(b, sortCols);
+      EXPECT_EQ(a2, expected);
+      // Static function with explicit allocator
+      Table mergedStatic =
+          Table::mergeTwoSortedTables(a, b, sortCols, a.getAllocator());
+      EXPECT_EQ(mergedStatic, expected);
+      // Edge case: merging with an empty table yields the original table
+      Table empty{2, std::move(additionalArgs.at(0))...};
+      Table mergedWithEmpty = a.mergeSortedTable(empty, sortCols);
+      EXPECT_EQ(mergedWithEmpty, a);
+      Table a3 = clone(a, std::move(additionalArgs.at(0))...);
+      a3.mergeSortedTableIntoThis(empty, sortCols);
+      EXPECT_EQ(a3, a);
+    }
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable,
+                              "idTableTest.mergeSortedTables");
+}
+
 // _____________________________________________________________________________
 TEST(IdTable, insertAtEndWithPermutationAndLimit) {
   // A lambda that is used as the `testCase` argument to the
