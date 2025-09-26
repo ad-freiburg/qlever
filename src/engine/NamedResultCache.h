@@ -22,6 +22,8 @@ class NamedResultCache {
  public:
   // The cached result. In addition to the `IdTable` of the result, also
   // store all the information required to construct a `QueryExecutionTree`.
+  // Optionally, a geometry index `cachedGeoIndex_` can be precomputed on a
+  // column of the result table for spatial joins with a constant (right) child.
   struct Value {
     std::shared_ptr<const IdTable> result_;
     VariableToColumnMap varToColMap_;
