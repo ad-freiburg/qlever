@@ -394,7 +394,8 @@ class StringBatcher {
 //  4. STREAMABLE_YIELD(someString) is either `co_yield someString` (20) or
 //  `streamableYielder(someString)` (17).
 //  5. STREAMABLE_RETURN is either `co_return`(20) or `return`(17).
-// To see these macros in action, see the examples in `StringBatcherTest.cpp`
+// To see these macros in action, see the examples in `StringBatcherTest.cpp`,
+// and their usage in `ExportQueryExecutionTrees.h/.cpp`.
 
 #ifndef QLEVER_STRIP_FEATURES_CPP_17
 using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;

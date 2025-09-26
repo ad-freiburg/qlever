@@ -1,6 +1,11 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Claude Code Assistant
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -12,20 +17,12 @@ using ::testing::_;
 using ::testing::InSequence;
 using ::testing::StrictMock;
 
+// First some example tests that demonstrate how to use the `STREAMABLE_...`
+// macros:
+
 namespace {
-constexpr size_t TEST_BATCH_SIZE = 10;
-}  // namespace
-
-// Mock callback to verify batch processing behavior
-class MockBatchCallback {
- public:
-  MOCK_METHOD(void, call, (std::string_view), (const));
-
-  void operator()(std::string_view batch) const { call(batch); }
-};
-
-// First some example tests on how to use the `STREAMABLE_` macros:
-namespace {
+// A simple generator, that yields "hello" `i` times and concatenates the result
+// into batches.
 STREAMABLE_GENERATOR_TYPE yieldSomething(size_t i,
                                          STREAMABLE_YIELDER_ARG_DECL) {
   for (size_t j = 0; j < i; ++j) {
@@ -36,16 +33,24 @@ STREAMABLE_GENERATOR_TYPE yieldSomething(size_t i,
 }  // namespace
 
 #ifdef QLEVER_STRIP_FEATURES_CPP_17
+// Using `yieldSomething` from above in C++17 model
 TEST(StringBatcher, StreamMacros) {
   std::string result;
+  // Create a `StringBatcher` that does something with the yielded batches.
   StringBatcher batcher{[&result](const auto& batch) { result.append(batch); }};
+  // Call the "generator" with a `reference_wrapper` to the `batcher` as the
+  // last argument.
   yieldSomething(3, std::ref(batcher));
+
+  // Finish to also make the last batch visible.
   batcher.finish();
   EXPECT_EQ(result, "hellohellohello");
 }
 #else
 TEST(StringBatcher, StreamMacros) {
   std::vector<std::string> result;
+  // In C++20, `yieldSomething` is an `input_range` that just yields the
+  // results.
   for (const auto& batch : yieldSomething(3)) {
     result.emplace_back(batch);
   };
@@ -53,6 +58,20 @@ TEST(StringBatcher, StreamMacros) {
 }
 
 #endif
+
+// In the following there are tests for the `StringBatcher` class.
+
+namespace {
+constexpr size_t TEST_BATCH_SIZE = 10;
+
+// Mock callback to verify batch processing behavior
+class MockBatchCallback {
+ public:
+  MOCK_METHOD(void, call, (std::string_view), (const));
+
+  void operator()(std::string_view batch) const { call(batch); }
+};
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(StringBatcher, EmptyBatcherCallsCallbackOnFinish) {
