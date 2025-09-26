@@ -295,7 +295,6 @@ T getSingleElement(generator<T, Details> g) {
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
 }
-
 }  // namespace cppcoro
 
 #endif
