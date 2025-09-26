@@ -16,6 +16,7 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "src/engine/NamedResultCache.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
@@ -88,7 +89,7 @@ using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
 // Forward declaration because of cyclic dependency
-class NamedQueryCache;
+class NamedResultCache;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -98,7 +99,7 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
-      NamedQueryCache* namedCache,
+      NamedResultCache* namedResultCache,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -161,14 +162,12 @@ class QueryExecutionContext {
   }
 
   // Access the cache for explicitly named query.
-  NamedQueryCache& namedQueryCache() {
-    AD_CORRECTNESS_CHECK(namedQueryCache_ != nullptr);
-    return *namedQueryCache_;
+  NamedResultCache& namedResultCache() {
+    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
+    return *namedResultCache_;
   }
 
-  // If this optional contains a string, then the result of the query that is
-  // executed using this context will be stored in the `namedQueryCache()` using
-  // the string as the query name. If it is `nullopt`, no such pinning is done.
+  // Accessors; see `pinWithExplicitName_` for an explanation.
   auto& pinWithExplicitName() { return pinWithExplicitName_; }
   const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
 
@@ -192,10 +191,11 @@ class QueryExecutionContext {
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 
-  // A cache for named queries.
-  NamedQueryCache* namedQueryCache_ = nullptr;
+  // The cache for named results.
+  NamedResultCache* namedResultCache_ = nullptr;
 
-  // See the getter with the same name for documentation.
+  // Name under which the result of the query that is executed using this
+  // context should be cached. When `std::nullopt`, the result is not cached.
   std::optional<std::string> pinWithExplicitName_ = std::nullopt;
 };
 

@@ -3,48 +3,47 @@
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//                  Chair of Algorithms and Data Structures.
 
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 
 // _____________________________________________________________________________
-std::shared_ptr<ExplicitIdTableOperation> NamedQueryCache ::getOperation(
-    const Key& key, QueryExecutionContext* ctx) {
-  const auto& ptr = get(key);
-  const auto& [table, map, sortedOn, localVocab] = *ptr;
-  auto res = std::make_shared<ExplicitIdTableOperation>(
+std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
+    const Key& name, QueryExecutionContext* qec) {
+  const auto& result = get(name);
+  const auto& [table, map, sortedOn, localVocab] = *result;
+  auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       ctx, table, map, sortedOn, localVocab.clone());
-  return res;
+  return resultAsOperation;
 }
 
 // _____________________________________________________________________________
-auto NamedQueryCache::get(const Key& key) -> std::shared_ptr<const Value> {
-  auto l = cache_.wlock();
-  if (!l->contains(key)) {
+auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
+  auto lock = cache_.wlock();
+  if (!lock->contains(name)) {
     throw std::runtime_error{
-        absl::StrCat("The named query with the name \"", key,
-                     "\" was not pinned to the named query cache")};
+        absl::StrCat("The cached result with name \"", name,
+                     "\" is not contained in the named result cache.")};
   }
-  return (*l)[key];
+  return (*l)[name];
 }
 
 // _____________________________________________________________________________
-void NamedQueryCache::store(const Key& key, Value value) {
+void NamedResultCache::store(const Key& name, Value result) {
   auto lock = cache_.wlock();
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  lock->erase(key);
-  lock->insert(key, std::move(value));
+  lock->erase(name);
+  lock->insert(name, std::move(result));
 }
 
 // _____________________________________________________________________________
-void NamedQueryCache::erase(const Key& key) { cache_.wlock()->erase(key); }
+void NamedResultCache::erase(const Key& name) { cache_.wlock()->erase(name); }
 
 // _____________________________________________________________________________
-void NamedQueryCache::clear() { cache_.wlock()->clearAll(); }
+void NamedResultCache::clear() { cache_.wlock()->clearAll(); }
 
 // _____________________________________________________________________________
-size_t NamedQueryCache::numEntries() const {
+size_t NamedResultCache::numEntries() const {
   return cache_.rlock()->numNonPinnedEntries();
 }

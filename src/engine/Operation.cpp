@@ -7,7 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -312,10 +312,10 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  const bool pinWithExplicitName =
-      _executionContext->pinWithExplicitName().has_value() && isRoot;
+  const bool pinResultWithName =
+      _executionContext->pinResultWithName().has_value() && isRoot;
 
-  if (pinWithExplicitName) {
+  if (pinResultWithName) {
     computationMode = ComputationMode::FULLY_MATERIALIZED;
   }
 
@@ -378,21 +378,21 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
-    if (pinWithExplicitName) {
-      // The query is to be pinned in the named query cache.
-      const auto& name = _executionContext->pinWithExplicitName().value();
+    // Pin result to the named result cache if so requested.
+    if (pinResultWithName) {
+      const auto& name = _executionContext->pinResultWithName().value();
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
-      // it would require great refactorings of the `Result` class.
-      auto valueForNamedCache = NamedQueryCache::Value{
+      // it would require a mojor refactoring of the `Result` class.
+      auto valueForNamedResultCache = NamedResultCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
           actualResult.localVocab().clone()};
-      _executionContext->namedQueryCache().store(name,
-                                                 std::move(valueForNamedCache));
+      _executionContext->namedQueryCache().store(
+          name, std::move(valueForNamedResultCache));
 
-      runtimeInfo().addDetail("pinned-with-explicit-name", name);
+      runtimeInfo().addDetail("pinned-with-name", name);
     }
 
     return result._resultPointer->resultTablePtr();
