@@ -169,12 +169,12 @@ class QueryExecutionContext {
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
   // the string given in `PinResultWithName` as the query name. If
-  // `sjIndexVar_` is also set, a geo index is built and cached in-memory on the
-  // column of this variable. If `pinResultWithName_` is `nullopt`, no
+  // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
+  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
   // pinning is done.
   struct PinResultWithName {
     std::string name_;
-    std::optional<Variable> sjIndexVar_ = std::nullopt;
+    std::optional<Variable> geoIndexVar_ = std::nullopt;
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.
