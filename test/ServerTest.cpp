@@ -323,7 +323,7 @@ TEST(ServerTest, configurePinnedResultWithName) {
   std::optional<std::string> pinNamed = "test_query_name";
   Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
   EXPECT_TRUE(qec->pinResultWithName().has_value());
-  EXPECT_EQ(qec->pinResultWithName().value(), "test_query_name");
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
