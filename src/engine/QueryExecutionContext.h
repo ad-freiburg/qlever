@@ -88,7 +88,7 @@ using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
 // Forward declaration because of cyclic dependency
-class NamedQueryCache;
+class NamedResultCache;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -98,7 +98,7 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
-      NamedQueryCache* namedCache,
+      NamedResultCache* namedResultCache,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -161,23 +161,25 @@ class QueryExecutionContext {
   }
 
   // Access the cache for explicitly named query.
-  NamedQueryCache& namedQueryCache() {
-    AD_CORRECTNESS_CHECK(namedQueryCache_ != nullptr);
-    return *namedQueryCache_;
+  NamedResultCache& namedResultCache() {
+    AD_CORRECTNESS_CHECK(namedResultCache_ != nullptr);
+    return *namedResultCache_;
   }
 
-  // If `pinWithExplicitName_` is set, then the result of the query that is
+  // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
-  // the string given in `PinWithExplicitName` as the query name. If
+  // the string given in `PinResultWithName` as the query name. If
   // `sjIndexVar_` is also set, a geo index is built and cached in-memory on the
-  // column of this variable. If `pinWithExplicitName_` is `nullopt`, no
+  // column of this variable. If `pinResultWithName_` is `nullopt`, no
   // pinning is done.
-  struct PinWithExplicitName {
+  struct PinResultWithName {
     std::string name_;
     std::optional<Variable> sjIndexVar_ = std::nullopt;
   };
-  auto& pinWithExplicitName() { return pinWithExplicitName_; }
-  const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
+
+  // Accessors; see `pinResultWithName_` for an explanation.
+  auto& pinResultWithName() { return pinResultWithName_; }
+  const auto& pinResultWithName() const { return pinResultWithName_; }
 
  private:
   static bool areWebSocketUpdatesEnabled();
@@ -199,11 +201,13 @@ class QueryExecutionContext {
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 
-  // A cache for named queries.
-  NamedQueryCache* namedQueryCache_ = nullptr;
+  // The cache for named results.
+  NamedResultCache* namedResultCache_ = nullptr;
 
-  // See the getter with the same name for documentation.
-  std::optional<PinWithExplicitName> pinWithExplicitName_ = std::nullopt;
+  // Name (and optional variable for geometry index) under which the result of
+  // the query that is executed using this context should be cached. When
+  // `std::nullopt`, the result is not cached.
+  std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

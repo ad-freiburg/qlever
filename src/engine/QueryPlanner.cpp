@@ -33,7 +33,7 @@
 #include "engine/Load.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
@@ -2957,8 +2957,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::NamedCachedQuery>) {
-    visitNamedCachedQuery(arg);
+  } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
+    visitNamedCachedResult(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -3147,10 +3147,10 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitNamedCachedQuery(
-    const parsedQuery::NamedCachedQuery& arg) {
+void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
+    const parsedQuery::NamedCachedResult& arg) {
   auto candidate =
-      SubtreePlan{planner_._qec, planner_._qec->namedQueryCache().getOperation(
+      SubtreePlan{planner_._qec, planner_._qec->namedResultCache().getOperation(
                                      arg.identifier(), planner_._qec)};
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }

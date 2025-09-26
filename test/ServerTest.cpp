@@ -36,12 +36,13 @@ auto parseQuery(std::string query,
 }  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
-                  {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
+                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
               testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinresult", {"true"}}}),
+  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
               testing::Pair(false, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinsubtrees", {"otherValue"}}}),
-              testing::Pair(false, false));
+  EXPECT_THAT(
+      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
+      testing::Pair(false, false));
 }
 
 // _____________________________________________________________________________
@@ -310,29 +311,29 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, configurePinnedNamedQuery) {
+TEST(ServerTest, configurePinnedResultWithName) {
   auto qec = ad_utility::testing::getQec();
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedNamedQuery(noPinNamed, std::nullopt, true, *qec);
-  EXPECT_FALSE(qec->pinWithExplicitName().has_value());
+  Server::configurePinnedResultWithName(noPinNamed, true, *qec);
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedNamedQuery(pinNamed, std::nullopt, true, *qec);
-  EXPECT_TRUE(qec->pinWithExplicitName().has_value());
-  EXPECT_EQ(qec->pinWithExplicitName().value().name_, "test_query_name");
+  Server::configurePinnedResultWithName(pinNamed, true, *qec);
+  EXPECT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value(), "test_query_name");
 
   // Reset for next test
-  qec->pinWithExplicitName() = std::nullopt;
+  qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedNamedQuery(pinNamed, std::nullopt, false, *qec),
+      Server::configurePinnedResultWithName(pinNamed, false, *qec),
       testing::HasSubstr(
-          "pinning of named queries requires a valid access token"));
+          "Pinning a result with a name requires a valid access token"));
 
   // Verify qec was not modified when exception was thrown
-  EXPECT_FALSE(qec->pinWithExplicitName().has_value());
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
 }

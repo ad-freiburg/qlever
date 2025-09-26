@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -172,7 +172,7 @@ class Qlever {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
-  mutable NamedQueryCache namedQueryCache_;
+  mutable NamedResultCache namedResultCache_;
   bool enablePatternTrick_;
 
  public:
@@ -220,14 +220,15 @@ class Qlever {
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
-  // Pin the query with the explicit name. This query can then later on be
-  // retrieved in a query via `SERVICE ql:named-cached-query-<queryName> {}`.
-  void pinNamedQuery(std::string queryName, std::string query);
+  // Plan, parse, and execute the given `query` and pin the result to the cache
+  // with the given `name`. This result can then be reused in a query as
+  // follows: `SERVICE ql:cached-result-with-name-<name> {}`.
+  void queryAndPinResultWithName(
+      std::string name, std::string query);  // TODO `PinResultWithName` here
 
-  // Interface to clear either a single query (via its name), or all queries
-  // from the explicit cache.
-  void eraseNamedQuery(const std::string& queryName);
-  void clearNamedQueryCache();
+  // Clear the result with the given `name` from the cache.
+  void eraseResultWithName(std::string name);
+  void clearNamedResultCache();
 };
 }  // namespace qlever
 

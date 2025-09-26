@@ -8,7 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
@@ -182,7 +182,7 @@ class OperationTestFixture : public testing::Test {
     return makeTestIndex("OperationTest", std::move(indexConfig));
   }();
   QueryResultCache cache;
-  NamedQueryCache namedCache;
+  NamedResultCache namedCache;
   QueryExecutionContext qec{
       index,
       &cache,
@@ -481,7 +481,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
-  NamedQueryCache namedCache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
       index,
       &cache,
@@ -511,7 +511,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
-  NamedQueryCache namedCache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
       index,
       &cache,
@@ -557,7 +557,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
-  NamedQueryCache namedCache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
       index,
       &cache,

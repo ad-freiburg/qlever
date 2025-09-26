@@ -7,7 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
-#include "engine/NamedQueryCache.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "global/RuntimeParameters.h"
@@ -313,10 +313,10 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  const bool pinWithExplicitName =
-      _executionContext->pinWithExplicitName().has_value() && isRoot;
+  const bool pinResultWithName =
+      _executionContext->pinResultWithName().has_value() && isRoot;
 
-  if (pinWithExplicitName) {
+  if (pinResultWithName) {
     computationMode = ComputationMode::FULLY_MATERIALIZED;
   }
 
@@ -379,7 +379,8 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
-    if (pinWithExplicitName) {
+    // Pin result to the named result cache if so requested.
+    if (pinResultWithName) {
       // The query is to be pinned in the named query cache.
       const auto& [name, geoIndexVar] =
           _executionContext->pinWithExplicitName().value();
@@ -402,14 +403,14 @@ std::shared_ptr<const Result> Operation::getResult(
 
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
       // it would require great refactorings of the `Result` class.
-      auto valueForNamedCache = NamedQueryCache::Value{
+      auto valueForNamedCache = NamedResultCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
           actualResult.localVocab().clone(), geoIndex()};
-      _executionContext->namedQueryCache().store(name,
-                                                 std::move(valueForNamedCache));
+      _executionContext->namedResultCache().store(
+          name, std::move(valueForNamedCache));
 
-      runtimeInfo().addDetail("pinned-with-explicit-name", name);
+      runtimeInfo().addDetail("pinned-with-name", name);
       if (geoIndexVar.has_value()) {
         runtimeInfo().addDetail("pinned-geo-index-on-var",
                                 geoIndexVar.value().name());

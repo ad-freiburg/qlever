@@ -276,53 +276,56 @@ auto Server::prepareOperation(
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
-  std::optional<std::string> pinNamed =
-      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
+  std::optional<std::string> pinResultWithName =
+      ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
+                                             {});
   std::optional<std::string> pinNamedGeoIndex =
       ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
                                              {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << (pinNamed
-                    ? absl::StrCat(" [pin named as ", pinNamed.value(),
+            << (pinSubtrees ? " [pin subresults]" : "")
+            << (pinResultWithName
+                    ? absl::StrCat(" [pin result with name \"",
+                                   pinResultWithName.value(),
                                    (pinNamedGeoIndex
                                         ? absl::StrCat(" with geo index on ?",
                                                        pinNamedGeoIndex.value())
                                         : ""),
-                                   "]")
+                                   "\"]")
                     : "")
             << "\n"
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, &namedQueryCache_,
+                            sortPerformanceEstimator_, &namedResultCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
 
-  configurePinnedNamedQuery(pinNamed, pinNamedGeoIndex, accessTokenOk, qec);
+  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                accessTokenOk, qec);
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
 }
 
 // _____________________________________________________________________________
 void Server::configurePinnedNamedQuery(
-    const std::optional<std::string>& pinNamed,
+    const std::optional<std::string>& pinResultWithName,
     const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
-  if (!pinNamed.has_value()) {
+  if (!pinResultWithName.has_value()) {
     return;
   }
   if (!accessTokenOk) {
     throw std::runtime_error(
-        "The pinning of named queries requires a valid access token");
+        "Pinning a result with a name requires a valid access token");
   }
   if (pinNamedGeoIndex.has_value()) {
-    qec.pinWithExplicitName() = QueryExecutionContext::PinWithExplicitName{
-        pinNamed.value(),
+    qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
+        pinResultWithName.value(),
         Variable{absl::StrCat("?", pinNamedGeoIndex.value())}};
   } else {
-    qec.pinWithExplicitName() =
-        QueryExecutionContext::PinWithExplicitName{pinNamed.value()};
+    qec.pinResultWithName() =
+        QueryExecutionContext::PinResultWithName{pinResultWithName.value()};
   }
 }
 
@@ -402,8 +405,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
-    logCommand(cmd, "clear the cache for named queries");
-    namedQueryCache_.clear();
+    logCommand(cmd, "clear the cache for named results");
+    namedResultCache_.clear();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
@@ -606,13 +609,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params) {
-  const bool pinSubtrees =
-      ad_utility::url_parser::checkParameter(params, "pinsubtrees", "true")
+  const bool pinSubresults =
+      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
           .has_value();
   const bool pinResult =
-      ad_utility::url_parser::checkParameter(params, "pinresult", "true")
+      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
           .has_value();
-  return {pinSubtrees, pinResult};
+  return {pinSubresults, pinResult};
 }
 
 // ____________________________________________________________________________
@@ -698,14 +701,14 @@ nlohmann::json Server::composeStatsJson() const {
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
-  result["num-pinned-entries"] = cache_.numPinnedEntries();
-  result["num-named-queries"] = namedQueryCache_.numEntries();
+  result["num-results-unpinned"] = cache_.numNonPinnedEntries();
+  result["num-results-pinned-unnamed"] = cache_.numPinnedEntries();
+  result["num-results-pinned-named"] = namedResultCache_.numEntries();
 
-  // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
+  // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
   // converter.
-  result["non-pinned-size"] = cache_.nonPinnedSize().getBytes();
-  result["pinned-size"] = cache_.pinnedSize().getBytes();
+  result["cache-size-unpinned"] = cache_.nonPinnedSize().getBytes();
+  result["cache-size-pinned"] = cache_.pinnedSize().getBytes();
   return result;
 }
 
@@ -996,7 +999,7 @@ UpdateMetadata Server::processUpdateImpl(
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
   cache_.clearAll();
-  namedQueryCache_.clear();
+  namedResultCache_.clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
