@@ -1074,7 +1074,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     std::optional<std::string> exceptionMessage;
     try {
       for (; it != innerGenerator.end(); ++it) {
-        co_yield (std::string{*it});
+        co_yield std::string{*it};
       }
     } catch (const std::exception& e) {
       exceptionMessage = e.what();
@@ -1090,8 +1090,8 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           "Unfortunately due to limitations in the HTTP 1.1 protocol, there is "
           "no better way to report this than to append it to the incomplete "
           "result. The error message was:\n";
-      co_yield (prefix);
-      co_yield (exceptionMessage.value());
+      co_yield prefix;
+      co_yield exceptionMessage.value();
     }
   }(std::move(streamGenerator), std::move(it));
 }
