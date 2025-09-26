@@ -308,7 +308,7 @@ auto Server::prepareOperation(
 }
 
 // _____________________________________________________________________________
-void Server::configurePinnedNamedQuery(
+void Server::configurePinnedResultWithName(
     const std::optional<std::string>& pinResultWithName,
     const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
     QueryExecutionContext& qec) {
