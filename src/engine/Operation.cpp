@@ -379,42 +379,9 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
-    // Pin result to the named result cache if so requested.
+    // Pin result to the named result cache if requested.
     if (pinResultWithName) {
-      // The query is to be pinned in the named query cache.
-      const auto& [name, geoIndexVar] =
-          _executionContext->pinResultWithName().value();
-      const auto& actualResult = result._resultPointer->resultTable();
-      AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
-
-      // If a geo index is to be cached, get the respective column using the
-      // given variable and compute the index.
-      auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
-        if (!geoIndexVar.has_value()) {
-          return std::nullopt;
-        }
-        auto colIndex = getExternallyVisibleVariableColumns()
-                            .at(geoIndexVar.value())
-                            .columnIndex_;
-        return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                      actualResult.idTable(),
-                                      _executionContext->getIndex()};
-      };
-
-      // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
-      // it would require a major refactoring of the `Result` class.
-      auto valueForNamedResultCache = NamedResultCache::Value{
-          std::make_shared<const IdTable>(actualResult.idTable().clone()),
-          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
-          actualResult.localVocab().clone(), geoIndex()};
-      _executionContext->namedResultCache().store(
-          name, std::move(valueForNamedResultCache));
-
-      runtimeInfo().addDetail("pinned-with-name", name);
-      if (geoIndexVar.has_value()) {
-        runtimeInfo().addDetail("pinned-geo-index-on-var",
-                                geoIndexVar.value().name());
-      }
+      storeToNamedResultCache(result._resultPointer->resultTable());
     }
 
     return result._resultPointer->resultTablePtr();
@@ -455,11 +422,47 @@ std::shared_ptr<const Result> Operation::getResult(
 }
 
 // ______________________________________________________________________
-
 std::chrono::milliseconds Operation::remainingTime() const {
   auto interval = deadline_ - std::chrono::steady_clock::now();
   return std::max(
       0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
+}
+
+// _____________________________________________________________________________
+void Operation::storeToNamedResultCache(const Result& result) {
+  // The query result is to be pinned in the named query cache.
+  const auto& [name, geoIndexVar] =
+      _executionContext->pinResultWithName().value();
+  AD_CORRECTNESS_CHECK(result.isFullyMaterialized());
+
+  // If a geo index is to be cached, get the respective column using the
+  // given variable and compute the index.
+  auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
+    if (!geoIndexVar.has_value()) {
+      return std::nullopt;
+    }
+    auto colIndex = getExternallyVisibleVariableColumns()
+                        .at(geoIndexVar.value())
+                        .columnIndex_;
+    return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
+                                  result.idTable(),
+                                  _executionContext->getIndex()};
+  };
+
+  // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
+  // it would require a major refactoring of the `Result` class.
+  auto valueForNamedResultCache = NamedResultCache::Value{
+      std::make_shared<const IdTable>(result.idTable().clone()),
+      getExternallyVisibleVariableColumns(), result.sortedBy(),
+      result.localVocab().clone(), geoIndex()};
+  _executionContext->namedResultCache().store(
+      name, std::move(valueForNamedResultCache));
+
+  runtimeInfo().addDetail("pinned-with-name", name);
+  if (geoIndexVar.has_value()) {
+    runtimeInfo().addDetail("pinned-geo-index-on-var",
+                            geoIndexVar.value().name());
+  }
 }
 
 // _______________________________________________________________________
@@ -500,7 +503,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   signalQueryUpdate();
 }
 
-// ____________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
