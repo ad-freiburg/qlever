@@ -95,6 +95,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
       textIndexBuilder.buildDocsDB(config.docsfile_);
     }
 #else
+    throw std::runtime_error(
+        "Building a fulltext index is not supported using this restricted "
+        "version of QLever");
 #endif
   }
 }
