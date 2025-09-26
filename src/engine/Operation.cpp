@@ -402,13 +402,13 @@ std::shared_ptr<const Result> Operation::getResult(
       };
 
       // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
-      // it would require great refactorings of the `Result` class.
-      auto valueForNamedCache = NamedResultCache::Value{
+      // it would require a major refactoring of the `Result` class.
+      auto valueForNamedResultCache = NamedResultCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
           getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
           actualResult.localVocab().clone(), geoIndex()};
       _executionContext->namedResultCache().store(
-          name, std::move(valueForNamedCache));
+          name, std::move(valueForNamedResultCache));
 
       runtimeInfo().addDetail("pinned-with-name", name);
       if (geoIndexVar.has_value()) {
