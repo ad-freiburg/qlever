@@ -1,6 +1,7 @@
 //  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_BACKPORTS_ALGORITHM_H
 #define QLEVER_SRC_BACKPORTS_ALGORITHM_H
@@ -9,6 +10,7 @@
 #include <functional>
 #include <range/v3/all.hpp>
 #include <utility>
+#include <vector>
 
 #include "backports/concepts.h"
 
@@ -47,6 +49,19 @@ using namespace ::ranges::views;
 using namespace std::views;
 #endif
 }  // namespace views
+
+#ifdef QLEVER_CPP_17
+template <class T, class Alloc, class U>
+constexpr typename std::vector<T, Alloc>::size_type erase(
+    std::vector<T, Alloc>& c, const U& value);
+
+template <class T, class Alloc, class Pred>
+constexpr typename std::vector<T, Alloc>::size_type erase_if(
+    std::vector<T, Alloc>& c, Pred pred);
+#else
+using std::erase;
+using std::erase_if;
+#endif
 
 }  // namespace ql
 

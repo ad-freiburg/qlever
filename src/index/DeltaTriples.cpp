@@ -8,11 +8,13 @@
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "index/DeltaTriples.h"
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -176,7 +178,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
                      triples.end());
   tracer.beginTrace("removeExistingTriples");
-  std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
+  ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
   tracer.endTrace("removeExistingTriples");

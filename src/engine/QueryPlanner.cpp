@@ -1679,8 +1679,8 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     auto shouldBeErased = [&nextTree = nextBestPlan.front()](const auto& plan) {
       return (nextTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) != 0;
     };
-    std::erase_if(currentPlans, shouldBeErased);
-    std::erase_if(cache, shouldBeErased);
+    ql::erase_if(currentPlans, shouldBeErased);
+    ql::erase_if(cache, shouldBeErased);
   };
 
   Plans result;

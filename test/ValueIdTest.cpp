@@ -1,6 +1,7 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/hash/hash_testing.h>
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "global/ValueId.h"
 #include "index/EncodedIriManager.h"
 #include "index/LocalVocabEntry.h"
@@ -213,7 +215,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
   // the NaNs from the `double`s.
-  std::erase_if(doubles, [](double d) { return std::isnan(d); });
+  ql::erase_if(doubles, [](double d) { return std::isnan(d); });
   std::sort(doubles.begin(), doubles.end());
 
   // When sorting ValueIds that hold doubles, the NaN values form a contiguous
