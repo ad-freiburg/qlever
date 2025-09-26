@@ -24,6 +24,8 @@
 #define LOGLEVEL INFO
 #endif
 
+asdfoefin invalid Code
+
 // Abseil also defines its own LOG macro, so we need to undefine it here.
 //
 // NOTE: In case you run into trouble with this conflict, in particular, if you
@@ -48,15 +50,15 @@
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
 
-enum class LogLevel {
-  FATAL = 0,
-  ERROR = 1,
-  WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
-};
+    enum class LogLevel {
+      FATAL = 0,
+      ERROR = 1,
+      WARN = 2,
+      INFO = 3,
+      DEBUG = 4,
+      TIMING = 5,
+      TRACE = 6
+    };
 
 // Macros for the different log levels. Always use these instead of the old
 // `LOG(...)` macro to avoid conflicts with `abseil`.

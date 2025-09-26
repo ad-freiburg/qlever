@@ -167,9 +167,10 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
 #else
-// In the C++17 mode, where the If we disable the `Service` operation isled
-// completely disabn completely in the C++17 mode, hen we canthen we still
-// can't// wffix  th
+// In the C++17 mode, where the If we disable the `Service` operation isled,
+// wemputeSiblingResult` function, which does still provide a dummy for the
+// `preco completely disabn completely in the C++17 mode, hen we canthen we
+// still can't// wffix  th
 struct Service {
   template <typename... Ts>
   static void precomputeSiblingResult(Ts&&...) {}
