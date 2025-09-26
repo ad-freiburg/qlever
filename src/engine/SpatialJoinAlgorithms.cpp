@@ -562,7 +562,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
 // ____________________________________________________________________________
 S2Point SpatialJoinAlgorithms::toS2Point(const GeoPoint& p) {
-  return {S2LatLng::FromDegrees(p.getLat(), p.getLng())};
+  return S2LatLng::FromDegrees(p.getLat(), p.getLng()).ToPoint();
 };
 
 // ____________________________________________________________________________
@@ -664,7 +664,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
-    t.stop();
+    // t.stop();
     AD_LOG_DEBUG << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
