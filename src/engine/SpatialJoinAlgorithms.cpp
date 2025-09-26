@@ -173,8 +173,8 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
-    const IdTable* restable, size_t row, ColumnIndex col, const Index& index) {
-  auto id = restable->at(row, col);
+    const IdTable& restable, size_t row, ColumnIndex col, const Index& index) {
+  auto id = restable.at(row, col);
   auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
@@ -650,8 +650,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
       util::units::Meters(static_cast<float>(maxDist.value()))));
 
-  ad_utility::Timer t{ad_utility::Timer::Started};
-  ad_utility::Timer t2{ad_utility::Timer::Started};
+  ad_utility::Timer timerAll{ad_utility::Timer::Started};
+  ad_utility::Timer timerS2{ad_utility::Timer::Started};
+  ad_utility::Timer timerWrite{ad_utility::Timer::Started};
 
   // Use the index to lookup the points of the other table
   for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
@@ -662,10 +663,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
-    t.cont();
+    timerS2.cont();
     auto res = s2query.FindClosestEdges(&s2target);
-    // t.stop();
-    AD_LOG_DEBUG << "numNearEdgesInRes " << res.size() << std::endl;
+
     for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
       // criteria
@@ -673,19 +673,21 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
       auto dist = S2Earth::ToKm(neighbor.distance());
       deduplicatedSet[indexRow] = dist;
     }
-    t.stop();
-    t2.cont();
+    timerS2.stop();
+    timerWrite.cont();
     for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowRight = indexRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
                           Id::makeFromDouble(dist));
     }
-    t2.stop();
+    timerWrite.stop();
   }
   spatialJoin_.value()->runtimeInfo().addDetail("time for s2 queries",
-                                                t.msecs().count());
+                                                timerS2.msecs().count());
   spatialJoin_.value()->runtimeInfo().addDetail("time for result writing",
-                                                t2.msecs().count());
+                                                timerWrite.msecs().count());
+  spatialJoin_.value()->runtimeInfo().addDetail("time total",
+                                                timerAll.msecs().count());
 
   return Result{std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight)};

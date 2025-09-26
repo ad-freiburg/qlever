@@ -189,7 +189,7 @@ class SpatialJoinAlgorithms {
 
   // Helper function to retrieve and parse a line string from the given cell of
   // an `IdTable` and convert it to an `S2Polyline`.
-  static std::optional<S2Polyline> getPolyline(const IdTable* restable,
+  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
                                                size_t row, ColumnIndex col,
                                                const Index& index);
 
