@@ -11,10 +11,8 @@
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
 
-// Forward declaration of s2 class
+// Forward declarations
 class MutableS2ShapeIndex;
-
-// Forward declaration of impl
 class SpatialJoinCachedIndexImpl;
 
 // This class holds a `MutableS2ShapeIndex` that is created once by the named
@@ -22,7 +20,12 @@ class SpatialJoinCachedIndexImpl;
 // queries.
 class SpatialJoinCachedIndex {
  private:
+  // The `geometryColumn_` indicates the variable name of the column from which
+  // geometries are indexed.
   Variable geometryColumn_;
+
+  // This points to a class holding the actual index data structure along with
+  // information necessary to use it. See more details in the `.cpp` file.
   std::shared_ptr<SpatialJoinCachedIndexImpl> pimpl_;
 
  public:
