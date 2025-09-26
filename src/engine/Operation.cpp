@@ -383,7 +383,7 @@ std::shared_ptr<const Result> Operation::getResult(
     if (pinResultWithName) {
       // The query is to be pinned in the named query cache.
       const auto& [name, geoIndexVar] =
-          _executionContext->pinWithExplicitName().value();
+          _executionContext->pinResultWithName().value();
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
 
