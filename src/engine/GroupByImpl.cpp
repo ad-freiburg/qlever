@@ -1608,24 +1608,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
   // Iterate through input blocks; buffer the rest and return result if
   // threshold exceeded
-  while (blockIt != blocksEnd) {
-    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
-    const IdTable& inputTable = inputTableRef;
-    const LocalVocab& inputLocalVocab = inputLocalVocabRef;
-
-    blocksProcessedBeforeFallback++;
-    totalRowsBeforeFallback += inputTable.numRows();
-
-    // Merge the local vocab of each input block.
-    //
-    // NOTE: If the input blocks have very similar or even identical non-empty
-    // local vocabs, no deduplication is performed.
-    localVocab.mergeWith(inputLocalVocab);
-    // Load all entries from inputTable into the hash map.
-    updateHashMapWithTable(inputTable, data, aggregationData, timers);
-    // Advance to the next block.
-    ++blockIt;
-
+  for (; blockIt != blocksEnd; ++blockIt) {
     // If the size of the hashmap (the number of groups) exceeds the
     // `groupThreshold`, we switch to a hybrid approach, where we add all
     // entries with existing groups to the hash map, and then perform a
@@ -1649,6 +1632,21 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
           std::move(data), aggregationData, timers, blockIt, blocksEnd);
     }
+
+    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
+    const IdTable& inputTable = inputTableRef;
+    const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
+    blocksProcessedBeforeFallback++;
+    totalRowsBeforeFallback += inputTable.numRows();
+
+    // Merge the local vocab of each input block.
+    //
+    // NOTE: If the input blocks have very similar or even identical non-empty
+    // local vocabs, no deduplication is performed.
+    localVocab.mergeWith(inputLocalVocab);
+    // Load all entries from inputTable into the hash map.
+    updateHashMapWithTable(inputTable, data, aggregationData, timers);
   }
   initialProcessingTimer.stop();
   runtimeInfo().addDetail("hashMapOnlyProcessing",
