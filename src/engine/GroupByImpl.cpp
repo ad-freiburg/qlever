@@ -1725,28 +1725,13 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       aggregationData, data.aggregateAliases_, &localVocab);
   hashResultTimer.stop();
 
-  std::string mergeStrategy =
-      RuntimeParameters().get<"group-by-hybrid-merge-strategy">();
-  // Build final hybrid result: append fallback rows and sort on grouping
-  // columns
-  if (mergeStrategy == "sort") {
-    finalMergeTimer.cont();
-    hashResult.insertAtEnd(restResult);
-    finalMergeTimer.stop();
+  finalMergeTimer.cont();
+  hashResult.insertAtEnd(restResult);
+  finalMergeTimer.stop();
 
-    finalSortTimer.cont();
-    Engine::sort(hashResult, data.columnIndices_.value());
-    finalSortTimer.stop();
-  } else {
-    finalMergeTimer.cont();
-    // Build final hybrid result.
-    // Both `hashResult` and `restResult` are sorted by the grouping columns.
-    // (In `createResultFromHashMap()` and `doGroupBy()` respectively.)
-    // Therefore, we can merge them in O(n+m) time.
-    hashResult.mergeSortedTableIntoThis(restResult,
-                                        data.columnIndices_.value());
-    finalMergeTimer.stop();
-  }
+  finalSortTimer.cont();
+  Engine::sort(hashResult, data.columnIndices_.value());
+  finalSortTimer.stop();
 
   remainderProcessingTimer.stop();
 

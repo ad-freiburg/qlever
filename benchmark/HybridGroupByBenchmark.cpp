@@ -53,10 +53,10 @@ static std::unordered_map<std::string, std::string> runGroupByCount(
   return timings;
 }
 
-std::vector<IdTable> makeChunks(size_t numRows, size_t blockSize,
+std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
                                 QueryExecutionContext* qec) {
-  std::vector<IdTable> chunks;
-  chunks.reserve((numRows + blockSize - 1) / blockSize);
+  std::vector<IdTable> blocks;
+  blocks.reserve((numRows + blockSize - 1) / blockSize);
   ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
   size_t produced = 0;
   while (produced < numRows) {
@@ -72,22 +72,22 @@ std::vector<IdTable> makeChunks(size_t numRows, size_t blockSize,
       c0[i] = ValueId::makeFromInt(static_cast<int64_t>(gIdx / 1.2));
       c1[i] = ValueId::makeFromInt(gen());
     }
-    chunks.push_back(std::move(t));
+    blocks.push_back(std::move(t));
     produced += nThis;
   }
-  return chunks;
+  return blocks;
 }
 
 std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
-    bool chunked, size_t numRows, size_t blockSize,
+    bool useBlocks, size_t numRows, size_t blockSize,
     QueryExecutionContext* qec) {
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   std::shared_ptr<QueryExecutionTree> valuesTree;
-  if (chunked) {
-    auto chunks = makeChunks(numRows, blockSize, qec);
+  if (useBlocks) {
+    auto blocks = makeBlocks(numRows, blockSize, qec);
     // DON'T advertise sortedColumns - let the explicit Sort do the work
     valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(chunks), vars, /*mayHaveUnbound=*/false);
+        qec, std::move(blocks), vars, /*mayHaveUnbound=*/false);
   } else {
     IdTable table{qec->getAllocator()};
     table.setNumColumns(2);
@@ -129,26 +129,26 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
       std::string name_;
       bool useHashMap_;
       std::string note_;
-      bool chunked_;
+      bool useBlocks_;
       bool hybrid_ = false;
-      // Only relevant if hybrid_ is true.
-      std::string mergeMethod_ = "merge";  // "merge" or "sort"
     };
 
     constexpr size_t hugeThreshold = std::numeric_limits<size_t>::max() / 4;
 
     std::vector<Scenario> scenarios = {
-        {"sort-only", /*useHashMap*/false, "Optimization disabled (sorting path)", false},
-        {"hash-only", /*useHashMap*/true, "Hash map enabled, fallback effectively disabled",
-         false},
-        {"sort-only-chunked", /*useHashMap*/false, "Optimization disabled (sorting path)",
-         true},
-        {"hash-only-chunked", /*useHashMap*/true,
-         "Hash map enabled, fallback effectively disabled", true},
-        {"hybrid-chunked-sort", /*useHashMap*/true, "Hash map with early fallback", true,
-         true, "sort"},
-        {"hybrid-chunked-merge", /*useHashMap*/true, "Hash map with early fallback", true,
-         true, "merge"},
+        {"sort-only", /*useHashMap*/ false,
+         "Optimization disabled (sorting path)", /*useBlocks*/ false},
+        {"hash-only", /*useHashMap*/ true,
+         "Hash map enabled, fallback effectively disabled",
+         /*useBlocks*/ false},
+        {"sort-only-blocks", /*useHashMap*/ false,
+         "Optimization disabled (sorting path)",
+         /*useBlocks*/ true},
+        {"hash-only-blocks", /*useHashMap*/ true,
+         "Hash map enabled, fallback effectively disabled", /*useBlocks*/ true},
+        {"hybrid-approach", /*useHashMap*/ true, "Hash map with early fallback",
+         /*useBlocks*/ true,
+         /*hybrid*/ true},
     };
 
     size_t numMeasurements = 10;
@@ -160,8 +160,6 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
 
     for (const auto& s : scenarios) {
       RuntimeParameters().set<"group-by-hash-map-enabled">(s.useHashMap_);
-
-      RuntimeParameters().set<"group-by-hybrid-merge-strategy">(s.mergeMethod_);
 
       size_t numRows = startNumRows;
       while (numRows <= endNumRows) {
@@ -193,7 +191,6 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
           group.metadata().addKeyValuePair("HashMapEnabled", s.useHashMap_);
           group.metadata().addKeyValuePair("Threshold", threshold);
           group.metadata().addKeyValuePair("Note", s.note_);
-          group.metadata().addKeyValuePair("MergeStrategy", s.mergeMethod_);
           group.metadata().addKeyValuePair("Rows", numRows);
           group.metadata().addKeyValuePair("BlockSize", blockSize);
 
@@ -203,7 +200,7 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
             auto& measurement = group.addMeasurement(std::to_string(i), [&]() {
               // Build fresh tree for each measurement to ensure clean state
               auto sortedTree =
-                  buildSortedSubtree(s.chunked_, numRows, blockSize, qec);
+                  buildSortedSubtree(s.useBlocks_, numRows, blockSize, qec);
               timingsForMeasurement = runGroupByCount(qec, sortedTree);
             });
 
