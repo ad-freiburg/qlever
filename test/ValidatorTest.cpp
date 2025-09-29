@@ -407,10 +407,10 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         ql::concepts::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
-            [errorMessage =
-                 std::move(errorMessage)](const std::same_as<bool> auto... b)
+            [errorMessage = std::move(errorMessage)](
+                const ql::concepts::same_as<bool> auto... b)
                 -> std::optional<ErrorMessage> {
               if ((b && ...)) {
                 return std::nullopt;
@@ -426,9 +426,11 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         ql::concepts::same_as<ConstConfigOptionProxy<bool>> auto... args) {
         return ConfigOptionValidatorManager(
-            [](const std::same_as<bool> auto... b) { return (b && ...); },
+            [](const ql::concepts::same_as<bool> auto... b) {
+              return (b && ...);
+            },
             std::move(errorMessage), std::move(descriptor), translationFunction,
             args...);
       });

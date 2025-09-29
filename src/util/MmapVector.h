@@ -307,9 +307,9 @@ class MmapVectorView : private MmapVector<T> {
   // construct with any combination of arguments that is supported by the open()
   // member function
   CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
-      std::same_as<ql::remove_cvref_t<Arg>,
-                   MmapVectorView>)) explicit MmapVectorView(Arg&& arg,
-                                                             Args&&... args) {
+      ql::concepts::same_as<
+          ql::remove_cvref_t<Arg>,
+          MmapVectorView>)) explicit MmapVectorView(Arg&& arg, Args&&... args) {
     open(AD_FWD(arg), AD_FWD(args)...);
   }
 

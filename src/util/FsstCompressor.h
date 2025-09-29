@@ -27,7 +27,7 @@ struct CastToUnsignedPtr {
   CPP_template(typename T)(
       requires ad_utility::SameAsAny<T, char*, const char*>) auto
   operator()(T ptr) const {
-    using Res = std::conditional_t<std::same_as<T, const char*>,
+    using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
   };
