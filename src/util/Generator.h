@@ -22,6 +22,15 @@ namespace cppcoro {
 struct GetDetails {};
 static constexpr GetDetails getDetails;
 
+template <typename Details>
+struct SetDetailsPointer {
+  Details* pointer;
+};
+template <typename Details>
+struct SetDetails {
+  Details details;
+};
+
 // This struct is used as the default of the details object for the case that
 // there are no details
 struct NoDetails {};
@@ -93,7 +102,40 @@ class generator_promise {
     return {*this};
   }
 
+  struct SetDetailsPointerAwaiter {
+    SetDetailsPointerAwaiter(generator_promise& promise,
+                             struct SetDetailsPointer<Details> details) {
+      promise.setDetailsPointer(details.pointer);
+    }
+    constexpr bool await_ready() const { return true; }
+    constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
+      return false;
+    }
+    constexpr void await_resume() noexcept {}
+  };
+
+  struct SetDetailsAwaiter {
+    SetDetailsAwaiter(generator_promise& promise,
+                      struct SetDetails<Details> details) {
+      promise.setDetails(std::move(details.details));
+    }
+    constexpr bool await_ready() const { return true; }
+    constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
+      return false;
+    }
+    constexpr void await_resume() noexcept {}
+  };
+
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  SetDetailsPointerAwaiter await_transform(SetDetailsPointer<Details> details)
+      requires hasDetails {
+    return {*this, details};
+  }
+  SetDetailsAwaiter await_transform(SetDetails<Details> details)
+      requires(hasDetails) {
+    return {*this, details};
+  }
+
   Details& details() requires hasDetails {
     return std::holds_alternative<Details>(m_details)
                ? std::get<Details>(m_details)
@@ -103,6 +145,10 @@ class generator_promise {
   void setDetailsPointer(Details* pointer) requires hasDetails {
     AD_CONTRACT_CHECK(pointer != nullptr);
     m_details = pointer;
+  }
+
+  void setDetails(Details details) requires hasDetails {
+    m_details = std::move(details);
   }
 
  private:
