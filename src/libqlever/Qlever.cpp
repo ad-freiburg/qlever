@@ -80,18 +80,25 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
     index.createFromFiles(config.inputFiles_);
   }
-  auto textIndexBuilder = TextIndexBuilder(
-      ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
     textIndexBuilder.buildTextIndexFile(
         config.wordsAndDocsFileSpecified()
             ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
             : std::nullopt,
         config.addWordsFromLiterals_, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
-  }
-  if (!config.docsfile_.empty()) {
-    textIndexBuilder.buildDocsDB(config.docsfile_);
+    if (!config.docsfile_.empty()) {
+      textIndexBuilder.buildDocsDB(config.docsfile_);
+    }
+#else
+    throw std::runtime_error(
+        "Building a fulltext index is not supported using this restricted "
+        "version of QLever");
+#endif
   }
 }
 
@@ -102,7 +109,7 @@ std::string Qlever::query(std::string queryString,
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
+std::string Qlever::query(const QueryPlan& queryPlan,
                           ad_utility::MediaType mediaType) const {
   const auto& [qet, qec, parsedQuery] = queryPlan;
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -128,10 +135,27 @@ std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
   return result;
 }
 
+// _____________________________________________________________________________
+void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
+  auto queryPlan = parseAndPlanQuery(std::move(query));
+  auto& [qet, qec, parsedQuery] = queryPlan;
+  qec->pinResultWithName() = std::move(name);
+  [[maybe_unused]] auto result = this->query(queryPlan);
+}
+
+// _____________________________________________________________________________
+void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
+
+// _____________________________________________________________________________
+void Qlever::eraseResultWithName(std::string name) {
+  namedResultCache_.erase(name);
+}
+
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
-      index_, &cache_, allocator_, sortPerformanceEstimator_);
+      index_, &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});

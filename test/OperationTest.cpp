@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
+#include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
@@ -181,8 +182,13 @@ class OperationTestFixture : public testing::Test {
     return makeTestIndex("OperationTest", std::move(indexConfig));
   }();
   QueryResultCache cache;
+  NamedResultCache namedCache;
   QueryExecutionContext qec{
-      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      index,
+      &cache,
+      makeAllocator(),
+      SortPerformanceEstimator{},
+      &namedCache,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -475,9 +481,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { signaledUpdate = true; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -500,9 +511,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
@@ -541,9 +557,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};

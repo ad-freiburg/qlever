@@ -3,6 +3,7 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
@@ -665,3 +666,5 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
   service->cacheBreaker_ = cacheBreaker_;
   return service;
 }
+
+#endif

@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
@@ -380,3 +382,5 @@ class TransitivePathBase : public Operation {
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+
+#endif
