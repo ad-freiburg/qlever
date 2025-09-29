@@ -137,8 +137,9 @@ InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
 
     std::optional<BlockType> get() override {
       if (iter_ == ql::ranges::end(nonEmptyView_)) {
-        LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
-        LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
+        AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
+                    << '\n';
+        AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
         return std::nullopt;
       }
 

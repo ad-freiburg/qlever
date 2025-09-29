@@ -726,7 +726,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  AD_LOG_DEBUG << "Resolving strings for finished binary result...\n";
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
@@ -755,8 +755,8 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   // unless the result is already cached.
   std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
-  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
-             << std::endl;
+  AD_LOG_DEBUG << "Converting result IDs to their corresponding strings ..."
+               << std::endl;
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
@@ -819,7 +819,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       cancellationHandle->throwIfCancelled();
     }
   }
-  LOG(DEBUG) << "Done creating readable result.\n";
+  AD_LOG_DEBUG << "Done creating readable result.\n";
 }
 
 // Convert a single ID to an XML binding of the given `variable`.
@@ -960,8 +960,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   // unless the result is already cached.
   std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
-  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
-             << std::endl;
+  AD_LOG_DEBUG << "Converting result IDs to their corresponding strings ..."
+               << std::endl;
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
 
@@ -1194,8 +1194,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     ++numBindingsExported;
   }
   if (numBindingsExported < resultSize) {
-    LOG(INFO) << "Number of bindings exported: " << numBindingsExported
-              << " of " << resultSize << std::endl;
+    AD_LOG_INFO << "Number of bindings exported: " << numBindingsExported
+                << " of " << resultSize << std::endl;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();

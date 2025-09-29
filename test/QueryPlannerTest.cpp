@@ -5639,7 +5639,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::parseAndPlan(query, qec),
       ::testing::HasSubstr("Unsupported element in a magic service query of "
-                           "type `named cached result`"));
+                           "type `named cached query`"));
 
   // Now pin a query to the named result cache, and check that the query
   // planning works as expected.

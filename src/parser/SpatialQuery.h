@@ -81,6 +81,10 @@ struct SpatialQuery : MagicServiceQuery {
   // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
   // check if all required values have been provided and otherwise throw.
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
+
+ private:
+  // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.
+  void throwIf(bool throwCondition, std::string_view message) const;
 };
 
 namespace detail {

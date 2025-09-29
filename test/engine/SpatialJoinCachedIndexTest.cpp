@@ -12,7 +12,7 @@
 #include "rdfTypes/Variable.h"
 
 namespace {
-
+// _________________________________________________________________________
 TEST(SpatialJoinCachedIndex, Basic) {
   // Sample data and query
   std::string kb =
@@ -49,6 +49,10 @@ TEST(SpatialJoinCachedIndex, Basic) {
   auto index = cacheEntry->cachedGeoIndex_.value().getIndex();
   ASSERT_NE(index.get(), nullptr);
   EXPECT_EQ(index->num_shape_ids(), 3);
+
+  const auto& cachedIndex = cacheEntry->cachedGeoIndex_.value();
+  EXPECT_EQ(cachedIndex.getRow(0), 0);
+  EXPECT_EQ(cachedIndex.getRow(3), 3);
 
   // The method `is_fresh()` tells us that there are no pending updates to be
   // applied (which would slow down the first query).

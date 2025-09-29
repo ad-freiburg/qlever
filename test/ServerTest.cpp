@@ -327,6 +327,15 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed AND pinned geo Var.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(

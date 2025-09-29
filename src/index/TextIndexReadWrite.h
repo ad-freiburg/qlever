@@ -38,15 +38,15 @@ void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
     return;
   }
   AD_CONTRACT_CHECK(nofBytes > 0);
-  LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
-  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
-             << ", nofBytes: " << nofBytes << '\n';
+  AD_LOG_DEBUG << "Reading frequency-encoded list from disk...\n";
+  AD_LOG_TRACE << "NofElements: " << nofElements << ", from: " << from
+               << ", nofBytes: " << nofBytes << '\n';
 
   // Read codebook size and advance pointer (current)
   size_t nofCodebookBytes;
   off_t current = from;
   size_t ret = textIndexFile.read(&nofCodebookBytes, sizeof(size_t), current);
-  LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
+  AD_LOG_TRACE << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CONTRACT_CHECK(sizeof(size_t) == ret);
   current += ret;
 
@@ -69,11 +69,11 @@ void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
   // simple8b decode the list which is then directly passed to
   // frequencyEncodedVector. The resizing with overhead is necessary for
   // simple8b
-  LOG(DEBUG) << "Decoding Simple8b code...\n";
+  AD_LOG_DEBUG << "Decoding Simple8b code...\n";
   frequencyEncodedVector.resize(nofElements + 250);
   ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
                                    frequencyEncodedVector.data());
-  LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
+  AD_LOG_DEBUG << "Reverting frequency encoded items to actual IDs...\n";
   frequencyEncodedVector.resize(nofElements);
 }
 
@@ -86,9 +86,9 @@ template <typename From>
 void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
                             const ad_utility::File& textIndexFile,
                             std::vector<From>& gapEncodedVector) {
-  LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
-  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
-             << ", nofBytes: " << nofBytes << '\n';
+  AD_LOG_DEBUG << "Reading gap-encoded list from disk...\n";
+  AD_LOG_TRACE << "NofElements: " << nofElements << ", from: " << from
+               << ", nofBytes: " << nofBytes << '\n';
   if (nofBytes == 0) {
     // This might happen for empty blocks.
     gapEncodedVector.clear();
@@ -103,11 +103,11 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 
   // simple8b decode the list which is then directly passed to
   // gapEncodedVector. The resizing with overhead is necessary for simple8b
-  LOG(DEBUG) << "Decoding Simple8b code...\n";
+  AD_LOG_DEBUG << "Decoding Simple8b code...\n";
   gapEncodedVector.resize(nofElements + 250);
   ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
                                    gapEncodedVector.data());
-  LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
+  AD_LOG_DEBUG << "Reverting gaps to actual IDs...\n";
   gapEncodedVector.resize(nofElements);
 }
 
@@ -231,8 +231,8 @@ std::vector<To> readFreqComprList(size_t nofElements, off_t from,
   ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
     result.push_back(transformer(codebook.at(encoded)));
   });
-  LOG(DEBUG) << "Done reading frequency-encoded list. Size: " << result.size()
-             << "\n";
+  AD_LOG_DEBUG << "Done reading frequency-encoded list. Size: " << result.size()
+               << "\n";
   return result;
 }
 
@@ -255,7 +255,7 @@ void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
     *iterator = transformer(codebook.at(encoded));
     ++iterator;
   });
-  LOG(DEBUG) << "Done reading frequency-encoded list.";
+  AD_LOG_DEBUG << "Done reading frequency-encoded list.";
 }
 
 /**
@@ -289,8 +289,8 @@ std::vector<To> readGapComprList(size_t nofElements, off_t from,
     previous += gap;
     result.push_back(transformer(previous));
   }
-  LOG(DEBUG) << "Done reading gap-encoded list. Size: " << result.size()
-             << "\n";
+  AD_LOG_DEBUG << "Done reading gap-encoded list. Size: " << result.size()
+               << "\n";
   return result;
 }
 
@@ -316,7 +316,7 @@ void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
     *iterator = transformer(previous);
     ++iterator;
   }
-  LOG(DEBUG) << "Done reading gap-encoded list.";
+  AD_LOG_DEBUG << "Done reading gap-encoded list.";
 }
 
 }  // namespace textIndexReadWrite

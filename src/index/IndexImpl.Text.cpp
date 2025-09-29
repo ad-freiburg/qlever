@@ -27,8 +27,8 @@ void IndexImpl::addTextFromOnDiskIndex() {
 
   // Initialize the text index.
   std::string textIndexFileName = onDiskBase_ + ".text.index";
-  LOG(INFO) << "Reading metadata from file " << textIndexFileName << " ..."
-            << std::endl;
+  AD_LOG_INFO << "Reading metadata from file " << textIndexFileName << " ..."
+              << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
   AD_CONTRACT_CHECK(textIndexFile_.isOpen());
   off_t metaFrom;
@@ -38,7 +38,8 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer.setSerializationPosition(metaFrom);
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
-  LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
+  AD_LOG_INFO << "Registered text index: " << textMeta_.statistics()
+              << std::endl;
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
@@ -48,11 +49,11 @@ void IndexImpl::addTextFromOnDiskIndex() {
   if (f.good()) {
     f.close();
     docsDB_.init(std::string(onDiskBase_ + ".text.docsDB"));
-    LOG(INFO) << "Registered text records: #records = " << docsDB_._size
-              << std::endl;
+    AD_LOG_INFO << "Registered text records: #records = " << docsDB_._size
+                << std::endl;
   } else {
-    LOG(DEBUG) << "No file \"" << docsDbFileName
-               << "\" with additional text records" << std::endl;
+    AD_LOG_DEBUG << "No file \"" << docsDbFileName
+                 << "\" with additional text records" << std::endl;
     f.close();
   }
 }
@@ -135,7 +136,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 IdTable IndexImpl::getWordPostingsForTerm(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
+  AD_LOG_DEBUG << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   if (tbmds.empty()) {
@@ -146,8 +147,8 @@ IdTable IndexImpl::getWordPostingsForTerm(
   IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
                                          allocator, TextScanMode::WordScan);
 
-  LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << result.getColumn(0).size() << '\n';
+  AD_LOG_DEBUG << "Word postings for term: " << term
+               << ": cids: " << result.getColumn(0).size() << '\n';
   return result;
 }
 
@@ -223,14 +224,14 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
   if (word.ends_with(PREFIX_CHAR)) {
     auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
     if (!idRangeOpt.has_value()) {
-      LOG(INFO) << "Prefix: " << word << " not in vocabulary\n";
+      AD_LOG_INFO << "Prefix: " << word << " not in vocabulary\n";
       return {};
     }
     idRange = idRangeOpt.value();
   } else {
     WordVocabIndex idx;
     if (!textVocab_.getId(word, &idx)) {
-      LOG(INFO) << "Term: " << word << " not in vocabulary\n";
+      AD_LOG_INFO << "Term: " << word << " not in vocabulary\n";
       return {};
     }
     idRange = IdRange{idx, idx};

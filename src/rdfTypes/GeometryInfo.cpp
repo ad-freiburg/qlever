@@ -50,10 +50,10 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
   auto centroid = centroidAsGeoPoint(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
-    LOG(DEBUG) << "The WKT string `" << wkt
-               << "` would lead to an invalid centroid or bounding box. It "
-                  "will thus be treated as an invalid WKT literal."
-               << std::endl;
+    AD_LOG_DEBUG << "The WKT string `" << wkt
+                 << "` would lead to an invalid centroid or bounding box. It "
+                    "will thus be treated as an invalid WKT literal."
+                 << std::endl;
     return std::nullopt;
   }
 

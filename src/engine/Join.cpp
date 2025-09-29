@@ -95,7 +95,7 @@ string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
 Result Join::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-results for join result computation..." << endl;
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
@@ -257,9 +257,9 @@ void Join::computeSizeEstimateAndMultiplicities() {
       size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
                                      nofDistinctInResult));
 
-  LOG(TRACE) << "Estimated size as: " << _sizeEstimate << " := " << corrFactor
-             << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
-             << std::endl;
+  AD_LOG_TRACE << "Estimated size as: " << _sizeEstimate << " := " << corrFactor
+               << " * " << jcMultiplicityInResult << " * "
+               << nofDistinctInResult << std::endl;
 
   for (auto i = ColumnIndex{0}; i < _left->getResultWidth(); ++i) {
     double oldMult = _left->getMultiplicity(i);
@@ -294,11 +294,11 @@ void Join::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________________________
 
 void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
-  LOG(DEBUG) << "Performing join between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
-             << "\n";
-  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
-             << "\n";
+  AD_LOG_DEBUG << "Performing join between two tables.\n";
+  AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
+               << "\n";
+  AD_LOG_DEBUG << "B: width = " << b.numColumns() << ", size = " << b.size()
+               << "\n";
 
   // Check trivial case.
   if (a.empty() || b.empty()) {
@@ -378,9 +378,9 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
   // the order.
   result->setColumnSubset(joinColumnData.permutationResult());
 
-  LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result: width = " << result->numColumns()
-             << ", size = " << result->size() << "\n";
+  AD_LOG_DEBUG << "Join done.\n";
+  AD_LOG_DEBUG << "Result: width = " << result->numColumns()
+               << ", size = " << result->size() << "\n";
 }
 
 // _____________________________________________________________________________
@@ -439,11 +439,11 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
-  LOG(DEBUG) << "Performing hashJoin between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
-             << "\n";
-  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
-             << "\n";
+  AD_LOG_DEBUG << "Performing hashJoin between two tables.\n";
+  AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
+               << "\n";
+  AD_LOG_DEBUG << "B: width = " << b.numColumns() << ", size = " << b.size()
+               << "\n";
 
   // Check trivial case.
   if (a.empty() || b.empty()) {
@@ -523,9 +523,9 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   }
   *dynRes = std::move(result).toDynamic();
 
-  LOG(DEBUG) << "HashJoin done.\n";
-  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
-             << ", size = " << dynRes->size() << "\n";
+  AD_LOG_DEBUG << "HashJoin done.\n";
+  AD_LOG_DEBUG << "Result: width = " << dynRes->numColumns()
+               << ", size = " << dynRes->size() << "\n";
 }
 
 // ______________________________________________________________________________
