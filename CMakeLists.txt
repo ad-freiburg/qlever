@@ -33,9 +33,9 @@ option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times"
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 
-option(STRIP_FEATURES_CPP_17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet." OFF)
-if (STRIP_FEATURES_CPP_17)
-    add_compile_definitions(QLEVER_STRIP_FEATURES_CPP_17)
+option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17)
 endif()
 
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)

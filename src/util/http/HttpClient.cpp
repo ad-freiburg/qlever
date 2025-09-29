@@ -4,7 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/HttpClient.h"
 
 #include <absl/strings/str_cat.h>

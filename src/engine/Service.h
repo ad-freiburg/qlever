@@ -6,7 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_SERVICE_H
 #define QLEVER_SRC_ENGINE_SERVICE_H
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <functional>
 
@@ -175,6 +175,6 @@ struct Service {
   template <typename... Ts>
   static void precomputeSiblingResult(Ts&&...) {}
 };
-#endif  // QLEVER_STRIP_FEATURES_CPP_17
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #endif  // QLEVER_SRC_ENGINE_SERVICE_H

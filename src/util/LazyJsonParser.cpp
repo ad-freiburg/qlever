@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/LazyJsonParser.h"
 
 #include <absl/strings/ascii.h>

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include "index/TextIndexBuilder.h"
 

@@ -20,10 +20,11 @@ add_library(engine
 
 qlever_target_link_libraries(engine util index parser sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
 
-# The `http` library currently is C++20-only. It is only required by the `Service` and `Load`
-# operations, which are disabled in C++-17 mode anyway. We therefore only link `engine` against
-# `http` if we are in the full C++-20 mode.
-if (NOT STRIP_FEATURES_CPP_17)
+# When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
+# `http` library (which requires C++20). This works because `http` is only used
+# in two operations, `Service` and `Load`, which we disable when
+# `REDUCED_FEATURE_SET_FOR_CPP17` is set.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)
 endif()
 

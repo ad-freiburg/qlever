@@ -2406,7 +2406,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
 std::optional<std::tuple<size_t, size_t>>
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
-#ifdef QLEVER_STRIP_FEATURES_CPP_17
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
   return std::nullopt;
@@ -2461,7 +2461,7 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
-#ifdef QLEVER_STRIP_FEATURES_CPP_17
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
   (void)jcs;
@@ -2949,7 +2949,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
   } else if constexpr (std::is_same_v<T, p::Service>) {
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
 #else
@@ -2957,7 +2957,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         "SERVICE is not supported in this restricted version of QLever");
 #endif
   } else if constexpr (std::is_same_v<T, p::Load>) {
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
 #else
@@ -3060,7 +3060,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     parsedQuery::TransPath& arg) {
-#ifdef QLEVER_STRIP_FEATURES_CPP_17
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)arg;
   throw std::runtime_error(
       "Transitive Paths are not supported in this restricted version of "

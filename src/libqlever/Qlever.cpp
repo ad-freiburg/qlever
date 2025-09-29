@@ -82,7 +82,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     auto textIndexBuilder = TextIndexBuilder(
         ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
     textIndexBuilder.buildTextIndexFile(

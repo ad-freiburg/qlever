@@ -7,7 +7,7 @@
 #ifndef QLEVER_LOAD_H
 #define QLEVER_LOAD_H
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <string>
 
 #include "engine/Operation.h"
