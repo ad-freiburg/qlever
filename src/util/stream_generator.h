@@ -35,9 +35,11 @@
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
+#endif
 
 namespace ad_utility::streams {
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 template <size_t BUFFER_SIZE>
 class basic_stream_generator;
 
@@ -300,10 +302,7 @@ stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
 // Use 1MiB buffer size by default
 using stream_generator = basic_stream_generator<1u << 20>;
 
-}  // namespace ad_utility::streams
 #endif
-
-namespace ad_utility::streams {
 
 // A class that can be fed `string_view`s (via `operator()`) and concatenates
 // them until a certain size (the `BATCH_SIZE`) is reached, at which point it

@@ -1106,72 +1106,33 @@ void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
   }
 }
 
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
-    const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
-    CancellationHandle cancellationHandle) {
-  auto limit = parsedQuery._limitOffset;
-  compensateForLimitOffsetClause(limit, qet);
-  auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
-    if constexpr (format == MediaType::qleverJson) {
-      return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
-                                       std::move(cancellationHandle));
-    } else {
-      if (parsedQuery.hasAskClause()) {
-        return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer);
-      }
-      return parsedQuery.hasSelectClause()
-                 ? selectQueryResultToStream<format>(
-                       qet, parsedQuery.selectClause(), limit,
-                       std::move(cancellationHandle))
-                 : constructQueryResultToStream<format>(
-                       qet, parsedQuery.constructClause().triples_, limit,
-                       qet.getResult(true), std::move(cancellationHandle));
-    }
-  }};
-
-  using enum MediaType;
-
-  static constexpr std::array supportedTypes{
-      csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
-  AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
-
-  auto inner =
-      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>{}(compute, mediaType);
-  return convertStreamGeneratorForChunkedTransfer(std::move(inner));
-}
-
-#else
-// _____________________________________________________________________________
-void ExportQueryExecutionTrees::computeResult(
+ExportQueryExecutionTrees::ComputeResultReturnType
+ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle,
-    STREAMABLE_YIELDER_TYPE streamableYielder) {
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   auto limit = parsedQuery._limitOffset;
   compensateForLimitOffsetClause(limit, qet);
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle),
-                                       std::move(streamableYielder));
+                                       streamableYielder);
     } else {
       if (parsedQuery.hasAskClause()) {
         return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer,
-                                   std::move(streamableYielder));
+                                   streamableYielder);
       }
       return parsedQuery.hasSelectClause()
                  ? selectQueryResultToStream<format>(
                        qet, parsedQuery.selectClause(), limit,
-                       std::move(cancellationHandle),
-                       std::move(streamableYielder))
+                       std::move(cancellationHandle), streamableYielder)
                  : constructQueryResultToStream<format>(
                        qet, parsedQuery.constructClause().triples_, limit,
                        qet.getResult(true), std::move(cancellationHandle),
-                       std::move(streamableYielder));
+                       streamableYielder);
     }
   }};
 
@@ -1181,11 +1142,16 @@ void ExportQueryExecutionTrees::computeResult(
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  auto inner =
+      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
+                                  sparqlJson, qleverJson>{}(compute, mediaType);
+  return convertStreamGeneratorForChunkedTransfer(std::move(inner));
+#else
   ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
                               sparqlJson, qleverJson>{}(compute, mediaType);
-}
-
 #endif
+}
 
 // _____________________________________________________________________________
 STREAMABLE_GENERATOR_TYPE

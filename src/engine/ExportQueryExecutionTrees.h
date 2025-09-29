@@ -36,19 +36,16 @@ class ExportQueryExecutionTrees {
   // `mediaType` and the query type will throw. The result is returned as a
   // `generator` that lazily computes the serialized result in large chunks of
   // bytes.
+  using ComputeResultReturnType =
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  static cppcoro::generator<std::string> computeResult(
+      cppcoro::generator<std::string>;
+#else
+      void;
+#endif
+  static ComputeResultReturnType computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
-#else
-  static void computeResult(const ParsedQuery& parsedQuery,
-                            const QueryExecutionTree& qet,
-                            ad_utility::MediaType mediaType,
-                            const ad_utility::Timer& requestTimer,
-                            CancellationHandle cancellationHandle,
-                            STREAMABLE_YIELDER_TYPE streamableYielder);
-#endif
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Return the corresponding blank node string representation for the export if
   // this iri is a blank node iri. Otherwise, return std::nullopt.
