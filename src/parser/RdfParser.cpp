@@ -1021,14 +1021,11 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
         // (maybe the failure was due to statements crossing our block).
         if (resetStateAndRead(&b)) {
           // we have successfully extended our buffer
-          if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
+          if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE.getBytes()) {
             std::string_view unparsed = tok_.view();
             LOG(ERROR) << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                       << " Within "
-                       << static_cast<size_t>(ad_utility::MemorySize::bytes(
-                                                  BZIP2_MAX_TOTAL_BUFFER_SIZE)
-                                                  .getMegabytes())
-                       << " MB of Turtle input\n";
+                       << " Within " << BZIP2_MAX_TOTAL_BUFFER_SIZE
+                       << " of Turtle input\n";
             LOG(ERROR) << "If you really have Turtle input with such a "
                           "long structure please recompile with adjusted "
                           "constants in ConstantsIndexCreation.h or "
