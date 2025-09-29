@@ -144,7 +144,7 @@ struct LoopControl {
         return std::nullopt;
       } else if constexpr (ad_utility::SimilarTo<U, T>) {
         return std::move(v);
-      } else if constexpr (ad_utility::SimilarToAny<U, InputRangeTypeErased<T>,
+      } else if constexpr (ad_utility::SimilarToAny<U, Range,
                                                     BreakWithYieldAll>) {
         AD_FAIL();
       } else {
