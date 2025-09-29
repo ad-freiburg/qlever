@@ -387,23 +387,12 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
-  // Extract a pointer/reference to the details of the previous scan
-  auto& originalDetails = lazyScanAllCols.details();
-
-  // Create a transforming wrapper using the reusable template
-  auto wrapper = std::make_unique<ad_utility::CachingTransformInputRangeFromGet<
-      Permutation::IdTableGenerator, decltype(makeApplyColumnSubset()),
-      LazyScanMetadata>>(std::move(lazyScanAllCols), makeApplyColumnSubset());
-
-  // Set up an InputRangeTypeErased<IdTable, LazyScanMetadata>
-  auto rangeTypeErased =
-      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
-          std::move(wrapper));
-
-  // Call setDetailsPointer on that range before returning it
-  rangeTypeErased.setDetailsPointer(&originalDetails);
-
-  return cppcoro::fromInputRange(std::move(rangeTypeErased));
+  return cppcoro::fromInputRange(
+      std::move(ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
+          ad_utility::CachingTransformInputRangeFromGet<
+              Permutation::IdTableGenerator, decltype(makeApplyColumnSubset()),
+              LazyScanMetadata>{std::move(lazyScanAllCols),
+                                makeApplyColumnSubset()})));
 };
 
 // _____________________________________________________________________________
