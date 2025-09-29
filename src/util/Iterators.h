@@ -311,6 +311,9 @@ class InputRangeFromGet
  public:
   using Storage = std::optional<ValueType>;
   using Details = DetailsType;
+  using Base =
+      DetailsProvider<InputRangeFromGet<ValueType, DetailsType>, DetailsType>;
+  using Base::setDetailsPointer;
 
   Storage storage_ = std::nullopt;
 
@@ -443,62 +446,6 @@ class RangeToInputRangeFromGet
       return std::nullopt;
     }
     return std::move(*iterator_.value());
-  }
-};
-
-// Similar to CachingTransformInputRange, but inherits from InputRangeFromGet
-// to support details/metadata and type erasure. Combines the transformation
-// capability of CachingTransformInputRange with the InputRangeFromGet
-// interface.
-template <typename Range, typename Transform, typename DetailsType = NoDetails>
-class CachingTransformInputRangeFromGet
-    : public InputRangeFromGet<
-          std::decay_t<std::invoke_result_t<Transform,
-                                            ql::ranges::range_value_t<Range>>>,
-          DetailsType> {
-  using ResultType = std::decay_t<
-      std::invoke_result_t<Transform, ql::ranges::range_value_t<Range>>>;
-  using BaseClass = InputRangeFromGet<ResultType, DetailsType>;
-
-  Range range_;
-  ::ranges::semiregular_box_t<Transform> transform_;
-  using Iterator = ql::ranges::iterator_t<Range>;
-  std::optional<Iterator> iterator_ = std::nullopt;
-  bool isDone() { return iterator_ == ql::ranges::end(range_); }
-
- public:
-  explicit CachingTransformInputRangeFromGet(Range range, Transform transform)
-      : range_{std::move(range)}, transform_(std::move(transform)) {}
-
-  std::optional<ResultType> get() override {
-    if (!iterator_.has_value()) {
-      // For the very first value we have to call `begin()`.
-      iterator_ = ql::ranges::begin(range_);
-      if (isDone()) {
-        return std::nullopt;
-      }
-    } else {
-      // Not the first value, so we have to advance the iterator.
-      if (isDone()) {
-        return std::nullopt;
-      }
-      ++iterator_.value();
-    }
-
-    // We now have advanced the iterator to the next value, so we can return it
-    // if existing.
-    if (isDone()) {
-      return std::nullopt;
-    }
-
-    // If the range supports details and we have details, copy them
-    if constexpr (!std::is_same_v<DetailsType, NoDetails>) {
-      if constexpr (requires { range_.details(); }) {
-        this->details() = range_.details();
-      }
-    }
-
-    return std::invoke(transform_, std::move(*iterator_.value()));
   }
 };
 

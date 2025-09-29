@@ -122,6 +122,35 @@ TEST(CachingTransformInputRange, IteratePastEnd) {
   EXPECT_FALSE(range.get().has_value());
 }
 
+// Test for the combination of `CachingTransformInputRagne` with the associated
+// `Details`.
+TEST(CachingTransformInputRange, Details) {
+  struct Details {
+    int value = 42;
+  };
+
+  struct Gen : public ad_utility::InputRangeFromGet<int, Details> {
+    int i = 0;
+    std::optional<int> get() override {
+      auto v = i++;
+      if (v >= 5) {
+        return std::nullopt;
+      }
+      details().value = v * 2;
+      return v;
+    }
+  };
+
+  auto timesTwo = [](auto el) { return el * 2; };
+  auto r = ad_utility::CachingTransformInputRange<ad_utility::OwningView<Gen>,
+                                                  decltype(timesTwo), Details>(
+      Gen{}, timesTwo);
+  for (auto [a, i] : ::ranges::views::enumerate(r)) {
+    EXPECT_EQ(i, r.details().value);
+    EXPECT_EQ(i, a * 2);
+  }
+}
+
 // Tests for the generator with additional control flow.
 TEST(CachingContinuableTransformInputRange, BreakAndContinue) {
   // This function will move the vector if possible (i.e. if it is not const)

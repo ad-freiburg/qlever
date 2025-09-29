@@ -388,11 +388,11 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
   return cppcoro::fromInputRange(
-      std::move(ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
-          ad_utility::CachingTransformInputRangeFromGet<
-              Permutation::IdTableGenerator, decltype(makeApplyColumnSubset()),
-              LazyScanMetadata>{std::move(lazyScanAllCols),
-                                makeApplyColumnSubset()})));
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
+          ad_utility::CachingTransformInputRange<
+              ad_utility::OwningView<Permutation::IdTableGenerator>,
+              decltype(makeApplyColumnSubset()), LazyScanMetadata>{
+              std::move(lazyScanAllCols), makeApplyColumnSubset()}));
 };
 
 // _____________________________________________________________________________
@@ -663,7 +663,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         AD_CORRECTNESS_CHECK(pendingBlocks.empty());
 
         // Capture scan details by reference so we get the updated values
-        auto& scanDetails = scan.details();
+        const auto& scanDetails = scan.details();
 
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(

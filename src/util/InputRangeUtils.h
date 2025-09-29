@@ -7,6 +7,8 @@
 #include <optional>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "util/Iterators.h"
 #include "util/Views.h"
 
 // This file contains helper classes that can be used to replace
@@ -27,15 +29,25 @@ namespace ad_utility {
 // optimization (RVO).
 // 3. This class only yields an input range, independent of the range category
 // of the input.
-CPP_class_template(typename View, typename F)(requires(
+// 4. Optionally, this class can propagate the `Details` of an underlying view.
+//    To make this work, the template parameters have to be explicitly stated,
+//    and the underlying view must inherit from the `DetailsProvider`. See
+//    `InputRangeUtilsTest.cpp` for an example, and `IndexScan.cpp` for a
+//    real-life usage.
+CPP_class_template(typename View, typename F,
+                   typename Details = NoDetails)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
                                      View>>)) struct CachingTransformInputRange
-    : InputRangeFromGet<std::decay_t<
-          std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>> {
+    : InputRangeFromGet<std::decay_t<std::invoke_result_t<
+                            F, ql::ranges::range_reference_t<View>>>,
+                        Details> {
  private:
   using Res = std::invoke_result_t<F, ql::ranges::range_reference_t<View>>;
+  using Base = InputRangeFromGet<std::decay_t<std::invoke_result_t<
+                                     F, ql::ranges::range_reference_t<View>>>,
+                                 Details>;
   static_assert(std::is_object_v<Res>,
                 "The functor of `CachingTransformInputRange` must yield an "
                 "object type, not a reference");
@@ -49,7 +61,11 @@ CPP_class_template(typename View, typename F)(requires(
  public:
   // Constructor.
   explicit CachingTransformInputRange(View view, F transformation = {})
-      : view_{std::move(view)}, transfomation_(std::move(transformation)) {}
+      : view_{std::move(view)}, transfomation_(std::move(transformation)) {
+    if constexpr (!std::is_same_v<Details, NoDetails>) {
+      static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
+    }
+  }
 
   // TODO<joka921> Make this private again and give explicit access to low-level
   // tools like the ones below.
