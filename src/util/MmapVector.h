@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_UTIL_MMAPVECTOR_H
 #define QLEVER_SRC_UTIL_MMAPVECTOR_H
 
-#include <concepts>
 #include <exception>
 #include <sstream>
 #include <string>

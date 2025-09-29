@@ -8,7 +8,6 @@
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
 #include <atomic>
-#include <concepts>
 #include <optional>
 #include <tuple>
 
@@ -41,12 +40,12 @@ struct ParameterBase {
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
 CPP_concept ParameterFromStringType =
-    std::default_initializable<FunctionType> &&
+    ql::concepts::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
 CPP_concept ParameterToStringType =
-    std::default_initializable<FunctionType> &&
+    ql::concepts::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
@@ -60,7 +59,7 @@ CPP_concept ParameterToStringType =
 ///         parameters with the same `Type`).
 CPP_template(typename Type, typename FromString, typename ToString,
              ParameterName Name)(
-    requires std::semiregular<Type> CPP_and
+    requires ql::concepts::semiregular<Type> CPP_and
         ParameterFromStringType<FromString, Type>
             CPP_and ParameterToStringType<ToString, Type>) struct Parameter
     : public ParameterBase {

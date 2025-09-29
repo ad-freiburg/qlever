@@ -5,7 +5,6 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
 #include <functional>
 
 #include "../test/util/TypeTraitsTestHelpers.h"

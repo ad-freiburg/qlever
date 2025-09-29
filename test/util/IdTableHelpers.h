@@ -6,7 +6,6 @@
 #define QLEVER_TEST_UTIL_IDTABLEHELPERS_H
 
 #include <algorithm>
-#include <concepts>
 #include <cstdio>
 #include <fstream>
 #include <ranges>
@@ -101,8 +100,10 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // workaround for GMock/GTest.
 struct MatchesIdTable {
   template <typename... Ts>
-  requires(std::constructible_from<IdTable, Ts && ...>)
-  auto operator()(Ts&&... ts) const {
+  QL_CONCEPT_OR_TYPENAME(
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>))
+  auto
+  operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 

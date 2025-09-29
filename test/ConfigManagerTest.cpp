@@ -10,7 +10,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
 #include <functional>
 #include <tuple>
