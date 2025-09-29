@@ -20,8 +20,6 @@ class Iri {
   // Store the string value of the IRI including the angle brackets.
   std::string iri_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(iri_)
-
   // Create a new `Iri` object
   explicit Iri(std::string iri);
 
@@ -40,7 +38,7 @@ class Iri {
     return H::combine(std::move(h), iri.iri_);
   }
 
-  QL_DEFINE_EQUALITY_OPERATOR(Iri)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, iri_)
 
   static Iri fromStringRepresentation(std::string s);
 

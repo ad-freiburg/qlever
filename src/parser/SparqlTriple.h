@@ -30,7 +30,8 @@ class SparqlTripleBase {
         o_(std::move(o)),
         additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  QL_DEFINE_EQUALITY_OPERATOR(SparqlTripleBase)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleBase, s_, p_, o_,
+                                              additionalScanColumns_)
 
   TripleComponent s_;
   Predicate p_;
@@ -40,8 +41,6 @@ class SparqlTripleBase {
   // TODO<joka921> On this level we should not store `ColumnIndex`, but the
   // special predicate IRIs that are to be attached here.
   std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns_;
-
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(s_, p_, o_, additionalScanColumns_)
 };
 
 // A triple where the predicate is a `TripleComponent`, so a fixed entity or a
@@ -63,9 +62,7 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(g_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(SparqlTripleSimpleWithGraph)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleSimpleWithGraph, g_)
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.

@@ -42,8 +42,6 @@ class DateYearOrDuration {
   // The bits.
   uint64_t bits_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(bits_)
-
  public:
   enum struct Type { Year = 0, YearMonth, Date, DateTime };
 
@@ -142,8 +140,7 @@ class DateYearOrDuration {
 
   // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
-  QL_DEFINE_EQUALITY_OPERATOR(DateYearOrDuration)
-  QL_DEFINE_THREEWAY_OPERATOR(DateYearOrDuration)
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(DateYearOrDuration, bits_)
 
   // Bitwise hashing.
   template <typename H>

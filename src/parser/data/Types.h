@@ -36,9 +36,8 @@ struct TripleWithPropertyPath {
   VarOrPath predicate_;
   GraphTerm object_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(subject_, predicate_, object_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(TripleWithPropertyPath)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TripleWithPropertyPath, subject_,
+                                              predicate_, object_)
 };
 using PathObjectPairsAndTriples =
     std::pair<PathObjectPairs, std::vector<TripleWithPropertyPath>>;

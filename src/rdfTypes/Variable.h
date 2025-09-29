@@ -22,8 +22,6 @@ class Variable {
  private:
   std::string _name;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_name)
-
  public:
   // Create the variable from the given `name` (which must include the leading ?
   // or $). If `checkName` is set, then the variable name will be validated by
@@ -83,7 +81,7 @@ class Variable {
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
-  QL_DEFINE_EQUALITY_OPERATOR(Variable)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Variable, _name)
 
   // The construction of PrefilterExpressions requires a defined < order.
   bool operator<(const Variable& other) const { return _name < other._name; };

@@ -32,8 +32,6 @@ class ParseableDuration {
  private:
   DurationType duration_{};
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(duration_)
-
   template <typename Other>
   friend class ParseableDuration;
 
@@ -46,7 +44,7 @@ class ParseableDuration {
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
       ParseableDuration, (const ParseableDuration& other) const noexcept, {
         return ql::compareThreeWay(duration_.count(), other.duration_.count());
       })
@@ -54,14 +52,14 @@ class ParseableDuration {
   template <typename Other>
   using CommonType = std::common_type_t<DurationType, Other>;
 
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_TMPL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(
       template <typename Other>, ParseableDuration<Other>,
       (const ParseableDuration<Other>& other) const noexcept, {
         return ql::compareThreeWay(CommonType<Other>{duration_}.count(),
                                    CommonType<Other>{other.duration_}.count());
       })
 
-  QL_DEFINE_EQUALITY_OPERATOR(ParseableDuration)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(ParseableDuration, duration_)
 
   // ___________________________________________________________________________
   template <typename CharT>

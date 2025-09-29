@@ -14,8 +14,6 @@ class BlankNode {
   bool _generated;
   std::string _label;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_generated, _label)
-
  public:
   BlankNode(bool generated, std::string label);
 
@@ -35,7 +33,7 @@ class BlankNode {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const;
 
-  QL_DEFINE_EQUALITY_OPERATOR(BlankNode)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BlankNode, _generated, _label)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

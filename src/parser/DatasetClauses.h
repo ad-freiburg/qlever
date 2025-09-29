@@ -30,9 +30,6 @@ struct DatasetClauses {
   // clause, which slightly changes the semantics.
   bool defaultGraphSpecifiedUsingWith_ = false;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(defaultGraphs_, namedGraphs_, emptyDummy_,
-                                 defaultGraphSpecifiedUsingWith_)
-
  public:
   // Divide the dataset clause from `clauses` into default and named graphs,
   // as needed for a `DatasetClauses` object.
@@ -87,7 +84,9 @@ struct DatasetClauses {
   // implicitly allowed.
   bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
-  QL_DEFINE_EQUALITY_OPERATOR(DatasetClauses)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DatasetClauses, defaultGraphs_,
+                                              namedGraphs_, emptyDummy_,
+                                              defaultGraphSpecifiedUsingWith_)
 };
 }  // namespace parsedQuery
 

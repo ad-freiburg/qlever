@@ -43,11 +43,10 @@ class Index {
     size_t normal{};
     size_t internal{};
 
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE(normal, internal)
-
     size_t normalAndInternal_() const { return normal + internal; }
 
-    QL_DEFINE_EQUALITY_OPERATOR(NumNormalAndInternal)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NumNormalAndInternal, normal,
+                                                internal)
 
     static NumNormalAndInternal fromNormalAndTotal(size_t normal,
                                                    size_t total) {

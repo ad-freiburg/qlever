@@ -48,7 +48,6 @@ class MemorySize {
   // Because of `sizeof` we know, that any size of memory, in bytes, can be
   // encoded as a `size_t` in cpp.
   size_t memoryInBytes_ = 0;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(memoryInBytes_)
 
  public:
   // Default constructors.
@@ -61,8 +60,8 @@ class MemorySize {
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
   // Default comparison operator.
-  QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(MemorySize)
-  QL_DEFINE_THREEWAY_OPERATOR_CONSTEXPR(MemorySize)
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(MemorySize,
+                                                        memoryInBytes_)
 
   // Hashing.
   template <typename H>

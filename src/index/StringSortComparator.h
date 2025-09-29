@@ -70,8 +70,7 @@ class LocaleManager {
       return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
     }
 
-    QL_DEFINE_EQUALITY_OPERATOR(SortKeyImpl)
-    QL_DEFINE_THREEWAY_OPERATOR(SortKeyImpl)
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
 
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
@@ -84,8 +83,6 @@ class LocaleManager {
 
    private:
     T sortKey_;
-
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE(sortKey_)
   };
   using SortKey = SortKeyImpl<std::basic_string<uint8_t>>;
   using SortKeyView = SortKeyImpl<std::basic_string_view<uint8_t>>;

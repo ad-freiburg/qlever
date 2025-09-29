@@ -15,21 +15,18 @@ using GraphRef = ad_utility::triple_component::Iri;
 // graph.
 struct DEFAULT {
   // For testing
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-  QL_DEFINE_EQUALITY_OPERATOR(DEFAULT)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DEFAULT)
 };
 // Denotes the target graphs for an operation. Here the target are all named
 // graphs.
 struct NAMED {
   // For testing
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-  QL_DEFINE_EQUALITY_OPERATOR(NAMED)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NAMED)
 };
 // Denotes the target graphs for an operation. Here the target are all graphs.
 struct ALL {
   // For testing
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-  QL_DEFINE_EQUALITY_OPERATOR(ALL)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ALL)
 };
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;

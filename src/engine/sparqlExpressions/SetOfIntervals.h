@@ -23,10 +23,9 @@ struct SetOfIntervals {
   using Vec = std::vector<std::pair<size_t, size_t>>;
   Vec _intervals;
   constexpr static size_t upperBound = std::numeric_limits<size_t>::max();
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_intervals)
 
   // _________________________________________________________________________
-  QL_DEFINE_EQUALITY_OPERATOR(SetOfIntervals)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals)
 
   /// Sort the intervals in ascending order and assert that they are indeed
   /// disjoint and nonempty.

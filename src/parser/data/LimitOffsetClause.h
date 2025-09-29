@@ -21,8 +21,6 @@ struct LimitOffsetClause {
   std::optional<uint64_t> textLimit_ = std::nullopt;
   std::optional<uint64_t> exportLimit_ = std::nullopt;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_limit, textLimit_, exportLimit_)
-
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
   uint64_t limitOrDefault() const {
@@ -67,7 +65,8 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  QL_DEFINE_EQUALITY_OPERATOR(LimitOffsetClause)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LimitOffsetClause, _limit,
+                                              textLimit_, exportLimit_)
 
   // Merge two clauses together. This adds the offsets and takes the minimum of
   // both limits. If the other limit is not set, the current limit is kept.

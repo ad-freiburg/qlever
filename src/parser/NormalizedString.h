@@ -12,10 +12,8 @@
 
 struct NormalizedChar {
   char c_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(c_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(NormalizedChar)
-  QL_DEFINE_THREEWAY_OPERATOR(NormalizedChar)
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NormalizedChar, c_)
 };
 
 // A bespoke string representation that ensures the content

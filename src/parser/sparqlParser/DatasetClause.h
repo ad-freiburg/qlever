@@ -13,10 +13,8 @@ struct DatasetClause {
   TripleComponent::Iri dataset_;
   bool isNamed_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(dataset_, isNamed_)
-
   // For testing
-  QL_DEFINE_EQUALITY_OPERATOR(DatasetClause)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DatasetClause, dataset_, isNamed_)
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H

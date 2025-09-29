@@ -33,10 +33,9 @@ struct ExceptionMetadata {
   size_t line_;
   size_t charPositionInLine_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(query_, startIndex_, stopIndex_, line_,
-                                 charPositionInLine_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(ExceptionMetadata)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ExceptionMetadata, query_,
+                                              startIndex_, stopIndex_, line_,
+                                              charPositionInLine_)
 
   // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.

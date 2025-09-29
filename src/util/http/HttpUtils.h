@@ -54,8 +54,6 @@ class Url {
   std::string port_;
   std::string target_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(protocol_, host_, port_, target_)
-
  public:
   // Construct from given URL.
   explicit Url(std::string_view url);
@@ -78,7 +76,8 @@ class Url {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 
-  QL_DEFINE_EQUALITY_OPERATOR(Url)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Url, protocol_, host_, port_,
+                                              target_)
 };
 
 // A concept for `http::request`

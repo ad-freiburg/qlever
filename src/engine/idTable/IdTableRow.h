@@ -53,8 +53,6 @@ class Row {
  private:
   Data data_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(data_)
-
  public:
   // Construct a row for the dynamic case (then the number of columns has to be
   // specified).
@@ -89,7 +87,7 @@ class Row {
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
-  QL_DEFINE_EQUALITY_OPERATOR(Row)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
   explicit operator std::array<T, numStaticColumns>() const

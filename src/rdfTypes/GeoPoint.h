@@ -39,8 +39,6 @@ class GeoPoint {
   double lat_;
   double lng_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(lat_, lng_)
-
  public:
   using T = uint64_t;
 
@@ -94,7 +92,7 @@ class GeoPoint {
 
   std::pair<std::string, const char*> toStringAndType() const;
 
-  QL_DEFINE_EQUALITY_OPERATOR(GeoPoint)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoPoint, lat_, lng_)
 };
 
 #endif  // QLEVER_SRC_PARSER_GEOPOINT_H

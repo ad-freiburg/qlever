@@ -59,7 +59,7 @@ struct IdTriple {
 
   // Note: The payload is not part of the value representation and therefore not
   // compared.
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
       IdTriple, (const IdTriple& other) const->ql::strong_ordering, {
         // Note: Libc++ in our clang build neither has three-way comparisons for
         // `std::array`, nor the `lexicographical_compare_three_way` function.

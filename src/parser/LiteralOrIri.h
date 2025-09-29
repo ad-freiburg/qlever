@@ -22,8 +22,6 @@ class alignas(16) LiteralOrIri {
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(data_)
-
  public:
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
@@ -70,9 +68,9 @@ class alignas(16) LiteralOrIri {
     return H::combine(std::move(h), literalOrIri.data_);
   }
 
-  QL_DEFINE_EQUALITY_OPERATOR(LiteralOrIri)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LiteralOrIri, data_)
 
-  QL_DECLARE_THREEWAY_OPERATOR_CUSTOM_LOCAL(LiteralOrIri,
+  QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LiteralOrIri,
                                             (const LiteralOrIri& rhs)
                                                 const->ql::strong_ordering)
 

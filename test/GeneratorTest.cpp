@@ -10,9 +10,8 @@
 struct Details {
   bool begin_ = false;
   bool end_ = false;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(begin_, end_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(Details)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Details, begin_, end_)
 };
 
 // A simple generator that first yields three numbers and then adds a detail

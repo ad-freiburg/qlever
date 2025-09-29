@@ -169,12 +169,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-    QL_DEFINE_EQUALITY_OPERATOR(NoTimeZone)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone)
   };
   struct TimeZoneZ {
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-    QL_DEFINE_EQUALITY_OPERATOR(TimeZoneZ)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
@@ -214,7 +212,7 @@ class Date {
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
   /// different time zone values (see the docstring of this class).
-  [[nodiscard]] QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR_LOCAL(
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
       Date, (const Date& rhs) const,
       { return ql::compareThreeWay(toBits(), rhs.toBits()); });
 

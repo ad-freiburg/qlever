@@ -34,11 +34,10 @@ struct InputFileSpecification {
   // command line).
   bool parseInParallelSetExplicitly_ = false;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(filename_, filetype_, defaultGraph_,
-                                 parseInParallel_,
-                                 parseInParallelSetExplicitly_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(InputFileSpecification)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(InputFileSpecification, filename_,
+                                              filetype_, defaultGraph_,
+                                              parseInParallel_,
+                                              parseInParallelSetExplicitly_)
 };
 }  // namespace qlever
 

@@ -37,11 +37,9 @@ class SparqlPrefix {
   std::string _prefix;
   std::string _uri;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_prefix, _uri)
-
   [[nodiscard]] std::string asString() const;
 
-  QL_DEFINE_EQUALITY_OPERATOR(SparqlPrefix)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlPrefix, _prefix, _uri)
 };
 
 // Forward declaration

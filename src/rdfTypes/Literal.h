@@ -28,8 +28,6 @@ class Literal {
   // datatypes.
   std::size_t beginOfSuffix_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(content_, beginOfSuffix_)
-
   // Create a new literal without any descriptor
   explicit Literal(std::string content, size_t beginOfSuffix_);
 
@@ -51,7 +49,7 @@ class Literal {
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
-  QL_DEFINE_EQUALITY_OPERATOR(Literal)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
 
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();

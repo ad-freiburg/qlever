@@ -60,8 +60,8 @@ struct CompressedBlockMetadataNoBlockIndex {
   struct OffsetAndCompressedSize {
     off_t offsetInFile_;
     size_t compressedSize_;
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE(offsetInFile_, compressedSize_)
-    QL_DEFINE_EQUALITY_OPERATOR(OffsetAndCompressedSize)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(OffsetAndCompressedSize,
+                                                offsetInFile_, compressedSize_)
   };
 
   using GraphInfo = std::optional<std::vector<Id>>;
@@ -89,9 +89,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     Id col1Id_;
     Id col2Id_;
     Id graphId_;
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE(col0Id_, col1Id_, col2Id_, graphId_)
-    QL_DEFINE_EQUALITY_OPERATOR(PermutedTriple)
-    QL_DEFINE_THREEWAY_OPERATOR(PermutedTriple)
+
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(PermutedTriple, col0Id_,
+                                                col1Id_, col2Id_, graphId_)
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -120,10 +120,6 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(offsetsAndCompressedSize_, numRows_,
-                                 firstTriple_, lastTriple_, graphInfo_,
-                                 containsDuplicatesWithDifferentGraphs_)
-
   // Check for constant values in `firstTriple_` and `lastTriple` over all
   // columns `< columnIndex`.
   // Returns `true` if the respective column values of `firstTriple_` and
@@ -136,7 +132,10 @@ struct CompressedBlockMetadataNoBlockIndex {
                         size_t columnIndex) const;
 
   // Two of these are equal if all members are equal.
-  QL_DEFINE_EQUALITY_OPERATOR(CompressedBlockMetadataNoBlockIndex)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
+      CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
+      firstTriple_, lastTriple_, graphInfo_,
+      containsDuplicatesWithDifferentGraphs_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -162,10 +161,10 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // the corresponding block from the `LocatedTriples` when only a subset of
   // blocks is being used.
   size_t blockIndex_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(blockIndex_)
 
   // Two of these are equal if all members are equal.
-  QL_DEFINE_EQUALITY_OPERATOR(CompressedBlockMetadata)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedBlockMetadata,
+                                              blockIndex_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -235,9 +234,6 @@ struct CompressedRelationMetadata {
   // `Id(-1)`.
   uint64_t offsetInBlock_ = std::numeric_limits<uint64_t>::max();
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(col0Id_, numRows_, multiplicityCol1_,
-                                 multiplicityCol2_, offsetInBlock_)
-
   size_t getNofElements() const { return numRows_; }
 
   // Setters and getters for the multiplicities.
@@ -249,7 +245,10 @@ struct CompressedRelationMetadata {
   bool isFunctional() const { return multiplicityCol1_ == 1.0f; }
 
   // Two of these are equal if all members are equal.
-  QL_DEFINE_EQUALITY_OPERATOR(CompressedRelationMetadata)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedRelationMetadata,
+                                              col0Id_, numRows_,
+                                              multiplicityCol1_,
+                                              multiplicityCol2_, offsetInBlock_)
 };
 
 // Serialization of the compressed "relation" meta data.

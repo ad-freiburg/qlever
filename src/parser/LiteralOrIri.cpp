@@ -127,7 +127,7 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
 }
 
 // ___________________________________________
-QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_IMPL(
+QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(
     LiteralOrIri, (const LiteralOrIri& rhs) const->ql::strong_ordering, {
       int i = IndexImpl::staticGlobalSingletonComparator().compare(
           toStringRepresentation(), rhs.toStringRepresentation(),

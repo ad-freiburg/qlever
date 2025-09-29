@@ -53,7 +53,6 @@ class SharedLocatedTriplesSnapshot
 struct DeltaTriplesCount {
   int64_t triplesInserted_;
   int64_t triplesDeleted_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(triplesInserted_, triplesDeleted_)
 
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
@@ -62,7 +61,8 @@ struct DeltaTriplesCount {
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
                                      const DeltaTriplesCount& rhs);
 
-  QL_DEFINE_EQUALITY_OPERATOR(DeltaTriplesCount)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
+                                              triplesInserted_, triplesDeleted_)
 };
 
 // A class for maintaining triples that are inserted or deleted after index

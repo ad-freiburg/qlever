@@ -72,7 +72,6 @@ struct EncodedBoundingBox {
 struct GeometryType {
  private:
   uint8_t type_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(type_)
 
  public:
   explicit GeometryType(uint8_t type) : type_{type} {};
@@ -82,7 +81,7 @@ struct GeometryType {
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
 
-  QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(GeometryType)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
 // Forward declaration for concept

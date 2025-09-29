@@ -37,10 +37,9 @@ struct ColumnIndexAndTypeInfo {
   // The information whether this column *might* contain UNDEF values.
   UndefStatus mightContainUndef_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(columnIndex_, mightContainUndef_)
-
   // Equality comparison, mostly used for testing.
-  QL_DEFINE_EQUALITY_OPERATOR(ColumnIndexAndTypeInfo)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ColumnIndexAndTypeInfo,
+                                              columnIndex_, mightContainUndef_)
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is

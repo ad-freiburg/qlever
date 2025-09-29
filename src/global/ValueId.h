@@ -157,7 +157,7 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
       ValueId, (const ValueId& other) const, {
         using enum Datatype;
         auto type = getDatatype();

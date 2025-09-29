@@ -27,10 +27,8 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(numAdded_, numDeleted_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(NumAddedAndDeleted)
-  QL_DEFINE_THREEWAY_OPERATOR(NumAddedAndDeleted)
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NumAddedAndDeleted, numAdded_,
+                                              numDeleted_)
 
   friend std::ostream& operator<<(std::ostream& str,
                                   const NumAddedAndDeleted& n) {
@@ -53,8 +51,6 @@ struct LocatedTriple {
   // If `true`, the triple is inserted, otherwise it is deleted.
   bool insertOrDelete_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(blockIndex_, triple_, insertOrDelete_)
-
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
@@ -62,7 +58,8 @@ struct LocatedTriple {
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
-  QL_DEFINE_EQUALITY_OPERATOR(LocatedTriple)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+                                              triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

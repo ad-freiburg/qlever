@@ -21,8 +21,6 @@ struct IndexFormatVersion {
   // The date of the last breaking change of the index format.
   DateYearOrDuration date_{Date{1900, 1, 1}};
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(prNumber_, date_)
-
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const IndexFormatVersion& version) {
     j["date"] = version.date_.toStringAndType().first;
@@ -35,7 +33,8 @@ struct IndexFormatVersion {
     version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
 
-  QL_DEFINE_EQUALITY_OPERATOR(IndexFormatVersion)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(IndexFormatVersion, prNumber_,
+                                              date_)
 };
 
 // The actual index version. Change it once the binary format of the index

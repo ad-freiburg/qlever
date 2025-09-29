@@ -17,8 +17,6 @@
 class Literal {
   std::string _stringRepresentation;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_stringRepresentation)
-
   CPP_template_2(typename T)(
       requires ad_utility::Streamable<T>) static std::string
       toString(const T& t) {
@@ -64,7 +62,7 @@ class Literal {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
-  QL_DEFINE_EQUALITY_OPERATOR(Literal)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, _stringRepresentation)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

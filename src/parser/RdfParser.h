@@ -45,9 +45,8 @@ struct TurtleTriple {
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(subject_, predicate_, object_, graphIri_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(TurtleTriple)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
+                                              predicate_, object_, graphIri_)
 };
 
 // A base class for all the different turtle and N-Quad parsers.

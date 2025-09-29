@@ -31,9 +31,8 @@ struct Quads {
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(freeTriples_, graphTriples_)
-
-  QL_DEFINE_EQUALITY_OPERATOR(Quads)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Quads, freeTriples_,
+                                              graphTriples_)
 
   // Run the function for all variables in the quads. The function may be called
   // twice for the same variable.

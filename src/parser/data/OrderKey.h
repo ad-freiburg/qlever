@@ -29,13 +29,12 @@ class VariableOrderKey {
   bool isDescending_;
   Variable variable_;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(isDescending_, variable_)
-
   // ___________________________________________________________________________
   explicit VariableOrderKey(Variable variable, bool isDescending = false)
       : isDescending_{isDescending}, variable_{std::move(variable)} {}
 
-  QL_DEFINE_EQUALITY_OPERATOR(VariableOrderKey)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VariableOrderKey, isDescending_,
+                                              variable_)
 };
 
 // Represents an ordering by a variable or an expression.

@@ -160,7 +160,7 @@ class CopyShield {
     return *this;
   }
 
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
       T,
       (const T& other)
           const QL_CONCEPT_OR_NOTHING(requires(std::three_way_comparable<T>)),

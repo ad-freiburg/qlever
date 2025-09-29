@@ -54,35 +54,30 @@ namespace sparqlOperation {
 struct Query {
   std::string query_;
   std::vector<DatasetClause> datasetClauses_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(query_, datasetClauses_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(Query)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Query, query_, datasetClauses_)
 };
 
 // A SPARQL 1.1 Update
 struct Update {
   std::string update_;
   std::vector<DatasetClause> datasetClauses_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(update_, datasetClauses_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(Update)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Update, update_, datasetClauses_)
 };
 
 // A Graph Store HTTP Protocol operation. We only store the graph on which the
 // operation acts. The actual operation is extracted later.
 struct GraphStoreOperation {
   GraphOrDefault graph_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(graph_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(GraphStoreOperation)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphStoreOperation, graph_)
 };
 
 // No operation. This can happen for QLever's custom operations (e.g.
 // `cache-stats`). These requests have no operation but are still valid.
 struct None {
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE()
-
-  QL_DEFINE_EQUALITY_OPERATOR(None)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(None)
 };
 
 using Operation = std::variant<Query, Update, GraphStoreOperation, None>;

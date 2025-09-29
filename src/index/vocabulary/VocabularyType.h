@@ -35,8 +35,6 @@ class VocabularyType {
  private:
   Enum value_ = Enum::InMemoryUncompressed;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(value_)
-
   static constexpr size_t numValues_ = 5;
   // All possible values.
   static constexpr std::array<Enum, numValues_> all_{
@@ -105,7 +103,7 @@ class VocabularyType {
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 
-  QL_DEFINE_EQUALITY_OPERATOR(VocabularyType)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VocabularyType, value_)
 };
 }  // namespace ad_utility
 

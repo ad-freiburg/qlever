@@ -218,7 +218,7 @@ class DayTimeDuration {
   }
 
   // Comparison <=> on bits
-  [[nodiscard]] QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR_LOCAL(
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
       DayTimeDuration, (const DayTimeDuration& rhs) const,
       { return ql::compareThreeWay(toBits(), rhs.toBits()); });
 

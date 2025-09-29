@@ -14,8 +14,6 @@
 class Iri {
   std::string _string;
 
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(_string)
-
  public:
   explicit Iri(std::string str);
 
@@ -33,7 +31,7 @@ class Iri {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _string; }
 
-  QL_DEFINE_EQUALITY_OPERATOR(Iri)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, _string)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_IRI_H

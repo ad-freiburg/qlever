@@ -95,7 +95,7 @@ class IteratorForAccessOperator {
   IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
       default;
 
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
       IteratorForAccessOperator, (const IteratorForAccessOperator& rhs) const,
       { return ql::compareThreeWay(index_, rhs.index_); })
 

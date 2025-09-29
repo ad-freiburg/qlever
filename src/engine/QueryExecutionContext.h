@@ -73,9 +73,9 @@ class CacheValue {
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(key_, locatedTriplesSnapshotIndex_)
 
-  QL_DEFINE_EQUALITY_OPERATOR(QueryCacheKey)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryCacheKey, key_,
+                                              locatedTriplesSnapshotIndex_)
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {

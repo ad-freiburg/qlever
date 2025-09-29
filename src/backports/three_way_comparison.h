@@ -1,22 +1,91 @@
-//
-// Created by kalmbacj on 9/2/25.
-//
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Author: Krzysztof Tyburski <Krzysztof.Tyburski@partner.bmw.de>
 
-#ifndef THREE_WAY_COMPARISON_H
-#define THREE_WAY_COMPARISON_H
+/*
+ * Three-Way comparison backport for C++17/C++20 compatibility
+ *
+ * This header provides macros for implementing comparison operators that work
+ * consistently across C++17 and C++20. In C++20, it uses the spaceship operator
+ * (<=>), while in C++17 it provides equivalent functionality using traditional
+ * comparison operators.
+ *
+ * Available Macros:
+ *
+ * DEFAULTED COMPARISON MACROS (using std::tie for member comparison):
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR(Class, members...): Friend operators
+ * for all comparisons
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_CONSTEXPR(Class, members...):
+ * Constexpr version
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(Class, members...): Member
+ * operators
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Class, members...):
+ * Constexpr member operators
+ *
+ * EQUALITY-ONLY MACROS (for classes that only need == and !=):
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(Class, members...): Friend equality
+ * operators
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(Class, members...):
+ * Constexpr version
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Class, members...): Member
+ * equality operators
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(Class, members...):
+ * Constexpr member version
+ *
+ * CUSTOM COMPARISON MACROS (for implementing custom comparison logic):
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(Class, signature, body): Friend operator
+ * with custom logic
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(Class, signature, body):
+ * Constexpr version
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Class, signature, body): Member
+ * operator with custom logic
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Class, signature, body):
+ * Constexpr member version
+ *
+ * TEMPLATE VARIANTS (for template classes):
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_TEMPLATE(template_spec, Class,
+ * signature, body)
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR_TEMPLATE(template_spec, Class,
+ * signature, body)
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(template_spec, Class,
+ * signature, body)
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_TEMPLATE(template_spec,
+ * Class, signature, body)
+ *
+ * DECLARATION/DEFINITION SPLIT MACROS (for separate declaration and
+ * definition):
+ * - QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Class, signature): Declare in
+ * class
+ * - QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Class, signature):
+ * Constexpr declaration
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(Class, signature, body):
+ * Define outside class
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_IMPL: Constexpr version
+ *
+ * COMPARISON FUNCTION:
+ * - ql::compareThreeWay(lhs, rhs): Generic three-way comparison function
+ *
+ * Examples and usage patterns can be found in:
+ * test/backports/ThreeWayComparisonTest.cpp
+ */
+
+#ifndef QLEVER_SRC_BACKPORTS_THREE_WAY_COMPARISON_H
+#define QLEVER_SRC_BACKPORTS_THREE_WAY_COMPARISON_H
+
+#include <absl/types/compare.h>
 
 #include <cmath>
 #include <tuple>
 #include <type_traits>
 
+namespace ql {
+using absl::partial_ordering;
+using absl::strong_ordering;
+using absl::weak_ordering;
+}  // namespace ql
+
 #ifdef QLEVER_CPP_17
 
 namespace ql {
-
-using strong_ordering = std::strong_ordering;
-using partial_ordering = std::partial_ordering;
-using weak_ordering = std::weak_ordering;
 
 template <typename LT, typename RT, typename = void>
 struct HasLess : std::false_type {};
@@ -46,10 +115,16 @@ struct HasGreaterEqual<
     LT, RT, std::void_t<decltype(std::declval<LT>() >= std::declval<RT>())>>
     : std::true_type {};
 
-template <typename LT, typename RT>
+template <typename LT, typename RT, typename = void>
 struct HasAllComparisonOperators
     : std::conjunction<HasLess<LT, RT>, HasGreater<LT, RT>,
                        HasLessEqual<LT, RT>, HasGreaterEqual<LT, RT>> {};
+
+template <typename LT, typename RT>
+struct HasAllComparisonOperators<
+    LT, RT,
+    std::enable_if_t<std::is_arithmetic_v<LT> && std::is_arithmetic_v<RT>>>
+    : std::true_type {};
 
 template <typename LT, typename RT>
 constexpr bool HasAllComparisonOperators_v =
@@ -60,7 +135,7 @@ struct adl_compare_tag {};
 }  // namespace adl
 
 template <typename LT, typename RT>
-auto try_adl_compareThreeWay(const LT& lhs, const RT& rhs, adl::adl_compare_tag)
+auto tryAdlCompareThreeWay(const LT& lhs, const RT& rhs, adl::adl_compare_tag)
     -> decltype(compareThreeWay(lhs, rhs));
 
 template <typename LT, typename RT, typename = void>
@@ -68,7 +143,7 @@ struct HasExternalCompareThreeWay : std::false_type {};
 template <typename LT, typename RT>
 struct HasExternalCompareThreeWay<
     LT, RT,
-    std::void_t<decltype(try_adl_compareThreeWay(
+    std::void_t<decltype(tryAdlCompareThreeWay(
         std::declval<const LT&>(), std::declval<const RT&>(),
         adl::adl_compare_tag{}))>> : std::true_type {};
 
@@ -81,10 +156,10 @@ struct HasMemberCompareThreeWay<
         std::declval<const T&>()))>> : std::true_type {};
 
 template <typename LT, typename RT>
-constexpr bool hasExternalCompareThreeWay_v =
+constexpr bool hasExternalCompareThreeWayV =
     HasExternalCompareThreeWay<LT, RT>::value;
 template <typename LT, typename RT>
-constexpr bool hasMemberCompareThreeWay_v =
+constexpr bool hasMemberCompareThreeWayV =
     HasMemberCompareThreeWay<LT, RT>::value;
 
 template <typename LT, typename RT>
@@ -93,48 +168,41 @@ struct HasAnyCompareThreeWay
                        HasMemberCompareThreeWay<LT, RT>> {};
 
 template <typename LT, typename RT>
-constexpr bool hasAnyCompareThreeWay_v = HasAnyCompareThreeWay<LT, RT>::value;
-
-template <typename LT, typename RT>
-constexpr std::enable_if_t<
-    std::conjunction_v<std::is_floating_point<LT>, std::is_floating_point<RT>>,
-    ql::partial_ordering>
-compareThreeWay(const LT& lhs, const RT& rhs) {
-  if (std::isnan(lhs) || std::isnan(rhs)) {
-    return ql::partial_ordering::unordered;
-  }
-  if (lhs < rhs) {
-    return ql::partial_ordering::less;
-  }
-  if (lhs > rhs) {
-    return ql::partial_ordering::greater;
-  }
-  return ql::partial_ordering::equivalent;
-}
+constexpr bool hasAnyCompareThreeWayV = HasAnyCompareThreeWay<LT, RT>::value;
 
 template <typename LT, typename RT,
-          std::enable_if_t<std::conjunction_v<HasAllComparisonOperators<LT, RT>,
-                                              std::negation<std::disjunction<
-                                                  HasAnyCompareThreeWay<LT, RT>,
-                                                  std::is_floating_point<LT>,
-                                                  std::is_floating_point<RT>>>>,
-                           int> = 0>
+          std::enable_if_t<
+              std::disjunction_v<std::conjunction<std::is_floating_point<LT>,
+                                                  std::is_floating_point<RT>>,
+                                 HasAnyCompareThreeWay<LT, RT>,
+                                 HasAllComparisonOperators<LT, RT>>,
+              int> = 0>
 constexpr auto compareThreeWay(const LT& lhs, const RT& rhs) {
-  if (lhs < rhs) {
-    return ql::strong_ordering::less;
-  } else if (lhs > rhs) {
-    return ql::strong_ordering::greater;
-  }
-  return ql::strong_ordering::equal;
-}
-
-template <typename LT, typename RT,
-          std::enable_if_t<ql::HasAnyCompareThreeWay<LT, RT>::value, int> = 0>
-constexpr auto compareThreeWay(const LT& lhs, const RT& rhs) {
-  if constexpr (hasMemberCompareThreeWay_v<LT, RT>) {
-    return lhs.compareThreeWay(rhs);
+  if constexpr (std::conjunction_v<std::is_floating_point<LT>,
+                                   std::is_floating_point<RT>>) {
+    if (std::isnan(lhs) || std::isnan(rhs)) {
+      return ql::partial_ordering::unordered;
+    }
+    if (lhs < rhs) {
+      return ql::partial_ordering::less;
+    }
+    if (lhs > rhs) {
+      return ql::partial_ordering::greater;
+    }
+    return ql::partial_ordering::equivalent;
+  } else if constexpr (hasAnyCompareThreeWayV<LT, RT>) {
+    if constexpr (hasMemberCompareThreeWayV<LT, RT>) {
+      return lhs.compareThreeWay(rhs);
+    } else {
+      return compareThreeWay(lhs, rhs);
+    }
   } else {
-    return compareThreeWay(lhs, rhs);
+    if (lhs < rhs) {
+      return ql::strong_ordering::less;
+    } else if (lhs > rhs) {
+      return ql::strong_ordering::greater;
+    }
+    return ql::strong_ordering::equal;
   }
 }
 
@@ -154,167 +222,190 @@ constexpr auto compareThreeWay(const T& /*lhs*/,
   } else if (rhs > 0) {
     return ql::strong_ordering::less;
   }
-  return std::strong_ordering::equal;
+  return ql::strong_ordering::equal;
 }
 
 }  // namespace ql
 
-#define QL_CONSTEXPR_IF(C) constexpr C
+#define QL_DEFINE_CLASS_MEMBERS_AS_TIE(CONSTEXPR_SPEC, ...) \
+  CONSTEXPR_SPEC auto membersAsTie() const { return std::tie(__VA_ARGS__); }
 
-#define QL_DEFINE_CLASS_MEMBERS_AS_TIE_(CONSTEXPR, ...) \
-  CONSTEXPR auto membersAsTie() const { return std::make_tuple(__VA_ARGS__); }
-
-#define QL_DEFINE_CLASS_MEMBERS_AS_TIE(...) \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE_(, __VA_ARGS__)
-
-#define QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(...) \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE_(constexpr, __VA_ARGS__)
-
-#define CPP_equality_operator(CONSTEXPR, T)                  \
-  friend CONSTEXPR bool operator==(const T& a, const T& b) { \
-    return a.membersAsTie() == b.membersAsTie();             \
-  }                                                          \
-  friend CONSTEXPR bool operator!=(const T& a, const T& b) { \
-    return a.membersAsTie() != b.membersAsTie();             \
+#define QL_IMPL_EQUALITY_OPERATOR(CONSTEXPR_SPEC, T)              \
+  friend CONSTEXPR_SPEC bool operator==(const T& a, const T& b) { \
+    return a.membersAsTie() == b.membersAsTie();                  \
+  }                                                               \
+  friend CONSTEXPR_SPEC bool operator!=(const T& a, const T& b) { \
+    return a.membersAsTie() != b.membersAsTie();                  \
   }
 
-#define CPP_threeway_operator(CONSTEXPR, T)                  \
-  friend CONSTEXPR bool operator<(const T& a, const T& b) {  \
-    return a.membersAsTie() < b.membersAsTie();              \
-  }                                                          \
-  friend CONSTEXPR bool operator<=(const T& a, const T& b) { \
-    return a.membersAsTie() <= b.membersAsTie();             \
-  }                                                          \
-  friend CONSTEXPR bool operator>(const T& a, const T& b) {  \
-    return a.membersAsTie() > b.membersAsTie();              \
-  }                                                          \
-  friend CONSTEXPR bool operator>=(const T& a, const T& b) { \
-    return a.membersAsTie() >= b.membersAsTie();             \
+#define QL_IMPL_THREEWAY_OPERATOR(CONSTEXPR_SPEC, T)              \
+  friend CONSTEXPR_SPEC bool operator<(const T& a, const T& b) {  \
+    return a.membersAsTie() < b.membersAsTie();                   \
+  }                                                               \
+  friend CONSTEXPR_SPEC bool operator<=(const T& a, const T& b) { \
+    return a.membersAsTie() <= b.membersAsTie();                  \
+  }                                                               \
+  friend CONSTEXPR_SPEC bool operator>(const T& a, const T& b) {  \
+    return a.membersAsTie() > b.membersAsTie();                   \
+  }                                                               \
+  friend CONSTEXPR_SPEC bool operator>=(const T& a, const T& b) { \
+    return a.membersAsTie() >= b.membersAsTie();                  \
   }
 
-#define CPP_equality_operator_local(T)                   \
-  bool operator==(const T& other) const {                \
-    return this->membersAsTie() == other.membersAsTie(); \
-  }                                                      \
-  bool operator!=(const T& other) const {                \
-    return this->membersAsTie() != other.membersAsTie(); \
+#define QL_IMPL_EQUALITY_OPERATOR_LOCAL(CONSTEXPR_SPEC, T) \
+  CONSTEXPR_SPEC bool operator==(const T& other) const {   \
+    return this->membersAsTie() == other.membersAsTie();   \
+  }                                                        \
+  CONSTEXPR_SPEC bool operator!=(const T& other) const {   \
+    return this->membersAsTie() != other.membersAsTie();   \
   }
 
-#define CPP_threeway_operator_local(T)                   \
-  bool operator<(const T& other) const {                 \
-    return this->membersAsTie() < other.membersAsTie();  \
-  }                                                      \
-  bool operator<=(const T& other) const {                \
-    return this->membersAsTie() <= other.membersAsTie(); \
-  }                                                      \
-  bool operator>(const T& other) const {                 \
-    return this->membersAsTie() > other.membersAsTie();  \
-  }                                                      \
-  bool operator>=(const T& other) const {                \
-    return this->membersAsTie() >= other.membersAsTie(); \
+#define QL_IMPL_THREEWAY_OPERATOR_LOCAL(CONSTEXPR_SPEC, T) \
+  CONSTEXPR_SPEC bool operator<(const T& other) const {    \
+    return this->membersAsTie() < other.membersAsTie();    \
+  }                                                        \
+  CONSTEXPR_SPEC bool operator<=(const T& other) const {   \
+    return this->membersAsTie() <= other.membersAsTie();   \
+  }                                                        \
+  CONSTEXPR_SPEC bool operator>(const T& other) const {    \
+    return this->membersAsTie() > other.membersAsTie();    \
+  }                                                        \
+  CONSTEXPR_SPEC bool operator>=(const T& other) const {   \
+    return this->membersAsTie() >= other.membersAsTie();   \
   }
 
-#define QL_DEFINE_THREEWAY_OPERATOR(T) CPP_threeway_operator(, T)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_CONSTEXPR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)        \
+  QL_IMPL_THREEWAY_OPERATOR(constexpr, T)                       \
+  QL_IMPL_EQUALITY_OPERATOR(constexpr, T)
 
-#define QL_DEFINE_EQUALITY_OPERATOR(T) CPP_equality_operator(, T)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)       \
+  QL_IMPL_THREEWAY_OPERATOR(, T) QL_IMPL_EQUALITY_OPERATOR(, T)
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CONSTEXPR(T) \
-  CPP_threeway_operator(constexpr, T)
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)        \
+  QL_IMPL_EQUALITY_OPERATOR(constexpr, T)
 
-#define QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(T) \
-  CPP_equality_operator(constexpr, T)
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)       \
+  QL_IMPL_EQUALITY_OPERATOR(, T)
 
-#define QL_DEFINE_THREEWAY_OPERATOR_LOCAL(T) CPP_threeway_operator_local(T)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)              \
+  QL_IMPL_THREEWAY_OPERATOR_LOCAL(constexpr, T)                       \
+  QL_IMPL_EQUALITY_OPERATOR_LOCAL(constexpr, T)
 
-#define QL_DEFINE_EQUALITY_OPERATOR_LOCAL(T) CPP_equality_operator_local(T)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)             \
+  QL_IMPL_THREEWAY_OPERATOR_LOCAL(, T)                      \
+  QL_IMPL_EQUALITY_OPERATOR_LOCAL(, T)
 
-#define CPP_threeway_operator_custom(CONSTEXPR, T, SIGNATURE, BODY)          \
-  static CONSTEXPR auto compareThreeWay SIGNATURE BODY friend CONSTEXPR bool \
-  operator<(const T& a, const T& b) {                                        \
-    return compareThreeWay(a, b) < 0;                                        \
-  }                                                                          \
-  friend CONSTEXPR bool operator<=(const T& a, const T& b) {                 \
-    return compareThreeWay(a, b) <= 0;                                       \
-  }                                                                          \
-  friend CONSTEXPR bool operator>(const T& a, const T& b) {                  \
-    return compareThreeWay(a, b) > 0;                                        \
-  }                                                                          \
-  friend CONSTEXPR bool operator>=(const T& a, const T& b) {                 \
-    return compareThreeWay(a, b) >= 0;                                       \
-  }
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)              \
+  QL_IMPL_EQUALITY_OPERATOR_LOCAL(constexpr, T)
 
-#define CPP_threeway_operator_custom_local(CONSTEXPR, T, SIGNATURE, BODY) \
-  CONSTEXPR auto compareThreeWay SIGNATURE BODY CONSTEXPR bool operator<( \
-      const T& other) const {                                             \
-    return this->compareThreeWay(other) < 0;                              \
-  }                                                                       \
-  CONSTEXPR bool operator<=(const T& other) const {                       \
-    return this->compareThreeWay(other) <= 0;                             \
-  }                                                                       \
-  CONSTEXPR bool operator>(const T& other) const {                        \
-    return this->compareThreeWay(other) > 0;                              \
-  }                                                                       \
-  CONSTEXPR bool operator>=(const T& other) const {                       \
-    return this->compareThreeWay(other) >= 0;                             \
-  }
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(T, ...) \
+  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)             \
+  QL_IMPL_EQUALITY_OPERATOR_LOCAL(, T)
 
-#define CPP_threeway_operator_custom_local_tmpl(TMPL, CONSTEXPR, T, SIGNATURE, \
-                                                BODY)                          \
-  TMPL CONSTEXPR auto compareThreeWay SIGNATURE BODY TMPL CONSTEXPR bool       \
-  operator<(const T& other) const {                                            \
-    return this->compareThreeWay(other) < 0;                                   \
+#define QL_IMPL_CUSTOM_THREEWAY_OPERATOR(TEMPLATE_SPEC, CONSTEXPR_SPEC, T,     \
+                                         SIGNATURE, BODY)                      \
+  TEMPLATE_SPEC static CONSTEXPR_SPEC auto compareThreeWay SIGNATURE BODY      \
+      TEMPLATE_SPEC friend CONSTEXPR_SPEC bool                                 \
+      operator<(const T& a, const T& b) {                                      \
+    return compareThreeWay(a, b) < 0;                                          \
   }                                                                            \
-  TMPL CONSTEXPR bool operator<=(const T& other) const {                       \
-    return this->compareThreeWay(other) <= 0;                                  \
+  TEMPLATE_SPEC friend CONSTEXPR_SPEC bool operator<=(const T& a,              \
+                                                      const T& b) {            \
+    return compareThreeWay(a, b) <= 0;                                         \
   }                                                                            \
-  TMPL CONSTEXPR bool operator>(const T& other) const {                        \
-    return this->compareThreeWay(other) > 0;                                   \
+  TEMPLATE_SPEC friend CONSTEXPR_SPEC bool operator>(const T& a, const T& b) { \
+    return compareThreeWay(a, b) > 0;                                          \
   }                                                                            \
-  TMPL CONSTEXPR bool operator>=(const T& other) const {                       \
-    return this->compareThreeWay(other) >= 0;                                  \
+  TEMPLATE_SPEC friend CONSTEXPR_SPEC bool operator>=(const T& a,              \
+                                                      const T& b) {            \
+    return compareThreeWay(a, b) >= 0;                                         \
   }
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM(T, SIGNATURE, BODY) \
-  CPP_threeway_operator_custom(, T, SIGNATURE, BODY)
-
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR(T, SIGNATURE, BODY) \
-  CPP_threeway_operator_custom(constexpr, T, SIGNATURE, BODY)
-
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(T, SIGNATURE, BODY) \
-  CPP_threeway_operator_custom_local(, T, SIGNATURE, BODY)
-
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_TMPL(TMPL, T, SIGNATURE, \
-                                                      BODY)               \
-  CPP_threeway_operator_custom_local_tmpl(TMPL, , T, SIGNATURE, BODY)
-
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR_LOCAL(T, SIGNATURE, BODY) \
-  CPP_threeway_operator_custom_local(constexpr, T, SIGNATURE, BODY)
-
-#define QL_DECLARE_THREEWAY_OPERATOR_CUSTOM_LOCAL(T, SIGNATURE) \
-  auto compareThreeWay SIGNATURE;                               \
-  bool operator<(const T& other) const {                        \
-    return this->compareThreeWay(other) < 0;                    \
-  }                                                             \
-  bool operator<=(const T& other) const {                       \
-    return this->compareThreeWay(other) <= 0;                   \
-  }                                                             \
-  bool operator>(const T& other) const {                        \
-    return this->compareThreeWay(other) > 0;                    \
-  }                                                             \
-  bool operator>=(const T& other) const {                       \
-    return this->compareThreeWay(other) >= 0;                   \
+#define QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(TEMPLATE_SPEC, CONSTEXPR_SPEC, \
+                                               T, SIGNATURE, BODY)            \
+  TEMPLATE_SPEC CONSTEXPR_SPEC auto compareThreeWay SIGNATURE BODY            \
+      TEMPLATE_SPEC CONSTEXPR_SPEC bool                                       \
+      operator<(const T& other) const {                                       \
+    return this->compareThreeWay(other) < 0;                                  \
+  }                                                                           \
+  TEMPLATE_SPEC CONSTEXPR_SPEC bool operator<=(const T& other) const {        \
+    return this->compareThreeWay(other) <= 0;                                 \
+  }                                                                           \
+  TEMPLATE_SPEC CONSTEXPR_SPEC bool operator>(const T& other) const {         \
+    return this->compareThreeWay(other) > 0;                                  \
+  }                                                                           \
+  TEMPLATE_SPEC CONSTEXPR_SPEC bool operator>=(const T& other) const {        \
+    return this->compareThreeWay(other) >= 0;                                 \
   }
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_IMPL(T, SIGNATURE, BODY) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(T, SIGNATURE, BODY) \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR(, , T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(T, SIGNATURE, BODY) \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR(, constexpr, T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_TEMPLATE(TEMPLATE_SPEC, T, \
+                                                    SIGNATURE, BODY)  \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR(TEMPLATE_SPEC, , T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR_TEMPLATE( \
+    TEMPLATE_SPEC, T, SIGNATURE, BODY)                         \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR(TEMPLATE_SPEC, constexpr, T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T, SIGNATURE, BODY) \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(, , T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(TEMPLATE_SPEC, T, \
+                                                          SIGNATURE, BODY)  \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(TEMPLATE_SPEC, , T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, SIGNATURE, BODY) \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(, constexpr, T, SIGNATURE, BODY)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_TEMPLATE(  \
+    TEMPLATE_SPEC, T, SIGNATURE, BODY)                                \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(TEMPLATE_SPEC, constexpr, T, \
+                                         SIGNATURE, BODY)
+
+#define QL_IMPL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(CONSTEXPR, T, \
+                                                       SIGNATURE)    \
+  CONSTEXPR auto compareThreeWay SIGNATURE;                          \
+  CONSTEXPR bool operator<(const T& other) const {                   \
+    return this->compareThreeWay(other) < 0;                         \
+  }                                                                  \
+  CONSTEXPR bool operator<=(const T& other) const {                  \
+    return this->compareThreeWay(other) <= 0;                        \
+  }                                                                  \
+  CONSTEXPR bool operator>(const T& other) const {                   \
+    return this->compareThreeWay(other) > 0;                         \
+  }                                                                  \
+  CONSTEXPR bool operator>=(const T& other) const {                  \
+    return this->compareThreeWay(other) >= 0;                        \
+  }
+
+#define QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T, SIGNATURE) \
+  QL_IMPL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(, T, SIGNATURE)
+
+#define QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, SIGNATURE) \
+  QL_IMPL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(constexpr, T, SIGNATURE)
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(T, SIGNATURE, BODY) \
   auto T::compareThreeWay SIGNATURE BODY
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_IMPL(T, SIGNATURE, \
+                                                                BODY)         \
+  constexpr auto T::compareThreeWay SIGNATURE BODY
 
 #else
 
 namespace ql {
-
-using strong_ordering = std::strong_ordering;
-using partial_ordering = std::partial_ordering;
-using weak_ordering = std::weak_ordering;
 
 template <typename LT, typename RT>
 constexpr inline auto compareThreeWay(const LT& lhs, const RT& rhs) {
@@ -337,48 +428,71 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
 
 }  // namespace ql
 
-#define QL_DEFINE_CLASS_MEMBERS_AS_TIE(...)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_CONSTEXPR(T, ...) \
+  friend constexpr auto operator<=>(const T&, const T&) = default;
 
-#define QL_DEFINE_CLASS_MEMBERS_AS_TIE_CONSTEXPR(...)
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR(T, ...) \
+  friend auto operator<=>(const T&, const T&) = default;
 
-#define QL_DEFINE_THREEWAY_OPERATOR(T) \
-  auto operator<=>(const T&) const = default;
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(T, ...) \
+  friend constexpr bool operator==(const T&, const T&) = default;
 
-#define QL_DEFINE_EQUALITY_OPERATOR(T) \
-  bool operator==(const T&) const = default;
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(T, ...) \
+  friend bool operator==(const T&, const T&) = default;
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CONSTEXPR(T) \
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, ...) \
   constexpr auto operator<=>(const T&) const = default;
 
-#define QL_DEFINE_EQUALITY_OPERATOR_CONSTEXPR(T) \
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(T, ...) \
+  auto operator<=>(const T&) const = default;
+
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(T, ...) \
   constexpr bool operator==(const T&) const = default;
 
-#define QL_DEFINE_THREEWAY_OPERATOR_LOCAL(T) QL_DEFINE_THREEWAY_OPERATOR(T)
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(T, ...) \
+  bool operator==(const T&) const = default;
 
-#define QL_DEFINE_EQUALITY_OPERATOR_LOCAL(T) QL_DEFINE_EQUALITY_OPERATOR(T)
-
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM(T, SIGNATURE, BODY) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(T, SIGNATURE, BODY) \
   friend auto operator<=> SIGNATURE BODY
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR(T, SIGNATURE, BODY) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(T, SIGNATURE, BODY) \
   friend constexpr auto operator<=> SIGNATURE BODY
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(T, SIGNATURE, BODY) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_TEMPLATE(TEMPLATE_SPEC, T, \
+                                                    SIGNATURE, BODY)  \
+  TEMPLATE_SPEC friend auto operator<=> SIGNATURE BODY
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR_TEMPLATE( \
+    TEMPLATE_SPEC, T, SIGNATURE, BODY)                         \
+  TEMPLATE_SPEC friend constexpr auto operator<=> SIGNATURE BODY
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T, SIGNATURE, BODY) \
   auto operator<=> SIGNATURE BODY
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_TMPL(TMPL, T, SIGNATURE, \
-                                                      BODY)               \
-  TMPL auto operator<=> SIGNATURE BODY
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(TEMPLATE_SPEC, T, \
+                                                          SIGNATURE, BODY)  \
+  TEMPLATE_SPEC auto operator<=> SIGNATURE BODY
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_CONSTEXPR_LOCAL(T, SIGNATURE, BODY) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, SIGNATURE, BODY) \
   constexpr auto operator<=> SIGNATURE BODY
 
-#define QL_DECLARE_THREEWAY_OPERATOR_CUSTOM_LOCAL(T, SIGNATURE) \
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_TEMPLATE( \
+    TEMPLATE_SPEC, T, SIGNATURE, BODY)                               \
+  TEMPLATE_SPEC constexpr auto operator<=> SIGNATURE BODY
+
+#define QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T, SIGNATURE) \
   auto operator<=> SIGNATURE;
 
-#define QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL_IMPL(T, SIGNATURE, BODY) \
+#define QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T, SIGNATURE) \
+  constexpr auto operator<=> SIGNATURE;
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(T, SIGNATURE, BODY) \
   auto T::operator<=> SIGNATURE BODY
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_IMPL(T, SIGNATURE, \
+                                                                BODY)         \
+  constexpr auto T::operator<=> SIGNATURE BODY
 
 #endif
 
-#endif  // THREE_WAY_COMPARISON_H
+#endif  // QLEVER_SRC_BACKPORTS_THREE_WAY_COMPARISON_H

@@ -42,7 +42,7 @@ struct MediaTypeWithQuality {
   };
 
   using Variant = std::variant<Wildcard, TypeWithWildcard, MediaType>;
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(
       Variant, (const Variant& a, const Variant& b)->ql::weak_ordering,
       { return ql::compareThreeWay(a.index(), b.index()); })
 
@@ -50,7 +50,7 @@ struct MediaTypeWithQuality {
   Variant _mediaType;
 
   // Order first by the qualities, and then by the specificity of the type.
-  QL_DEFINE_THREEWAY_OPERATOR_CUSTOM_LOCAL(
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
       MediaTypeWithQuality,
       (const MediaTypeWithQuality& rhs) const->ql::partial_ordering, {
         if (auto cmp = ql::compareThreeWay(_qualityValue, rhs._qualityValue);

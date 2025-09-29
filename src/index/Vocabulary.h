@@ -66,15 +66,13 @@ class Vocabulary {
    private:
     Ranges ranges_{};
 
-    QL_DEFINE_CLASS_MEMBERS_AS_TIE(ranges_)
-
    public:
     PrefixRanges() = default;
     explicit PrefixRanges(const Ranges& ranges);
     const Ranges& ranges() const { return ranges_; }
     bool contain(IndexT index) const;
 
-    QL_DEFINE_EQUALITY_OPERATOR(PrefixRanges)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PrefixRanges, ranges_)
   };
 
  private:
