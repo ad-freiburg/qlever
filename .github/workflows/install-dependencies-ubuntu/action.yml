@@ -42,7 +42,7 @@ runs:
     - name: Get cmake version
       id: cmake
       run: |
-        echo "::set-output name=cmake-version::$(cmake --version | head -n1 | cut -d' ' -f3)"
+        echo "cmake-version=$(cmake --version | head -n1 | cut -d' ' -f3)" >> $GITHUB_OUTPUT
         echo "Minimum desired version: ${{ inputs.cmake-version }}"
       shell: bash
 
