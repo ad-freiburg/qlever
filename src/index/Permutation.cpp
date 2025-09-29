@@ -59,8 +59,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   }
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
-  LOG(INFO) << "Registered " << readableName_
-            << " permutation: " << meta_.statistics() << std::endl;
+  AD_LOG_INFO << "Registered " << readableName_
+              << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
 }
 

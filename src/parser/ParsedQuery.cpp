@@ -319,10 +319,10 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     if (!variableFoundInTriple) {
       return false;
     }
-    LOG(DEBUG) << "language filter variable " + variable.name() +
-                      " did not appear as object in any suitable "
-                      "triple. "
-                      "Using literal-to-language predicate instead.\n";
+    AD_LOG_DEBUG << "language filter variable " + variable.name() +
+                        " did not appear as object in any suitable "
+                        "triple. "
+                        "Using literal-to-language predicate instead.\n";
 
     // If necessary create an empty `BasicGraphPattern` at the end to which we
     // can append a triple.

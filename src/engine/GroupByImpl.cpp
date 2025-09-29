@@ -456,7 +456,7 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
                                const vector<size_t>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
-  LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
+  AD_LOG_DEBUG << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
 
   // If the input is empty, the result is also empty, except for an implicit
@@ -526,7 +526,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 
 // _____________________________________________________________________________
 Result GroupByImpl::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "GroupBy result computation..." << std::endl;
+  AD_LOG_DEBUG << "GroupBy result computation..." << std::endl;
 
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
@@ -568,7 +568,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     subresult = _subtree->getResult(metadataForUnsequentialData.has_value());
   }
 
-  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
+  AD_LOG_DEBUG << "GroupBy subresult computation done" << std::endl;
 
   std::vector<size_t> groupByColumns;
 
@@ -643,7 +643,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
       (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
       subresult->idTable(), groupByCols, aggregates, &localVocab);
 
-  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 

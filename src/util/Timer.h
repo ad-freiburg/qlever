@@ -189,7 +189,7 @@ namespace detail {
 // callable with a `size_t` (the number of milliseconds) and `message`.
 [[maybe_unused]] inline auto defaultLogger = [](chr::milliseconds msecs,
                                                 std::string_view message) {
-  LOG(TIMING) << message << " took " << msecs.count() << "ms" << std::endl;
+  AD_LOG_TIMING << message << " took " << msecs.count() << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
 struct [[nodiscard(

@@ -149,12 +149,12 @@ Result Service::computeResultImpl(bool requestLaziness) {
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
                    variablesForSelectClause, " ", getGraphPattern());
-  LOG(INFO) << "Sending SERVICE query to remote endpoint "
-            << "(protocol: " << serviceUrl.protocolAsString()
-            << ", host: " << serviceUrl.host()
-            << ", port: " << serviceUrl.port()
-            << ", target: " << serviceUrl.target() << ")" << std::endl
-            << serviceQuery << std::endl;
+  AD_LOG_INFO << "Sending SERVICE query to remote endpoint "
+              << "(protocol: " << serviceUrl.protocolAsString()
+              << ", host: " << serviceUrl.host()
+              << ", port: " << serviceUrl.port()
+              << ", target: " << serviceUrl.target() << ")" << std::endl
+              << serviceQuery << std::endl;
 
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,

@@ -65,7 +65,8 @@ std::string OrderBy::getDescriptor() const {
 // _____________________________________________________________________________
 Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
-  LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for OrderBy result computation..."
+               << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
@@ -74,7 +75,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       subTable.numRows(), subTable.numColumns(), deadline_,
       "Sort for COUNT(DISTINCT *)");
 
-  LOG(DEBUG) << "OrderBy result computation..." << endl;
+  AD_LOG_DEBUG << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();
 
   size_t width = idTable.numColumns();
@@ -125,7 +126,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
-  LOG(DEBUG) << "OrderBy result computation done." << endl;
+  AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
