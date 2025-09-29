@@ -1055,14 +1055,13 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
             // triples parsed so far, check if we have indeed parsed through
             // the complete input
             tok_.skipWhitespaceAndComments();
-            auto d = tok_.view();
-            if (!d.empty()) {
+            std::string_view unparsed = tok_.view();
+            if (!unparsed.empty()) {
               LOG(INFO) << "Parsing of line has Failed, but parseInput is not "
                            "yet exhausted. Remaining bytes: "
-                        << d.size() << '\n';
-              auto s = std::min(size_t(1000), size_t(d.size()));
+                        << unparsed.size() << '\n';
               LOG(INFO) << "Logging first 1000 unparsed characters\n";
-              LOG(INFO) << std::string_view(d.data(), s) << std::endl;
+              LOG(INFO) << unparsed.substr(0, 1000) << std::endl;
             }
             isParserExhausted_ = true;
             break;

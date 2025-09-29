@@ -44,7 +44,7 @@ constinit inline std::atomic<size_t> BATCH_SIZE_VOCABULARY_MERGE = 10'000'000;
 // it holds this many bytes in total, it will assume that there was indeed an
 // Exception. (Only works safely if no Turtle statement is longer than this
 // size. I think currently 1 GB should be enough for this, this is 10MB per
-// triple average over 1000 triples.
+// triple average over 100 triples.
 constexpr inline ad_utility::MemorySize BZIP2_MAX_TOTAL_BUFFER_SIZE =
     ad_utility::MemorySize::gigabytes(1);
 
