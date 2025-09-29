@@ -489,23 +489,23 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
   AD_CORRECTNESS_CHECK(result != nullptr);
 
   auto rowIndicies = getRowIndices(limitAndOffset, *result, resultSize);
-  return ql::views::join(ql::ranges::transform_view(
-      ad_utility::OwningView(std::move(rowIndicies)),
-      [qet, myColumns = std::move(columns), result = std::move(result),
-       myCancellationHandle = std::move(cancellationHandle)](
-          const ExportQueryExecutionTrees::TableWithRange& tableWithRange) {
-        return ql::ranges::transform_view(
-            tableWithRange.view_, [qet, &myColumns, &myCancellationHandle,
-                                   &tableWithRange](uint64_t rowIndex) {
-              myCancellationHandle->throwIfCancelled();
-              TableConstRefWithVocab tableWithVocab =
-                  tableWithRange.tableWithVocab_;
-              return idTableToQLeverJSONRow(qet, myColumns,
-                                            tableWithVocab.localVocab(),
-                                            rowIndex, tableWithVocab.idTable())
-                  .dump();
-            });
-      }));
+  return ad_utility::OwningView(std::move(rowIndicies)) |
+         ql::views::transform(
+             [&qet, columns = std::move(columns), result = std::move(result),
+              cancellationHandle =
+                  std::move(cancellationHandle)](const auto& tableWithView) {
+               return ql::ranges::transform_view(
+                   tableWithView.view_, [&](uint64_t rowIndex) {
+                     cancellationHandle->throwIfCancelled();
+                     TableConstRefWithVocab tableWithVocab =
+                         tableWithView.tableWithVocab_;
+                     return idTableToQLeverJSONRow(
+                                qet, columns, tableWithVocab.localVocab(),
+                                rowIndex, tableWithVocab.idTable())
+                         .dump();
+                   });
+             }) |
+         ql::views::join;
 }
 
 // _____________________________________________________________________________
