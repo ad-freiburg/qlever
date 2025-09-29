@@ -639,7 +639,7 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
         auto copy = std::move(prefetched);
         prefetched.clear();
 
-        // Yield all values from the copy, then break to fetch more
+        // Yield all the newly found values
         return LoopControl::yieldAll(std::move(copy));
       }};
   return Result::LazyResult{std::move(range)};
@@ -673,8 +673,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         auto scan = getLazyScan(std::move(pendingBlocks));
         AD_CORRECTNESS_CHECK(pendingBlocks.empty());
 
-        // Capture scan details before moving the scan
-        auto scanDetails = scan.details();
+        // Capture scan details by reference so we get the updated values
+        auto& scanDetails = scan.details();
 
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
@@ -684,7 +684,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         // Use CallbackOnEndView to aggregate metadata after scan is consumed
         auto callback = ad_utility::makeAssignableLambda(
-            [&metadata, scanDetails]() mutable {
+            [&metadata, &scanDetails]() mutable {
               metadata.aggregate(scanDetails);
             });
 
@@ -702,14 +702,11 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
   auto metaBlocks = getMetadataForScan();
 
   if (!metaBlocks.has_value()) {
-    // Helper to create empty range
-    auto createEmptyRange = []() {
-      using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
-      return ad_utility::InputRangeFromLoopControlGet{
-          []() { return LoopControl::makeBreak(); }};
-    };
-    return {Result::LazyResult{createEmptyRange()},
-            Result::LazyResult{createEmptyRange()}};
+    // Return empty results
+    return {Result::LazyResult{
+                ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{}},
+            Result::LazyResult{
+                ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{}}};
   }
 
   auto state = std::make_shared<SharedGeneratorState>(
