@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "TransitivePathBase.h"
 
 #include <absl/strings/str_cat.h>
@@ -664,3 +666,5 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
 // initialization.
 const Variable TransitivePathBase::internalGraphHelper_{
     "?_Qlever_internal_transitive_path_graph", false};
+
+#endif
