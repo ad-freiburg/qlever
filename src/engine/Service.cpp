@@ -404,9 +404,10 @@ TripleComponent Service::bindingToTripleComponent(
       getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
-  // typed-literal is a pre SPARQL 1.1 WG note construct
-  // found widely in the wild because it was left in Virtuoso OS until summer 
-  // 2025
+  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
+  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
+  // Virtuoso until the summer of 2025. It is therefore still produced by
+  // some SPARQL endpoints, and we therefore support parsing it.
   if (type == "literal" || type == "typed-literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
