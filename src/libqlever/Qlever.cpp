@@ -118,7 +118,7 @@ std::string Qlever::query(const QueryPlan& queryPlan,
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   std::string result;
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       parsedQuery, *qet, mediaType, timer, std::move(handle));
   for (const auto& batch : responseGenerator) {

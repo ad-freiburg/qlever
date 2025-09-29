@@ -36,7 +36,7 @@ class ExportQueryExecutionTrees {
   // `mediaType` and the query type will throw. The result is returned as a
   // `generator` that lazily computes the serialized result in large chunks of
   // bytes.
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static cppcoro::generator<std::string> computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
@@ -163,7 +163,7 @@ class ExportQueryExecutionTrees {
   // that there is no good mechanism for handling errors during a chunked HTTP
   // response transfer.
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static cppcoro::generator<std::string>
   convertStreamGeneratorForChunkedTransfer(
       STREAMABLE_GENERATOR_TYPE streamGenerator);

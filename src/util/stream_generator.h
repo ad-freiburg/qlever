@@ -1,26 +1,33 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Copyright 2021 - 2025 The QLever Authors, in particular:
+//
+// 2021 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 #define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
-// This file consists of
-// 1. The implementation of `ad_utility::streams::stream_generator`, a
-// `generator`-like coroutine type in which you `co_yield` `string_view`s, and
-// the `stream_generator` first concatenates those `string_view`s to larger
-// batches before actually yielding those batches to the consumer. (only enabled
-// in C++20 mode).
+// This file consists of:
+//
+// 1. A generator-like type `ad_utility::streams::stream_generator`, in which
+// one can `co_yield` `string_view`s, which are then concatenated before being
+// yielded to the consumer. This type and functionality is not available when
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set.
+//
 // 2. A class `ad_utility::streams::StringBatcher`, which is a callable type
-// that concatenates the `string_view`s with which into it is invoked into
-// larger batches. For each batch a callback is invoked.
+// that concatenates the `string_view`s with which it is invoked and in turn
+// invokes a user-provided callback with the concatenated result.
+//
 // 3. Several macros that can be used to make a generator-like function either
-// use the facilities of the `stream_generator` (see 1. above)` or the
-// `StringBatcher` (see 2. above), depending on whether C++17 or C++20 is being
-// used.
+// using the `stream_generator` or the `StringBatcher`, depending on whether
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set or not.
 
 #include <cstring>
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <coroutine>
 #include <exception>
 #include <sstream>
@@ -297,15 +304,14 @@ using stream_generator = basic_stream_generator<1u << 20>;
 #endif
 
 namespace ad_utility::streams {
-// This class stores a `callback` for batches. When being invoked with a
-// `string_view`, then the `string_view is appended to the current batch, and
-// for batches that reach the `BATCH_SIZE`, the callback is invoked. Note the
-// following:
-// 1. original strings might be split up between batches.
-// 2. After pushing the first string, there remains an incomplete batch for
-// which
-//    the callback hasn't been called yet. This is done either in the
-//    destructor, or via an explicit call to `finish()`.
+
+// A class that can be fed `string_view`s (via `operator()`) and concatenates
+// them until a certain size (the `BATCH_SIZE`) is reached, at which point it
+// invokes a callback with the concatenated result.
+//
+// NOTE: A `string_view` that is pushed via `operator()` might and often will be
+// split up between two callback invocations. The callback for the final batch
+// is invoked either in the destructor or via an explicit call to `finish()`.
 template <size_t BATCH_SIZE = 1u << 20>
 class StringBatcher {
   using CallbackForBatches = std::function<void(std::string_view)>;
@@ -377,27 +383,37 @@ class StringBatcher {
 };
 }  // namespace ad_utility::streams
 
-// This section defines the macros to implement a coroutine(-like) generator,
-// that batches strings together. The following discusses the macros for both
-// modes (C++20 first)
-//  1. STREAMABLE_GENERATOR_TYPE is `stream_generator`(C++20) or `void`(C++17).
-//  (In C++20 it defines the coroutine mechanics, and in C++17 the "yielding"
-//  is done via a callback argument.
-//  2. STREAMABLE_YIELDER_TYPE is the type of a mandatory argument with the
-//  hardcoded name `streamableYielder`, that each function needs to have. It has
-//  to be the last argument (s.t. it can be defaulted). In C++20 it is `int` (an
-//  unused dummy), in C++17 it is `reference_wrappper<StringBatcher>` (the
-//  actual callback that is invoked for each "yielded" string.
-//  3. STREAMABLE_YIELDER_ARG_DECL  declares the `streamableYielder` argument
-//  with the proper attributes (it can be defaulted in C++20 mode, where it is a
-//  dummy.
-//  4. STREAMABLE_YIELD(someString) is either `co_yield someString` (20) or
-//  `streamableYielder(someString)` (17).
-//  5. STREAMABLE_RETURN is either `co_return`(20) or `return`(17).
-// To see these macros in action, see the examples in `StringBatcherTest.cpp`,
-// and their usage in `ExportQueryExecutionTrees.h/.cpp`.
+// Define macros to implement a coroutine-like generator that batches strings
+// together, when `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is not set (called
+// C++20 mode in the following), and when it is set (called C++17 mode in the
+// following).
+//
+// 1. `STREAMABLE_GENERATOR_TYPE` is `stream_generator` (in C++20 mode) or
+// `void` (in C++17 mode). In C++20 mode, it defines the coroutine mechanics,
+// whereas in C++17 mode, the "yielding" is done via a callback argument.
+//
+// 2. `STREAMABLE_YIELDER_TYPE` is the type of a mandatory argument with the
+// hardcoded name `streamableYielder`, which each function needs to have. It has
+// to be the last argument so that it can be defaulted. In C++20 mode, this is
+// `int` (a dummy type that is not used), whereas in C++17 mode, it is
+// `reference_wrappper<StringBatcher>` (the actual callback that is invoked for
+// each "yielded" string).
+//
+// 3. `STREAMABLE_YIELDER_ARG_DECL` declares the `streamableYielder` argument
+// with the proper attributes (which can be defaulted in C++20 mode, where it is
+// a dummy).
+//
+// 4. `STREAMABLE_YIELD(someString)` is either `co_yield someString` (in C++20
+// mode) or a call to the `streamableYielder` callback with `someString (in
+// C++17 mode).
+//
+// 5. `STREAMABLE_RETURN` is either `co_return` (in C++20 mode) or `return` (in
+// C++17 mode).
+//
+// To see these macros in action, see the examples in `StringBatcherTest.pp`,
+// and their usage in `ExportQueryExecutionTrees.{h,cpp}`.
 
-#ifndef QLEVER_STRIP_FEATURES_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 using STREAMABLE_GENERATOR_TYPE = ad_utility::streams::stream_generator;
 using STREAMABLE_YIELDER_TYPE = int;
 #define STREAMABLE_YIELDER_ARG_DECL \
@@ -414,6 +430,6 @@ using STREAMABLE_YIELDER_TYPE =
 #define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
 #define STREAMABLE_RETURN return;
 
-#endif
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #endif  // QLEVER_SRC_UTIL_STREAM_GENERATOR_H

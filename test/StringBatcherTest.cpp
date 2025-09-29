@@ -32,7 +32,7 @@ STREAMABLE_GENERATOR_TYPE yieldSomething(size_t i,
 }
 }  // namespace
 
-#ifdef QLEVER_STRIP_FEATURES_CPP_17
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // Using `yieldSomething` from above in C++17 model
 TEST(StringBatcher, StreamMacros) {
   std::string result;
