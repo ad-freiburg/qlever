@@ -4,6 +4,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
@@ -190,3 +191,4 @@ bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {
   getResultFunction_ = std::move(func);
 }
+#endif

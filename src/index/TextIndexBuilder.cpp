@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "index/TextIndexBuilder.h"
 
 #include "index/Postings.h"
@@ -512,3 +514,5 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
             sizeof(off_t) * offsets.size());
   LOG(INFO) << "DocsDB done.\n";
 }
+
+#endif
