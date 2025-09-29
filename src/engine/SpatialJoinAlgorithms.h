@@ -81,18 +81,6 @@ class S2Polyline;
 class S2Point;
 class S2LatLng;
 
-// Helper functions to convert between the representations of geometries used by
-// different libraries.
-namespace GeometryConverters {
-
-// Helper function to convert `libspatialjoin` `DPoint` objects to `S2LatLng`.
-S2LatLng toS2LatLng(const util::geo::DPoint& point);
-
-// Helper function to convert `GeoPoint` objects to `S2Point`.
-S2Point toS2Point(const GeoPoint& point);
-
-}  // namespace GeometryConverters
-
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;

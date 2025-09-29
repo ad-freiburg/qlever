@@ -19,10 +19,13 @@ class SpatialJoinCachedIndexImpl {
  public:
   MutableS2ShapeIndex s2index_;
   std::vector<std::pair<S2Polyline, size_t>> lines_;
-  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
 
-  SpatialJoinCachedIndexImpl(ColumnIndex col, const IdTable& restable,
-                             const Index& index) {
+  // Construct the index, and return the mapping from shape indices to rows.
+  ad_utility::HashMap<size_t, size_t> populate(ColumnIndex col,
+                                               const IdTable& restable,
+                                               const Index& index) {
+    AD_CORRECTNESS_CHECK(lines_.empty());
+    AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     // Populate the index from the given `IdTable`
     lines_.reserve(restable.size());
     for (size_t row = 0; row < restable.size(); row++) {
@@ -35,10 +38,11 @@ class SpatialJoinCachedIndexImpl {
     }
     lines_.shrink_to_fit();
 
+    ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
     for (const auto& [line, row] : lines_) {
       auto shapeIndex =
           s2index_.Add(std::make_unique<S2Polyline::Shape>(&line));
-      shapeIndexToRow_[shapeIndex] = row;
+      shapeIndexToRow[shapeIndex] = row;
     }
 
     // S2 adds geometries to its index data structure lazily and only updates
@@ -48,6 +52,7 @@ class SpatialJoinCachedIndexImpl {
     // without making changes, we force the updating of its internal data
     // structure here to ensure good performance also for the first query.
     s2index_.ForceBuild();
+    return shapeIndexToRow;
   }
 };
 
@@ -57,8 +62,9 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(const Variable& geometryColumn,
                                                const IdTable& restable,
                                                const Index& index)
     : geometryColumn_{geometryColumn},
-      pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>(col, restable,
-                                                          index)} {};
+      pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
+  shapeIndexToRow_ = pimpl_->populate(col, restable, index);
+}
 
 // ____________________________________________________________________________
 const Variable& SpatialJoinCachedIndex::getGeometryColumn() const {
@@ -69,9 +75,4 @@ const Variable& SpatialJoinCachedIndex::getGeometryColumn() const {
 std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
     const {
   return {pimpl_, &pimpl_->s2index_};
-}
-
-// ____________________________________________________________________________
-size_t SpatialJoinCachedIndex::getRow(size_t shapeIndex) const {
-  return pimpl_->shapeIndexToRow_.at(shapeIndex);
 }

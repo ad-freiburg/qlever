@@ -27,10 +27,11 @@
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
+#include "util/GeoConverters.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
-using namespace GeometryConverters;
+using namespace geometryConverters;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
@@ -181,12 +182,8 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     return std::nullopt;
   }
   auto line = util::geo::lineFromWKT<double>(str.value().first);
-  if (line.empty()) {
-    return std::nullopt;
-  }
-  return S2Polyline{
-      ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
-};
+  return line.empty() ? std::nullopt : std::optional{toS2Polyline(line)};
+}
 
 // ____________________________________________________________________________
 std::string_view SpatialJoinAlgorithms::betweenQuotes(
@@ -558,18 +555,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
 
-namespace GeometryConverters {
-// ____________________________________________________________________________
-S2Point toS2Point(const GeoPoint& p) {
-  return S2LatLng::FromDegrees(p.getLat(), p.getLng()).ToPoint();
-}
-
-// ____________________________________________________________________________
-S2LatLng toS2LatLng(const util::geo::DPoint& point) {
-  return S2LatLng::FromDegrees(point.getY(), point.getX());
-}
-}  // namespace GeometryConverters
-
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
@@ -638,7 +623,6 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
-  using namespace GeometryConverters;
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
               joinType, rightCacheName] = params_;
@@ -657,8 +641,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
       util::units::Meters(static_cast<float>(maxDist.value()))));
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
-  ad_utility::Timer timerS2{ad_utility::Timer::Started};
-  ad_utility::Timer timerWrite{ad_utility::Timer::Started};
+  ad_utility::Timer timerS2{ad_utility::Timer::Stopped};
+  ad_utility::Timer timerWrite{ad_utility::Timer::Stopped};
 
   // Use the index to lookup the points of the other table
   for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {

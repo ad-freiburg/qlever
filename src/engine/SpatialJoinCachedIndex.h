@@ -28,6 +28,11 @@ class SpatialJoinCachedIndex {
   // information necessary to use it. See more details in the `.cpp` file.
   std::shared_ptr<SpatialJoinCachedIndexImpl> pimpl_;
 
+  // As `S2MutableShapeInex` doesn't support additional payloads, the
+  //  `shapeIndexToRow_` associates s2's `shape ids` with row indices in the
+  //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
+  ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
+
  public:
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
@@ -38,7 +43,14 @@ class SpatialJoinCachedIndex {
   // Getters
   const Variable& getGeometryColumn() const;
   std::shared_ptr<const MutableS2ShapeIndex> getIndex() const;
-  size_t getRow(size_t shapeIndex) const;
+
+  // From an `S2ShapeIndex` (returned by querying this index), obtain the
+  // row index in the `IdTable` from which this index was created.
+  // Note: For efficiency reasons (this might be called in a tight loop),
+  // this function is inlined.
+  size_t getRow(size_t shapeIndex) const {
+    return shapeIndexToRow_.at(shapeIndex);
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H
