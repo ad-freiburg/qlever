@@ -275,7 +275,7 @@ class ExportQueryExecutionTrees {
  public:
   static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result,
-      uint64_t& resutSizeTotal);
+      uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
 
  private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
