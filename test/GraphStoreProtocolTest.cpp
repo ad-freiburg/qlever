@@ -22,10 +22,12 @@ using TC = TripleComponent;
 namespace {
 // A matcher that matches a ParsedQuery that is an updated that deletes all
 // triples from the given `graph`.
-auto ClearGraph = [](SparqlTripleSimpleWithGraph::Graph graph)
+auto ClearGraph = [](ad_utility::triple_component::Iri graph)
     -> testing::Matcher<const ParsedQuery&> {
   return m::UpdateClause(
-      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), graph}}, {}),
+      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"),
+                       SparqlTripleSimpleWithGraph::Graph{graph}}},
+                     {}),
       m::GraphPattern(m::GroupGraphPatternWithGraph(
           graph, m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
                                           TC(Var{"?o"}))}))));
