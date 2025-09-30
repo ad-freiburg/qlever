@@ -80,6 +80,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);
   }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   c.addWordsFromLiterals_ = true;
 
   // Note: Currently the `addWordsFromLiterals` feature is broken, but
@@ -88,10 +89,16 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   EngineConfig ec{c};
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
+#endif
 }
 
 // _____________________________________________________________________________
 TEST(LibQlever, fulltextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  GTEST_SKIP_(
+      "Fulltext index not available in the reduced feature set (at least for "
+      "now)");
+#endif
   auto basename = "libQleverFulltextIndex";
   std::string filename = absl::StrCat(basename, ".ttl");
   std::string wordsfileName = absl::StrCat(basename, ".words");
