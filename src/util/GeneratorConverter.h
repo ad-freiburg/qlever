@@ -27,7 +27,8 @@ generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
 
   // The range is about to be destroyed, copy the details.
   if constexpr (!std::is_same_v<D, ad_utility::NoDetails>) {
-    co_await cppcoro::SetDetails{std::move(range.details())};
+    co_await cppcoro::SetDetails<std::decay_t<decltype(range.details())>>{
+        std::move(range.details())};
   }
 }
 }  // namespace cppcoro
