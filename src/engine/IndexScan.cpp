@@ -255,7 +255,7 @@ IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
-  LOG(DEBUG) << "IndexScan result computation done.\n";
+  AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
@@ -264,7 +264,7 @@ IdTable IndexScan::materializedIndexScan() const {
 
 // _____________________________________________________________________________
 Result IndexScan::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "IndexScan result computation...\n";
+  AD_LOG_DEBUG << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }

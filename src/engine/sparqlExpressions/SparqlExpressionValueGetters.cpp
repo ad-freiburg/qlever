@@ -4,6 +4,8 @@
 
 #include "SparqlExpressionValueGetters.h"
 
+#include <absl/strings/str_format.h>
+
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
@@ -88,9 +90,18 @@ auto EffectiveBooleanValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
+  // For Booleans, return the canonical "true" or "false".
   if (id.getDatatype() == Datatype::Bool) {
-    // Always use canonical representation when converting to string.
     return id.getBool() ? "true" : "false";
+  }
+  // For doubles that hold integers, do NOT have ".0" at the end, in compliance
+  // with https://www.w3.org/TR/xpath-functions/#casting-to-string
+  if (id.getDatatype() == Datatype::Double) {
+    double d = id.getDouble();
+    double dIntPart;
+    if (std::modf(d, &dIntPart) == 0.0 && std::isfinite(d)) {
+      return absl::StrFormat("%.0f", d);
+    }
   }
   // `true` means that we remove the quotes and angle brackets.
   auto optionalStringAndType =

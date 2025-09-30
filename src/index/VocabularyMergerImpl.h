@@ -120,7 +120,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       sortedBuffer.reserve(bufferSize_);
       // wait for the last batch
 
-      LOG(TIMING) << "A new batch of words is ready" << std::endl;
+      AD_LOG_TIMING << "A new batch of words is ready" << std::endl;
       // First wait for the last batch to finish, that way there will be no
       // race conditions.
       if (writeFuture.valid()) {
@@ -140,7 +140,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   if (!sortedBuffer.empty()) {
     writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
   }
-  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
   auto metaData = std::move(metaData_);
   // completely reset all the inner state
@@ -156,7 +156,7 @@ CPP_template_def(typename C, typename L)(
     writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
                            C& wordCallback, const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
-  LOG(TIMING) << "Start writing a batch of merged words\n";
+  AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Smaller grained buffer for the actual inner write.
   auto bufSize = bufferSize_ / 5;
@@ -170,9 +170,9 @@ CPP_template_def(typename C, typename L)(
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value() &&
           !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        LOG(WARN) << "Total vocabulary order violated for "
-                  << lastTripleComponent_->iriOrLiteral() << " and "
-                  << top.iriOrLiteral() << std::endl;
+        AD_LOG_WARN << "Total vocabulary order violated for "
+                    << lastTripleComponent_->iriOrLiteral() << " and "
+                    << top.iriOrLiteral() << std::endl;
       }
       lastTripleComponent_ = TripleComponentWithIndex{
           top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
@@ -191,7 +191,7 @@ CPP_template_def(typename C, typename L)(
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
-        LOG(INFO) << progressBar.getProgressString() << std::flush;
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
       }
     } else {
       // If a word appears with different values for `isExternal`, then we
@@ -277,8 +277,8 @@ inline void writeMappedIdsToExtVec(
       }
       auto iterator = map.find(curTriple[k].getVocabIndex().get());
       if (iterator == map.end()) {
-        LOG(ERROR) << "not found in partial local vocabulary: " << curTriple[k]
-                   << std::endl;
+        AD_LOG_ERROR << "not found in partial local vocabulary: "
+                     << curTriple[k] << std::endl;
         AD_FAIL();
       }
       mappedTriple[k] =
@@ -291,7 +291,7 @@ inline void writeMappedIdsToExtVec(
 // _________________________________________________________________________________________________________
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
-  LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
+  AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(1'000'000'000);
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
@@ -312,7 +312,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                               byteBuffer.data().size());
     serializer.close();
   }
-  LOG(DEBUG) << "Done writing partial vocabulary\n";
+  AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
 // __________________________________________________________________________________________________
