@@ -97,6 +97,40 @@ TEST_F(GroupByFallbackTest, MultiColumn) {
   EXPECT_EQ(out(2, 1), IntId(2));
 }
 
+// Force a mid-table fallback on a single, large materialized table with
+// unique values. This ensures that rows buffered for the hybrid remainder are
+// taken from later micro-blocks of the same IdTable. If the implementation
+// forgets to offset `nonMatchingRows` from block-relative to table-relative
+// indices, this test will fail (missing many groups and/or duplicate groups).
+TEST_F(GroupByFallbackTest,
+       MidTableFallbackRequiresIndexOffset_SingleLargeTable) {
+  forceFallback();
+
+  // Create a large table of strictly increasing, unique values to guarantee
+  // that after the first micro-block all subsequent rows are new groups.
+  // The size is chosen to be much larger than typical
+  // GROUP_BY_HASH_MAP_BLOCK_SIZE.
+  const size_t N = 300'000;
+  AllocatorWithLimit<Id> allocator{ad_utility::testing::makeAllocator()};
+  IdTable table{1, allocator};
+  table.resize(N);
+  for (size_t i = 0; i < N; ++i) {
+    table(i, 0) = IntId(i + 1);
+  }
+
+  auto gb =
+      setupGroupBy(table, qec_, {Variable{"?a"}}, std::vector<ColumnIndex>{0});
+  auto res = gb->computeResult(false);
+  const auto& out = res.idTable();
+
+  // Expect exactly all unique input values once, sorted ascending.
+  ASSERT_EQ(out.numColumns(), 1u);
+  ASSERT_EQ(out.size(), N);
+  for (size_t i = 0; i < N; ++i) {
+    EXPECT_EQ(out(i, 0), IntId(i + 1)) << "Mismatch at row " << i;
+  }
+}
+
 // Verify that with a large threshold (no fallback), the pure hash-map path is
 // used and results are correct.
 TEST_F(GroupByFallbackTest, NoFallbackWithLargeThreshold_Count) {

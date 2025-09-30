@@ -442,7 +442,7 @@ class GroupByImpl : public Operation {
     // entries unless `onlyInsertPreexistingKeys` is set to `true`.
     GroupLookupResult getHashEntries(
         const ArrayOrVector<ql::span<const Id>>& groupByCols,
-        bool onlyInsertPreexistingKeys);
+        bool onlyInsertPreexistingKeys, size_t nonMatchingRowsOffset = 0);
 
     // Helper to build a single key vector from column-wise spans.
     ArrayOrVector<Id> makeKeyForHashMap(
@@ -677,10 +677,18 @@ class GroupByImpl : public Operation {
     ad_utility::Timer aggregationTimer_;
   };
 
-  // Load entries from the given table into the hash map, optionally only
-  // matching rows
+  // Result struct for updateHashMapWithTable
   template <size_t NUM_GROUP_COLUMNS>
-  std::vector<size_t> updateHashMapWithTable(
+  struct UpdateResult {
+    std::vector<size_t> nonMatchingRows_;
+    bool thresholdExceeded_ = false;
+  };
+
+  // Load entries from the given table into the hash map, optionally only
+  // matching rows. Returns both non-matching rows and whether threshold was
+  // exceeded.
+  template <size_t NUM_GROUP_COLUMNS>
+  UpdateResult<NUM_GROUP_COLUMNS> updateHashMapWithTable(
       const IdTable& table, const HashMapOptimizationData& data,
       HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       HashMapTimers& timers, bool onlyInsertPreexistingKeys = false) const;
@@ -727,8 +735,9 @@ class GroupByImpl : public Operation {
       handleRemainderUsingHybridApproach(
           HashMapOptimizationData data,
           HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          HashMapTimers& timers, BlockIterator blockIt,
-          BlocksEnd blocksEnd) const;
+          HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+          const IdTable& currentTable,
+          std::vector<size_t> nonMatchingRows) const;
 };
 
 // _____________________________________________________________________________

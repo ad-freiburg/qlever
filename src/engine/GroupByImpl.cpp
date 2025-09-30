@@ -1281,7 +1281,7 @@ template <size_t NUM_GROUP_COLUMNS>
 GroupByImpl::GroupLookupResult
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     const ArrayOrVector<ql::span<const Id>>& groupByCols,
-    bool onlyInsertPreexistingKeys) {
+    bool onlyInsertPreexistingKeys, size_t nonMatchingRowsOffset) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<RowToGroup> matchedRowsToGroups;
@@ -1296,7 +1296,9 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     auto key = makeKeyForHashMap(groupByCols, i);
     if (onlyInsertPreexistingKeys && map_.find(key) == map_.end()) {
       // If the row's key is not found, we add it to the non-matching list.
-      nonMatchingRows.push_back(i);
+      // The offset is used to map the row index back to the original
+      // IdTable.
+      nonMatchingRows.push_back(nonMatchingRowsOffset + i);
     } else {
       auto [iterator, wasAdded] = map_.try_emplace(key, numGroups());
       matchedRowsToGroups.push_back(RowToGroup{i, iterator->second});
@@ -1608,12 +1610,31 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
   // Iterate through input blocks; buffer the rest and return result if
   // threshold exceeded
-  for (; blockIt != blocksEnd; ++blockIt) {
+  while (blockIt != blocksEnd) {
+    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
+    const IdTable& inputTable = inputTableRef;
+    const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
+    blocksProcessedBeforeFallback++;
+    totalRowsBeforeFallback += inputTable.numRows();
+
+    // Merge the local vocab of each input block.
+    //
+    // NOTE: If the input blocks have very similar or even identical non-empty
+    // local vocabs, no deduplication is performed.
+    localVocab.mergeWith(inputLocalVocab);
+    // Load all entries from inputTable into the hash map.
+    auto updateResult =
+        updateHashMapWithTable(inputTable, data, aggregationData, timers);
+    // Advance to next block
+    ++blockIt;
+
     // If the size of the hashmap (the number of groups) exceeds the
     // `groupThreshold`, we switch to a hybrid approach, where we add all
     // entries with existing groups to the hash map, and then perform a
     // sort-based grouping on the remaining entries.
-    if (aggregationData.numGroups() > groupThreshold) {
+    if (updateResult.thresholdExceeded_ ||
+        aggregationData.numGroups() > groupThreshold) {
       initialProcessingTimer.stop();
       // Record statistics about the fallback trigger
       runtimeInfo().addDetail("hybridTriggerBlocks",
@@ -1628,25 +1649,15 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       AD_LOG_DEBUG << "GroupBy HashMap groups: (est: "
                    << aggregationData.numGroups()
                    << ") > (thr: " << groupThreshold
-                   << "), switching to hybrid approach" << std::endl;
+                   << "), switching to hybrid approach during block processing"
+                   << std::endl;
+      // If threshold was exceeded, we need to handle remaining unprocessed rows
+      // Note: nonMatchingRows contains only the unprocessed rows from current
+      // table
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
-          std::move(data), aggregationData, timers, blockIt, blocksEnd);
+          std::move(data), aggregationData, timers, blockIt, blocksEnd,
+          inputTable, updateResult.nonMatchingRows_);
     }
-
-    const auto& [inputTableRef, inputLocalVocabRef] = *blockIt;
-    const IdTable& inputTable = inputTableRef;
-    const LocalVocab& inputLocalVocab = inputLocalVocabRef;
-
-    blocksProcessedBeforeFallback++;
-    totalRowsBeforeFallback += inputTable.numRows();
-
-    // Merge the local vocab of each input block.
-    //
-    // NOTE: If the input blocks have very similar or even identical non-empty
-    // local vocabs, no deduplication is performed.
-    localVocab.mergeWith(inputLocalVocab);
-    // Load all entries from inputTable into the hash map.
-    updateHashMapWithTable(inputTable, data, aggregationData, timers);
   }
   initialProcessingTimer.stop();
   runtimeInfo().addDetail("hashMapOnlyProcessing",
@@ -1666,8 +1677,9 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
     GroupByImpl::handleRemainderUsingHybridApproach(
         HashMapOptimizationData data,
         HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-        HashMapTimers& timers, BlockIterator blockIt,
-        BlocksEnd blocksEnd) const {
+        HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+        const IdTable& currentTable,
+        std::vector<size_t> nonMatchingRows) const {
   const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef_.value();
 
@@ -1680,6 +1692,14 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       finalSortTimer{Timer::Stopped};
 
   IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+  // Copy non-matching rows of the current table to the restTable
+  // These are the rows that weren't processed due to threshold being exceeded
+  if (!nonMatchingRows.empty()) {
+    bufferingTimer.cont();
+    restTable.insertSubsetAtEnd(currentTable, nonMatchingRows);
+    bufferingTimer.stop();
+  }
+
   size_t totalRowsProcessed = 0;
   size_t totalNonMatchingRows = 0;
 
@@ -1697,8 +1717,9 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
     vocabMergeTimer.stop();
 
     // Process only existing groups and collect non-matching rows
-    auto nonMatchingRows =
+    auto updateResult =
         updateHashMapWithTable(inputTable, data, aggregationData, timers, true);
+    const auto& nonMatchingRows = updateResult.nonMatchingRows_;
 
     totalNonMatchingRows += nonMatchingRows.size();
 
@@ -1730,7 +1751,7 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   finalMergeTimer.stop();
 
   finalSortTimer.cont();
-  Engine::sort(hashResult, data.columnIndices_.value());
+  Engine::sort(hashResult, resultSortedOn());
   finalSortTimer.stop();
 
   remainderProcessingTimer.stop();
@@ -1752,8 +1773,7 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       absl::StrCat("hash groups=", hashResult.numRows(),
                    ", sorted tail groups=", restResult.numRows()));
 
-  return Result{std::move(hashResult), data.columnIndices_.value(),
-                std::move(localVocab)};
+  return Result{std::move(hashResult), resultSortedOn(), std::move(localVocab)};
 }
 
 // Helper to build column-wise spans of grouping values for a block
@@ -1775,7 +1795,8 @@ GroupByImpl::makeGroupValueSpans(const IdTable& table, size_t beginIdx,
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-std::vector<size_t> GroupByImpl::updateHashMapWithTable(
+typename GroupByImpl::UpdateResult<NUM_GROUP_COLUMNS>
+GroupByImpl::updateHashMapWithTable(
     const IdTable& table, const HashMapOptimizationData& data,
     HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     HashMapTimers& timers, bool onlyInsertPreexistingKeys) const {
@@ -1791,6 +1812,10 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
   // Iterate of the rows of this block. Process (up to)
   // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
   std::vector<size_t> nonMatchingRows;
+  size_t groupThreshold =
+      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+  bool thresholdExceededDuringThisTable = false;
+
   for (size_t i = 0; i < table.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
@@ -1804,8 +1829,8 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
         data.columnIndices_.value());
 
     timers.lookupTimer_.cont();
-    auto lookupResult =
-        aggregationData.getHashEntries(groupValues, onlyInsertPreexistingKeys);
+    auto lookupResult = aggregationData.getHashEntries(
+        groupValues, onlyInsertPreexistingKeys, evaluationContext._beginIndex);
     timers.lookupTimer_.stop();
 
     if (onlyInsertPreexistingKeys) {
@@ -1818,8 +1843,18 @@ std::vector<size_t> GroupByImpl::updateHashMapWithTable(
     processAggregateAliasesForBlock(lookupResult, data, aggregationData,
                                     evaluationContext);
     timers.aggregationTimer_.stop();
+
+    // Check if we've exceeded the group threshold after processing this block
+    if (!onlyInsertPreexistingKeys &&
+        aggregationData.numGroups() > groupThreshold) {
+      // If we exceeded the threshold, we switch to only inserting pre-existing
+      // keys for the remaining blocks of this table.
+      onlyInsertPreexistingKeys = true;
+      thresholdExceededDuringThisTable = true;
+    }
   }
-  return nonMatchingRows;
+  return UpdateResult<NUM_GROUP_COLUMNS>{std::move(nonMatchingRows),
+                                         thresholdExceededDuringThisTable};
 }
 
 // _____________________________________________________________________________
@@ -1939,6 +1974,6 @@ template
         size_t) const;
 
 // Explicit instantiation of `updateHashMapWithTable` used by unit tests.
-template std::vector<size_t> GroupByImpl::updateHashMapWithTable<1>(
+template GroupByImpl::UpdateResult<1> GroupByImpl::updateHashMapWithTable<1>(
     const IdTable&, const HashMapOptimizationData&, HashMapAggregationData<1>&,
     HashMapTimers&, bool) const;

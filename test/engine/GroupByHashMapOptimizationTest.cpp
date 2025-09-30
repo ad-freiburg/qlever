@@ -497,7 +497,8 @@ TEST_F(GroupByHashMapOptimizationTest,
   // Update the map with the single block.
   auto nonmatching =
       gb.updateHashMapWithTable<1>(inputTable, data, aggr, timers, false);
-  ASSERT_TRUE(nonmatching.empty());
+  ASSERT_TRUE(nonmatching.nonMatchingRows_.empty());
+  EXPECT_FALSE(nonmatching.thresholdExceeded_);
   // Now finalize: create result sorted by group and check counts.
   auto result =
       gb.createResultFromHashMap<1>(aggr, data.aggregateAliases_, &localVocab);
@@ -522,11 +523,13 @@ TEST_F(GroupByHashMapOptimizationTest,
   // First block
   auto nonmatchingIndicesFirstBlock =
       gb.updateHashMapWithTable<1>(firstBlockTable, data, aggr, timers, false);
-  ASSERT_TRUE(nonmatchingIndicesFirstBlock.empty());
+  ASSERT_TRUE(nonmatchingIndicesFirstBlock.nonMatchingRows_.empty());
+  EXPECT_FALSE(nonmatchingIndicesFirstBlock.thresholdExceeded_);
   // Second block
   auto nonmatchingIndicesSecondBlock =
       gb.updateHashMapWithTable<1>(secondBlockTable, data, aggr, timers, false);
-  ASSERT_TRUE(nonmatchingIndicesSecondBlock.empty());
+  ASSERT_TRUE(nonmatchingIndicesSecondBlock.nonMatchingRows_.empty());
+  EXPECT_FALSE(nonmatchingIndicesSecondBlock.thresholdExceeded_);
 
   auto result =
       gb.createResultFromHashMap<1>(aggr, data.aggregateAliases_, &localVocab);
@@ -555,7 +558,7 @@ TEST_F(GroupByHashMapOptimizationTest,
   auto nonmatchingIndicesSecondBlock =
       gb.updateHashMapWithTable<1>(secondBlockTable, data, aggr, timers, true);
   std::vector<size_t> expected{1, 3};
-  ASSERT_EQ(nonmatchingIndicesSecondBlock, expected);
+  ASSERT_EQ(nonmatchingIndicesSecondBlock.nonMatchingRows_, expected);
 }
 
 // _____________________________________________________________________________

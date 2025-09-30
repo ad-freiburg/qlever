@@ -75,12 +75,12 @@ inline std::unique_ptr<GroupByImpl> setupGroupByGeneric(
     // If `tables` is a single IdTable, move it to avoid copying.
     subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(tables), std::move(optionalVariables), false,
-        sortCols.value());
+        std::vector<ColumnIndex>{});
   } else {
     // If `tables` is a vector of IdTables, forward as is.
     subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::forward<Tables>(tables), std::move(optionalVariables), false,
-        sortCols.value());
+        std::vector<ColumnIndex>{});
   }
   if (!sortCols.value().empty()) {
     subtree = QueryExecutionTree::createSortedTree(subtree, sortCols.value());
