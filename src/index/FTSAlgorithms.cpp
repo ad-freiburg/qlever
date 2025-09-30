@@ -11,8 +11,8 @@
 IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
                                      const IdTable& idTablePreFilter) {
   AD_CONTRACT_CHECK(idTablePreFilter.numColumns() == 3);
-  LOG(DEBUG) << "Filtering " << idTablePreFilter.getColumn(0).size()
-             << " elements by ID range...\n";
+  AD_LOG_DEBUG << "Filtering " << idTablePreFilter.getColumn(0).size()
+               << " elements by ID range...\n";
 
   IdTable idTableResult{idTablePreFilter.getAllocator()};
   idTableResult.setNumColumns(3);
@@ -45,7 +45,7 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
 
   idTableResult.resize(nofResultElements);
 
-  LOG(DEBUG) << "Filtering by ID range done. Result has "
-             << idTableResult.numRows() << " elements.\n";
+  AD_LOG_DEBUG << "Filtering by ID range done. Result has "
+               << idTableResult.numRows() << " elements.\n";
   return idTableResult;
 }

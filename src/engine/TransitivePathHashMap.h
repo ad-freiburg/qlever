@@ -4,6 +4,8 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 
@@ -79,3 +81,5 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+
+#endif

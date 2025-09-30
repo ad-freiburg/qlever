@@ -178,18 +178,18 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          LOG(WARN) << "No timeout check has been performed for at least "
-                    << ParseableDuration{duration_cast<DurationType>(
-                                             steady_clock::now() -
-                                             startTimeoutWindow_.load()) +
-                                         DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ", should be at most "
-                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ". Checked at " << trimFileName(location.file_name())
-                    << ":" << location.line()
-                    << detail::printAdditionalDetails(
-                           std::invoke(stageInvocable))
-                    << std::endl;
+          AD_LOG_WARN << "No timeout check has been performed for at least "
+                      << ParseableDuration{duration_cast<DurationType>(
+                                               steady_clock::now() -
+                                               startTimeoutWindow_.load()) +
+                                           DESIRED_CANCELLATION_CHECK_INTERVAL}
+                      << ", should be at most "
+                      << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                      << ". Checked at " << trimFileName(location.file_name())
+                      << ":" << location.line()
+                      << detail::printAdditionalDetails(
+                             std::invoke(stageInvocable))
+                      << std::endl;
         }
         break;
       }

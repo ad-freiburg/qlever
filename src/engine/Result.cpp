@@ -376,9 +376,9 @@ void Result::cacheDuringConsumption(
 // _____________________________________________________________________________
 void Result::logResultSize() const {
   if (isFullyMaterialized()) {
-    LOG(INFO) << "Result has size " << idTable().size() << " x "
-              << idTable().numColumns() << std::endl;
+    AD_LOG_INFO << "Result has size " << idTable().size() << " x "
+                << idTable().numColumns() << std::endl;
   } else {
-    LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
+    AD_LOG_INFO << "Result has unknown size (not computed yet)" << std::endl;
   }
 }

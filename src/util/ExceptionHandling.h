@@ -38,11 +38,11 @@ CPP_template(typename F)(
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
-    LOG(INFO) << "Ignored an exception. The exception message was:\""
-              << e.what() << "\". " << additionalNote << std::endl;
+    AD_LOG_INFO << "Ignored an exception. The exception message was:\""
+                << e.what() << "\". " << additionalNote << std::endl;
   } catch (...) {
-    LOG(INFO) << "Ignored an exception of an unknown type. " << additionalNote
-              << std::endl;
+    AD_LOG_INFO << "Ignored an exception of an unknown type. " << additionalNote
+                << std::endl;
   }
 }
 
@@ -78,7 +78,7 @@ CPP_template(typename F,
 
   auto logAndTerminate = [&terminateAction](std::string_view msg) {
     try {
-      LOG(ERROR) << msg << std::endl;
+      AD_LOG_ERROR << msg << std::endl;
       std::cerr << msg << std::endl;
     } catch (...) {
       std::cerr << msg << std::endl;
@@ -124,12 +124,12 @@ class ThrowInDestructorIfSafe {
   operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
-      LOG(WARN) << absl::StrCat(
-                       "An exception was ignored because it would have led to "
-                       "program termination",
-                       sep, additionalMessages...,
-                       ". Exception message: ", what)
-                << std::endl;
+      AD_LOG_WARN
+          << absl::StrCat(
+                 "An exception was ignored because it would have led to "
+                 "program termination",
+                 sep, additionalMessages..., ". Exception message: ", what)
+          << std::endl;
     };
     // If the number of uncaught exceptions is the same as when then constructor
     // was called, then it is safe to throw a possible exception. For details

@@ -63,9 +63,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
                                                  size_t numCols) const noexcept
     -> Timer::Duration {
   if (!_estimatesWereCalculated) {
-    LOG(WARN) << "The estimates of the SortPerformanceEstimator were never set "
-                 "up, Sorts will thus never time out"
-              << std::endl;
+    AD_LOG_WARN
+        << "The estimates of the SortPerformanceEstimator were never set "
+           "up, Sorts will thus never time out"
+        << std::endl;
     return Timer::Duration::zero();
   }
   // Return the index of the element in the !sorted! `sampleVector`, which is
@@ -94,10 +95,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
   // start with the closest sample
   Timer::Duration result = _samples[rowIndex][columnIndex];
 
-  LOG(TRACE) << "Closest sample result was " << sampleValuesRows[rowIndex]
-             << " rows with " << sampleValuesCols[columnIndex]
-             << " columns and an estimate of " << Timer::toSeconds(result)
-             << " seconds." << std::endl;
+  AD_LOG_TRACE << "Closest sample result was " << sampleValuesRows[rowIndex]
+               << " rows with " << sampleValuesCols[columnIndex]
+               << " columns and an estimate of " << Timer::toSeconds(result)
+               << " seconds." << std::endl;
 
   auto numRowsInSample = static_cast<double>(sampleValuesRows[rowIndex]);
   double rowRatio = static_cast<double>(numRows) / numRowsInSample;
@@ -121,9 +122,9 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
 
-  LOG(INFO) << "Sorting random result tables to estimate the sorting "
-               "performance of this machine ..."
-            << std::endl;
+  AD_LOG_INFO << "Sorting random result tables to estimate the sorting "
+                 "performance of this machine ..."
+              << std::endl;
 
   _samples.fill({});
   for (size_t i = 0; i < NUM_SAMPLES_ROWS; ++i) {
@@ -156,9 +157,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       if (estimateSortingTime) {
         // These estimates are not too important, since results of this size
         // cannot be sorted anyway because of the memory limit.
-        LOG(TRACE) << "Creating the table failed because of a lack of memory"
-                   << std::endl;
-        LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
+        AD_LOG_TRACE << "Creating the table failed because of a lack of memory"
+                     << std::endl;
+        AD_LOG_TRACE << "Creating an estimate from a smaller result"
+                     << std::endl;
         if (i > 0) {
           // Assume that sorting time grows linearly in the number of rows. For
           // details on the usage of `toDuration()` see its first usage above.
@@ -177,18 +179,18 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.
-          LOG(WARN)
+          AD_LOG_WARN
               << "Could not create any estimate for the sorting performance. "
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        LOG(TRACE) << "Estimated the sort time to be " << std::fixed
-                   << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
-                   << " seconds." << std::endl;
+        AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
+                     << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+                     << " seconds." << std::endl;
       }
     }
   }
-  LOG(DEBUG) << "Done computing sort estimates" << std::endl;
+  AD_LOG_DEBUG << "Done computing sort estimates" << std::endl;
   _estimatesWereCalculated = true;
 }
 // ___________________________________________________________________________

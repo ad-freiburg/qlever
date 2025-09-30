@@ -102,7 +102,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 // _____________________________________________________________________________
 Result CountAvailablePredicates::computeResult(
     [[maybe_unused]] bool requestLaziness) {
-  LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
+  AD_LOG_DEBUG << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
 
@@ -139,8 +139,8 @@ Result CountAvailablePredicates::computeResult(
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
-    LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
-               << std::endl;
+    AD_LOG_DEBUG << "CountAvailablePredicates subresult computation done."
+                 << std::endl;
 
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
@@ -156,7 +156,7 @@ Result CountAvailablePredicates::computeResult(
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
-  LOG(DEBUG) << "For all entities." << std::endl;
+  AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   const auto& index = getExecutionContext()->getIndex().getImpl();
@@ -177,8 +177,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     }
   }
 
-  LOG(DEBUG) << "Using " << patternCounts.size()
-             << " patterns for computing the result" << std::endl;
+  AD_LOG_DEBUG << "Using " << patternCounts.size()
+               << " patterns for computing the result" << std::endl;
   for (const auto& [patternIdx, count] : patternCounts) {
     AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
     for (const auto& predicate : patterns[patternIdx]) {
@@ -220,8 +220,8 @@ void CountAvailablePredicates::computePatternTrick(
     const size_t patternColumnIdx, RuntimeInformation& runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
-  LOG(DEBUG) << "For " << input.size() << " entities in column "
-             << subjectColumnIdx << std::endl;
+  AD_LOG_DEBUG << "For " << input.size() << " entities in column "
+               << subjectColumnIdx << std::endl;
 
   MergeableHashMap<Id> predicateCounts;
   MergeableHashMap<size_t> patternCounts;
@@ -260,19 +260,19 @@ void CountAvailablePredicates::computePatternTrick(
       patternCounts[patternColumn[i].getInt()]++;
     }
   }
-  LOG(DEBUG) << "Using " << patternCounts.size()
-             << " patterns for computing the result." << std::endl;
+  AD_LOG_DEBUG << "Using " << patternCounts.size()
+               << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
   size_t numPredicatesSubsumedInPatterns = 0;
   // resolve the patterns to predicate counts
 
-  LOG(DEBUG) << "Converting PatternMap to vector" << std::endl;
+  AD_LOG_DEBUG << "Converting PatternMap to vector" << std::endl;
   // flatten into a vector, to make iterable
   const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
                                                           patternCounts.end());
 
-  LOG(DEBUG) << "Start translating pattern counts to predicate counts"
-             << std::endl;
+  AD_LOG_DEBUG << "Start translating pattern counts to predicate counts"
+               << std::endl;
   bool illegalPatternIndexFound = false;
   if (patternVec.begin() !=
       patternVec.end()) {  // avoid segfaults with OpenMP on GCC
@@ -307,14 +307,14 @@ void CountAvailablePredicates::computePatternTrick(
     }
   }
   AD_CONTRACT_CHECK(!illegalPatternIndexFound);
-  LOG(DEBUG) << "Finished translating pattern counts to predicate counts"
-             << std::endl;
+  AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
+               << std::endl;
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
     result.push_back({it.first, Id::makeFromInt(it.second)});
   }
-  LOG(DEBUG) << "Finished writing results" << std::endl;
+  AD_LOG_DEBUG << "Finished writing results" << std::endl;
 
   // Print interesting statistics about the pattern trick
   double ratioHasPatterns =
@@ -331,23 +331,23 @@ void CountAvailablePredicates::computePatternTrick(
   double costRatio =
       static_cast<double>(costWithPatterns) / costWithoutPatterns;
   // Print the ratio of entities that used a pattern
-  LOG(DEBUG) << numEntitiesWithPatterns << " of " << input.size()
-             << " entities had a pattern. That equals "
-             << (ratioHasPatterns * 100) << " %" << std::endl;
+  AD_LOG_DEBUG << numEntitiesWithPatterns << " of " << input.size()
+               << " entities had a pattern. That equals "
+               << (ratioHasPatterns * 100) << " %" << std::endl;
   // Print info about how many predicates where counted with patterns
-  LOG(DEBUG) << "Of the " << numPredicatesWithRepetitions << "predicates "
-             << numPredicatesSubsumedInPatterns
-             << " were counted with patterns, " << numListPredicates
-             << " were counted without.";
-  LOG(DEBUG) << "The ratio is " << (ratioCountedWithPatterns * 100) << "%"
-             << std::endl;
+  AD_LOG_DEBUG << "Of the " << numPredicatesWithRepetitions << "predicates "
+               << numPredicatesSubsumedInPatterns
+               << " were counted with patterns, " << numListPredicates
+               << " were counted without.";
+  AD_LOG_DEBUG << "The ratio is " << (ratioCountedWithPatterns * 100) << "%"
+               << std::endl;
   // Print information about of efficient the pattern trick is
-  LOG(DEBUG) << "The conceptual cost with patterns was " << costWithPatterns
-             << " vs " << costWithoutPatterns << " without patterns"
-             << std::endl;
+  AD_LOG_DEBUG << "The conceptual cost with patterns was " << costWithPatterns
+               << " vs " << costWithoutPatterns << " without patterns"
+               << std::endl;
   // Print the cost improvement using the pattern trick gave us
-  LOG(DEBUG) << "This gives a ratio  with to without of " << costRatio
-             << std::endl;
+  AD_LOG_DEBUG << "This gives a ratio  with to without of " << costRatio
+               << std::endl;
 
   // Add these values to the runtime info
   runtimeInfo.addDetail("numEntities", input.size());

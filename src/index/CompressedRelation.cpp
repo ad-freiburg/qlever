@@ -1835,7 +1835,7 @@ auto CompressedRelationWriter::createPermutationPair(
 
       ++numTriplesProcessed;
       if (progressBar.update()) {
-        LOG(INFO) << progressBar.getProgressString() << std::flush;
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
       }
     }
     // Call each of the `perBlockCallbacks` for the current block.
@@ -1851,7 +1851,7 @@ auto CompressedRelationWriter::createPermutationPair(
     blockCallbackTimer.stop();
     inputWaitTimer.cont();
   }
-  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   inputWaitTimer.stop();
   if (!relation.empty() || numBlocksCurrentRel > 0) {
     finishRelation();
@@ -1862,21 +1862,21 @@ auto CompressedRelationWriter::createPermutationPair(
   blockCallbackTimer.cont();
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
-  LOG(TIMING) << "Time spent waiting for the input "
-              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-              << std::endl;
-  LOG(TIMING) << "Time spent waiting for writer1's queue "
-              << ad_utility::Timer::toSeconds(
-                     writer1.blockWriteQueueTimer_.msecs())
-              << "s" << std::endl;
-  LOG(TIMING) << "Time spent waiting for writer2's queue "
-              << ad_utility::Timer::toSeconds(
-                     writer2.blockWriteQueueTimer_.msecs())
-              << "s" << std::endl;
-  LOG(TIMING) << "Time spent waiting for large twin relations "
-              << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-              << "s" << std::endl;
-  LOG(TIMING)
+  AD_LOG_TIMING << "Time spent waiting for the input "
+                << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+                << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for writer1's queue "
+                << ad_utility::Timer::toSeconds(
+                       writer1.blockWriteQueueTimer_.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for writer2's queue "
+                << ad_utility::Timer::toSeconds(
+                       writer2.blockWriteQueueTimer_.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for large twin relations "
+                << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING
       << "Time spent waiting for triple callbacks (e.g. the next sorter) "
       << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
       << std::endl;
@@ -1894,33 +1894,50 @@ CompressedRelationReader::getMetadataForSmallRelation(
   metadata.offsetInBlock_ = 0;
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  if (scanSpecAndBlocks.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
-  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 1,
-                    "Should only be called for small relations");
-  auto block = readPossiblyIncompleteBlock(
-      scanSpec, config, blocks.front(), std::nullopt, locatedTriplesPerBlock);
-  if (block.empty()) {
+  // For relations that already span more than one block when the index is first
+  // built, this function should never be called. With SPARQL UPDATE it might
+  // happen that a relation starts in a single block, but added triples land in
+  // an adjacent block (because the relation was right at the end of a block).
+  // In this case we might also see two blocks here.
+  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 2,
+                    "Should only be called for small relations (contained in "
+                    "at most one block), or relations that started in a single "
+                    "block, but were extended into the adjacent block by "
+                    "SPARQL UPDATE, but found a relation which spans ",
+                    scanSpecAndBlocks.sizeBlockMetadata_, "block.");
+
+  ad_utility::HashSet<Id> distinctCol2;
+  size_t numRowsTotal = 0;
+  size_t numDistinct = 0;
+  for (const auto& blockMetadata : blocks) {
+    auto block = readPossiblyIncompleteBlock(
+        scanSpec, config, blockMetadata, std::nullopt, locatedTriplesPerBlock);
+
+    numRowsTotal += block.numRows();
+    // The `col1` is sorted, so we compute the multiplicity using
+    // `std::unique`. Note: The distinct count might be off by one in the case
+    // of two blocks, because we perform the `unique` separately for both
+    // blocks. But as the multiplicity is only an approximate measure used for
+    // query planning statistics, this is not an issue.
+    const auto& blockCol = block.getColumn(0);
+    auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
+    numDistinct += endOfUnique - blockCol.begin();
+
+    // The `col2` is unsorted, so we use a hash map.
+    for (auto id : block.getColumn(1)) {
+      distinctCol2.insert(id);
+    }
+  };
+
+  if (numRowsTotal == 0) {
     return std::nullopt;
   }
-
-  // The `col1` is sorted, so we compute the multiplicity using
-  // `std::unique`.
-  const auto& blockCol = block.getColumn(0);
-  auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
-  size_t numDistinct = endOfUnique - blockCol.begin();
-  metadata.numRows_ = block.size();
+  metadata.numRows_ = numRowsTotal;
   metadata.multiplicityCol1_ =
-      CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);
-
-  // The `col2` is not sorted, so we compute the multiplicity using a hash
-  // set.
-  ad_utility::HashSet<Id> distinctCol2{block.getColumn(1).begin(),
-                                       block.getColumn(1).end()};
+      CompressedRelationWriter::computeMultiplicity(numRowsTotal, numDistinct);
   metadata.multiplicityCol2_ = CompressedRelationWriter::computeMultiplicity(
-      block.size(), distinctCol2.size());
+      numRowsTotal, distinctCol2.size());
   return metadata;
 }
 

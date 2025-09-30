@@ -242,8 +242,8 @@ struct SkipWhitespaceAndCommentsMixin {
       auto pos = v.find('\n');
       if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
+        AD_LOG_INFO << "Warning, unfinished comment found while parsing"
+                    << std::endl;
       } else {
         self()._data.remove_prefix(pos + 1);
       }

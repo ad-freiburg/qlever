@@ -3,6 +3,7 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
@@ -148,12 +149,12 @@ Result Service::computeResultImpl(bool requestLaziness) {
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
                    variablesForSelectClause, " ", getGraphPattern());
-  LOG(INFO) << "Sending SERVICE query to remote endpoint "
-            << "(protocol: " << serviceUrl.protocolAsString()
-            << ", host: " << serviceUrl.host()
-            << ", port: " << serviceUrl.port()
-            << ", target: " << serviceUrl.target() << ")" << std::endl
-            << serviceQuery << std::endl;
+  AD_LOG_INFO << "Sending SERVICE query to remote endpoint "
+              << "(protocol: " << serviceUrl.protocolAsString()
+              << ", host: " << serviceUrl.host()
+              << ", port: " << serviceUrl.port()
+              << ", target: " << serviceUrl.target() << ")" << std::endl
+              << serviceQuery << std::endl;
 
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
@@ -403,7 +404,11 @@ TripleComponent Service::bindingToTripleComponent(
       getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
-  if (type == "literal") {
+  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
+  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
+  // Virtuoso until the summer of 2025. It is therefore still produced by
+  // some SPARQL endpoints, and we therefore support parsing it.
+  if (type == "literal" || type == "typed-literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
           value,
@@ -666,3 +671,5 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
   service->cacheBreaker_ = cacheBreaker_;
   return service;
 }
+
+#endif

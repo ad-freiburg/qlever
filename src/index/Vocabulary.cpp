@@ -58,7 +58,7 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
-  LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
+  AD_LOG_DEBUG << "BEGIN Vocabulary::createFromSet" << std::endl;
   vocabulary_.close();
   std::vector<std::string> words(set.begin(), set.end());
   auto totalComparison = [this](const auto& a, const auto& b) {
@@ -76,7 +76,7 @@ void Vocabulary<S, C, I>::createFromSet(
   ql::ranges::for_each(words, writeWords);
   writerPtr->finish();
   vocabulary_.open(filename);
-  LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
+  AD_LOG_DEBUG << "END Vocabulary::createFromSet" << std::endl;
 }
 
 // _____________________________________________________________________________

@@ -102,7 +102,7 @@ string OptionalJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result OptionalJoin::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+  AD_LOG_DEBUG << "OptionalJoin result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
   // its sibling.
@@ -127,7 +127,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   checkCancellation();
 
-  LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "OptionalJoin subresult computation done." << std::endl;
 
   if (!leftResult->isFullyMaterialized() ||
       !rightResult->isFullyMaterialized()) {
@@ -135,16 +135,16 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
                             requestLaziness);
   }
 
-  LOG(DEBUG) << "Computing optional join between results of size "
-             << leftResult->idTable().size() << " and "
-             << rightResult->idTable().size() << endl;
+  AD_LOG_DEBUG << "Computing optional join between results of size "
+               << leftResult->idTable().size() << " and "
+               << rightResult->idTable().size() << endl;
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
                &idTable, implementation_);
 
   checkCancellation();
 
-  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
+  AD_LOG_DEBUG << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
