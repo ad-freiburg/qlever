@@ -45,12 +45,11 @@ class PolymorphicVocabulary;
 // well as a SplitFunction that decides which underlying vocabulary is used for
 // each word and a SplitFilenameFunction that assigns filenames to underlying
 // vocabularies.
-template <typename SplitFunction, typename SplitFilenameFunction,
-          typename... UnderlyingVocabularies>
-requires SplitFunctionT<SplitFunction> &&
-         SplitFilenameFunctionT<SplitFilenameFunction,
-                                sizeof...(UnderlyingVocabularies)>
-class SplitVocabulary {
+CPP_variadic_template(typename SplitFunction, typename SplitFilenameFunction,
+                      typename... UnderlyingVocabularies)(
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
+        SplitFilenameFunction,
+        sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
   // vocabularies. Note that this limit is very large and there should not be a

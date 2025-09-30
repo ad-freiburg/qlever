@@ -66,8 +66,8 @@ namespace ad_benchmark {
 @brief Return true, iff, the given value is unchanged, when casting to type
 `Target`
 */
-template <typename Target, typename Source>
-requires std::convertible_to<Source, Target>
+CPP_template(typename Target, typename Source)
+(requires ql::concepts::convertible_to<Source, Target>)
 static constexpr bool isValuePreservingCast(const Source& source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
@@ -88,10 +88,10 @@ CPP_template(typename Type)(requires ad_utility::Arithmetic<Type>)
 template <typename Type>
 void throwOverflowError(const std::string_view reason) {
   std::string typeName;
-  if constexpr (std::same_as<Type, double>) {
+  if constexpr (ql::concepts::same_as<Type, double>) {
     typeName = "double";
   } else {
-    AD_CORRECTNESS_CHECK((std::same_as<Type, size_t>));
+    AD_CORRECTNESS_CHECK((ql::concepts::same_as<Type, size_t>));
     typeName = "size_t";
   }
   throw std::runtime_error(absl::StrCat(
@@ -369,28 +369,28 @@ enum struct GeneratedTableColumn : unsigned long {
 /*
 Convert the given enum value into the underlying type.
 */
-template <typename Enum>
-requires std::is_enum_v<Enum> auto toUnderlying(const Enum& e) {
+CPP_template(typename Enum)
+(requires std::is_enum_v<Enum>) auto toUnderlying(const Enum& e) {
   return static_cast<std::underlying_type_t<Enum>>(e);
 }
 
 // `T` must be an invocable object, which can be invoked with `const size_t&`
 // and returns an instance of `ReturnType`.
 template <typename T, typename ReturnType>
-concept growthFunction =
+CPP_concept growthFunction =
     ad_utility::RegularInvocableWithExactReturnType<T, ReturnType,
                                                     const size_t&>;
 
 // Is `T` of the given type, or a function, that takes `size_t` and return
 // the given type?
 template <typename T, typename Type>
-concept isTypeOrGrowthFunction =
-    std::same_as<T, Type> || growthFunction<T, Type>;
+CPP_concept isTypeOrGrowthFunction =
+    ql::concepts::same_as<T, Type> || growthFunction<T, Type>;
 
 // There must be exactly one growth function, that either returns a `size_t`, or
 // a `float`.
 template <typename... Ts>
-concept exactlyOneGrowthFunction =
+CPP_concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
 // Is something a growth function?
@@ -414,7 +414,7 @@ struct IsGrowthFunction {
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-template <std::convertible_to<double> T>
+CPP_template(typename T)(requires std::convertible_to<T, double>)
 static double calculateNextWholeExponent(const T& base,
                                          const T& startingPoint) {
   // This is a rather simple calculation: We calculate
@@ -430,7 +430,7 @@ static double calculateNextWholeExponent(const T& base,
 always a natural number.
 */
 CPP_template(typename T)(requires ad_utility::Arithmetic<T> CPP_and
-                             std::convertible_to<T, double>) static std::
+                             ql::concepts::convertible_to<T, double>) static std::
     vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
                                        T inclusiveUpperBound) {
   std::vector<T> elements{};
@@ -1636,9 +1636,9 @@ argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
 
 @tparam ReturnType The return type of the created lambda function.
 */
-template <typename ReturnType>
-requires std::convertible_to<ReturnType, double> &&
-         std::convertible_to<double, ReturnType>
+CPP_template(typename ReturnType)
+(requires ql::concepts::convertible_to<ReturnType, double> &&
+         ql::concepts::convertible_to<double, ReturnType>)
 auto createDefaultGrowthLambda(const ReturnType& base,
                                const ReturnType& startingPoint,
                                std::vector<ReturnType> prefixValues = {}) {

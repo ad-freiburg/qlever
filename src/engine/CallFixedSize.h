@@ -56,9 +56,10 @@ namespace detail {
 
 // Call the `lambda` when the correct compile-time `Int`s are given as a
 // `std::integer_sequence`.
-template <std::integral Int, Int... Is, typename F, typename... Args>
-auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
-                            Args&&... args) {
+CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
+    requires ql::concepts::integral<
+        Int>) auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>,
+                                          F&& lambda, Args&&... args) {
   return lambda.template operator()<Is...>(AD_FWD(args)...);
 };
 

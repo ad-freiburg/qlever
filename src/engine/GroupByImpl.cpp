@@ -1395,7 +1395,7 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
       T & arg, size_t numberOfGroups,
       [[maybe_unused]] const HashMapAggregateTypeWithData& info)(
       requires true) {
-    if constexpr (std::same_as<typename T::value_type,
+    if constexpr (ql::concepts::same_as<typename T::value_type,
                                GroupConcatAggregationData>) {
       arg.resize(numberOfGroups,
                  GroupConcatAggregationData{info.separator_.value()});

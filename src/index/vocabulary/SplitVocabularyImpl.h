@@ -13,9 +13,10 @@
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::
+    readFromFile(const std::string& filename) {
   auto readSingle = [](auto& vocab, const std::string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
@@ -44,9 +45,11 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN,
+                                                 S...>::open(const std::string&
+                                                                 filename) {
   auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
@@ -55,11 +58,11 @@ void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
-    const UnderlyingVocabsArray& underlyingVocabularies,
-    const std::string& filename) {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
+        const UnderlyingVocabsArray& underlyingVocabularies,
+        const std::string& filename) {
   // Init all underlying word writers
   auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
@@ -72,10 +75,10 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
 };
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-uint64_t SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
-    std::string_view word, bool isExternal) {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    uint64_t SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
+        std::string_view word, bool isExternal) {
   // The word will be stored in the vocabulary selected by the split
   // function. Therefore the word's index needs the marker bit(s) set
   // accordingly.
@@ -85,18 +88,19 @@ uint64_t SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::WordWriter::finishImpl() {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::WordWriter::
+    finishImpl() {
   for (const auto& wordWriter : underlyingWordWriters_) {
     wordWriter->finish();
   }
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
   if (!finishWasCalled()) {
     ad_utility::terminateIfThrows([this]() { this->finish(); },
                                   "Calling `finish` from the destructor of "
@@ -104,19 +108,19 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
   }
 }
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::close() {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::close() {
   for (auto& vocab : underlying_) {
     std::visit([&](auto& v) { v.close(); }, vocab);
   }
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-std::optional<ad_utility::GeometryInfo>
-SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    std::optional<ad_utility::GeometryInfo> SplitVocabulary<
+        SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
   // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
   // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
@@ -134,9 +138,10 @@ SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
-requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
+CPP_template(typename SF, typename SFN, typename... S)(
+    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) bool SplitVocabulary<SF, SFN,
+                                                 S...>::isGeoInfoAvailable() {
   // If any of the underlying vocabularies is a `GeoVocabulary`, then this
   // `SplitVocabulary` is able to provide precomputed `GeometryInfo`. The other
   // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which

@@ -28,14 +28,21 @@ CPP_template(typename Type)(
   const size_t columnNum_;
 };
 
-template <typename ColumnReturnType, typename... ColumnInputTypes>
-requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
-    ResultTable* const table,
-    QL_CONCEPT_OR_NOTHING(
-        ad_utility::InvocableWithSimilarReturnType<
-            ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
-    const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
-    const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
+CPP_variadic_template(typename ColumnReturnType,
+                      typename... ColumnInputTypes)(requires(
+    sizeof...(ColumnInputTypes) >
+    0)) void generateColumnWithColumnInput(ResultTable* const table,
+                                           QL_CONCEPT_OR_NOTHING(
+                                               ad_utility::
+                                                   InvocableWithSimilarReturnType<
+                                                       ColumnReturnType,
+                                                       const ColumnInputTypes&...>) auto&&
+                                               generator,
+                                           const ColumnNumWithType<
+                                               ColumnReturnType>&
+                                               columnToPutResultIn,
+                                           const ColumnNumWithType<
+                                               ColumnInputTypes>&... inputColumns) {
   // Using a column more than once is the sign of an error.
   std::array<size_t, sizeof...(ColumnInputTypes)> allColumnNums{
       {inputColumns.columnNum_...}};
@@ -55,8 +62,8 @@ requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
 /*
 @brief Vector addition with `ResultTable` columns.
 */
-template <typename ColumnReturnType,
-          std::same_as<ColumnNumWithType<ColumnReturnType>>... ColumnInputTypes>
+template <typename ColumnReturnType, ql::concepts::same_as<ColumnNumWithType<
+                                         ColumnReturnType>>... ColumnInputTypes>
 requires(sizeof...(ColumnInputTypes) > 1) void sumUpColumns(
     ResultTable* const table,
     const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,

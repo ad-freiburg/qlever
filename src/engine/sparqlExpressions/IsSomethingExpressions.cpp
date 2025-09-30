@@ -24,8 +24,8 @@ namespace detail {
 //    `SparqlExpression::Ptr` and returns a `unique_ptr` to a new instance of
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
-template <typename NaryOperation, prefilterExpressions::IsDatatype Datatype>
-requires(isOperation<NaryOperation>)
+CPP_template (typename NaryOperation, prefilterExpressions::IsDatatype Datatype)
+(requires(isOperation<NaryOperation>))
 class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;

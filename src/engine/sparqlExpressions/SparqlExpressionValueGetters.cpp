@@ -460,8 +460,8 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
+CPP_template (typename RequestedInfo)
+(requires ad_utility::RequestedInfoT<RequestedInfo>)
 std::optional<ad_utility::GeometryInfo>
 GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
     ValueId id, const EvaluationContext* context) {
@@ -475,8 +475,8 @@ GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
+CPP_template (typename RequestedInfo)
+(requires ad_utility::RequestedInfoT<RequestedInfo>)
 std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
     ValueId id, const EvaluationContext* context) const {
   using enum Datatype;
@@ -512,8 +512,8 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
 };
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
+CPP_template (typename RequestedInfo)
+(requires ad_utility::RequestedInfoT<RequestedInfo>)
 std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
     const LiteralOrIri& litOrIri,
     [[maybe_unused]] const EvaluationContext* context) const {
