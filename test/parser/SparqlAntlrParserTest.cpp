@@ -1559,8 +1559,8 @@ TEST(SparqlParser, GraphClauseIncludesDefaultGraph) {
           parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED,
           ::testing::_));
 
-  auto cleanup =
-      setRuntimeParameterForTest<"treat-default-graph-like-named-graph">(true);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphLikeNamedGraph_>(true);
   expectGraphClause(
       "GRAPH ?g { ?s ?p ?o }",
       m::GroupGraphPatternWithGraph(
