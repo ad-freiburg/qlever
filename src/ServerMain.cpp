@@ -169,9 +169,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
-            << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever Server, compiled on "
+              << qlever::version::DatetimeOfCompilation << " using git hash "
+              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()
-    LOG(ERROR) << e.what() << std::endl;
+    AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }
   // This should also never be reached as the server threads are not supposed

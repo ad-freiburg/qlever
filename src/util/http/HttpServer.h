@@ -168,7 +168,7 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
  private:
   // Format a boost/beast error and log it to console
   void logBeastError(beast::error_code ec, std::string_view message) {
-    LOG(ERROR) << message << ": " << ec.message() << std::endl;
+    AD_LOG_ERROR << message << ": " << ec.message() << std::endl;
   }
 
   // The loop which accepts TCP connections and delegates their handling
@@ -311,8 +311,8 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           // the client stream ended unexpectedly.
           if (error.code() == beast::error::timeout ||
               error.code() == boost::asio::error::eof) {
-            LOG(TRACE) << error.what() << " (code " << error.code() << ")"
-                       << std::endl;
+            AD_LOG_TRACE << error.what() << " (code " << error.code() << ")"
+                         << std::endl;
           } else {
             logBeastError(error.code(), error.what());
           }
@@ -324,12 +324,12 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           co_return;
         }
       } catch (const std::exception& error) {
-        LOG(ERROR) << error.what() << std::endl;
+        AD_LOG_ERROR << error.what() << std::endl;
         co_return;
       } catch (...) {
-        LOG(ERROR) << "Weird exception not inheriting from std::exception, "
-                      "this shouldn't happen"
-                   << std::endl;
+        AD_LOG_ERROR << "Weird exception not inheriting from std::exception, "
+                        "this shouldn't happen"
+                     << std::endl;
         co_return;
       }
 

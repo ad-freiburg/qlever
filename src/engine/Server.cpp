@@ -76,7 +76,7 @@ Server::Server(unsigned short port, size_t numThreads,
 void Server::initialize(const std::string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations,
                         bool persistUpdates) {
-  LOG(INFO) << "Initializing server ..." << std::endl;
+  AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   index_.usePatterns() = usePatterns;
   index_.loadAllPermutations() = loadAllPermutations;
@@ -91,8 +91,8 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
-  LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
-            << "\"" << std::endl;
+  AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
+              << "\"" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -124,9 +124,9 @@ void Server::run(const std::string& indexBaseName, bool useText,
     // (in particular, from the QLever UI) are preceded by an OPTIONS request (a
     // so-called "preflight" request, which asks permission for the POST query).
     if (request.method() == http::verb::options) {
-      LOG(INFO) << std::endl;
-      LOG(INFO) << "Request received via " << request.method()
-                << ", allowing everything" << std::endl;
+      AD_LOG_INFO << std::endl;
+      AD_LOG_INFO << "Request received via " << request.method()
+                  << ", allowing everything" << std::endl;
       co_return co_await sendWithAccessControlHeaders(
           createOkResponse("", request, MediaType::textPlain));
     }
@@ -145,7 +145,7 @@ void Server::run(const std::string& indexBaseName, bool useText,
       exceptionErrorMsg = e.what();
     }
     if (exceptionErrorMsg.has_value()) {
-      LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+      AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
       auto status =
           httpResponseStatus.value_or(boost::beast::http::status::bad_request);
       auto response = createHttpResponseFromString(
@@ -182,8 +182,8 @@ void Server::run(const std::string& indexBaseName, bool useText,
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
              persistUpdates);
 
-  LOG(INFO) << "The server is ready, listening for requests on port "
-            << std::to_string(httpServer.getPort()) << " ..." << std::endl;
+  AD_LOG_INFO << "The server is ready, listening for requests on port "
+              << std::to_string(httpServer.getPort()) << " ..." << std::endl;
 
   // Start listening for connections on the server.
   httpServer.run();
@@ -278,16 +278,16 @@ auto Server::prepareOperation(
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
-  LOG(INFO) << "Processing the following " << operationName << ":"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "")
-            << (pinResultWithName
-                    ? absl::StrCat(" [pin result with name \"",
-                                   pinResultWithName.value(), "\"]")
-                    : "")
-            << "\n"
-            << ad_utility::truncateOperationString(operationSPARQL)
-            << std::endl;
+  AD_LOG_INFO << "Processing the following " << operationName << ":"
+              << (pinResult ? " [pin result]" : "")
+              << (pinSubtrees ? " [pin subresults]" : "")
+              << (pinResultWithName
+                      ? absl::StrCat(" [pin result with name \"",
+                                     pinResultWithName.value(), "\"]")
+                      : "")
+              << "\n"
+              << ad_utility::truncateOperationString(operationSPARQL)
+              << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedResultCache_,
                             std::ref(messageSender), pinSubtrees, pinResult);
@@ -321,12 +321,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // that in a low-traffic scenario (or when the query processing is very fast),
   // we have one visual block per request in the log.
   std::string_view contentType = request.base()[http::field::content_type];
-  LOG(INFO) << std::endl;
-  LOG(INFO) << "Request received via " << request.method()
-            << (contentType.empty()
-                    ? absl::StrCat(", no content type specified")
-                    : absl::StrCat(", content type \"", contentType, "\""))
-            << std::endl;
+  AD_LOG_INFO << std::endl;
+  AD_LOG_INFO << "Request received via " << request.method()
+              << (contentType.empty()
+                      ? absl::StrCat(", no content type specified")
+                      : absl::StrCat(", content type \"", contentType, "\""))
+              << std::endl;
 
   // Start timing.
   ad_utility::Timer requestTimer{ad_utility::Timer::Started};
@@ -367,8 +367,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Execute commands (URL parameter with key "cmd").
   auto logCommand = [](const std::optional<std::string_view>& cmd,
                        std::string_view actionMsg) {
-    LOG(INFO) << "Processing command \"" << cmd.value() << "\""
-              << ": " << actionMsg << std::endl;
+    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\""
+                << ": " << actionMsg << std::endl;
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
@@ -434,10 +434,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
     if (auto msg = checkParameter("msg", std::nullopt)) {
-      LOG(INFO) << "Alive check with message \"" << msg.value() << "\""
-                << std::endl;
+      AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
+                  << std::endl;
     } else {
-      LOG(INFO) << "Alive check without message" << std::endl;
+      AD_LOG_INFO << "Alive check without message" << std::endl;
     }
     response = createOkResponse("This QLever server is up and running\n",
                                 request, MediaType::textPlain);
@@ -446,8 +446,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Set description of KB index.
   if (auto description = checkParameter("index-description", std::nullopt)) {
     requireValidAccessToken("index-description");
-    LOG(INFO) << "Setting index description to: \"" << description.value()
-              << "\"" << std::endl;
+    AD_LOG_INFO << "Setting index description to: \"" << description.value()
+                << "\"" << std::endl;
     index_.setKbName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
@@ -455,8 +455,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Set description of text index.
   if (auto description = checkParameter("text-description", std::nullopt)) {
     requireValidAccessToken("text-description");
-    LOG(INFO) << "Setting text description to: \"" << description.value()
-              << "\"" << std::endl;
+    AD_LOG_INFO << "Setting text description to: \"" << description.value()
+                << "\"" << std::endl;
     index_.setTextName(std::string{description.value()});
     response = createJsonResponse(composeStatsJson(), request);
   }
@@ -465,8 +465,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   for (auto key : RuntimeParameters().getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
       requireValidAccessToken("setting runtime parameters");
-      LOG(INFO) << "Setting runtime parameter \"" << key << "\""
-                << " to value \"" << value.value() << "\"" << std::endl;
+      AD_LOG_INFO << "Setting runtime parameter \"" << key << "\""
+                  << " to value \"" << value.value() << "\"" << std::endl;
       RuntimeParameters().set(key, std::string{value.value()});
       response = createJsonResponse(json(RuntimeParameters().toMap()), request);
     }
@@ -620,9 +620,9 @@ Server::PlannedQuery Server::planQuery(
   auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
   runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-  LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
-            << " ms" << std::endl;
-  LOG(TRACE) << qet.getCacheKey() << std::endl;
+  AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
+              << " ms" << std::endl;
+  AD_LOG_TRACE << qet.getCacheKey() << std::endl;
   return plannedQuery;
 }
 
@@ -735,8 +735,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     if (e.code().value() == EPIPE) {
       co_return;
     }
-    LOG(ERROR) << "Unexpected error while sending response: " << e.what()
-               << std::endl;
+    AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
+                 << std::endl;
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -752,7 +752,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // properly terminate the connection if an error occurs which does
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
-    LOG(ERROR) << e.what() << std::endl;
+    AD_LOG_ERROR << e.what() << std::endl;
   }
 }
 
@@ -898,19 +898,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                                   requestTimer, cancellationHandle);
   // Print the runtime info. This needs to be done after the query
   // was computed.
-  LOG(INFO) << "Done processing query and sending result"
-            << ", total time was " << requestTimer.msecs().count() << " ms"
-            << std::endl;
+  AD_LOG_INFO << "Done processing query and sending result"
+              << ", total time was " << requestTimer.msecs().count() << " ms"
+              << std::endl;
 
   // Log that we are done with the query and how long it took.
   //
   // TODO<joka921> Also log an identifier of the query.
-  LOG(DEBUG) << "Runtime Info:\n"
-             << plannedQuery.value()
-                    .queryExecutionTree_.getRootOperation()
-                    ->runtimeInfo()
-                    .toString()
-             << std::endl;
+  AD_LOG_DEBUG << "Runtime Info:\n"
+               << plannedQuery.value()
+                      .queryExecutionTree_.getRootOperation()
+                      ->runtimeInfo()
+                      .toString()
+               << std::endl;
   co_return;
 }
 
@@ -1052,14 +1052,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               updateMetadata, tracer));
           tracer.reset();
 
-          LOG(INFO) << "Done processing update"
-                    << ", total time was " << requestTimer.msecs().count()
-                    << " ms" << std::endl;
-          LOG(DEBUG) << "Runtime Info:\n"
-                     << plannedUpdate->queryExecutionTree_.getRootOperation()
-                            ->runtimeInfo()
-                            .toString()
-                     << std::endl;
+          AD_LOG_INFO << "Done processing update"
+                      << ", total time was " << requestTimer.msecs().count()
+                      << " ms" << std::endl;
+          AD_LOG_DEBUG << "Runtime Info:\n"
+                       << plannedUpdate->queryExecutionTree_.getRootOperation()
+                              ->runtimeInfo()
+                              .toString()
+                       << std::endl;
         }
         return results;
       },
@@ -1143,20 +1143,20 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
-    LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+    AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
     if (metadata) {
       // The `coloredError()` message might fail because of the
       // different Unicode handling of QLever and ANTLR. Make sure to
       // detect this case so that we can fix it if it happens.
       try {
-        LOG(ERROR) << metadata.value().coloredError() << std::endl;
+        AD_LOG_ERROR << metadata.value().coloredError() << std::endl;
       } catch (const std::exception& e) {
         exceptionErrorMsg.value().append(absl::StrCat(
             " Highlighting an error for the command line log failed: ",
             e.what()));
-        LOG(ERROR) << "Failed to highlight error in operation. " << e.what()
-                   << std::endl;
-        LOG(ERROR) << metadata.value().query_ << std::endl;
+        AD_LOG_ERROR << "Failed to highlight error in operation. " << e.what()
+                     << std::endl;
+        AD_LOG_ERROR << metadata.value().query_ << std::endl;
       }
     }
     auto errorResponseJson = composeErrorResponseJson(
@@ -1218,7 +1218,7 @@ bool Server::checkAccessToken(
     throw std::runtime_error(
         absl::StrCat(accessTokenProvidedMsg, " but it was invalid"));
   } else {
-    LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
+    AD_LOG_DEBUG << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
   }
 }

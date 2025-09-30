@@ -120,7 +120,7 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parsePOST(
   // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
   std::string_view contentType =
       request.base()[boost::beast::http::field::content_type];
-  LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+  AD_LOG_DEBUG << "Content-type: \"" << contentType << "\"" << std::endl;
 
   // Note: For simplicity we only check via `starts_with`. This ignores
   // additional parameters like `application/sparql-query;charset=utf8`. We

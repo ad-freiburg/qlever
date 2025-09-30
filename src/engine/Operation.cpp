@@ -193,8 +193,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
-          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
-                     << " x " << idTable.numColumns() << std::endl;
+          AD_LOG_DEBUG << "Computed partial chunk of size " << idTable.numRows()
+                       << " x " << idTable.numColumns() << std::endl;
           mergeStats(vocabStats, pair.localVocab_);
           if (vocabStats.sizeSum_ > 0) {
             runtimeInfo().addDetail(
@@ -278,8 +278,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   if (result.isFullyMaterialized()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
+    AD_LOG_DEBUG << "Computed result of size " << resultNumRows << " x "
+                 << resultNumCols << std::endl;
   }
 
   return CacheValue{std::move(result), runtimeInfo()};
@@ -410,21 +410,21 @@ std::shared_ptr<const Result> Operation::getResult(
     // runtime info) only in the DEBUG log. Note that the exception will be
     // caught by the `processQuery` method, where the error message will be
     // printed *and* included in an error response sent to the client.
-    LOG(ERROR) << "Waited for a result from another thread which then failed"
-               << std::endl;
-    LOG(DEBUG) << getCacheKey();
+    AD_LOG_ERROR << "Waited for a result from another thread which then failed"
+                 << std::endl;
+    AD_LOG_DEBUG << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(

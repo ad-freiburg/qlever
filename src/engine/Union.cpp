@@ -227,7 +227,7 @@ size_t Union::getCostEstimate() {
 }
 
 Result Union::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Union result computation..." << std::endl;
+  AD_LOG_DEBUG << "Union result computation..." << std::endl;
   std::shared_ptr<const Result> subRes1 =
       _subtrees[0]->getResult(requestLaziness);
   std::shared_ptr<const Result> subRes2 =
@@ -249,12 +249,12 @@ Result Union::computeResult(bool requestLaziness) {
             resultSortedOn()};
   }
 
-  LOG(DEBUG) << "Union subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
 
   IdTable idTable =
       computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
 
-  LOG(DEBUG) << "Union result computation done" << std::endl;
+  AD_LOG_DEBUG << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),

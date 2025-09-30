@@ -26,7 +26,7 @@ namespace ad_benchmark {
 // Helper function for adding time entries to the classes.
 /*
 @brief Return execution time of function in seconds and inserts the progress in
-`LOG(INFO)`.
+`AD_LOG_INFO`.
 
 @tparam Function Best left to type inference.
 
@@ -37,8 +37,8 @@ template <std::invocable Function>
 static float measureTimeOfFunction(
     const Function& functionToMeasure,
     std::string_view measurementSubjectIdentifier) {
-  LOG(INFO) << "Running measurement \"" << measurementSubjectIdentifier
-            << "\" ..." << std::endl;
+  AD_LOG_INFO << "Running measurement \"" << measurementSubjectIdentifier
+              << "\" ..." << std::endl;
 
   // Measuring the time.
   ad_utility::timer::Timer benchmarkTimer(ad_utility::timer::Timer::Started);
@@ -49,7 +49,7 @@ static float measureTimeOfFunction(
   // precision.
   const auto measuredTime = static_cast<float>(
       ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
-  LOG(INFO) << "Done in " << measuredTime << " seconds." << std::endl;
+  AD_LOG_INFO << "Done in " << measuredTime << " seconds." << std::endl;
 
   return measuredTime;
 }
@@ -142,7 +142,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   // For identification.
   std::string descriptor_;
   /*
-  For identification within `Log(Info)`. This class knows nothing about the
+  For identification within `AD_LOG_INFO`. This class knows nothing about the
   groups, where it is a member, but we want to include this information in
   the log. This is our workaround.
   */

@@ -184,13 +184,13 @@ TransitivePathBase::~TransitivePathBase() = default;
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
     return {lhs_, rhs_};
   } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath right to left" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath right to left" << std::endl;
     return {rhs_, lhs_};
   }
-  LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+  AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
   return {lhs_, rhs_};
 }
 

@@ -15,8 +15,8 @@ void TextIndexBuilder::buildTextIndexFile(
     bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
     std::pair<float, float> bAndKForBM25) {
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
-  LOG(INFO) << std::endl;
-  LOG(INFO) << "Adding text index ..." << std::endl;
+  AD_LOG_INFO << std::endl;
+  AD_LOG_INFO << "Adding text index ..." << std::endl;
   std::string indexFilename = onDiskBase_ + ".text.index";
   bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
   const auto& [wordsFile, docsFile] =
@@ -25,12 +25,12 @@ void TextIndexBuilder::buildTextIndexFile(
   // or both (but at least one of them, otherwise this function is not called)
   if (addFromWordAndDocsFile) {
     AD_CORRECTNESS_CHECK(!(wordsFile.empty() || docsFile.empty()));
-    LOG(INFO) << "Reading words from wordsfile \"" << wordsFile << "\""
-              << " and from docsFile \"" << docsFile << "\"" << std::endl;
+    AD_LOG_INFO << "Reading words from wordsfile \"" << wordsFile << "\""
+                << " and from docsFile \"" << docsFile << "\"" << std::endl;
   }
   if (addWordsFromLiterals) {
-    LOG(INFO) << (!addFromWordAndDocsFile ? "C" : "Additionally c")
-              << "onsidering each literal as a text record" << std::endl;
+    AD_LOG_INFO << (!addFromWordAndDocsFile ? "C" : "Additionally c")
+                << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
   // now we have to reload it. Also, when IndexBuilderMain is called with option
@@ -40,7 +40,7 @@ void TextIndexBuilder::buildTextIndexFile(
   // read from a wordsfile), this as done in `processWordsForInvertedLists`.
   // That is, when we now call call `processWordsForVocabulary` (which builds
   // the text vocabulary), we already have the KB vocabular in RAM as well.
-  LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
+  AD_LOG_DEBUG << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
   {
@@ -58,7 +58,7 @@ void TextIndexBuilder::buildTextIndexFile(
   scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
                                 vocab_);
   // Build the half-inverted lists (second scan over the text records).
-  LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
+  AD_LOG_INFO << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec vec{indexFilename + ".text-vec-sorter.tmp",
               memoryLimitIndexBuilding() / 3, allocator_};
@@ -86,7 +86,7 @@ size_t TextIndexBuilder::processWordsForVocabulary(
 // _____________________________________________________________________________
 void TextIndexBuilder::processWordsForInvertedLists(
     const std::string& contextFile, bool addWordsFromLiterals, TextVec& vec) {
-  LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
+  AD_LOG_TRACE << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
@@ -118,11 +118,12 @@ void TextIndexBuilder::processWordsForInvertedLists(
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {
-    LOG(WARN) << "Number of mentions of entities not found in the vocabulary: "
-              << entityNotFoundErrorMsgCount << std::endl;
+    AD_LOG_WARN
+        << "Number of mentions of entities not found in the vocabulary: "
+        << entityNotFoundErrorMsgCount << std::endl;
   }
-  LOG(DEBUG) << "Number of total entity mentions: " << nofEntityPostings
-             << std::endl;
+  AD_LOG_DEBUG << "Number of total entity mentions: " << nofEntityPostings
+               << std::endl;
   ++nofContexts;
   addContextToVector(vec, currentContext, wordsInContext, entitiesInContext);
   textMeta_.setNofTextRecords(nofContexts);
@@ -133,7 +134,7 @@ void TextIndexBuilder::processWordsForInvertedLists(
       nofNonLiteralsInTextIndex_;
   writeConfiguration();
 
-  LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;
+  AD_LOG_TRACE << "END IndexImpl::passContextFileIntoVector" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -211,8 +212,8 @@ void TextIndexBuilder::processWordCaseDuringInvertedListProcessing(
   bool ret = textVocab_.getId(line.word_, &vid);
   WordIndex wid = vid.get();
   if (!ret) {
-    LOG(ERROR) << "ERROR: word \"" << line.word_ << "\" "
-               << "not found in textVocab. Terminating\n";
+    AD_LOG_ERROR << "ERROR: word \"" << line.word_ << "\" "
+                 << "not found in textVocab. Terminating\n";
     AD_FAIL();
   }
   if (scoreData.getScoringMetric() == TextScoringMetric::EXPLICIT) {
@@ -226,10 +227,10 @@ void TextIndexBuilder::processWordCaseDuringInvertedListProcessing(
 void TextIndexBuilder::logEntityNotFound(const std::string& word,
                                          size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
-    LOG(WARN) << "Entity from text not in KB: " << word << '\n';
+    AD_LOG_WARN << "Entity from text not in KB: " << word << '\n';
     if (++entityNotFoundErrorMsgCount == 20) {
-      LOG(WARN) << "There are more entities not in the KB..."
-                << " suppressing further warnings...\n";
+      AD_LOG_WARN << "There are more entities not in the KB..."
+                  << " suppressing further warnings...\n";
     }
   } else {
     entityNotFoundErrorMsgCount++;
@@ -327,18 +328,18 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        classic, entity));
   classicPostings.clear();
   entityPostings.clear();
-  LOG(DEBUG) << "Done creating text index." << std::endl;
-  LOG(INFO) << "Statistics for text index: " << textMeta_.statistics()
-            << std::endl;
+  AD_LOG_DEBUG << "Done creating text index." << std::endl;
+  AD_LOG_INFO << "Statistics for text index: " << textMeta_.statistics()
+              << std::endl;
 
-  LOG(DEBUG) << "Writing Meta data to index file ..." << std::endl;
+  AD_LOG_DEBUG << "Writing Meta data to index file ..." << std::endl;
   ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
   serializer << textMeta_;
   out = std::move(serializer).file();
   off_t startOfMeta = textMeta_.getOffsetAfter();
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
-  LOG(INFO) << "Text index build completed" << std::endl;
+  AD_LOG_INFO << "Text index build completed" << std::endl;
 }
 
 /// yields  aaaa, aaab, ..., zzzz
@@ -370,7 +371,7 @@ static bool areFourLetterPrefixesSorted(T comparator) {
 template <typename I, typename BlockBoundaryAction>
 void TextIndexBuilder::calculateBlockBoundariesImpl(
     I&& index, const BlockBoundaryAction& blockBoundaryAction) {
-  LOG(TRACE) << "BEGIN IndexImpl::calculateBlockBoundaries" << std::endl;
+  AD_LOG_TRACE << "BEGIN IndexImpl::calculateBlockBoundaries" << std::endl;
   // Go through the vocabulary
   // Start a new block whenever a word is
   // 1) The last word in the corpus
@@ -386,15 +387,17 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   // this way std::lower_bound will point to the correct bracket.
 
   if (!areFourLetterPrefixesSorted(index.textVocab_.getCaseComparator())) {
-    LOG(ERROR) << "You have chosen a locale where the prefixes aaaa, aaab, "
-                  "..., zzzz are not alphabetically ordered. This is currently "
-                  "unsupported when building a text index";
+    AD_LOG_ERROR
+        << "You have chosen a locale where the prefixes aaaa, aaab, "
+           "..., zzzz are not alphabetically ordered. This is currently "
+           "unsupported when building a text index";
     AD_FAIL();
   }
 
   if (index.textVocab_.size() == 0) {
-    LOG(WARN) << "You are trying to call calculateBlockBoundaries on an empty "
-                 "text vocabulary\n";
+    AD_LOG_WARN
+        << "You are trying to call calculateBlockBoundaries on an empty "
+           "text vocabulary\n";
     return;
   }
   size_t numBlocks = 0;
@@ -433,9 +436,9 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
     if (len > MIN_WORD_PREFIX_SIZE) {
-      LOG(DEBUG) << "The prefix sort key for word \"" << word
-                 << "\" and prefix length " << MIN_WORD_PREFIX_SIZE
-                 << " actually refers to a prefix of size " << len << '\n';
+      AD_LOG_DEBUG << "The prefix sort key for word \"" << word
+                   << "\" and prefix length " << MIN_WORD_PREFIX_SIZE
+                   << " actually refers to a prefix of size " << len << '\n';
     }
     // If we are in a block where one of the fourLetterPrefixes are contained,
     // use those as the block start.
@@ -467,8 +470,8 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   }
   blockBoundaryAction(index.textVocab_.size() - 1);
   numBlocks++;
-  LOG(DEBUG) << "Block boundaries computed: #blocks = " << numBlocks
-             << ", #words = " << index.textVocab_.size() << std::endl;
+  AD_LOG_DEBUG << "Block boundaries computed: #blocks = " << numBlocks
+               << ", #words = " << index.textVocab_.size() << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -482,7 +485,7 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 
 // _____________________________________________________________________________
 void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
-  LOG(INFO) << "Building DocsDB...\n";
+  AD_LOG_INFO << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
   std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
@@ -512,7 +515,7 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   offsets.push_back(currentOffset);
   ofs.write(reinterpret_cast<const char*>(offsets.data()),
             sizeof(off_t) * offsets.size());
-  LOG(INFO) << "DocsDB done.\n";
+  AD_LOG_INFO << "DocsDB done.\n";
 }
 
 #endif

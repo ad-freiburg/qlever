@@ -97,13 +97,13 @@ TEST(SparqlExpressionParser, First) {
   string s = "(5 * 5 ) bimbam";
   // This is an example on how to access a certain parsed substring.
   /*
-  LOG(INFO) << context->getText() << std::endl;
-  LOG(INFO) << p.parser_.getTokenStream()
+  AD_LOG_INFO << context->getText() << std::endl;
+  AD_LOG_INFO << p.parser_.getTokenStream()
                    ->getTokenSource()
                    ->getInputStream()
                    ->toString()
             << std::endl;
-  LOG(INFO) << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
+  AD_LOG_INFO << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
    */
   auto resultofParse = parse<&Parser::expression>(s);
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);

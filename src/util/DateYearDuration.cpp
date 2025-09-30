@@ -64,9 +64,9 @@ static Date::TimeZone parseTimeZone(const T& match) {
     tz *= -1;
   }
   if (match.template get<"tzMinutes">() != "00") {
-    LOG(DEBUG) << "Qlever supports only full hours as timezones, timezone"
-               << match.template get<0>() << "will be rounded down to " << tz
-               << ":00" << std::endl;
+    AD_LOG_DEBUG << "Qlever supports only full hours as timezones, timezone"
+                 << match.template get<0>() << "will be rounded down to " << tz
+                 << ":00" << std::endl;
   }
   return tz;
 }
@@ -84,10 +84,10 @@ static DateYearOrDuration makeDateOrLargeYear(std::string_view fullInput,
   if (year < Date::minYear || year > Date::maxYear) {
     if (year < DateYearOrDuration::minYear ||
         year > DateYearOrDuration::maxYear) {
-      LOG(DEBUG) << "QLever cannot encode dates that are less than "
-                 << DateYearOrDuration::minYear << " or larger than "
-                 << DateYearOrDuration::maxYear << ". Input " << fullInput
-                 << " will be clamped to this range";
+      AD_LOG_DEBUG << "QLever cannot encode dates that are less than "
+                   << DateYearOrDuration::minYear << " or larger than "
+                   << DateYearOrDuration::maxYear << ". Input " << fullInput
+                   << " will be clamped to this range";
       year = std::clamp(year, DateYearOrDuration::minYear,
                         DateYearOrDuration::maxYear);
     }
@@ -102,11 +102,12 @@ static DateYearOrDuration makeDateOrLargeYear(std::string_view fullInput,
       }
       // Warn only for one component per input.
       alreadyWarned = true;
-      LOG(DEBUG) << "When the year of a datetime object is smaller than -9999 "
-                    "or larger than 9999 then the "
-                 << component << " will always be set to " << defaultValue
-                 << " in QLever's implementation of dates. Full input was "
-                 << fullInput << std::endl;
+      AD_LOG_DEBUG
+          << "When the year of a datetime object is smaller than -9999 "
+             "or larger than 9999 then the "
+          << component << " will always be set to " << defaultValue
+          << " in QLever's implementation of dates. Full input was "
+          << fullInput << std::endl;
     };
 
     if (month == 0) {

@@ -243,7 +243,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
   try {
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
-    LOG(DEBUG) << "Done creating execution plan" << std::endl;
+    AD_LOG_DEBUG << "Done creating execution plan" << std::endl;
     auto result = std::move(*lastRow[minInd]._qet);
     auto& rootOperation = *result.getRootOperation();
     // Collect all the warnings and pass them to the created tree such that
@@ -1202,8 +1202,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
   // if that is rather small, replace the join and scan by a combination.
   ad_utility::HashMap<std::string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
-  LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
-             << b.size() << " plans...\n";
+  AD_LOG_TRACE << "Considering joins that merge " << a.size() << " and "
+               << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
       for (auto& plan : createJoinCandidates(ai, bj, tg)) {
@@ -1219,7 +1219,7 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   // Therefore we mapped plans and use contained triples + ordering var
   // as key.
-  LOG(TRACE) << "Pruning...\n";
+  AD_LOG_TRACE << "Pruning...\n";
   vector<SubtreePlan> prunedPlans;
 
   auto pruneCandidates = [&](auto& actualCandidates) {
@@ -1242,7 +1242,7 @@ std::vector<SubtreePlan> QueryPlanner::merge(
     pruneCandidates(candidates);
   }
 
-  LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
+  AD_LOG_TRACE << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
 }
 
@@ -1519,8 +1519,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
-    LOG(TRACE) << "Producing plans that unite " << k << " triples."
-               << std::endl;
+    AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
+                 << std::endl;
     applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
     applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
@@ -1749,7 +1749,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
     bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
-      LOG(INFO)
+      AD_LOG_INFO
           << "Using the greedy query planner for a large connected component"
           << std::endl;
     }
@@ -2018,11 +2018,11 @@ bool QueryPlanner::TripleGraph::isSimilar(
   // This method is very verbose as it is currently only intended for
   // testing
   if (_nodeStorage.size() != other._nodeStorage.size()) {
-    LOG(INFO) << asString() << std::endl;
-    LOG(INFO) << other.asString() << std::endl;
-    LOG(INFO) << "The two triple graphs are not of the same size: "
-              << _nodeStorage.size() << " != " << other._nodeStorage.size()
-              << std::endl;
+    AD_LOG_INFO << asString() << std::endl;
+    AD_LOG_INFO << other.asString() << std::endl;
+    AD_LOG_INFO << "The two triple graphs are not of the same size: "
+                << _nodeStorage.size() << " != " << other._nodeStorage.size()
+                << std::endl;
     return false;
   }
   ad_utility::HashMap<size_t, size_t> id_map;
@@ -2039,20 +2039,20 @@ bool QueryPlanner::TripleGraph::isSimilar(
       }
     }
     if (!hasMatch) {
-      LOG(INFO) << asString() << std::endl;
-      LOG(INFO) << other.asString() << std::endl;
-      LOG(INFO) << "The node " << n << " has no match in the other graph"
-                << std::endl;
+      AD_LOG_INFO << asString() << std::endl;
+      AD_LOG_INFO << other.asString() << std::endl;
+      AD_LOG_INFO << "The node " << n << " has no match in the other graph"
+                  << std::endl;
       return false;
     }
   }
   if (id_map.size() != _nodeStorage.size() ||
       id_map_reverse.size() != _nodeStorage.size()) {
-    LOG(INFO) << asString() << std::endl;
-    LOG(INFO) << other.asString() << std::endl;
-    LOG(INFO) << "Two nodes in this graph were matches to the same node in "
-                 "the other graph"
-              << std::endl;
+    AD_LOG_INFO << asString() << std::endl;
+    AD_LOG_INFO << other.asString() << std::endl;
+    AD_LOG_INFO << "Two nodes in this graph were matches to the same node in "
+                   "the other graph"
+                << std::endl;
     return false;
   }
   for (size_t id = 0; id < _adjLists.size(); ++id) {
@@ -2067,23 +2067,23 @@ bool QueryPlanner::TripleGraph::isSimilar(
     }
     for (size_t a : _adjLists[id]) {
       if (other_adj_set.count(id_map[a]) == 0) {
-        LOG(INFO) << asString() << std::endl;
-        LOG(INFO) << other.asString() << std::endl;
-        LOG(INFO) << "The node with id " << id << " is connected to " << a
-                  << " in this graph graph but not to the equivalent "
-                     "node in the other graph."
-                  << std::endl;
+        AD_LOG_INFO << asString() << std::endl;
+        AD_LOG_INFO << other.asString() << std::endl;
+        AD_LOG_INFO << "The node with id " << id << " is connected to " << a
+                    << " in this graph graph but not to the equivalent "
+                       "node in the other graph."
+                    << std::endl;
         return false;
       }
     }
     for (size_t a : other._adjLists[other_id]) {
       if (adj_set.count(id_map_reverse[a]) == 0) {
-        LOG(INFO) << asString() << std::endl;
-        LOG(INFO) << other.asString() << std::endl;
-        LOG(INFO) << "The node with id " << id << " is connected to " << a
-                  << " in the other graph graph but not to the equivalent "
-                     "node in this graph."
-                  << std::endl;
+        AD_LOG_INFO << asString() << std::endl;
+        AD_LOG_INFO << other.asString() << std::endl;
+        AD_LOG_INFO << "The node with id " << id << " is connected to " << a
+                    << " in the other graph graph but not to the equivalent "
+                       "node in this graph."
+                    << std::endl;
         return false;
       }
     }
