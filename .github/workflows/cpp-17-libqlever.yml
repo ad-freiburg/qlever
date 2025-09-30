@@ -67,7 +67,7 @@ jobs:
           IGNORE_ERRORS="-i"
           fi
           set -o pipefail # the `tee` will never fail, but the `build` command might. We want to fail if the build fails.
-          cmake --build ${{github.workspace}}/build --target QleverTest --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) | tee /tmp/build.log
+          cmake --build ${{github.workspace}}/build --target QleverTest --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
         id: build
 
       - name: Run gcc8 log analyzer on gcc8 builds
