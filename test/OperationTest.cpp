@@ -310,18 +310,16 @@ TEST(OperationTest, estimatesForCachedResults) {
   // set to `true`, the cost estimate should be zero. The size estimate does not
   // change (see the `getCostEstimate` function for details on why).
   {
-    auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            true);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
   {
-    auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            false);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(false);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
@@ -698,7 +696,8 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // generator to additionally assert sure it is not re-read on every
     // iteration.
     auto cleanup =
-        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
@@ -765,8 +764,9 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
         }};
     qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
 
-    auto cleanup = setRuntimeParameterForTest<"cache-max-size-lazy-result">(
-        runtimeParameterLimit);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            runtimeParameterLimit);
 
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
