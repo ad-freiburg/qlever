@@ -207,10 +207,17 @@ static auto createJsonResponse(std::string text, const auto& request,
                                       MediaType::json);
 }
 
+template <typename T>
+CPP_concept IsJson = SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
+
 /// Create a HttpResponse from a json object with status 200 OK and mime type
 /// "application/json".
-static auto createJsonResponse(const nlohmann::json& j, const auto& request,
-                               http::status status = http::status::ok) {
+CPP_template(typename Json)(
+    requires IsJson<
+        Json>) static auto createJsonResponse(const Json& j,
+                                              const auto& request,
+                                              http::status status =
+                                                  http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);
 }

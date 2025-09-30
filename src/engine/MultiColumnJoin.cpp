@@ -60,7 +60,7 @@ string MultiColumnJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
-  LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
+  AD_LOG_DEBUG << "MultiColumnJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
@@ -72,18 +72,18 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 
   checkCancellation();
 
-  LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
 
-  LOG(DEBUG) << "Computing a multi column join between results of size "
-             << leftResult->idTable().size() << " and "
-             << rightResult->idTable().size() << endl;
+  AD_LOG_DEBUG << "Computing a multi column join between results of size "
+               << leftResult->idTable().size() << " and "
+               << rightResult->idTable().size() << endl;
 
   computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
                          _joinColumns, &idTable);
 
   checkCancellation();
 
-  LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
+  AD_LOG_DEBUG << "MultiColumnJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),

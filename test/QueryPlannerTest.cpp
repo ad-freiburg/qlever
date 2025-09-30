@@ -1348,7 +1348,7 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter `<start>` has already been set to variable "
                 "`?start1` and cannot be set to variable `?start2`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1398,7 +1398,7 @@ TEST(QueryPlanner, PathSearchMultipleEnds) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter `<end>` has already been set to variable `?end1`"
                 " and cannot be set to variable `?end2`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1423,7 +1423,7 @@ TEST(QueryPlanner, PathSearchStartNotVariable) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The value `<error>` for parameter `<start>`"),
-      parsedQuery::MagicServiceException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1447,7 +1447,7 @@ TEST(QueryPlanner, PathSearchPredicateNotIri) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
                                         HasSubstr("Parameters must be IRIs"),
-                                        parsedQuery::MagicServiceException);
+                                        InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1473,7 +1473,7 @@ TEST(QueryPlanner, PathSearchUnsupportedArgument) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Unsupported argument <unsupportedArgument> in PathSearch"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1525,8 +1525,9 @@ TEST(QueryPlanner, PathSearchUnsupportedElement) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("Unsupported element in pathSearch"),
-      parsedQuery::PathSearchException);
+      HasSubstr(
+          "Unsupported element in a magic service query of type `path search`"),
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1552,7 +1553,7 @@ TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Unsupported algorithm in pathSearch"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1579,7 +1580,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <cartesian> expects a boolean"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1606,7 +1607,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // __________________________________________________________________________
@@ -1632,7 +1633,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The <algorithm> value has to be an IRI"),
-      parsedQuery::PathSearchException);
+      InvalidSparqlQueryException);
 }
 
 // _____________________________________________________________________________
@@ -2261,7 +2262,8 @@ TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
                 "SERVICE <http://example.com/> { ?a <something> <else> }"
                 " }}",
                 ::testing::_),
-      ::testing::ContainsRegex("Unsupported element in spatialQuery"));
+      ::testing::ContainsRegex("Unsupported element in a magic service query "
+                               "of type `spatial join`"));
 }
 
 // _____________________________________________________________________________
@@ -3310,9 +3312,8 @@ TEST(QueryPlanner, TextSearchService) {
                  "}"
                  "}"
                  "}"),
-      ::testing::HasSubstr(
-          "Unsupported element in textSearchQuery. textSearchQuery may only "
-          "consist of triples for configuration"));
+      ::testing::HasSubstr("Unsupported element in a magic service query of "
+                           "type `full text search`"));
 
   // Predicate contains
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -3481,6 +3482,15 @@ TEST(QueryPlanner, TextSearchService) {
           "Each text search config should only contain at most one "
           "<score>. The second match variable given was: ?score2. The "
           "config variable was: ?conf"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseQuery("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+                 "SELECT * WHERE {"
+                 "SERVICE qlts: {"
+                 " {}"
+                 "}"
+                 "}"),
+      ::testing::HasSubstr("nested group graph patterns are not supported"));
 
   // toConfigs errors
   // No word or entity
@@ -5404,4 +5414,58 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
     EXPECT_THAT(qet, h::hasVariables({"?x", "?y"}));
     EXPECT_EQ(qet.getResultWidth(), doStrip ? 2 : 4);
   }
+}
+
+// Test the handling of the named cached queries.
+TEST(QueryPlanner, NamedCachedResult) {
+  // First test all the error cases that might appear during the parsing and
+  // query planning.
+  std::string query = "SELECT * { SERVICE ql:cached-result-with-name-3 {}}";
+  auto qec = ad_utility::testing::getQec();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr("is not contained in the named result cache"));
+
+  query =
+      "SELECT * { SERVICE ql:cached-result-with-name-3 { <not> <allowed> "
+      "<here> }}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr(
+          "body of a named cache query request must be empty"));
+
+  // This query looks the same (non-empty body of the SERVICE request), but
+  // nested GROUP GRAPH patterns use a different code path in the
+  // `MagicServiceQuery` base class, so we need to test a very similar query
+  // again.
+  query =
+      "SELECT * { SERVICE ql:cached-result-with-name-3 { {<not> <allowed> "
+      "<here>} "
+      "}}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr(
+          "body of a named cache query request must be empty"));
+
+  query =
+      "SELECT * { SERVICE ql:cached-result-with-name-3 { VALUES ?x {3 4 5} }}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr("Unsupported element in a magic service query of "
+                           "type `named cached query`"));
+
+  // Now pin a query to the named result cache, and check that the query
+  // planning works as expected.
+  std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
+  qec = ad_utility::testing::getQec(
+      "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
+  qec->pinResultWithName() = "dummyQuery";
+  auto plan = h::parseAndPlan(queryToPin, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  query = "SELECT * { SERVICE ql:cached-result-with-name-dummyQuery {}}";
+  // We only check the size estimate (which in this case is exact), because
+  // more detailed tests in `NamedResultCacheTest.cpp` check the correct
+  // contents etc. of cached queries.
+  h::expect(query, h::ExplicitIdTableOperation(3), qec);
 }

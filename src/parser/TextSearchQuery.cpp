@@ -217,6 +217,14 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
+void TextSearchQuery::addGraph(
+    [[maybe_unused]] const GraphPatternOperation& childGraphPattern) {
+  throw TextSearchException{
+      "nested group graph patterns are not supported in the body of a `text "
+      "search query`, only plain triples that specify the configuration"};
+}
+
+// ____________________________________________________________________________
 std::vector<std::variant<TextIndexScanForWordConfiguration,
                          TextIndexScanForEntityConfiguration>>
 TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {

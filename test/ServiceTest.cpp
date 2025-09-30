@@ -643,6 +643,14 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
+  // See the comment in `src/engine/Service.cpp` regarding the support of the
+  // deprecated `typed-literal` type.
+  EXPECT_EQ(
+      bTTC({{"type", "typed-literal"},
+            {"value", "Hallo Welt"},
+            {"xml:lang", "de"}}),
+      TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
+
   EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 

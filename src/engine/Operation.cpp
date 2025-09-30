@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -192,8 +193,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
-          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
-                     << " x " << idTable.numColumns() << std::endl;
+          AD_LOG_DEBUG << "Computed partial chunk of size " << idTable.numRows()
+                       << " x " << idTable.numColumns() << std::endl;
           mergeStats(vocabStats, pair.localVocab_);
           if (vocabStats.sizeSum_ > 0) {
             runtimeInfo().addDetail(
@@ -277,8 +278,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   if (result.isFullyMaterialized()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
+    AD_LOG_DEBUG << "Computed result of size " << resultNumRows << " x "
+                 << resultNumCols << std::endl;
   }
 
   return CacheValue{std::move(result), runtimeInfo()};
@@ -310,6 +311,13 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
+  const bool pinResultWithName =
+      _executionContext->pinResultWithName().has_value() && isRoot;
+
+  if (pinResultWithName) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   // If pinned there's no point in computing the result lazily.
   if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
@@ -370,6 +378,23 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
+    // Pin result to the named result cache if so requested.
+    if (pinResultWithName) {
+      const auto& name = _executionContext->pinResultWithName().value();
+      const auto& actualResult = result._resultPointer->resultTable();
+      AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
+      // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
+      // it would require a mojor refactoring of the `Result` class.
+      auto valueForNamedResultCache = NamedResultCache::Value{
+          std::make_shared<const IdTable>(actualResult.idTable().clone()),
+          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
+          actualResult.localVocab().clone()};
+      _executionContext->namedResultCache().store(
+          name, std::move(valueForNamedResultCache));
+
+      runtimeInfo().addDetail("pinned-with-name", name);
+    }
+
     return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
@@ -385,21 +410,21 @@ std::shared_ptr<const Result> Operation::getResult(
     // runtime info) only in the DEBUG log. Note that the exception will be
     // caught by the `processQuery` method, where the error message will be
     // printed *and* included in an error response sent to the client.
-    LOG(ERROR) << "Waited for a result from another thread which then failed"
-               << std::endl;
-    LOG(DEBUG) << getCacheKey();
+    AD_LOG_ERROR << "Waited for a result from another thread which then failed"
+                 << std::endl;
+    AD_LOG_DEBUG << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << std::endl;
-    LOG(DEBUG) << getCacheKey() << std::endl;
+    AD_LOG_ERROR << "Aborted Operation" << std::endl;
+    AD_LOG_DEBUG << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
