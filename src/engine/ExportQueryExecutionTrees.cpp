@@ -208,12 +208,52 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 }
 
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
-ExportQueryExecutionTrees::constructQueryResultToTriples(
+auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
+  auto rowIndicies = getRowIndices(limitAndOffset, *result, resultSize);
+  auto range =
+      ad_utility::OwningView(std::move(rowIndicies)) |
+      ql::views::transform([&qet, &constructTriples, result = std::move(result),
+                            cancellationHandle = std::move(cancellationHandle),
+                            rowOffset =
+                                size_t{0}](const auto& tableWithView) mutable {
+        auto& idTable = tableWithView.tableWithVocab_.idTable();
+        auto& localVocab = tableWithView.tableWithVocab_.localVocab();
+        auto cleanup = absl::Cleanup{
+            [&rowOffset, size = idTable.size()]() { rowOffset += size; }};
+        return ql::ranges::transform_view(
+            tableWithView.view_,
+            [&qet, &constructTriples, &cancellationHandle, &rowOffset, &idTable,
+             &localVocab, cleanup = std::move(cleanup)](uint64_t i) mutable {
+              return ql::ranges::transform_view(
+                  constructTriples,
+                  [&cancellationHandle,
+                   context = ConstructQueryExportContext{
+                       i, idTable, localVocab, qet.getVariableColumns(),
+                       qet.getQec()->getIndex(),
+                       rowOffset}](const auto& triple) mutable {
+                    cancellationHandle->throwIfCancelled();
+                    using enum PositionInTriple;
+                    auto subject = triple[0].evaluate(context, SUBJECT);
+                    auto predicate = triple[1].evaluate(context, PREDICATE);
+                    auto object = triple[2].evaluate(context, OBJECT);
+                    if (!subject.has_value() || !predicate.has_value() ||
+                        !object.has_value()) {
+                      return QueryExecutionTree::StringTriple();
+                    }
+                    return QueryExecutionTree::StringTriple(
+                        std::move(subject.value()),
+                        std::move(predicate.value()),
+                        std::move(object.value()));
+                  });
+            });
+      }) |
+      ql::views::join | ql::views::join |
+      ql::views::filter([](const auto& triple) { return !triple.isEmpty(); });
+
   absl::Cleanup resultSizeCleanUp{[&resultSize, &constructTriples]() {
     // For each result from the WHERE clause, we produce up to
     // `constructTriples.size()` triples. We do not account for triples that are
@@ -221,45 +261,10 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     // materializing the whole result).
     resultSize *= constructTriples.size();
   }};
-  auto rowIndicies = getRowIndices(limitAndOffset, *result, resultSize);
-  return ad_utility::InputRangeTypeErased(
-      ql::ranges::transform_view(
-          ad_utility::OwningView(std::move(rowIndicies)),
-          [&qet, &constructTriples, result = std::move(result),
-           cancellationHandle = std::move(cancellationHandle),
-           rowOffset = size_t{0}, cleanup = std::move(resultSizeCleanUp)](
-              const auto& tableWithView) mutable {
-            auto& idTable = tableWithView.tableWithVocab_.idTable();
-            auto rowOffsetCleanup = absl::Cleanup{
-                [&rowOffset, size = idTable.size()]() { rowOffset += size; }};
-            return ql::ranges::transform_view(
-                tableWithView.view_,
-                [&, cleanup = std::move(rowOffsetCleanup)](uint64_t i) mutable {
-                  auto& localVocab = tableWithView.tableWithVocab_.localVocab();
-                  return ql::ranges::transform_view(
-                      constructTriples,
-                      [&, context = ConstructQueryExportContext{
-                              i, idTable, localVocab, qet.getVariableColumns(),
-                              qet.getQec()->getIndex(),
-                              rowOffset}](const auto& triple) mutable {
-                        cancellationHandle->throwIfCancelled();
-                        using enum PositionInTriple;
-                        auto subject = triple[0].evaluate(context, SUBJECT);
-                        auto predicate = triple[1].evaluate(context, PREDICATE);
-                        auto object = triple[2].evaluate(context, OBJECT);
-                        if (!subject.has_value() || !predicate.has_value() ||
-                            !object.has_value()) {
-                          return QueryExecutionTree::StringTriple();
-                        }
-                        return QueryExecutionTree::StringTriple(
-                            std::move(subject.value()),
-                            std::move(predicate.value()),
-                            std::move(object.value()));
-                      });
-                });
-          }) |
-      ql::views::join | ql::views::join |
-      ql::views::filter([](const auto& triple) { return !triple.isEmpty(); }));
+
+  return ad_utility::CachingTransformInputRange(
+      std::move(range), [cleanup = std::move(resultSizeCleanUp)](
+                            const auto& triple) { return triple; });
 }
 
 // _____________________________________________________________________________
