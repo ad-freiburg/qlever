@@ -425,7 +425,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     size_t maxDist, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable) {
   bool useBinSearch =
-      RuntimeParameters().get<"use-binsearch-transitive-path">();
+      getRuntimeParameter<&RuntimeParameters::useBinsearchTransitivePath_>();
   return makeTransitivePath(
       qec, std::move(child), std::move(leftSide), std::move(rightSide), minDist,
       maxDist, useBinSearch, std::move(activeGraphs), graphVariable);
