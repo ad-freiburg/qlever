@@ -52,7 +52,8 @@ TEST(SpatialJoinCachedIndex, Basic) {
 
   const auto& cachedIndex = cacheEntry->cachedGeoIndex_.value();
   EXPECT_EQ(cachedIndex.getRow(0), 0);
-  EXPECT_EQ(cachedIndex.getRow(3), 3);
+  EXPECT_EQ(cachedIndex.getRow(1), 1);
+  EXPECT_EQ(cachedIndex.getRow(2), 2);
 
   // The method `is_fresh()` tells us that there are no pending updates to be
   // applied (which would slow down the first query).
