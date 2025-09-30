@@ -17,15 +17,17 @@ class AlgorithmBackportTest : public ::testing::Test {
   std::vector<int> testVector;
 };
 
+// _____________________________________________________________________________
 TEST_F(AlgorithmBackportTest, EraseSingleValue) {
-  ql::erase(testVector, 4);
+  EXPECT_EQ(ql::backports::erase(testVector, 4), 1);
   std::vector<int> expected{5, 3, 8, 1, 2, 7, 6};
   EXPECT_EQ(testVector, expected);
 }
 
+// _____________________________________________________________________________
 TEST_F(AlgorithmBackportTest, EraseIfRemovesCorrectElements) {
   auto isEven = [](int x) { return x % 2 == 0; };
-  ql::erase_if(testVector, isEven);
+  EXPECT_EQ(ql::backports::erase_if(testVector, isEven), 4);
   std::vector<int> expected{5, 3, 1, 7};
   EXPECT_EQ(testVector, expected);
 }

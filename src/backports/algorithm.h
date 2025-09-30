@@ -28,7 +28,6 @@
 #endif
 
 namespace ql {
-
 namespace ranges {
 #ifdef QLEVER_CPP_17
 using namespace ::ranges;
@@ -50,14 +49,31 @@ using namespace std::views;
 #endif
 }  // namespace views
 
-#ifdef QLEVER_CPP_17
+// Backported versions of `std::erase(_if)`
+namespace backports {
 template <class T, class Alloc, class U>
-constexpr typename std::vector<T, Alloc>::size_type erase(
-    std::vector<T, Alloc>& c, const U& value);
+constexpr std::vector<T, Alloc>::size_type erase(std::vector<T, Alloc>& c,
+                                                 const U& value) {
+  auto it = std::remove(c.begin(), c.end(), value);
+  auto r = c.end() - it;
+  c.erase(it, c.end());
+  return r;
+}
 
 template <class T, class Alloc, class Pred>
-constexpr typename std::vector<T, Alloc>::size_type erase_if(
-    std::vector<T, Alloc>& c, Pred pred);
+constexpr std::vector<T, Alloc>::size_type erase_if(std::vector<T, Alloc>& c,
+                                                    Pred pred) {
+  auto it = std::remove_if(c.begin(), c.end(), pred);
+  auto r = c.end() - it;
+  c.erase(it, c.end());
+  return r;
+}
+}  // namespace backports
+
+#ifdef QLEVER_CPP_17
+using backports::erase;
+using backports::erase_if;
+
 #else
 using std::erase;
 using std::erase_if;

@@ -5,8 +5,6 @@
 
 #include "./SparqlExpressionPimpl.h"
 
-#include <algorithm>
-
 #include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
