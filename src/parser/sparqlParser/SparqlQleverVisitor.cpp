@@ -1327,9 +1327,13 @@ parsedQuery::GraphPatternOperation Visitor::visit(
       ad_utility::OverloadCallOperator{
           [this, &group](const Variable& graphVar) {
             addVisibleVariable(graphVar);
+            bool includeDefaultGraph =
+                RuntimeParameters()
+                    .get<"treat-default-graph-like-named-graph">();
+            using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
             return parsedQuery::GroupGraphPattern{
                 std::move(group), graphVar,
-                parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED};
+                includeDefaultGraph ? GVB::ALL : GVB::NAMED};
           },
           [&group](const TripleComponent::Iri& graphIri) {
             return parsedQuery::GroupGraphPattern{std::move(group), graphIri};

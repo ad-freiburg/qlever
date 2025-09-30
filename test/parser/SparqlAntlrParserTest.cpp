@@ -1548,6 +1548,29 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
+// _____________________________________________________________________________
+TEST(SparqlParser, GraphClauseIncludesDefaultGraph) {
+  // This test tests if the runtime parameter allows to toggle this behaviour.
+  auto expectGraphClause =
+      ExpectCompleteParse<&Parser::graphGraphPattern>{defaultPrefixMap};
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED,
+          ::testing::_));
+
+  auto cleanup =
+      setRuntimeParameterForTest<"treat-default-graph-like-named-graph">(true);
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL,
+          ::testing::_));
+}
+
+// _____________________________________________________________________________
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.

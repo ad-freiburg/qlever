@@ -107,6 +107,10 @@ inline auto& RuntimeParameters() {
         // Push joins into both children of unions if this leads to a cheaper
         // cost-estimate.
         Bool<"enable-distributive-union">{true},
+        // If set, the query `SELECT * { GRAPH ?g { ?s ?p ?o } }` will return
+        // triples from the default graph, otherwise it will follow the
+        // behaviour defined by the SPARQL standard which filters them out.
+        Bool<"treat-default-graph-like-named-graph">{false},
     };
   }();
   return params;
