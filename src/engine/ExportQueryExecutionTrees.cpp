@@ -229,8 +229,7 @@ auto evaluateTripleForConstruct =
 
 }  // namespace
 // _____________________________________________________________________________
-ad_utility::InputRangeTypeErased<QueryExecutionTree::StringTriple>
-ExportQueryExecutionTrees::constructQueryResultToTriples(
+auto ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
@@ -243,11 +242,15 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
   return ad_utility::InputRangeTypeErased(
-      ql::ranges::transform_view(
-          ad_utility::OwningView(std::move(rowIndices)),
+      ad_utility::OwningView{std::move(rowIndices)} |
+      ql::views::transform(
           [&qet, &constructTriples, result = std::move(result),
            cancellationHandle = std::move(cancellationHandle),
            rowOffset = size_t{0}](const auto& tableWithView) mutable {
+            // NOTE: This reference is captured in the following lambda.
+            // Normally it would be dangling, but as the `idTable` is not owned
+            // by the `tableWithView`, but backed by the outermost range, This
+            // is fine.
             auto& idTable = tableWithView.tableWithVocab_.idTable();
             auto currentRowOffset = rowOffset;
             rowOffset += idTable.size();
