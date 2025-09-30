@@ -24,11 +24,11 @@ static constexpr GetDetails getDetails;
 
 template <typename Details>
 struct SetDetailsPointer {
-  Details* pointer;
+  Details* pointer_;
 };
 template <typename Details>
 struct SetDetails {
-  Details details;
+  Details details_;
 };
 
 // This struct is used as the default of the details object for the case that
@@ -105,25 +105,25 @@ class generator_promise {
   struct SetDetailsPointerAwaiter {
     SetDetailsPointerAwaiter(generator_promise& promise,
                              struct SetDetailsPointer<Details> details) {
-      promise.setDetailsPointer(details.pointer);
+      promise.setDetailsPointer(details.pointer_);
     }
     constexpr bool await_ready() const { return true; }
     constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
       return false;
     }
-    constexpr void await_resume() noexcept {}
+    constexpr void await_resume() const noexcept {}
   };
 
   struct SetDetailsAwaiter {
     SetDetailsAwaiter(generator_promise& promise,
                       struct SetDetails<Details> details) {
-      promise.setDetails(std::move(details.details));
+      promise.setDetails(std::move(details.details_));
     }
     constexpr bool await_ready() const { return true; }
     constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
       return false;
     }
-    constexpr void await_resume() noexcept {}
+    constexpr void await_resume() const noexcept {}
   };
 
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
@@ -132,7 +132,7 @@ class generator_promise {
     return {*this, details};
   }
   SetDetailsAwaiter await_transform(SetDetails<Details> details)
-      requires(hasDetails) {
+      requires hasDetails {
     return {*this, details};
   }
 
