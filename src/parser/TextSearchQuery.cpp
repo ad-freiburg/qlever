@@ -7,7 +7,7 @@
 #include <absl/strings/str_split.h>
 
 #include "parser/MagicServiceIriConstants.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "parser/SparqlTriple.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
@@ -214,6 +214,14 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
     checkSubjectAndObjectAreVariables("score", subject, object);
     predStringBindScore(subject.getVariable(), object.getVariable());
   }
+}
+
+// ____________________________________________________________________________
+void TextSearchQuery::addGraph(
+    [[maybe_unused]] const GraphPatternOperation& childGraphPattern) {
+  throw TextSearchException{
+      "nested group graph patterns are not supported in the body of a `text "
+      "search query`, only plain triples that specify the configuration"};
 }
 
 // ____________________________________________________________________________

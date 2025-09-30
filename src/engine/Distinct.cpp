@@ -89,15 +89,16 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
 
 // _____________________________________________________________________________
 Result Distinct::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for distinct result computation..."
+               << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
-  LOG(DEBUG) << "Distinct result computation..." << endl;
+  AD_LOG_DEBUG << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
   if (subRes->isFullyMaterialized()) {
     IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::outOfPlaceDistinct,
                                       this, subRes->idTable());
-    LOG(DEBUG) << "Distinct result computation done." << endl;
+    AD_LOG_DEBUG << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
             subRes->getSharedLocalVocab()};
   }
@@ -123,7 +124,7 @@ IdTable Distinct::distinct(
     IdTable dynInput,
     std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
-  LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
+  AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
   // Variant of `ql::ranges::unique` that allows to skip the begin rows of
@@ -167,7 +168,7 @@ IdTable Distinct::distinct(
   result.erase(dest, end);
   checkCancellation();
 
-  LOG(DEBUG) << "Distinct done.\n";
+  AD_LOG_DEBUG << "Distinct done.\n";
   return std::move(result).toDynamic();
 }
 
@@ -175,7 +176,7 @@ IdTable Distinct::distinct(
 template <size_t WIDTH>
 IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
-  LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
+  AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> output{dynInput.numColumns(), allocator()};
 
@@ -208,7 +209,7 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
     } while (begin != end && matchesRow(*begin, begin[-1]));
   }
 
-  LOG(DEBUG) << "Distinct done.\n";
+  AD_LOG_DEBUG << "Distinct done.\n";
   return std::move(output).toDynamic();
 }
 

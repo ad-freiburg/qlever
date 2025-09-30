@@ -33,6 +33,7 @@
 #include "engine/Load.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
+#include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
@@ -242,7 +243,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
   try {
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
-    LOG(DEBUG) << "Done creating execution plan" << std::endl;
+    AD_LOG_DEBUG << "Done creating execution plan" << std::endl;
     auto result = std::move(*lastRow[minInd]._qet);
     auto& rootOperation = *result.getRootOperation();
     // Collect all the warnings and pass them to the created tree such that
@@ -1199,8 +1200,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
   // if that is rather small, replace the join and scan by a combination.
   ad_utility::HashMap<std::string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
-  LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
-             << b.size() << " plans...\n";
+  AD_LOG_TRACE << "Considering joins that merge " << a.size() << " and "
+               << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
       for (auto& plan : createJoinCandidates(ai, bj, tg)) {
@@ -1216,7 +1217,7 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   // Therefore we mapped plans and use contained triples + ordering var
   // as key.
-  LOG(TRACE) << "Pruning...\n";
+  AD_LOG_TRACE << "Pruning...\n";
   vector<SubtreePlan> prunedPlans;
 
   auto pruneCandidates = [&](auto& actualCandidates) {
@@ -1239,7 +1240,7 @@ std::vector<SubtreePlan> QueryPlanner::merge(
     pruneCandidates(candidates);
   }
 
-  LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
+  AD_LOG_TRACE << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
 }
 
@@ -1516,8 +1517,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
-    LOG(TRACE) << "Producing plans that unite " << k << " triples."
-               << std::endl;
+    AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
+                 << std::endl;
     applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
     applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
@@ -1746,7 +1747,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
     bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
-      LOG(INFO)
+      AD_LOG_INFO
           << "Using the greedy query planner for a large connected component"
           << std::endl;
     }
@@ -2015,11 +2016,11 @@ bool QueryPlanner::TripleGraph::isSimilar(
   // This method is very verbose as it is currently only intended for
   // testing
   if (_nodeStorage.size() != other._nodeStorage.size()) {
-    LOG(INFO) << asString() << std::endl;
-    LOG(INFO) << other.asString() << std::endl;
-    LOG(INFO) << "The two triple graphs are not of the same size: "
-              << _nodeStorage.size() << " != " << other._nodeStorage.size()
-              << std::endl;
+    AD_LOG_INFO << asString() << std::endl;
+    AD_LOG_INFO << other.asString() << std::endl;
+    AD_LOG_INFO << "The two triple graphs are not of the same size: "
+                << _nodeStorage.size() << " != " << other._nodeStorage.size()
+                << std::endl;
     return false;
   }
   ad_utility::HashMap<size_t, size_t> id_map;
@@ -2036,20 +2037,20 @@ bool QueryPlanner::TripleGraph::isSimilar(
       }
     }
     if (!hasMatch) {
-      LOG(INFO) << asString() << std::endl;
-      LOG(INFO) << other.asString() << std::endl;
-      LOG(INFO) << "The node " << n << " has no match in the other graph"
-                << std::endl;
+      AD_LOG_INFO << asString() << std::endl;
+      AD_LOG_INFO << other.asString() << std::endl;
+      AD_LOG_INFO << "The node " << n << " has no match in the other graph"
+                  << std::endl;
       return false;
     }
   }
   if (id_map.size() != _nodeStorage.size() ||
       id_map_reverse.size() != _nodeStorage.size()) {
-    LOG(INFO) << asString() << std::endl;
-    LOG(INFO) << other.asString() << std::endl;
-    LOG(INFO) << "Two nodes in this graph were matches to the same node in "
-                 "the other graph"
-              << std::endl;
+    AD_LOG_INFO << asString() << std::endl;
+    AD_LOG_INFO << other.asString() << std::endl;
+    AD_LOG_INFO << "Two nodes in this graph were matches to the same node in "
+                   "the other graph"
+                << std::endl;
     return false;
   }
   for (size_t id = 0; id < _adjLists.size(); ++id) {
@@ -2064,23 +2065,23 @@ bool QueryPlanner::TripleGraph::isSimilar(
     }
     for (size_t a : _adjLists[id]) {
       if (other_adj_set.count(id_map[a]) == 0) {
-        LOG(INFO) << asString() << std::endl;
-        LOG(INFO) << other.asString() << std::endl;
-        LOG(INFO) << "The node with id " << id << " is connected to " << a
-                  << " in this graph graph but not to the equivalent "
-                     "node in the other graph."
-                  << std::endl;
+        AD_LOG_INFO << asString() << std::endl;
+        AD_LOG_INFO << other.asString() << std::endl;
+        AD_LOG_INFO << "The node with id " << id << " is connected to " << a
+                    << " in this graph graph but not to the equivalent "
+                       "node in the other graph."
+                    << std::endl;
         return false;
       }
     }
     for (size_t a : other._adjLists[other_id]) {
       if (adj_set.count(id_map_reverse[a]) == 0) {
-        LOG(INFO) << asString() << std::endl;
-        LOG(INFO) << other.asString() << std::endl;
-        LOG(INFO) << "The node with id " << id << " is connected to " << a
-                  << " in the other graph graph but not to the equivalent "
-                     "node in this graph."
-                  << std::endl;
+        AD_LOG_INFO << asString() << std::endl;
+        AD_LOG_INFO << other.asString() << std::endl;
+        AD_LOG_INFO << "The node with id " << id << " is connected to " << a
+                    << " in the other graph graph but not to the equivalent "
+                       "node in this graph."
+                    << std::endl;
         return false;
       }
     }
@@ -2403,6 +2404,11 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
 std::optional<std::tuple<size_t, size_t>>
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  (void)jcs;
+  (void)leftSideTransitivePath;
+  return std::nullopt;
+#else
   // If there are more than two pairs of join columns, we have a graph
   // variable. In that case, we compute the full transitive hull (followed by a
   // multi-column join).
@@ -2445,6 +2451,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
   return std::tuple{transitiveColB, otherColB};
+#endif
 }
 
 // __________________________________________________________________________________________________________________
@@ -2452,6 +2459,12 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  (void)a;
+  (void)b;
+  (void)jcs;
+  return std::nullopt;
+#else
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
   auto bTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
@@ -2491,6 +2504,7 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;
+#endif
 }
 
 // ______________________________________________________________________________________
@@ -2957,11 +2971,21 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
   } else if constexpr (std::is_same_v<T, p::Service>) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
+#else
+    throw std::runtime_error(
+        "SERVICE is not supported in this restricted version of QLever");
+#endif
   } else if constexpr (std::is_same_v<T, p::Load>) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
+#else
+    throw std::runtime_error(
+        "LOAD is not supported in this restricted version of QLever");
+#endif
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
@@ -2978,6 +3002,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
+    visitNamedCachedResult(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -3056,6 +3082,12 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     parsedQuery::TransPath& arg) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  (void)arg;
+  throw std::runtime_error(
+      "Transitive Paths are not supported in this restricted version of "
+      "QLever");
+#else
   auto candidatesIn = planner_.optimize(&arg._childGraphPattern);
   std::vector<SubtreePlan> candidatesOut;
 
@@ -3076,6 +3108,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
+#endif
 }
 
 // _______________________________________________________________
@@ -3162,6 +3195,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
+    const parsedQuery::NamedCachedResult& arg) {
+  auto candidate =
+      SubtreePlan{planner_._qec, planner_._qec->namedResultCache().getOperation(
+                                     arg.identifier(), planner_._qec)};
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _______________________________________________________________

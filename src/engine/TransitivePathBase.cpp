@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "TransitivePathBase.h"
 
 #include <absl/strings/str_cat.h>
@@ -182,13 +184,13 @@ TransitivePathBase::~TransitivePathBase() = default;
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
     return {lhs_, rhs_};
   } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath right to left" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath right to left" << std::endl;
     return {rhs_, lhs_};
   }
-  LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+  AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
   return {lhs_, rhs_};
 }
 
@@ -664,3 +666,5 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
 // initialization.
 const Variable TransitivePathBase::internalGraphHelper_{
     "?_Qlever_internal_transitive_path_graph", false};
+
+#endif

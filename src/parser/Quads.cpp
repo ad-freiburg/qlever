@@ -4,6 +4,8 @@
 
 #include "Quads.h"
 
+#include "parser/UpdateClause.h"
+
 // ____________________________________________________________________________________
 Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
   AD_CORRECTNESS_CHECK(label.starts_with("_:"));
