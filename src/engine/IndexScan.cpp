@@ -692,10 +692,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 
   if (!metaBlocks.has_value()) {
     // Return empty results
-    return {Result::LazyResult{
-                ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{}},
-            Result::LazyResult{
-                ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{}}};
+    return {Result::LazyResult{}, Result::LazyResult{}};
   }
 
   auto state = std::make_shared<SharedGeneratorState>(
