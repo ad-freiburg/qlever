@@ -29,5 +29,5 @@ add_library(parser
         Quads.cpp
         UpdateTriples.cpp
 )
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index rdfTypes)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 util engine index rdfTypes)
 

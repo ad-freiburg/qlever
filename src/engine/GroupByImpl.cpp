@@ -239,7 +239,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
-  if (RuntimeParameters().get<"strip-columns">()) {
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
@@ -1039,7 +1039,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   // TODO<C++23> Use `std::optional::or_else`.
-  if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::groupByDisableIndexScanOptimizations_>()) {
     if (auto result = computeGroupByForSingleIndexScan()) {
       return result;
     }
@@ -1101,7 +1102,7 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
 std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::checkIfHashMapOptimizationPossible(
     std::vector<Aggregate>& aliases) const {
-  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
+  if (!getRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>()) {
     return std::nullopt;
   }
 
