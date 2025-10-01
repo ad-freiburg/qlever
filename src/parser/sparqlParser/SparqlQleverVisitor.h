@@ -709,7 +709,6 @@ class SparqlQleverVisitor {
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
-  ParsedQuery makeClear(SparqlTripleSimpleWithGraph::Graph graph);
 
   // Construct a `ParsedQuery` that adds all triples from the source graph to
   // the target graph equivalent to `INSERT { GRAPH target { ?s ?p ?o } } WHERE

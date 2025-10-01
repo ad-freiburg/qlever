@@ -42,6 +42,8 @@ const EncodedIriManager* encodedIriManager() {
   static EncodedIriManager encodedIriManager_;
   return &encodedIriManager_;
 }
+
+using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -963,7 +965,7 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ GRAPH ?g { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          Variable("?g"),
+          std::pair{Variable("?g"), GVB::NAMED},
           m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}))));
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
@@ -996,12 +998,13 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}));
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
 
   // A matcher that matches the query `SELECT * { ?a <bar> ?foo}`, where the
   // FROM and FROM NAMED clauses can still be specified via arguments.
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
+  auto selectABarFooMatcher = [](std::optional<m::Graphs> defaultGraphs =
+                                     std::nullopt,
+                                 std::optional<m::Graphs> namedGraphs =
+                                     std::nullopt) {
     return m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
@@ -1219,28 +1222,29 @@ TEST(SparqlParser, AskQuery) {
   auto expectAskQueryFails = ExpectParseFails<&Parser::askQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}));
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  using Graphs = m::Graphs;
 
   // A matcher that matches the query `ASK { ?a <bar> ?foo}`, where the
   // FROM parts of the query can be specified via `defaultGraphs` and
   // the FROM NAMED parts can be specified via `namedGraphs`.
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
+  auto selectABarFooMatcher = [](std::optional<Graphs> defaultGraphs =
+                                     std::nullopt,
+                                 std::optional<Graphs> namedGraphs =
+                                     std::nullopt) {
     return m::AskQuery(
         m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
-        defaultGraphs, namedGraphs);
+        std::move(defaultGraphs), std::move(namedGraphs));
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
   // ASK query with both a FROM and a FROM NAMED clause.
   Graphs defaultGraphs;
-  defaultGraphs.emplace();
-  defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
+  defaultGraphs.insert(TripleComponent::Iri::fromIriref("<x>"));
   Graphs namedGraphs;
-  namedGraphs.emplace();
-  namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
-  expectAskQuery("ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
-                 selectABarFooMatcher(defaultGraphs, namedGraphs));
+  namedGraphs.insert(TripleComponent::Iri::fromIriref("<y>"));
+  expectAskQuery(
+      "ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
+      selectABarFooMatcher(std::move(defaultGraphs), std::move(namedGraphs)));
 
   // ASK whether there are any triples at all.
   expectAskQuery("ASK { ?x ?y ?z }", m::AskQuery(DummyGraphPatternMatcher));
@@ -1386,17 +1390,16 @@ TEST(SparqlParser, Query) {
     // NOTE: The clauses are relevant *both* for the retrieval of the resources
     // to describe (the `Id`s matching `?y`), as well as for computing the
     // triples for each of these resources.
-    using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-    Graphs expectedDefaultGraphs;
-    Graphs expectedNamedGraphs;
-    expectedDefaultGraphs.emplace({Iri("<default-graph>")});
-    expectedNamedGraphs.emplace({Iri("<named-graph>")});
+    using Graphs = m::Graphs;
+    Graphs expectedDefaultGraphs{Iri("<default-graph>")};
+    Graphs expectedNamedGraphs{Iri("<named-graph>")};
     parsedQuery::DatasetClauses expectedClauses{expectedDefaultGraphs,
                                                 expectedNamedGraphs};
     expectQuery(
         "DESCRIBE <x> ?y <z> FROM <default-graph> FROM NAMED <named-graph>",
         m::DescribeQuery(m::Describe(xyz, expectedClauses, ::testing::_),
-                         expectedDefaultGraphs, expectedNamedGraphs));
+                         std::move(expectedDefaultGraphs),
+                         std::move(expectedNamedGraphs)));
   }
 
   // Test the various places where warnings are added in a query.
@@ -1427,9 +1430,9 @@ TEST(SparqlParser, Exists) {
 
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
   // FROM and FROM NAMED clauses can be specified as arguments.
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   auto selectABarFooMatcher =
-      [](Graphs defaultGraphs = std::nullopt, Graphs namedGraphs = std::nullopt,
+      [](std::optional<m::Graphs> defaultGraphs = std::nullopt,
+         std::optional<m::Graphs> namedGraphs = std::nullopt,
          const std::optional<std::vector<std::string>>& variables =
              std::nullopt) {
         auto selectMatcher = variables.has_value()
@@ -1439,7 +1442,7 @@ TEST(SparqlParser, Exists) {
         return m::SelectQuery(selectMatcher,
                               m::GraphPattern(m::Triples(
                                   {{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
-                              defaultGraphs, namedGraphs);
+                              std::move(defaultGraphs), std::move(namedGraphs));
       };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
@@ -1447,8 +1450,8 @@ TEST(SparqlParser, Exists) {
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
                     m::NotExists(selectABarFooMatcher()));
 
-  Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
-  Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};
+  m::Graphs defaultGraphs{iri("<blubb>")};
+  m::Graphs namedGraphs{iri("<blabb>")};
 
   // Now run the same tests, but with non-empty dataset clauses, that have to be
   // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
@@ -1544,6 +1547,29 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
+// _____________________________________________________________________________
+TEST(SparqlParser, GraphClauseIncludesDefaultGraph) {
+  // This test tests if the runtime parameter allows to toggle this behaviour.
+  auto expectGraphClause =
+      ExpectCompleteParse<&Parser::graphGraphPattern>{defaultPrefixMap};
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED,
+          ::testing::_));
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL,
+          ::testing::_));
+}
+
+// _____________________________________________________________________________
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
@@ -1649,7 +1675,7 @@ TEST(SparqlParser, Datasets) {
   };
   auto noGraph = std::monostate{};
   auto noGraphs = m::Graphs{};
-  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<g>")}};
+  m::Graphs datasets{Iri("<g>")};
   // Only checks `_filters` on the GraphPattern. We are not concerned with the
   // `_graphPatterns` here.
   auto filterGraphPattern = m::Filters(m::ExistsFilter(

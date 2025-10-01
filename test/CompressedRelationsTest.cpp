@@ -901,8 +901,8 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   CompressedBlockMetadata metadata{
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
-  ScanSpecification::Graphs graphs = std::nullopt;
-  Filter f{graphs, 43, false};
+  using GF = ScanSpecification::GraphFilter;
+  Filter f{GF::All(), 43, false};
   EXPECT_FALSE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
 
@@ -914,10 +914,10 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   // Keep the graph column (the last column), hence there are no duplicates,
   // but keep only the entries from graphs `1` and `2`.
   table = makeIdTableFromVector({{3, 1}, {3, 2}, {5, 3}});
-  graphs.emplace();
-  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
-  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
-  f = Filter{graphs, 1, false};
+  ad_utility::HashSet<Id> graphs;
+  graphs.insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
+  graphs.insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
+  f = Filter{GF::Whitelist(std::move(graphs)), 1, false};
   EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
@@ -937,9 +937,11 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
-  auto filter = CompressedRelationReader::FilterDuplicatesAndGraphs{
-      std::nullopt, 0, false};
-  auto& graphs = filter.desiredGraphs_;
+  using GF = ScanSpecification::GraphFilter;
+  auto filter =
+      CompressedRelationReader::FilterDuplicatesAndGraphs{GF::All(), 0, false};
+  auto& graphFilter = filter.graphFilter_;
+  ad_utility::HashSet<Id> graphs;
   // No information about the contained blocks, and no graph filter specified,
   // so we cannot skip.
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
@@ -952,14 +954,15 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 
   // The graph info says that the block only contains the graph `1`, and we in
   // fact want the graphs `1` and `3`, so it can't be skipped.
-  graphs.emplace();
-  graphs->insert(V(1));
-  graphs->insert(V(3));
+  graphs.insert(V(1));
+  graphs.insert(V(3));
+  graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
   // be skipped.
-  graphs->erase(V(1));
+  graphs.insert(V(3));
+  graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_TRUE(filter.canBlockBeSkipped(metadata));
 
   // The block metadata contains no information on the contained graphs, but we
@@ -1076,10 +1079,15 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {9, 5, 1}}});
   using namespace ::testing;
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
+    using GF = ScanSpecification::GraphFilter;
     auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
     ad_utility::HashSet<Id> graphs{V(0)};
-    ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
+    ScanSpecification spec{V(42),
+                           std::nullopt,
+                           std::nullopt,
+                           {},
+                           GF::Whitelist(std::move(graphs))};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     auto res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
@@ -1089,7 +1097,11 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     graphs.clear();
     graphs.insert(V(1));
-    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    spec = ScanSpecification{V(42),
+                             std::nullopt,
+                             std::nullopt,
+                             {},
+                             GF::Whitelist(std::move(graphs))};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
@@ -1098,15 +1110,18 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // Edge case, all graphs are filtered out
     graphs.clear();
-    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    spec = ScanSpecification{V(42),
+                             std::nullopt,
+                             std::nullopt,
+                             {},
+                             GF::Whitelist(std::move(graphs))};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector({}));
 
     // std::nullopt matches all graphs.
-    spec =
-        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, GF::All()};
     std::array additionalColumns{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
@@ -1123,13 +1138,23 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
-    spec =
-        ScanSpecification{V(42), std::nullopt, std::nullopt, {}, std::nullopt};
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, GF::All()};
     res = reader->scan(
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
+        << "Failed with blocksize " << blocksize.getBytes();
+
+    // std::nullopt matches all graphs, but the default graph ('0' in this test)
+    // should be filtered out.
+    spec = ScanSpecification{
+        V(42), std::nullopt, std::nullopt, {}, GF::Blacklist(V(0))};
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples);
+    EXPECT_THAT(res, matchesIdTableFromVector(
+                         {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
         << "Failed with blocksize " << blocksize.getBytes();
   }
 }
@@ -1149,8 +1174,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {7, 0, 0}}});
   auto [blocks, metadata, reader] =
       writeAndOpenRelations(inputs, "removePrefix", 16_B);
-  ScanSpecification spec{
-      std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
+  ScanSpecification spec{std::nullopt, std::nullopt, std::nullopt};
 
   auto getSize = [](auto range) {
     size_t counter = 0;

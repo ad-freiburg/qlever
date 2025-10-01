@@ -9,6 +9,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
@@ -232,10 +233,10 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   AD_CORRECTNESS_CHECK(subtree != nullptr);
   // Remove all undefined GROUP BY variables (according to the SPARQL standard
   // they are allowed, but have no effect on the result).
-  std::erase_if(_groupByVariables,
-                [&map = subtree->getVariableColumns()](const auto& var) {
-                  return !map.contains(var);
-                });
+  ql::erase_if(_groupByVariables,
+               [&map = subtree->getVariableColumns()](const auto& var) {
+                 return !map.contains(var);
+               });
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
@@ -736,7 +737,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   }
 
   if (indexScan->numVariables() <= 1 ||
-      indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
+      !indexScan->graphsToFilter().areAllGraphsAllowed() ||
+      !_groupByVariables.empty()) {
     return std::nullopt;
   }
 
@@ -781,7 +783,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
-  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+  if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 2) {
     return std::nullopt;
   }
@@ -901,7 +903,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
-  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+  if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 3) {
     return std::nullopt;
   }

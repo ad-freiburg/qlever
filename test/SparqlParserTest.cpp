@@ -1447,7 +1447,7 @@ TEST(ParserTest, parseWithDatasets) {
                                   DatasetClause{Iri("<baz>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                              {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
-  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<h>")}};
+  parsedQuery::DatasetClauses::Graphs datasets{{Iri("<h>")}};
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));

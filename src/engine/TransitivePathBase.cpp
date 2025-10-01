@@ -577,11 +577,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
                                           rhs, minDist_, maxDist_, useBinSearch,
-                                          {}, graphVariable_));
+                                          activeGraphs_, graphVariable_));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
     candidates.push_back(makeTransitivePath(
         getExecutionContext(), alternativeSubtree, lhs, rhs, minDist_, maxDist_,
-        useBinSearch, {}, graphVariable_));
+        useBinSearch, activeGraphs_, graphVariable_));
   }
 
   auto& p = *ql::ranges::min_element(
