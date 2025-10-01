@@ -100,7 +100,8 @@ TEST_F(LoadTest, computeResult) {
     // Not silent, but syntax test mode is activated.
     pq.silent_ = false;
     {
-      auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
       impl();
     }
     // Silent, but syntax test mode is deactivated.
@@ -156,7 +157,9 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            auto idOpt = field.toValueId(testQec->getIndex().getVocab());
+            const auto& idx = testQec->getIndex();
+            auto idOpt =
+                field.toValueId(idx.getVocab(), idx.encodedIriManager());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
@@ -241,7 +244,8 @@ TEST_F(LoadTest, computeResult) {
 
 TEST_F(LoadTest, getCacheKey) {
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -258,7 +262,9 @@ TEST_F(LoadTest, getCacheKey) {
                 testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -278,7 +284,9 @@ TEST_F(LoadTest, clone) {
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -287,7 +295,8 @@ TEST_F(LoadTest, clone) {
   }
   // When the results are cached, we get decoupled object that is the same.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -296,8 +305,9 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate(&blankNodeManager_,
-                                                "LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(
+      &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
+      "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

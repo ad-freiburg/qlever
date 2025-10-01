@@ -6,8 +6,6 @@
 
 #include "CompressedRelation.h"
 
-#include <ranges>
-
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -15,7 +13,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
 #include "util/ProgressBar.h"
@@ -31,6 +29,14 @@ template <typename T>
 static auto getBeginAndEnd(T& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
+
+namespace {
+// Helper function to make a row from `IdTable` easier to compare. This ties
+// the cells of the given row with the indices 0, 1 and 2.
+auto tieFirstThreeColumns = [](const auto& row) {
+  return std::tie(row[0], row[1], row[2]);
+};
+}  // namespace
 
 // TODO @realHannes:
 // Create a separate header file CompressedRelationMetadata for all the
@@ -61,20 +67,20 @@ static auto getMaskedTriple(
       // ignoreIndex out of bound.
       AD_FAIL();
   }
-};
+}
 
 bool CompressedBlockMetadataNoBlockIndex::containsInconsistentTriples(
     size_t columnIndex) const {
   return getMaskedTriple(firstTriple_, columnIndex) !=
          getMaskedTriple(lastTriple_, columnIndex);
-};
+}
 
 bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
     const CompressedBlockMetadataNoBlockIndex& other,
     size_t columnIndex) const {
   return getMaskedTriple(lastTriple_, columnIndex) ==
          getMaskedTriple(other.firstTriple_, columnIndex);
-};
+}
 
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
@@ -129,116 +135,170 @@ static void pruneBlock(T& block, LimitOffsetClause& limitOffset) {
 
 // ____________________________________________________________________________
 template <typename T>
-CompressedRelationReader::IdTableGenerator
+CompressedRelationReader::IdTableGeneratorInputRange
 CompressedRelationReader::asyncParallelBlockGenerator(
     T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
     CancellationHandle cancellationHandle,
     LimitOffsetClause& limitOffset) const {
   // Empty range.
   if (beginBlock == endBlock) {
-    co_return;
+    return IdTableGeneratorInputRange{};
   }
 
-  // Preparation.
-  const auto& columnIndices = scanConfig.scanColumns_;
-  const auto& blockGraphFilter = scanConfig.graphFilter_;
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
-  const size_t queueSize =
-      RuntimeParameters().get<"lazy-index-scan-queue-size">();
-  auto blockMetadataIterator = beginBlock;
-  std::mutex blockIteratorMutex;
+  struct Generator
+      : public ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    const T beginBlock_;
+    const T endBlock_;
+    T blockMetadataIterator_;
+    const ScanImplConfig& scanConfig_;
+    CancellationHandle cancellationHandle_;
+    LimitOffsetClause& limitOffset_;
+    const CompressedRelationReader* reader_;
+    ad_utility::Timer popTimer_{
+        ad_utility::timer::Timer::InitialStatus::Stopped};
+    std::mutex blockIteratorMutex_;
+    ad_utility::InputRangeTypeErased<
+        std::optional<DecompressedBlockAndMetadata>>
+        queue_;
+    bool needsStart_{true};
 
-  // Helper lambda that reads and decompessed the next block and returns it
-  // together with its index relative to `beginBlock`. Return `std::nullopt`
-  // when `endBlock` is reached. Returns `std::nullopt` for the block if it
-  // is skipped due to the graph filter.
-  auto readAndDecompressBlock = [&]()
-      -> std::optional<
-          std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>> {
-    cancellationHandle->throwIfCancelled();
-    std::unique_lock lock{blockIteratorMutex};
-    if (blockMetadataIterator == endBlock) {
+    Generator(T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
+              CancellationHandle cancellationHandle,
+              LimitOffsetClause& limitOffset,
+              const CompressedRelationReader* reader)
+        : beginBlock_{beginBlock},
+          endBlock_{endBlock},
+          blockMetadataIterator_{beginBlock},
+          scanConfig_{scanConfig},
+          cancellationHandle_{cancellationHandle},
+          limitOffset_{limitOffset},
+          reader_{reader} {}
+
+    void start() {
+      auto numThreads{
+          getRuntimeParameter<&RuntimeParameters::lazyIndexScanNumThreads_>()};
+      auto queueSize{
+          getRuntimeParameter<&RuntimeParameters::lazyIndexScanQueueSize_>()};
+      auto producer{std::bind(&Generator::readAndDecompressBlock, this)};
+
+      // Prepare queue for reading and decompressing blocks concurrently using
+      // `numThreads` threads.
+      queue_ = ad_utility::data_structures::queueManager<
+          ad_utility::data_structures::OrderedThreadSafeQueue<
+              std::optional<DecompressedBlockAndMetadata>>>(
+          queueSize, numThreads, producer);
+    }
+
+    std::optional<
+        std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>>
+    readAndDecompressBlock() {
+      cancellationHandle_->throwIfCancelled();
+      std::unique_lock lock{blockIteratorMutex_};
+      if (blockMetadataIterator_ == endBlock_) {
+        return std::nullopt;
+      }
+
+      // Note: taking a copy here is probably not necessary (the lifetime of
+      // all the blocks is long enough, so a `const&` would suffice), but the
+      // copy is cheap and makes the code more robust.
+      auto blockMetadata = *blockMetadataIterator_;
+      // Note: The order of the following two lines is important: The index
+      // of the current blockMetadata depends on the current value of
+      // `blockMetadataIterator`, so we have to compute it before incrementing
+      // the iterator.
+      auto myIndex = static_cast<size_t>(blockMetadataIterator_ - beginBlock_);
+      ++blockMetadataIterator_;
+      if (scanConfig_.graphFilter_.canBlockBeSkipped(blockMetadata)) {
+        return std::pair{myIndex, std::nullopt};
+      }
+      // Note: the reading of the blockMetadata could also happen without
+      // holding the lock. We still perform it inside the lock to avoid
+      // contention of the file. On a fast SSD we could possibly change this,
+      // but this has to be investigated.
+      auto compressedBlock = reader_->readCompressedBlockFromFile(
+          blockMetadata, scanConfig_.scanColumns_);
+
+      lock.unlock();
+      auto decompressedBlockAndMetadata =
+          reader_->decompressAndPostprocessBlock(compressedBlock,
+                                                 blockMetadata.numRows_,
+                                                 scanConfig_, blockMetadata);
+      return std::pair{myIndex,
+                       std::optional{std::move(decompressedBlockAndMetadata)}};
+    };
+
+    std::optional<IdTable> get() override {
+      if (std::exchange(needsStart_, false)) {
+        start();
+      }
+
+      // Yield the blocks (in the right order) as soon as they become
+      // available. Stop when all the blocks have been yielded or the LIMIT of
+      // the query is reached. Keep track of various statistics.
+      while (true) {
+        popTimer_.cont();
+        auto&& item{queue_.get()};  // copy elision
+        popTimer_.stop();
+
+        details().blockingTime_ = popTimer_.msecs();
+
+        if (item == std::nullopt) {
+          break;
+        }
+
+        if (cancellationHandle_->isCancelled()) {
+          details().blockingTime_ = popTimer_.msecs();
+          cancellationHandle_->throwIfCancelled();
+        }
+
+        auto& optBlock{item.value()};
+
+        details().update(optBlock);
+        if (optBlock.has_value()) {
+          auto block{std::move(optBlock.value().block_)};
+          pruneBlock(block, limitOffset_);
+
+          if (!block.empty()) {
+            details().numElementsYielded_ += block.numRows();
+            return block;
+          }
+
+          if (limitOffset_._limit.value_or(1) == 0) {
+            break;
+          }
+        }
+      }
+
       return std::nullopt;
     }
-    // Note: taking a copy here is probably not necessary (the lifetime of
-    // all the blocks is long enough, so a `const&` would suffice), but the
-    // copy is cheap and makes the code more robust.
-    auto blockMetadata = *blockMetadataIterator;
-    // Note: The order of the following two lines is important: The index
-    // of the current blockMetadata depends on the current value of
-    // `blockMetadataIterator`, so we have to compute it before incrementing the
-    // iterator.
-    auto myIndex = static_cast<size_t>(blockMetadataIterator - beginBlock);
-    ++blockMetadataIterator;
-    if (blockGraphFilter.canBlockBeSkipped(blockMetadata)) {
-      return std::pair{myIndex, std::nullopt};
-    }
-    // Note: the reading of the blockMetadata could also happen without holding
-    // the lock. We still perform it inside the lock to avoid contention of the
-    // file. On a fast SSD we could possibly change this, but this has to be
-    // investigated.
-    CompressedBlock compressedBlock =
-        readCompressedBlockFromFile(blockMetadata, columnIndices);
-    lock.unlock();
-    auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
-        compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
-    return std::pair{myIndex,
-                     std::optional{std::move(decompressedBlockAndMetadata)}};
   };
 
-  // Prepare queue for reading and decompressing blocks concurrently using
-  // `numThreads` threads.
-  const size_t numThreads =
-      RuntimeParameters().get<"lazy-index-scan-num-threads">();
-  ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
-  // In case the coroutine is destroyed early we still want to have this
-  // information.
-  auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [&details, &popTimer]() { details.blockingTime_ = popTimer.msecs(); });
-  auto queue = ad_utility::data_structures::queueManager<
-      ad_utility::data_structures::OrderedThreadSafeQueue<
-          std::optional<DecompressedBlockAndMetadata>>>(queueSize, numThreads,
-                                                        readAndDecompressBlock);
+  // There is a std::mutex in the generator, so we cannot copy or move it,
+  // that's why it is consctucted via a unique_ptr.
+  std::unique_ptr<ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata>>
+      generator{std::make_unique<Generator>(beginBlock, endBlock, scanConfig,
+                                            cancellationHandle, limitOffset,
+                                            this)};
 
-  // Yield the blocks (in the right order) as soon as they become available.
-  // Stop when all the blocks have been yielded or the LIMIT of the query is
-  // reached. Keep track of various statistics.
-  for (std::optional<DecompressedBlockAndMetadata>& optBlock : queue) {
-    popTimer.stop();
-    cancellationHandle->throwIfCancelled();
-    details.update(optBlock);
-    if (optBlock.has_value()) {
-      auto& block = optBlock.value().block_;
-      pruneBlock(block, limitOffset);
-      details.numElementsYielded_ += block.numRows();
-      if (!block.empty()) {
-        co_yield block;
-      }
-      if (limitOffset._limit.value_or(1) == 0) {
-        co_return;
-      }
-    }
-    popTimer.cont();
-  }
-  // The `OnDestruction...` above might be called too late, so we manually stop
-  // the timer here in case it wasn't already.
-  popTimer.stop();
+  return ad_utility::InputRangeTypeErased{std::move(generator)};
+}
+// _____________________________________________________________________________
+auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
+    const {
+  return [this](Id graph) { return graphFilter_.isGraphAllowed(graph); };
 }
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
-  if (!desiredGraphs_.has_value()) {
+  if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
   const auto& graphInfo = metadata.graphInfo_.value();
-  return !ql::ranges::all_of(
-      graphInfo, [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
-        return wantedGraphs.contains(containedGraph);
-      });
+  return !ql::ranges::all_of(graphInfo, isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________
@@ -249,14 +309,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   auto graphIdFromRow = [graphColumn = graphColumn_](const auto& row) {
     return row[graphColumn];
   };
-  auto isDesiredGraphId = [this]() {
-    return [&wantedGraphs = desiredGraphs_.value()](Id id) {
-      return wantedGraphs.contains(id);
-    };
-  };
   if (needsFilteringByGraph) {
     auto removedRange = ql::ranges::remove_if(
-        block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
+        block, std::not_fn(isGraphAllowedLambda()), graphIdFromRow);
 #ifdef QLEVER_CPP_17
     block.erase(removedRange, block.end());
 #else
@@ -264,8 +319,8 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 #endif
   } else {
     AD_EXPENSIVE_CHECK(
-        !desiredGraphs_.has_value() ||
-        ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        graphFilter_.areAllGraphsAllowed() ||
+        ql::ranges::all_of(block, isGraphAllowedLambda(), graphIdFromRow));
   }
   return needsFilteringByGraph;
 }
@@ -298,94 +353,185 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
 // ______________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
     const CompressedBlockMetadata& block) const {
-  if (!desiredGraphs_.has_value()) {
+  if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
   if (!block.graphInfo_.has_value()) {
     return false;
   }
-  const auto& containedGraphs = block.graphInfo_.value();
-  return ql::ranges::none_of(
-      desiredGraphs_.value(), [&containedGraphs](const auto& desiredGraph) {
-        return ad_utility::contains(containedGraphs, desiredGraph);
-      });
+  return ql::ranges::none_of(block.graphInfo_.value(), isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________
-CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
-    ScanSpecification scanSpec,
+CompressedRelationReader::IdTableGeneratorInputRange
+CompressedRelationReader::lazyScan(
+    const ScanSpecification& scanSpec,
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-    ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+    ColumnIndices additionalColumns,
+    const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
-  // We will modify `limitOffset` as we go. We make a copy of the original
-  // value for some sanity checks at the end of the function.
-  const auto originalLimit = limitOffset;
-
   if (relevantBlockMetadata.empty()) {
-    co_return;
+    return IdTableGeneratorInputRange{};
   }
 
-  // Some preparation.
-  auto [beginBlockMetadata, endBlockMetadata] =
-      getBeginAndEnd(relevantBlockMetadata);
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
-  size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
+  struct Generator : ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    enum class State {
+      yieldFirstBlocks,
+      createMiddleBlocksGenerator,
+      yieldMiddleBlocks,
+      yieldLastBlock,
+      afterLastYieldedBlock
+    };
+
+    using CompressedBlockMetadataIterator =
+        std::vector<CompressedBlockMetadata>::iterator;
+
+    ScanSpecification scanSpec_;
+    std::vector<CompressedBlockMetadata> relevantBlockMetadata_;
+    ColumnIndices additionalColumns_;
+    const CancellationHandle& cancellationHandle_;
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
+    LimitOffsetClause limitOffset_;
+    ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
+        blockGenerator_{};
+    State state_{State::yieldFirstBlocks};
+    CompressedBlockMetadataIterator beginBlockMetadata_;
+    CompressedBlockMetadataIterator endBlockMetadata_;
+    const CompressedRelationReader* reader_;
+    ScanImplConfig config_;
+    IdTableGeneratorInputRange middleBlocksGenerator_{};
+    // We will modify `limitOffset` as we go. We make a copy of the original
+    // value for some sanity checks at the end of the function.
+    const LimitOffsetClause originalLimit_{limitOffset_};
+    std::size_t numBlocksTotal_;
+
+    Generator(ScanSpecification scanSpec,
+              std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+              ColumnIndices additionalColumns,
+              const CancellationHandle& cancellationHandle,
+              const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+              const LimitOffsetClause& limitOffset,
+              const CompressedRelationReader* reader,
+              const ScanImplConfig& config)
+        : scanSpec_{std::move(scanSpec)},
+          relevantBlockMetadata_{std::move(relevantBlockMetadata)},
+          additionalColumns_{std::move(additionalColumns)},
+          cancellationHandle_{cancellationHandle},
+          locatedTriplesPerBlock_{locatedTriplesPerBlock},
+          limitOffset_{limitOffset},
+          reader_{reader},
+          config_{config} {}
+
+    void start() {
+      beginBlockMetadata_ = ql::ranges::begin(relevantBlockMetadata_);
+      endBlockMetadata_ = ql::ranges::end(relevantBlockMetadata_);
+
+      numBlocksTotal_ = endBlockMetadata_ - beginBlockMetadata_;
+    }
+
+    auto getIncompleteBlock(CompressedBlockMetadataIterator it) {
+      auto result = reader_->readPossiblyIncompleteBlock(
+          scanSpec_, config_, *it, std::ref(details()),
+          locatedTriplesPerBlock_);
+
+      return result;
+    };
+
+    auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
+      auto block = getIncompleteBlock(it);
+      pruneBlock(block, limitOffset_);
+      if (!block.empty()) {
+        details().numElementsYielded_ += block.numRows();
+      }
+      return block;
+    }
+
+    std::optional<IdTable> get() override {
+      switch (state_) {
+        case State::yieldFirstBlocks: {
+          start();
+          AD_CORRECTNESS_CHECK(beginBlockMetadata_ < endBlockMetadata_);
+
+          // Get and yield the first block.
+          auto block = getPrunedBlockAndUpdateDetails(beginBlockMetadata_);
+
+          state_ = (beginBlockMetadata_ + 1 < endBlockMetadata_)
+                       ? State::createMiddleBlocksGenerator
+                       : State::afterLastYieldedBlock;
+
+          if (!block.empty()) {
+            return block;
+          }
+          // recursively go to next state because there is no data to yield
+          // from this call
+          return get();
+        }
+
+        case State::createMiddleBlocksGenerator: {
+          middleBlocksGenerator_ = reader_->asyncParallelBlockGenerator(
+              beginBlockMetadata_ + 1, endBlockMetadata_ - 1, config_,
+              cancellationHandle_, limitOffset_);
+          middleBlocksGenerator_.setDetailsPointer(&details());
+          state_ = State::yieldMiddleBlocks;
+        }
+          [[fallthrough]];
+
+        case State::yieldMiddleBlocks: {
+          auto block{middleBlocksGenerator_.get()};
+          if (block.has_value()) {
+            return std::move(block.value());
+          } else {
+            state_ = State::yieldLastBlock;
+          }
+        }
+          [[fallthrough]];
+
+        case State::yieldLastBlock: {
+          {
+            auto block = getPrunedBlockAndUpdateDetails(endBlockMetadata_ - 1);
+            state_ = State::afterLastYieldedBlock;
+
+            if (!block.empty()) {
+              return block;
+            }
+          }
+        }
+          [[fallthrough]];
+
+        case State::afterLastYieldedBlock:
+          checkInvariantsAtEnd();
+      }
+
+      return std::nullopt;
+    }
+
+    void checkInvariantsAtEnd() {
+      // Some sanity checks.
+      const auto& limit = originalLimit_._limit;
+
+      const LazyScanMetadata& d{details()};
+      AD_CORRECTNESS_CHECK(!limit.has_value() ||
+                           d.numElementsYielded_ <= limit.value());
+      AD_CORRECTNESS_CHECK(
+          numBlocksTotal_ ==
+                  (d.numBlocksRead_ + d.numBlocksSkippedBecauseOfGraph_) ||
+              !limitOffset_.isUnconstrained(),
+          [&]() {
+            return absl::StrCat(numBlocksTotal_, " ", d.numBlocksRead_, " ",
+                                d.numBlocksSkippedBecauseOfGraph_);
+          });
+    }
+  };
+
   auto config =
       getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock);
 
-  // Helper lambda for reading the first and last block, of which only a part
-  // is needed.
-  auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(
-        scanSpec, config, *it, std::ref(details), locatedTriplesPerBlock);
-    cancellationHandle->throwIfCancelled();
-    return result;
-  };
-
-  // Get and yield the first block.
-  if (beginBlockMetadata < endBlockMetadata) {
-    auto block = getIncompleteBlock(beginBlockMetadata);
-    pruneBlock(block, limitOffset);
-    details.numElementsYielded_ += block.numRows();
-    if (!block.empty()) {
-      co_yield block;
-    }
-  }
-
-  // Get and yield the remaining blocks.
-  if (beginBlockMetadata + 1 < endBlockMetadata) {
-    // We copy the cancellationHandle because it is still captured by
-    // reference inside the `getIncompleteBlock` lambda.
-    auto blockGenerator = asyncParallelBlockGenerator(
-        beginBlockMetadata + 1, endBlockMetadata - 1, config,
-        cancellationHandle, limitOffset);
-    blockGenerator.setDetailsPointer(&details);
-    for (auto& block : blockGenerator) {
-      co_yield block;
-    }
-    auto lastBlock = getIncompleteBlock(endBlockMetadata - 1);
-    pruneBlock(lastBlock, limitOffset);
-    if (!lastBlock.empty()) {
-      details.numElementsYielded_ += lastBlock.numRows();
-      co_yield lastBlock;
-    }
-  }
-
-  // Some sanity checks.
-  const auto& limit = originalLimit._limit;
-  AD_CORRECTNESS_CHECK(!limit.has_value() ||
-                       details.numElementsYielded_ <= limit.value());
-  AD_CORRECTNESS_CHECK(
-      numBlocksTotal == (details.numBlocksRead_ +
-                         details.numBlocksSkippedBecauseOfGraph_) ||
-          !limitOffset.isUnconstrained(),
-      [&]() {
-        return absl::StrCat(numBlocksTotal, " ", details.numBlocksRead_, " ",
-                            details.numBlocksSkippedBecauseOfGraph_);
-      });
+  return IdTableGeneratorInputRange{Generator{
+      scanSpec, std::move(relevantBlockMetadata), additionalColumns,
+      cancellationHandle, locatedTriplesPerBlock, limitOffset, this, config}};
 }
 
 // _____________________________________________________________________________
@@ -401,9 +547,10 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
     return triple.col0Id_;
   }
 
-  // Compute the following range: If the `scanSpec` specifies both `col0Id` and
-  // `col1Id`, the first and last `col2Id` of the blocks. If the `scanSpec`
-  // specifies only `col0Id`, the first and last `col1Id` of the blocks.
+  // Compute the following range: If the `scanSpec` specifies both `col0Id`
+  // and `col1Id`, the first and last `col2Id` of the blocks. If the
+  // `scanSpec` specifies only `col0Id`, the first and last `col1Id` of the
+  // blocks.
   auto [minId, maxId] = [&]() {
     const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
@@ -441,8 +588,8 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
   }
 
   // If the `col1Id` of the triple matches that of the `scanSpec`, return the
-  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or `maxId`
-  // (if it is larger).
+  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or
+  // `maxId` (if it is larger).
   return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(), minId,
                                maxId)
       .value_or(triple.col2Id_);
@@ -483,8 +630,8 @@ auto CompressedRelationReader::getBlocksForJoin(
   // `joinColumn`.
   auto& blockIdx = res.numHandledBlocks;
   while (true) {
-    // Skip all IDs in the `joinColumn` that are strictly smaller than any block
-    // that hasn't been handled so far.
+    // Skip all IDs in the `joinColumn` that are strictly smaller than any
+    // block that hasn't been handled so far.
     while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
       ++colIt;
     }
@@ -503,8 +650,8 @@ auto CompressedRelationReader::getBlocksForJoin(
     }
     // Now it holds that `*blockIt >= *colIt`. As the entries in the
     // `joinColumn` as well as the blocks are sorted, it suffices to
-    // additionally find the values where `*blockIt <= *colIt` to find possibly
-    // matching blocks.
+    // additionally find the values where `*blockIt <= *colIt` to find
+    // possibly matching blocks.
     while (blockIt != blockEnd && !idLessThanBlock(*colIt, *blockIt)) {
       res.matchingBlocks_.push_back(*blockIt);
       ++blockIt;
@@ -623,24 +770,31 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   AD_CORRECTNESS_CHECK(ADDITIONAL_COLUMN_GRAPH_ID <
                        blockMetadata.offsetsAndCompressedSize_.size());
 
-  // We first scan the complete block including ALL columns.
+  bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
+  // We first scan the complete block including ALL columns with the following
+  // exception: If `manuallyDeleteGraphColumn` is true, then the `graphColumn`
+  // is contained inside `scanConfig.scanColumns`, but this function is supposed
+  // to delete it. In this case we will not scan the graph column, that way the
+  // `readAndDecompressBlock` function will correctly delete all duplicates from
+  // the block. The downside of this approach is that further down we have to be
+  // aware of this already dropped column when assembling the final result.
   std::vector<ColumnIndex> allAdditionalColumns;
   ql::ranges::copy(
-      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
+      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID +
+                          static_cast<size_t>(manuallyDeleteGraphColumn),
                       blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,
                                       std::nullopt,
                                       {},
-                                      scanConfig.graphFilter_.desiredGraphs_};
+                                      scanConfig.graphFilter_.graphFilter_};
   auto config = getScanConfig(specForAllColumns,
                               std::move(allAdditionalColumns), locatedTriples);
-  bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
 
   // Helper lambda that returns the decompressed block or an empty block if
   // `readAndDecompressBlock` returns `std::nullopt`.
-  const DecompressedBlock& block = [&]() {
+  DecompressedBlock block = [&]() {
     auto result = readAndDecompressBlock(blockMetadata, config);
     if (scanMetadata.has_value()) {
       scanMetadata.value().get().update(result);
@@ -689,9 +843,18 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   result.resize(endIdx - beginIdx);
   size_t i = 0;
   const auto& columnIndices = scanConfig.scanColumns_;
+
+  // If `manuallyDeleteGraphColumn` is `true`, then we don't output the graph
+  // column. Additionally, it means that the graph column has already been
+  // dropped by the call to `readAndDecompressBlock` (see above), so we have to
+  // shift the column origins above the graph column down by one.
   for (const auto& inputColIdx :
        columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
+       }) | ql::views::transform([&](const auto& idx) {
+         return manuallyDeleteGraphColumn && idx > ADDITIONAL_COLUMN_GRAPH_ID
+                    ? idx - 1
+                    : idx;
        })) {
     const auto& inputCol = block.getColumn(inputColIdx);
     ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
@@ -730,14 +893,15 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
                                       locatedTriplesPerBlock)
               .numRows();
     } else {
-      // If the first and last triple of the block match, then we know that the
-      // whole block belongs to the result.
+      // If the first and last triple of the block match, then we know that
+      // the whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
-          isComplete ? 1
-                     : RuntimeParameters()
-                           .get<"small-index-scan-size-estimate-divisor">();
+          isComplete
+              ? 1
+              : getRuntimeParameter<
+                    &RuntimeParameters::smallIndexScanSizeEstimateDivisor_>();
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {
@@ -921,10 +1085,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   AD_CORRECTNESS_CHECK(smallRelationsBuffer_.numColumns() == numColumns());
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
-  compressAndWriteBlock(
-      currentBlockFirstCol0_, currentBlockLastCol0_,
-      std::make_shared<IdTable>(std::move(smallRelationsBuffer_).toDynamic()),
-      true);
+  compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
+                        std::move(smallRelationsBuffer_), true);
   smallRelationsBuffer_.clear();
   smallRelationsBuffer_.reserve(2 * blocksize());
 }
@@ -1022,23 +1184,23 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
 // contains only a few distinct graphs such that we can store this information
 // in the block metadata.
 static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const std::shared_ptr<IdTable>& block) {
-  AD_CORRECTNESS_CHECK(block->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
+    const IdTable& block) {
+  AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
   auto hasDuplicates = [&block]() {
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
-        block->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
+        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
     size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
                                                ad_utility::noop);
-    return numDistinct != block->numRows();
+    return numDistinct != block.numRows();
   };
 
   // Return the contained graphs, or  `nullopt` if there are too many of them.
   auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
     std::vector<Id> graphColumn;
-    ql::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+    ql::ranges::copy(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
                      std::back_inserter(graphColumn));
     ql::ranges::sort(graphColumn);
     auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
@@ -1058,20 +1220,21 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::compressAndWriteBlock(
-    Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
-    bool invokeCallback) {
+void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
+                                                     Id lastCol0Id,
+                                                     IdTable block,
+                                                     bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : block->getColumns()) {
+    for (const auto& column : block.getColumns()) {
       offsets.push_back(compressAndWriteColumn(column));
     }
     AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = block->numRows();
-    const auto& first = (*block)[0];
-    const auto& last = (*block)[numRows - 1];
+    auto numRows = block.numRows();
+    const auto& first = block[0];
+    const auto& last = block[numRows - 1];
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
@@ -1142,9 +1305,9 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
   };
 
   // TODO:
-  // Optionally implement a free function like `equal_range(YourRangeType, key,
-  // comp)` that implements the equal range correctly.
-  // (1) Perform binary search on the inner blocks with respect to the first and
+  // Optionally implement a free function like `equal_range(YourRangeType,
+  // key, comp)` that implements the equal range correctly. (1) Perform binary
+  // search on the inner blocks with respect to the first and
   //     last triple.
   // (2) Perform binary search regarding the outer blocks.
   BlockMetadataRanges resultBlocks;
@@ -1161,7 +1324,7 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
-    const CompressedRelationReader::ScanSpecAndBlocks& metadataAndBlocks,
+    const ScanSpecAndBlocks& metadataAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
   if (metadataAndBlocks.sizeBlockMetadata_ == 0) {
@@ -1171,12 +1334,13 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   ScanSpecification scanSpecForAllColumns{
-      std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
+      std::nullopt, std::nullopt, std::nullopt, {}, scanSpec.graphFilter()};
   auto config =
       getScanConfig(scanSpecForAllColumns,
                     std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
                     locatedTriplesPerBlock);
-  auto scanBlock = [&](const CompressedBlockMetadata& block) {
+  auto scanBlock = [this, &scanSpec, &config, &locatedTriplesPerBlock](
+                       const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // matches the `col0` and `col1`.
     return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
@@ -1328,13 +1492,13 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::addBlockForLargeRelation(
-    Id col0Id, std::shared_ptr<IdTable> relation) {
-  AD_CORRECTNESS_CHECK(!relation->empty());
+void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
+                                                        IdTable relation) {
+  AD_CORRECTNESS_CHECK(!relation.empty());
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
-  currentRelationPreviousSize_ += relation->numRows();
+  currentRelationPreviousSize_ += relation.numRows();
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
@@ -1423,11 +1587,62 @@ template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
-  for (auto& block : sortedBlocks) {
+
+  // Buffer used to ensure the invariant that equal triples (when disregarding
+  // the graph) stay in the same block.
+  std::optional<IdTable> bufferedBlock;
+
+  for (auto& block :
+       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
-    addBlockForLargeRelation(
-        col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
+
+    if (!bufferedBlock.has_value()) {
+      // First non-empty block - initialize buffer.
+      bufferedBlock = std::move(block);
+      continue;
+    }
+
+    const auto& lastRowFromPrevious = bufferedBlock.value().back();
+
+    // Find how many rows from current block have the same first three columns
+    // as the last row in the buffered block
+    const size_t upperBoundEqualTriples =
+        ql::ranges::find_if(
+            block,
+            [&lastRowFromPrevious](const auto& row) {
+              return tieFirstThreeColumns(lastRowFromPrevious) !=
+                     tieFirstThreeColumns(row);
+            }) -
+        block.begin();
+
+    // If we found rows to merge, add them to the buffered block
+    if (upperBoundEqualTriples > 0) {
+      bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
+
+      // Remove the merged rows from the current block
+      block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
+    }
+
+    // If the `block` is empty after moving the duplicate triples into the
+    // buffer, continue without writing a block, because the next block might
+    // again contain the `lastRowFromPrevious`
+    if (block.empty()) {
+      continue;
+    }
+
+    // At this point we know that the `block` contains at least a single triple
+    // larger than `lastRowFromPrevious`, so we can safely write the
+    // `bufferedBlock`.
+    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
+    bufferedBlock = std::move(block);
   }
+
+  // Write the remaining triples from the buffer.
+  if (bufferedBlock.has_value()) {
+    AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
+    addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
+  }
+
   return finishLargeRelation(distinctCol1Counter.getAndReset());
 }
 
@@ -1435,7 +1650,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
-    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) -> PermutationPairResult {
@@ -1496,9 +1711,8 @@ auto CompressedRelationWriter::createPermutationPair(
     for (const auto& row : twinRelation) {
       twinRelationSorter.push(row);
     }
-    writer1.addBlockForLargeRelation(
-        col0IdCurrentRelation.value(),
-        std::make_shared<IdTable>(std::move(relation).toDynamic()));
+    writer1.addBlockForLargeRelation(col0IdCurrentRelation.value(),
+                                     std::move(relation).toDynamic());
     relation.clear();
     relation.reserve(blocksize);
     ++numBlocksCurrentRel;
@@ -1508,27 +1722,29 @@ auto CompressedRelationWriter::createPermutationPair(
   // A complete block of them is handed from `writer1` to the following lambda
   // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the
   // block and feeds it to `writer2`.)
-  auto addBlockOfSmallRelationsToSwitched =
-      [&writer2](std::shared_ptr<IdTable> relationPtr) {
-        auto& relation = *relationPtr;
-        // We don't use the parallel twinRelationSorter to create the twin
-        // relation as its overhead is far too high for small relations.
-        relation.swapColumns(c1Idx, c2Idx);
+  auto addBlockOfSmallRelationsToSwitched = [&writer2](IdTable relation) {
+    // We don't use the parallel twinRelationSorter to create the twin
+    // relation as its overhead is far too high for small relations.
+    relation.swapColumns(c1Idx, c2Idx);
 
-        // We only need to sort by the columns of the triple + the graph
-        // column, not the additional payload. Note: We could also use
-        // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
-        // sort is far from being a performance bottleneck.
-        auto compare = [](const auto& a, const auto& b) {
-          return std::tie(a[0], a[1], a[2], a[3]) <
-                 std::tie(b[0], b[1], b[2], b[3]);
-        };
-        ql::ranges::sort(relation, compare);
-        AD_CORRECTNESS_CHECK(!relation.empty());
-        writer2.compressAndWriteBlock(relation.at(0, 0),
-                                      relation.at(relation.size() - 1, 0),
-                                      std::move(relationPtr), false);
-      };
+    // We only need to sort by the columns of the triple + the graph
+    // column, not the additional payload. Note: We could also use
+    // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
+    // sort is far from being a performance bottleneck.
+    auto compare = [](const auto& a, const auto& b) {
+      return std::tie(a[0], a[1], a[2], a[3]) <
+             std::tie(b[0], b[1], b[2], b[3]);
+    };
+    ql::ranges::sort(relation, compare);
+    AD_CORRECTNESS_CHECK(!relation.empty());
+    // Note: it is important that we store these two IDs before moving the
+    // `relation`, because the evaluation order of function arguments is
+    // unspecified.
+    auto firstCol0 = relation.at(0, 0);
+    auto lastCol0 = relation.at(relation.numRows() - 1, 0);
+    writer2.compressAndWriteBlock(firstCol0, lastCol0, std::move(relation),
+                                  false);
+  };
 
   writer1.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
 
@@ -1587,18 +1803,34 @@ auto CompressedRelationWriter::createPermutationPair(
     for (size_t idx : ad_utility::integerRange(block.numRows())) {
       Id col0Id = firstCol[idx];
       decltype(auto) curRemainingCols = permutedCols[idx];
+
       if (col0Id != col0IdCurrentRelation) {
         finishRelation();
         col0IdCurrentRelation = col0Id;
       }
+
+      // Check if we need to create a new block before adding the current
+      // triple. We create a new block if:
+      // 1. The relation buffer is at the block size limit, AND
+      // 2. The current triple has different first three columns than the last
+      //    triple in the buffer (to ensure equal triples stay in same block)
+      AD_CORRECTNESS_CHECK(blocksize > 0);
+      if (relation.size() >= blocksize) {
+        // Compare first three columns of current triple with last buffered
+        // triple
+        const auto& lastBufferedRow = relation.back();
+        if (tieFirstThreeColumns(curRemainingCols) !=
+            tieFirstThreeColumns(lastBufferedRow)) {
+          addBlockForLargeRelation();
+        }
+      }
+
       distinctCol1Counter(curRemainingCols[c1Idx]);
       relation.push_back(curRemainingCols);
-      if (relation.size() >= blocksize) {
-        addBlockForLargeRelation();
-      }
+
       ++numTriplesProcessed;
       if (progressBar.update()) {
-        LOG(INFO) << progressBar.getProgressString() << std::flush;
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
       }
     }
     // Call each of the `perBlockCallbacks` for the current block.
@@ -1614,7 +1846,7 @@ auto CompressedRelationWriter::createPermutationPair(
     blockCallbackTimer.stop();
     inputWaitTimer.cont();
   }
-  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   inputWaitTimer.stop();
   if (!relation.empty() || numBlocksCurrentRel > 0) {
     finishRelation();
@@ -1625,21 +1857,21 @@ auto CompressedRelationWriter::createPermutationPair(
   blockCallbackTimer.cont();
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
-  LOG(TIMING) << "Time spent waiting for the input "
-              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-              << std::endl;
-  LOG(TIMING) << "Time spent waiting for writer1's queue "
-              << ad_utility::Timer::toSeconds(
-                     writer1.blockWriteQueueTimer_.msecs())
-              << "s" << std::endl;
-  LOG(TIMING) << "Time spent waiting for writer2's queue "
-              << ad_utility::Timer::toSeconds(
-                     writer2.blockWriteQueueTimer_.msecs())
-              << "s" << std::endl;
-  LOG(TIMING) << "Time spent waiting for large twin relations "
-              << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-              << "s" << std::endl;
-  LOG(TIMING)
+  AD_LOG_TIMING << "Time spent waiting for the input "
+                << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+                << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for writer1's queue "
+                << ad_utility::Timer::toSeconds(
+                       writer1.blockWriteQueueTimer_.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for writer2's queue "
+                << ad_utility::Timer::toSeconds(
+                       writer2.blockWriteQueueTimer_.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING << "Time spent waiting for large twin relations "
+                << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
+                << "s" << std::endl;
+  AD_LOG_TIMING
       << "Time spent waiting for triple callbacks (e.g. the next sorter) "
       << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
       << std::endl;
@@ -1657,40 +1889,56 @@ CompressedRelationReader::getMetadataForSmallRelation(
   metadata.offsetInBlock_ = 0;
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  if (scanSpecAndBlocks.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
-  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 1,
-                    "Should only be called for small relations");
-  auto block = readPossiblyIncompleteBlock(
-      scanSpec, config, blocks.front(), std::nullopt, locatedTriplesPerBlock);
-  if (block.empty()) {
+  // For relations that already span more than one block when the index is first
+  // built, this function should never be called. With SPARQL UPDATE it might
+  // happen that a relation starts in a single block, but added triples land in
+  // an adjacent block (because the relation was right at the end of a block).
+  // In this case we might also see two blocks here.
+  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 2,
+                    "Should only be called for small relations (contained in "
+                    "at most one block), or relations that started in a single "
+                    "block, but were extended into the adjacent block by "
+                    "SPARQL UPDATE, but found a relation which spans ",
+                    scanSpecAndBlocks.sizeBlockMetadata_, "block.");
+
+  ad_utility::HashSet<Id> distinctCol2;
+  size_t numRowsTotal = 0;
+  size_t numDistinct = 0;
+  for (const auto& blockMetadata : blocks) {
+    auto block = readPossiblyIncompleteBlock(
+        scanSpec, config, blockMetadata, std::nullopt, locatedTriplesPerBlock);
+
+    numRowsTotal += block.numRows();
+    // The `col1` is sorted, so we compute the multiplicity using
+    // `std::unique`. Note: The distinct count might be off by one in the case
+    // of two blocks, because we perform the `unique` separately for both
+    // blocks. But as the multiplicity is only an approximate measure used for
+    // query planning statistics, this is not an issue.
+    const auto& blockCol = block.getColumn(0);
+    auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
+    numDistinct += endOfUnique - blockCol.begin();
+
+    // The `col2` is unsorted, so we use a hash map.
+    for (auto id : block.getColumn(1)) {
+      distinctCol2.insert(id);
+    }
+  };
+
+  if (numRowsTotal == 0) {
     return std::nullopt;
   }
-
-  // The `col1` is sorted, so we compute the multiplicity using
-  // `std::unique`.
-  const auto& blockCol = block.getColumn(0);
-  auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
-  size_t numDistinct = endOfUnique - blockCol.begin();
-  metadata.numRows_ = block.size();
+  metadata.numRows_ = numRowsTotal;
   metadata.multiplicityCol1_ =
-      CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);
-
-  // The `col2` is not sorted, so we compute the multiplicity using a hash
-  // set.
-  ad_utility::HashSet<Id> distinctCol2{block.getColumn(1).begin(),
-                                       block.getColumn(1).end()};
+      CompressedRelationWriter::computeMultiplicity(numRowsTotal, numDistinct);
   metadata.multiplicityCol2_ = CompressedRelationWriter::computeMultiplicity(
-      block.size(), distinctCol2.size());
+      numRowsTotal, distinctCol2.size());
   return metadata;
 }
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
-    const ScanSpecification& scanSpec,
-    CompressedRelationReader::ColumnIndicesRef additionalColumns,
+    const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
     const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   // Determine the index of the graph column (which we need either for
@@ -1701,25 +1949,17 @@ auto CompressedRelationReader::getScanConfig(
   // before any additional payload columns. Otherwise `prepareLocatedTriples`
   // will throw an assertion.
   auto [graphColumnIndex,
-        deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
-    if (!scanSpec.graphsToFilter().has_value()) {
-      // No filtering required, these are dummy values that are ignored by the
-      // filtering logic.
-      return {0, false};
-    }
-    auto idx = static_cast<size_t>(
-        ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
-        columnIndices.begin());
-    bool deleteColumn = false;
-    if (idx == columnIndices.size()) {
-      idx = columnIndices.size() - additionalColumns.size();
+        deleteGraphColumn] = [&]() -> std::pair<size_t, bool> {
+    auto it = ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID);
+    if (it == columnIndices.end()) {
+      size_t idx = columnIndices.size() - additionalColumns.size();
       columnIndices.insert(columnIndices.begin() + idx,
                            ADDITIONAL_COLUMN_GRAPH_ID);
-      deleteColumn = true;
+      return {idx, true};
     }
-    return {idx, deleteColumn};
+    return {ql::ranges::distance(columnIndices.begin(), it), false};
   }();
-  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
+  FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
                                         graphColumnIndex, deleteGraphColumn};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }

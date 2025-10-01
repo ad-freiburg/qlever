@@ -9,33 +9,43 @@
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
+    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
+    ad_utility::timer::TimeTracer& tracer) {
   UpdateMetadata metadata{};
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
   // inserted using `deleteTriples`/`insertTriples` to keep LocalVocabIds valid.
+  tracer.beginTrace("materializeResult");
   auto result = qet.getResult(false);
+  tracer.endTrace("materializeResult");
   auto [toInsert, toDelete] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
-                              cancellationHandle, metadata);
+                              cancellationHandle, metadata, tracer);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
-  deltaTriples.deleteTriples(cancellationHandle,
-                             std::move(toDelete.idTriples_));
-  metadata.deletionTime_ = timer.msecs();
-  timer.reset();
-  deltaTriples.insertTriples(cancellationHandle,
-                             std::move(toInsert.idTriples_));
-  metadata.insertionTime_ = timer.msecs();
+  tracer.beginTrace("deleteTriples");
+  if (!toDelete.idTriples_.empty()) {
+    deltaTriples.deleteTriples(cancellationHandle,
+                               std::move(toDelete.idTriples_), tracer);
+  }
+  tracer.endTrace("deleteTriples");
+  tracer.beginTrace("insertTriples");
+  timer.start();
+  if (!toInsert.idTriples_.empty()) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               std::move(toInsert.idTriples_), tracer);
+  }
+  tracer.endTrace("insertTriples");
   return metadata;
 }
 
 // _____________________________________________________________________________
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
-    const Index::Vocab& vocab, const VariableToColumnMap& variableColumns,
+    const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
+    const VariableToColumnMap& variableColumns,
     std::vector<SparqlTripleSimpleWithGraph>&& triples) {
   // This LocalVocab only contains IDs that are related to the
   // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
@@ -44,13 +54,14 @@ ExecuteUpdate::transformTriplesTemplate(
   LocalVocab localVocab{};
 
   auto transformSparqlTripleComponent =
-      [&vocab, &localVocab,
+      [&vocab, &localVocab, &encodedIriManager,
        &variableColumns](TripleComponent component) -> IdOrVariableIndex {
     if (component.isVariable()) {
       AD_CORRECTNESS_CHECK(variableColumns.contains(component.getVariable()));
       return variableColumns.at(component.getVariable()).columnIndex_;
     } else {
-      return std::move(component).toValueId(vocab, localVocab);
+      return std::move(component).toValueId(vocab, localVocab,
+                                            encodedIriManager);
     }
   };
   Id defaultGraphIri = [&transformSparqlTripleComponent] {
@@ -60,16 +71,18 @@ ExecuteUpdate::transformTriplesTemplate(
     return std::get<Id>(defaultGraph);
   }();
   auto transformGraph = [&vocab, &localVocab, &defaultGraphIri,
-                         &variableColumns](
+                         &variableColumns, &encodedIriManager](
                             SparqlTripleSimpleWithGraph::Graph graph) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
               return defaultGraphIri;
             },
-            [&vocab, &localVocab](const ad_utility::triple_component::Iri& iri)
+            [&vocab, &localVocab,
+             &encodedIriManager](const ad_utility::triple_component::Iri& iri)
                 -> IdOrVariableIndex {
-              return TripleComponent(iri).toValueId(vocab, localVocab);
+              return TripleComponent(iri).toValueId(vocab, localVocab,
+                                                    encodedIriManager);
             },
             [&variableColumns](const Variable& var) -> IdOrVariableIndex {
               AD_CORRECTNESS_CHECK(variableColumns.contains(var));
@@ -131,20 +144,23 @@ std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
-    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
+    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+    ad_utility::timer::TimeTracer& tracer) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
+  tracer.beginTrace("preparation");
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
+  const auto& encodedIriManager = index.encodedIriManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns,
+      [&vocab, &variableColumns, &encodedIriManager,
        &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(vocab, variableColumns,
+            transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
                                      std::move(tripleTemplates));
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
@@ -181,7 +197,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
   metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
-  metadata.triplePreparationTime_ = timer.msecs();
+  tracer.endTrace("preparation");
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},

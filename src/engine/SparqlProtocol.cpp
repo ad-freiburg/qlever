@@ -120,7 +120,7 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parsePOST(
   // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
   std::string_view contentType =
       request.base()[boost::beast::http::field::content_type];
-  LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+  AD_LOG_DEBUG << "Content-type: \"" << contentType << "\"" << std::endl;
 
   // Note: For simplicity we only check via `starts_with`. This ignores
   // additional parameters like `application/sparql-query;charset=utf8`. We
@@ -209,10 +209,16 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
+  // Graph Store Protocol with indirect graph identification
+  std::string_view methodStr = request.method_string();
+  if (request.method() == http::verb::put ||
+      request.method() == http::verb::delete_ || methodStr == "TSOP") {
+    return parseGraphStoreProtocolIndirect(request);
+  }
   throw HttpError(
       boost::beast::http::status::method_not_allowed,
       absl::StrCat(
-          "Request method \"", std::string_view{request.method_string()},
-          "\" not supported (only GET and POST are supported; PUT, DELETE, "
+          "Request method \"", methodStr,
+          "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }

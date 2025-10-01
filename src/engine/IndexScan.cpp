@@ -112,16 +112,7 @@ string IndexScan::getCacheKeyImpl() const {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
-  if (graphsToFilter_.has_value()) {
-    // The graphs are stored as a hash set, but we need a deterministic order.
-    std::vector<std::string> graphIdVec;
-    ql::ranges::transform(graphsToFilter_.value(),
-                          std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
-    ql::ranges::sort(graphIdVec);
-    os << "\nFiltered by Graphs:";
-    os << absl::StrJoin(graphIdVec, " ");
-  }
+  graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
     os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
@@ -255,7 +246,7 @@ IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
-  LOG(DEBUG) << "IndexScan result computation done.\n";
+  AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
@@ -264,7 +255,7 @@ IdTable IndexScan::materializedIndexScan() const {
 
 // _____________________________________________________________________________
 Result IndexScan::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "IndexScan result computation...\n";
+  AD_LOG_DEBUG << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }

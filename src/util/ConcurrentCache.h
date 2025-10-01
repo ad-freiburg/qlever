@@ -10,6 +10,7 @@
 #include <mutex>
 #include <utility>
 
+#include "backports/keywords.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
@@ -159,7 +160,7 @@ class ConcurrentCache {
   ConcurrentCache() = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
-      !ql::concepts::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>))
+      !ql::concepts::same_as<ConcurrentCache, ql::remove_cvref_t<CacheArg>>))
       ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
@@ -337,11 +338,10 @@ class ConcurrentCache {
         _inProgress;
 
     CacheAndInProgressMap() = default;
-    CPP_template_2(typename Arg, typename... Args)(
-        requires(!ql::concepts::same_as<
-                 std::remove_cvref_t<Arg>,
-                 CacheAndInProgressMap>)) explicit(sizeof...(Args) > 0)
-        CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    CPP_template_2(typename Arg, typename... Args)(requires(
+        !ql::concepts::same_as<ql::remove_cvref_t<Arg>, CacheAndInProgressMap>))
+        QL_EXPLICIT(sizeof...(Args) > 0)
+            CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
@@ -415,7 +415,7 @@ class ConcurrentCache {
       }
     }  // release the lock, it is not required while we are computing
     if (mustCompute) {
-      LOG(TRACE) << "Not in the cache, need to compute result" << std::endl;
+      AD_LOG_TRACE << "Not in the cache, need to compute result" << std::endl;
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());

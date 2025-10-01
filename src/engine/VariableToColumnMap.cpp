@@ -4,6 +4,7 @@
 
 #include "engine/VariableToColumnMap.h"
 
+#include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________

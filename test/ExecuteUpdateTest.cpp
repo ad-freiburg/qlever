@@ -8,17 +8,24 @@
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+namespace {
 using namespace deltaTriplesTestHelpers;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -31,6 +38,7 @@ MATCHER_P(AlwaysFalse, msg, "") {
   *result_listener << msg;
   return false;
 }
+}  // namespace
 
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
@@ -42,7 +50,7 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         for (auto& pq : pqs) {
           QueryPlanner qp{&qec, sharedHandle};
           const auto qet = qp.createExecutionTree(pq);
@@ -65,10 +73,12 @@ TEST(ExecuteUpdate, executeUpdate) {
         Index index = ad_utility::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         expectExecuteUpdateHelper(update, qec, index);
         index.deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -83,10 +93,12 @@ TEST(ExecuteUpdate, executeUpdate) {
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
+        NamedResultCache namedResultCache;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{});
+                                  SortPerformanceEstimator{},
+                                  &namedResultCache);
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };
@@ -216,7 +228,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -232,6 +244,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     }
     return results;
   };
+
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
@@ -260,6 +273,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));
       };
+
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
@@ -441,7 +455,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
           const std::vector<std::array<TripleComponentT, 4>>&
               expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
+            ExecuteUpdate::transformTriplesTemplate(*encodedIriManager(), vocab,
+                                                    variableColumns,
                                                     std::move(triples));
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
@@ -459,10 +474,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       [&vocab](const VariableToColumnMap& variableColumns,
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
                const Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
-                                                    std::move(triples)),
-            messageMatcher);
+        AD_EXPECT_THROW_WITH_MESSAGE(ExecuteUpdate::transformTriplesTemplate(
+                                         *encodedIriManager(), vocab,
+                                         variableColumns, std::move(triples)),
+                                     messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.

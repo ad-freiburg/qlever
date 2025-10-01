@@ -5,9 +5,12 @@
 #ifndef QLEVER_SRC_PARSER_DATA_LITERAL_H
 #define QLEVER_SRC_PARSER_DATA_LITERAL_H
 
+#include <optional>
 #include <sstream>
 #include <string>
 
+#include "backports/type_traits.h"
+#include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
 
 class Literal {
@@ -27,7 +30,7 @@ class Literal {
 
  public:
   CPP_template_2(typename T)(
-      requires CPP_NOT(std::same_as<std::remove_cvref_t<T>, Literal>)
+      requires CPP_NOT(std::same_as<ql::remove_cvref_t<T>, Literal>)
           CPP_and_2 ad_utility::Streamable<T>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 

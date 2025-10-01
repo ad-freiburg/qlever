@@ -10,8 +10,8 @@
 #include <concepts>
 #include <exception>
 #include <iostream>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -27,22 +27,22 @@ namespace detail {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires std::invocable<std::remove_cvref_t<
+    requires std::invocable<ql::remove_cvref_t<
         F>>) void ignoreExceptionIfThrows(F&& f,
                                           std::string_view additionalNote =
                                               "") noexcept {
-  if constexpr (std::is_nothrow_invocable_v<std::remove_cvref_t<F>>) {
+  if constexpr (std::is_nothrow_invocable_v<ql::remove_cvref_t<F>>) {
     std::invoke(AD_FWD(f));
     return;
   }
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
-    LOG(INFO) << "Ignored an exception. The exception message was:\""
-              << e.what() << "\". " << additionalNote << std::endl;
+    AD_LOG_INFO << "Ignored an exception. The exception message was:\""
+                << e.what() << "\". " << additionalNote << std::endl;
   } catch (...) {
-    LOG(INFO) << "Ignored an exception of an unknown type. " << additionalNote
-              << std::endl;
+    AD_LOG_INFO << "Ignored an exception of an unknown type. " << additionalNote
+                << std::endl;
   }
 }
 
@@ -56,7 +56,7 @@ CPP_template(typename F)(
 // this function must never throw an exception.
 CPP_template(typename F,
              typename TerminateAction = decltype(detail::callStdTerminate))(
-    requires std::invocable<std::remove_cvref_t<F>> CPP_and
+    requires std::invocable<ql::remove_cvref_t<F>> CPP_and
         std::is_nothrow_invocable_v<
             TerminateAction>) void terminateIfThrows(F&& f,
                                                      std::string_view message,
@@ -78,7 +78,7 @@ CPP_template(typename F,
 
   auto logAndTerminate = [&terminateAction](std::string_view msg) {
     try {
-      LOG(ERROR) << msg << std::endl;
+      AD_LOG_ERROR << msg << std::endl;
       std::cerr << msg << std::endl;
     } catch (...) {
       std::cerr << msg << std::endl;
@@ -124,12 +124,12 @@ class ThrowInDestructorIfSafe {
   operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
-      LOG(WARN) << absl::StrCat(
-                       "An exception was ignored because it would have led to "
-                       "program termination",
-                       sep, additionalMessages...,
-                       ". Exception message: ", what)
-                << std::endl;
+      AD_LOG_WARN
+          << absl::StrCat(
+                 "An exception was ignored because it would have led to "
+                 "program termination",
+                 sep, additionalMessages..., ". Exception message: ", what)
+          << std::endl;
     };
     // If the number of uncaught exceptions is the same as when then constructor
     // was called, then it is safe to throw a possible exception. For details
