@@ -90,9 +90,9 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     // of agents (especially web browsers) automatically add some default
     // parameters.
     if (!ctx->parameter().empty()) {
-      LOG(WARN) << "Ignoring unsupported media type parameters, the first of "
-                   "which is \""
-                << ctx->parameter()[0]->getText() << std::endl;
+      AD_LOG_WARN << "Ignoring unsupported media type parameters, the first of "
+                     "which is \""
+                  << ctx->parameter()[0]->getText() << std::endl;
     }
     using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
     if (!ctx->subtype()) {

@@ -4,6 +4,8 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
@@ -99,3 +101,5 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
+
+#endif

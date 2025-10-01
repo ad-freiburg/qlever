@@ -104,7 +104,7 @@ TEST(QuadTest, getOperations) {
   auto GraphTriples =
       [](const std::vector<::SparqlTriple>& triples,
          const parsedQuery::GroupGraphPattern::GraphSpec& graph) {
-        return matchers::GroupGraphPatternWithGraph({}, graph,
+        return matchers::GroupGraphPatternWithGraph(graph,
                                                     matchers::Triples(triples));
       };
   expectGetQuads({}, {}, ElementsAre(matchers::Triples({})));

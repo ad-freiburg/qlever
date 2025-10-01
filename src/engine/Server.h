@@ -14,6 +14,7 @@
 
 #include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
@@ -40,6 +41,7 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
+  FRIEND_TEST(ServerTest, configurePinnedResultWithName);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -79,6 +81,7 @@ class Server {
   unsigned short port_;
   std::string accessToken_;
   QueryResultCache cache_;
+  NamedResultCache namedResultCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
@@ -166,12 +169,11 @@ class Server {
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
-  static json createResponseMetadataForUpdate(
-      const ad_utility::Timer& requestTimer, const Index& index,
-      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+  static nlohmann::ordered_json createResponseMetadataForUpdate(
+      const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesCount& countAfter);
+      const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template(typename RequestT, typename ResponseT)(
@@ -202,11 +204,19 @@ class Server {
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit);
+                        TimeLimit timeLimit, bool accessTokenOk);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
+
+  // Configure pinned of named results on the `qec`. If `pinResultWithName` is
+  // set, then the `qec` is configured such that the query result will be stored
+  // in the named query cache. Throws if named pinning is required, but the
+  // access token is not okay.
+  static void configurePinnedResultWithName(
+      const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+      QueryExecutionContext& qec);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation,
@@ -221,10 +231,12 @@ class Server {
           const RequestT& request, std::string_view operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  json processUpdateImpl(
-      const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
+  UpdateMetadata processUpdateImpl(
+      const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples);
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,

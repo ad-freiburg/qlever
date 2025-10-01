@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "engine/IndexScan.h"
+#include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
@@ -181,8 +182,13 @@ class OperationTestFixture : public testing::Test {
     return makeTestIndex("OperationTest", std::move(indexConfig));
   }();
   QueryResultCache cache;
+  NamedResultCache namedCache;
   QueryExecutionContext qec{
-      index, &cache, makeAllocator(), SortPerformanceEstimator{},
+      index,
+      &cache,
+      makeAllocator(),
+      SortPerformanceEstimator{},
+      &namedCache,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -304,18 +310,16 @@ TEST(OperationTest, estimatesForCachedResults) {
   // set to `true`, the cost estimate should be zero. The size estimate does not
   // change (see the `getCostEstimate` function for details on why).
   {
-    auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            true);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
   {
-    auto restoreWhenScopeEnds =
-        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
-            false);
+    auto restoreWhenScopeEnds = setRuntimeParameterForTest<
+        &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(false);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
@@ -475,9 +479,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { signaledUpdate = true; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -500,9 +509,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
@@ -541,9 +555,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   auto idTable = makeIdTableFromVector({{}});
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
+  NamedResultCache namedCache{};
   QueryExecutionContext context{
-      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{},
+      &namedCache,
+      [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};
@@ -677,7 +696,8 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // generator to additionally assert sure it is not re-read on every
     // iteration.
     auto cleanup =
-        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
@@ -744,8 +764,9 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
         }};
     qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
 
-    auto cleanup = setRuntimeParameterForTest<"cache-max-size-lazy-result">(
-        runtimeParameterLimit);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeLazyResult_>(
+            runtimeParameterLimit);
 
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 

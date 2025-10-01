@@ -17,8 +17,8 @@ template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
   auto readSingle = [](auto& vocab, const std::string& filename) {
-    LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
-              << std::endl;
+    AD_LOG_INFO << "Reading vocabulary from file " << filename << " ..."
+                << std::endl;
     vocab.close();
     vocab.open(filename);
 
@@ -26,12 +26,12 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
                                  detail::UnderlyingVocabRdfsVocabulary>) {
       const auto& internalExternalVocab =
           vocab.getUnderlyingVocabulary().getUnderlyingVocabulary();
-      LOG(INFO) << "Done, number of words: "
-                << internalExternalVocab.internalVocab().size() << std::endl;
-      LOG(INFO) << "Number of words in external vocabulary: "
-                << internalExternalVocab.externalVocab().size() << std::endl;
+      AD_LOG_INFO << "Done, number of words: "
+                  << internalExternalVocab.internalVocab().size() << std::endl;
+      AD_LOG_INFO << "Number of words in external vocabulary: "
+                  << internalExternalVocab.externalVocab().size() << std::endl;
     } else {
-      LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
+      AD_LOG_INFO << "Done, number of words: " << vocab.size() << std::endl;
     }
   };
 

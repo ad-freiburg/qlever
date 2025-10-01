@@ -18,6 +18,7 @@
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
+#include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -124,7 +125,7 @@ constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
@@ -249,6 +250,10 @@ struct CountAvailablePredicatesMatcher {
 };
 constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
 
+// Class used to indicate only named graphs are allowed when using
+// `IndexScanFromStrings`.
+class NamedTag {};
+
 // Same as above, but the subject, predicate, and object are passed in as
 // strings. The strings are automatically converted a matching
 // `TripleComponent`.
@@ -256,8 +261,9 @@ inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const std::optional<ad_utility::HashSet<std::string>> graphs =
-           std::nullopt,
+       const std::variant<std::monostate, NamedTag,
+                          ad_utility::HashSet<std::string>>
+           graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
@@ -270,12 +276,17 @@ inline auto IndexScanFromStrings =
     return s;
   };
 
-  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
-  if (graphs.has_value()) {
-    graphsOut.emplace();
-    for (const auto& graphIn : graphs.value()) {
-      graphsOut->insert(strToComp(graphIn));
+  IndexScan::Graphs graphsOut = IndexScan::Graphs::All();
+  if (std::holds_alternative<NamedTag>(graphs)) {
+    graphsOut = IndexScan::Graphs::Blacklist(
+        TripleComponent{TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  } else if (std::holds_alternative<ad_utility::HashSet<std::string>>(graphs)) {
+    ad_utility::HashSet<TripleComponent> whitelist;
+    for (const auto& graphIn :
+         std::get<ad_utility::HashSet<std::string>>(graphs)) {
+      whitelist.insert(strToComp(graphIn));
     }
+    graphsOut = IndexScan::Graphs::Whitelist(std::move(whitelist));
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,
@@ -486,6 +497,16 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
+// Match an `ExplicitIdTableOperation`, but only test its size estimate (which
+// is equal to the actual number of rows in the result). More detailed tests for
+// this operation can be found in `ExplicitIdTableOperationTest.cpp` and
+// `NamedResultCacheTest.cpp`.
+inline QetMatcher ExplicitIdTableOperation(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ExplicitIdTableOperation, sizeEstimate,
+                       ::testing::Eq(sizeEstimate));
+  return RootOperation<::ExplicitIdTableOperation>(p);
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
@@ -581,9 +602,12 @@ inline QueryExecutionTree parseAndPlan(std::string query,
   ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
-  return QueryPlannerClass{qec,
-                           std::make_shared<ad_utility::CancellationHandle<>>()}
-      .createExecutionTree(pq);
+  auto tree =
+      QueryPlannerClass{qec,
+                        std::make_shared<ad_utility::CancellationHandle<>>()}
+          .createExecutionTree(pq);
+  tree.isRoot() = true;
+  return tree;
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and
@@ -596,10 +620,12 @@ void expectWithGivenBudget(std::string query, auto matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = source_location::current()) {
-  auto budgetBackup = RuntimeParameters().get<"query-planning-budget">();
-  RuntimeParameters().set<"query-planning-budget">(queryPlanningBudget);
+  auto budgetBackup =
+      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
+  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
+      queryPlanningBudget);
   auto cleanup = absl::Cleanup{[budgetBackup]() {
-    RuntimeParameters().set<"query-planning-budget">(budgetBackup);
+    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
   }};
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
