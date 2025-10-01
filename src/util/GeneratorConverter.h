@@ -18,12 +18,17 @@ namespace cppcoro {
 template <typename T, typename D>
 generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
   if constexpr (!std::is_same_v<D, ad_utility::NoDetails>) {
-    auto& detailsRef = co_await cppcoro::getDetails;
-    range.setDetailsPointer(&detailsRef);
+    co_await cppcoro::SetDetailsPointer<D>{&range.details()};
   }
 
   for (auto& value : range) {
     co_yield value;
+  }
+
+  // The range is about to be destroyed, copy the details.
+  if constexpr (!std::is_same_v<D, ad_utility::NoDetails>) {
+    co_await cppcoro::SetDetails<std::decay_t<decltype(range.details())>>{
+        std::move(range.details())};
   }
 }
 }  // namespace cppcoro

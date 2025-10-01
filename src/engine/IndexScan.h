@@ -113,24 +113,24 @@ class IndexScan final : public Operation {
   // `input` to speed up join algorithms when no undef values are presend. When
   // there are undef values, the second generator represents the full index
   // scan.
-  std::pair<Result::Generator, Result::Generator> prefilterTables(
+  std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn);
 
  private:
-  // Implementation detail that allows to consume a generator from two other
-  // cooperating generators. Needs to be forward declared as it is used by
+  // Implementation detail that allows to consume a lazy range from two other
+  // cooperating ranges. Needs to be forward declared as it is used by
   // several member functions below.
   struct SharedGeneratorState;
 
-  // Helper function that creates a generator that re-yields the generator
+  // Helper function that creates a lazy range that re-yields the input
   // wrapped by `innerState`.
-  static Result::Generator createPrefilteredJoinSide(
+  static Result::LazyResult createPrefilteredJoinSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
-  // Helper function that creates a generator yielding prefiltered rows of this
-  // index scan according to the block metadata, that match the tables yielded
-  // by the generator wrapped by `innerState`.
-  Result::Generator createPrefilteredIndexScanSide(
+  // Helper function that creates a lazy range yielding prefiltered rows of
+  // this index scan according to the block metadata, that match the tables
+  // yielded by the input wrapped by `innerState`.
+  Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
@@ -220,7 +220,7 @@ class IndexScan final : public Operation {
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
-  Result::Generator chunkedIndexScan() const;
+  Result::LazyResult chunkedIndexScan() const;
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
 
