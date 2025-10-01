@@ -5,7 +5,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -144,70 +144,99 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     }
   };
 
-  using LoopControl = LoopControl<ExportQueryExecutionTrees::TableWithRange>;
-  auto makeResult = [](TableConstRefWithVocab& tableWithVocab,
-                       uint64_t rangeBegin, uint64_t numRowsToBeExported,
-                       uint64_t effectiveLimit) {
-    auto value = ExportQueryExecutionTrees::TableWithRange{
-        std::move(tableWithVocab),
-        ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
-    // If the effective limit is zero, there is nothing to yield and nothing
-    // to count anymore. This should come at the end of the loop and not at
-    // the beginning, to avoid unnecessarily fetching another block from
-    // `result`.
-    if (effectiveLimit == 0) {
-      return numRowsToBeExported > 0 ? LoopControl::breakWithValue(value)
-                                     : LoopControl::makeBreak();
-    }
+  // The following structs and variant is used to encode the subrange of an
+  // `IdTable` of the actual `result` that has to be part of the result. An
+  // `IdTable` that is completely before the result (because of `Offset`)
+  struct BeforeOffset {};
+  // An `IdTable` that is completely after the `ExportLimit`, but not yet after
+  // the `Limit`. For these tables we only have to report the number of lines in
+  // the table.
+  struct OnlyCountForExport {};
 
-    // If there is something to be exported, yield it.
-    return numRowsToBeExported > 0 ? LoopControl::yieldValue(value)
-                                   : LoopControl::makeContinue();
+  // An `IdTable` that completely comes after the `LIMIT` has been fully
+  // exhausted. Once we have reached this point, we can stop the iteration.
+  // TODO<joka921> This currently consumes one block too many I think.
+  struct AfterLimit {};
+
+  struct Export {
+    TableWithRange tableWithRange_;
+    bool isLast_;
   };
 
-  return InputRangeTypeErased(CachingContinuableTransformInputRange(
-      getIdTables(result),
-      [resultSizeMultiplicator, &resultSize, makeResult = std::move(makeResult),
-       reduceLimit = std::move(reduceLimit), effectiveOffset = effectiveOffset,
-       effectiveLimit = effectiveLimit,
-       effectiveExportLimit = effectiveExportLimit](
-          TableConstRefWithVocab& tableWithVocab) mutable {
-        // If all rows in the current block are before the effective offset, we
-        // can skip the block entirely. If not, there is at least something to
-        // count and maybe also something to yield.
-        uint64_t currentBlockSize = tableWithVocab.idTable().numRows();
-        if (effectiveOffset >= currentBlockSize) {
-          effectiveOffset -= currentBlockSize;
-          return LoopControl::makeContinue();
-        }
-        AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
-        AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+  // Encode all of the possible states, the `TableWithRange` is a reference to
+  // an IdTable + a subrange of the rows that actually has to be consumed.
+  using State =
+      std::variant<BeforeOffset, OnlyCountForExport, AfterLimit, Export>;
 
-        // Compute the range of rows to be exported (can be zero) and to be
-        // counted (always non-zero at this point).
-        uint64_t rangeBegin = effectiveOffset;
-        uint64_t numRowsToBeExported =
-            std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
-        uint64_t numRowsToBeCounted =
-            std::min(effectiveLimit, currentBlockSize - rangeBegin);
-        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <=
-                             currentBlockSize);
-        AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <=
-                             currentBlockSize);
-        AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
+  // Convert a `TableConstRefWithVocab` to a `State`. As this modifies the
+  // `limit` and `offset`, this has to be called exactly once per block in the
+  // result and strictly in order.
+  auto tableToState =
+      [reduceLimit, &resultSize, resultSizeMultiplicator,
+       limit = effectiveLimit, exportLimit = effectiveExportLimit,
+       offset = effectiveOffset](
+          TableConstRefWithVocab& tableWithVocab) mutable -> State {
+    uint64_t blockSize = tableWithVocab.idTable().numRows();
+    if (offset >= blockSize) {
+      offset -= blockSize;
+      return BeforeOffset{};
+    }
+    if (limit == 0) {
+      return AfterLimit{};
+    }
 
-        // Add to `resultSize` and update the effective offset (which becomes
-        // zero after the first non-skipped block) and limits (make sure to
-        // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
-        // there).
-        resultSize += numRowsToBeCounted * resultSizeMultiplicator;
-        effectiveOffset = 0;
-        reduceLimit(effectiveLimit, numRowsToBeCounted);
-        reduceLimit(effectiveExportLimit, numRowsToBeCounted);
+    AD_CORRECTNESS_CHECK(offset < blockSize);
+    AD_CORRECTNESS_CHECK(limit > 0);
 
-        return makeResult(tableWithVocab, rangeBegin, numRowsToBeExported,
-                          effectiveLimit);
-      }));
+    // Compute the range of rows to be exported (can be zero) and to be
+    // counted.
+    uint64_t rangeBegin = offset;
+    uint64_t numRowsToBeExported =
+        std::min(exportLimit, blockSize - rangeBegin);
+    uint64_t numRowsToBeCounted = std::min(limit, blockSize - rangeBegin);
+
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= blockSize);
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= blockSize);
+
+    // Add to `resultSize` and update the effective offset (which becomes
+    // zero after the first non-skipped block) and limits (make sure to
+    // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
+    // there).
+    resultSize += numRowsToBeCounted * resultSizeMultiplicator;
+    offset = 0;
+    reduceLimit(limit, numRowsToBeCounted);
+    reduceLimit(exportLimit, numRowsToBeCounted);
+
+    if (numRowsToBeExported == 0) {
+      return OnlyCountForExport{};
+    }
+    return Export{
+        TableWithRange{
+            tableWithVocab,
+            ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)},
+        (limit == 0 && exportLimit == 0)};
+  };
+
+  namespace v = ql::views;
+  return InputRangeTypeErased{
+      OwningView{getIdTables(result)} | v::transform(tableToState) |
+      ::ranges::views::cache1 | v::drop_while([](const State& state) {
+        return std::holds_alternative<BeforeOffset>(state);
+      }) |
+      v::take_while([](const State& state) {
+        return !std::holds_alternative<AfterLimit>(state);
+      }) |
+      ad_utility::views::takeUntilInclusive([](const State& state) {
+        auto ptr = std::get_if<Export>(&state);
+        return ptr && ptr->isLast_;
+      }) |
+      v::filter([](const State& state) {
+        return std::holds_alternative<Export>(state);
+      }) |
+      ::ranges::views::cache1 |
+      v::transform([](State&& state) -> TableWithRange {
+        return std::get<Export>(state).tableWithRange_;
+      })};
 }
 
 namespace {
