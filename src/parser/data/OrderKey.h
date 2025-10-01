@@ -8,6 +8,7 @@
 #include <string>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 /// Store an expression that appeared in an ORDER BY clause.
@@ -27,11 +28,13 @@ class VariableOrderKey {
  public:
   bool isDescending_;
   Variable variable_;
+
   // ___________________________________________________________________________
   explicit VariableOrderKey(Variable variable, bool isDescending = false)
       : isDescending_{isDescending}, variable_{std::move(variable)} {}
 
-  bool operator==(const VariableOrderKey&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VariableOrderKey, isDescending_,
+                                              variable_)
 };
 
 // Represents an ordering by a variable or an expression.

@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 #define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
@@ -37,7 +38,8 @@ struct ColumnIndexAndTypeInfo {
   UndefStatus mightContainUndef_;
 
   // Equality comparison, mostly used for testing.
-  bool operator==(const ColumnIndexAndTypeInfo&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ColumnIndexAndTypeInfo,
+                                              columnIndex_, mightContainUndef_)
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is

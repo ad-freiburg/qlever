@@ -12,6 +12,7 @@
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
+#include "backports/three_way_comparison.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
@@ -60,7 +61,8 @@ struct DeltaTriplesCount {
   friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
                                      const DeltaTriplesCount& rhs);
 
-  bool operator==(const DeltaTriplesCount& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
+                                              triplesInserted_, triplesDeleted_)
 };
 
 // A class for maintaining triples that are inserted or deleted after index

@@ -10,6 +10,7 @@
 #include <array>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/Random.h"
 #include "util/json.h"
 
@@ -102,7 +103,7 @@ class VocabularyType {
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 
-  bool operator==(const VocabularyType&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VocabularyType, value_)
 };
 }  // namespace ad_utility
 

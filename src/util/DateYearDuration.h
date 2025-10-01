@@ -5,6 +5,7 @@
 #ifndef QLEVER_DATES_AND_DURATION_H
 #define QLEVER_DATES_AND_DURATION_H
 
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Date.h"
 #include "util/Duration.h"
@@ -139,7 +140,7 @@ class DateYearOrDuration {
 
   // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
-  auto operator<=>(const DateYearOrDuration&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(DateYearOrDuration, bits_)
 
   // Bitwise hashing.
   template <typename H>

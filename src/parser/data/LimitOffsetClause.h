@@ -11,6 +11,7 @@
 #include <limits>
 #include <optional>
 
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 // Represents the data returned by a limitOffsetClause.
@@ -64,7 +65,8 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  bool operator==(const LimitOffsetClause&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LimitOffsetClause, _limit,
+                                              textLimit_, exportLimit_)
 
   // Merge two clauses together. This adds the offsets and takes the minimum of
   // both limits. If the other limit is not set, the current limit is kept.

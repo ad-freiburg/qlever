@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
@@ -61,7 +62,7 @@ class Literal {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 
-  bool operator==(const Literal& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, _stringRepresentation)
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -80,7 +81,7 @@ struct GeometryType {
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
 
-  constexpr bool operator==(const GeometryType& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
 // Forward declaration for concept

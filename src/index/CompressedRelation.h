@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -59,7 +60,8 @@ struct CompressedBlockMetadataNoBlockIndex {
   struct OffsetAndCompressedSize {
     off_t offsetInFile_;
     size_t compressedSize_;
-    bool operator==(const OffsetAndCompressedSize&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(OffsetAndCompressedSize,
+                                                offsetInFile_, compressedSize_)
   };
 
   using GraphInfo = std::optional<std::vector<Id>>;
@@ -87,7 +89,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     Id col1Id_;
     Id col2Id_;
     Id graphId_;
-    auto operator<=>(const PermutedTriple&) const = default;
+
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(PermutedTriple, col0Id_,
+                                                col1Id_, col2Id_, graphId_)
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -128,7 +132,10 @@ struct CompressedBlockMetadataNoBlockIndex {
                         size_t columnIndex) const;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
+      CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
+      firstTriple_, lastTriple_, graphInfo_,
+      containsDuplicatesWithDifferentGraphs_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -156,7 +163,8 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   size_t blockIndex_;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadata&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedBlockMetadata,
+                                              blockIndex_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -237,7 +245,10 @@ struct CompressedRelationMetadata {
   bool isFunctional() const { return multiplicityCol1_ == 1.0f; }
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedRelationMetadata&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedRelationMetadata,
+                                              col0Id_, numRows_,
+                                              multiplicityCol1_,
+                                              multiplicityCol2_, offsetInBlock_)
 };
 
 // Serialization of the compressed "relation" meta data.

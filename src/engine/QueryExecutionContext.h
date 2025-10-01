@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -73,7 +74,8 @@ struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
 
-  bool operator==(const QueryCacheKey&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryCacheKey, key_,
+                                              locatedTriplesSnapshotIndex_)
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {
