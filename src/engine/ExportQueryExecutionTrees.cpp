@@ -1153,7 +1153,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           exceptionMessage = "A very strange exception, please report this";
         }
 
-        std::string prefix =
+        static constexpr std::string_view prefix =
             "\n !!!!>># An error has occurred while exporting the query "
             "result. Unfortunately due to limitations in the HTTP 1.1 "
             "protocol, there is no better way to report this than to append it "
