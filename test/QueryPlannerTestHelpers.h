@@ -125,7 +125,7 @@ constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const IndexScan::Graphs& graphs = IndexScan::Graphs::All(),
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
@@ -250,6 +250,10 @@ struct CountAvailablePredicatesMatcher {
 };
 constexpr inline CountAvailablePredicatesMatcher countAvailablePredicates;
 
+// Class used to indicate only named graphs are allowed when using
+// `IndexScanFromStrings`.
+class NamedTag {};
+
 // Same as above, but the subject, predicate, and object are passed in as
 // strings. The strings are automatically converted a matching
 // `TripleComponent`.
@@ -257,8 +261,9 @@ inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
        const std::vector<Permutation::Enum>& allowedPermutations = {},
-       const std::optional<ad_utility::HashSet<std::string>> graphs =
-           std::nullopt,
+       const std::variant<std::monostate, NamedTag,
+                          ad_utility::HashSet<std::string>>
+           graphs = std::monostate{},
        const std::vector<Variable>& additionalVariables = {},
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
@@ -271,12 +276,17 @@ inline auto IndexScanFromStrings =
     return s;
   };
 
-  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
-  if (graphs.has_value()) {
-    graphsOut.emplace();
-    for (const auto& graphIn : graphs.value()) {
-      graphsOut->insert(strToComp(graphIn));
+  IndexScan::Graphs graphsOut = IndexScan::Graphs::All();
+  if (std::holds_alternative<NamedTag>(graphs)) {
+    graphsOut = IndexScan::Graphs::Blacklist(
+        TripleComponent{TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  } else if (std::holds_alternative<ad_utility::HashSet<std::string>>(graphs)) {
+    ad_utility::HashSet<TripleComponent> whitelist;
+    for (const auto& graphIn :
+         std::get<ad_utility::HashSet<std::string>>(graphs)) {
+      whitelist.insert(strToComp(graphIn));
     }
+    graphsOut = IndexScan::Graphs::Whitelist(std::move(whitelist));
   }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
                    allowedPermutations, graphsOut, additionalVariables,

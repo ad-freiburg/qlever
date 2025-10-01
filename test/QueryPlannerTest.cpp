@@ -26,6 +26,7 @@ namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
+using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
 
@@ -4028,34 +4029,34 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
   // Single variable
   h::expect("SELECT * { GRAPH ?x { ?x <b> <c> } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
-                      scan("?x", "<b>", "<c>", {}, std::nullopt,
+                      scan("?x", "<b>", "<c>", {}, NamedTag{},
                            {Variable{internalVar(0)}}, {3})));
   h::expect("SELECT * { GRAPH ?x { <a> ?x <c> } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
-                      scan("<a>", "?x", "<c>", {}, std::nullopt,
+                      scan("<a>", "?x", "<c>", {}, NamedTag{},
                            {Variable{internalVar(0)}}, {3})));
   h::expect("SELECT * { GRAPH ?x { <a> <b> ?x } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
-                      scan("<a>", "<b>", "?x", {}, std::nullopt,
+                      scan("<a>", "<b>", "?x", {}, NamedTag{},
                            {Variable{internalVar(0)}}, {3})));
   // Two variables
   h::expect(
       "SELECT * { GRAPH ?x { ?x ?x <c> } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
-                          scan(internalVar(0), "?x", "<c>", {}, std::nullopt,
+                          scan(internalVar(0), "?x", "<c>", {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { ?x <b> ?x } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
-                          scan("?x", "<b>", internalVar(0), {}, std::nullopt,
+                          scan("?x", "<b>", internalVar(0), {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { <a> ?x ?x } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
-                          scan("<a>", "?x", internalVar(0), {}, std::nullopt,
+                          scan("<a>", "?x", internalVar(0), {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   // Three variables
   h::expect(
@@ -4064,28 +4065,28 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
                 h::Filter("?_QLever_internal_variable_qp_1=?x",
                           h::Filter("?_QLever_internal_variable_qp_0=?x",
                                     scan(internalVar(1), "?x", internalVar(0),
-                                         {}, std::nullopt,
+                                         {}, NamedTag{},
                                          {Variable{internalVar(2)}}, {3})))));
   // Three distinct variables
   h::expect("SELECT * { GRAPH ?x { ?x ?y ?z } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
-                      scan("?x", "?y", "?z", {}, std::nullopt,
+                      scan("?x", "?y", "?z", {}, NamedTag{},
                            {Variable{internalVar(0)}}, {3})));
 
   // Wrapped in subquery (one of the compliance tests)
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
       h::Filter("?g = ?_QLever_internal_variable_qp_0",
-                scan("?x", "?p", "?g", {}, std::nullopt,
+                scan("?x", "?p", "?g", {}, NamedTag{},
                      {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
       h::Filter("?g = ?_QLever_internal_variable_qp_0",
-                scan("?x", "?p", "?g", {}, std::nullopt,
+                scan("?x", "?p", "?g", {}, NamedTag{},
                      {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
-      scan("?x", "?p", "?g"));
+      scan("?x", "?p", "?g", {}, NamedTag{}));
 }
 
 // _____________________________________________________________________________
@@ -4291,11 +4292,13 @@ TEST(QueryPlanner, ContainsWordInGraphClause) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
-  h::expect("SELECT * WHERE { GRAPH ?g { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 } }",
-            h::Join(h::Sort(h::IndexScanFromStrings("?s1", "?p1", "?o1", {}, {},
-                                                    {Variable{"?g"}}, {3})),
-                    h::Sort(h::IndexScanFromStrings("?s2", "?p2", "?o2", {}, {},
-                                                    {Variable{"?g"}}, {3}))));
+  h::expect(
+      "SELECT * WHERE { GRAPH ?g { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 } }",
+      h::Join(
+          h::Sort(h::IndexScanFromStrings("?s1", "?p1", "?o1", {}, NamedTag{},
+                                          {Variable{"?g"}}, {3})),
+          h::Sort(h::IndexScanFromStrings("?s2", "?p2", "?o2", {}, NamedTag{},
+                                          {Variable{"?g"}}, {3}))));
   // Sanity check case without a GRAPH clause
   h::expect(
       "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
@@ -4592,15 +4595,16 @@ TEST(QueryPlanner,
      PropertyPathWithGraphVariableNoSpecialHandlingWhenJoiningOnGraph) {
   TransitivePathSide left{std::nullopt, 0, Variable{"?a"}, 0};
   TransitivePathSide right{std::nullopt, 1, Variable{"?b"}, 1};
-  h::expect("SELECT * { GRAPH ?g { ?a <a>+ ?b . ?c <a> ?d } }",
-            h::Join(h::Sort(h::transitivePath(
-                        left, right, 1, std::numeric_limits<size_t>::max(),
-                        h::Sort(h::IndexScanFromStrings(
-                            "?_QLever_internal_variable_qp_0", "<a>",
-                            "?_QLever_internal_variable_qp_1", {}, {},
-                            {Variable{"?g"}}, {3})))),
-                    h::Sort(h::IndexScanFromStrings("?c", "<a>", "?d", {}, {},
-                                                    {Variable{"?g"}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?g { ?a <a>+ ?b . ?c <a> ?d } }",
+      h::Join(h::Sort(h::transitivePath(
+                  left, right, 1, std::numeric_limits<size_t>::max(),
+                  h::Sort(h::IndexScanFromStrings(
+                      "?_QLever_internal_variable_qp_0", "<a>",
+                      "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                      {Variable{"?g"}}, {3})))),
+              h::Sort(h::IndexScanFromStrings("?c", "<a>", "?d", {}, NamedTag{},
+                                              {Variable{"?g"}}, {3}))));
 }
 
 // _____________________________________________________________________________
@@ -4617,22 +4621,22 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                       h::Sort(h::IndexScanFromStrings(
                           "?_QLever_internal_variable_qp_0",
                           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-                          "?_QLever_internal_variable_qp_1", {}, {},
+                          "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                           {Variable{"?g"}}, {3})))));
   }
   {
     TransitivePathSide left{std::nullopt, 0, Var{"?a"}, 0};
     TransitivePathSide right{std::nullopt, 1, Var{"?b"}, 1};
-    h::expect(
-        "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . ?a <is-a> ?c } }",
-        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
-                          h::IndexScanFromStrings("?a", "<is-a>", "?c", {}, {},
-                                                  {Variable{"?g"}}, {3}),
-                          // Sort by ?g
-                          h::Sort(h::IndexScanFromStrings(
-                              "?_QLever_internal_variable_qp_0", "<label>",
-                              "?_QLever_internal_variable_qp_1", {}, {},
-                              {Variable{"?g"}}, {3}))));
+    h::expect("SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . ?a <is-a> ?c } }",
+              h::transitivePath(
+                  left, right, 1, std::numeric_limits<size_t>::max(),
+                  h::IndexScanFromStrings("?a", "<is-a>", "?c", {}, NamedTag{},
+                                          {Variable{"?g"}}, {3}),
+                  // Sort by ?g
+                  h::Sort(h::IndexScanFromStrings(
+                      "?_QLever_internal_variable_qp_0", "<label>",
+                      "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                      {Variable{"?g"}}, {3}))));
     // Verify query planning also works when ?g is the first variable.
     h::expect(
         "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>+ ?b } }",
@@ -4641,7 +4645,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           // Sort by ?g
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
-                              "?_QLever_internal_variable_qp_1", {}, {},
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                               {Variable{"?g"}}, {3}))));
 
     // Ensure join with too many columns doesn't result in an exception. (This
@@ -4656,8 +4660,8 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                 // Sort by ?g
                 h::Sort(h::IndexScanFromStrings(
                     "?_QLever_internal_variable_qp_0", "<label>",
-                    "?_QLever_internal_variable_qp_1", {}, {}, {Variable{"?g"}},
-                    {3}))))));
+                    "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                    {Variable{"?g"}}, {3}))))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -4666,7 +4670,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           // Sort by ?g
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
-                              "?_QLever_internal_variable_qp_1", {}, {},
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                               {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
     h::expectWithGivenBudgets(
@@ -4676,7 +4680,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           // Sort by ?g
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
-                              "?_QLever_internal_variable_qp_1", {}, {},
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                               {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
 
@@ -4685,46 +4689,48 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         "SELECT * WHERE { GRAPH ?g { ?a <label>* ?b . VALUES ?a { UNDEF } } }",
         h::transitivePath(
             left, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(h::Distinct(
-                        {0, 1},
-                        // The sorts of index scans are because of missing graph
-                        // permutations.
-                        h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_a",
-                                     "?internal_property_path_variable_b", {},
-                                     {}, {Variable{"?g"}}, {3}, 2)),
-                                 h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_c",
-                                     "?internal_property_path_variable_d", "?a",
-                                     {}, {}, {Variable{"?g"}}, {3}, 2)))),
-                    h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
+            h::Join(
+                h::Distinct(
+                    {0, 1},
+                    // The sorts of index scans are because of missing graph
+                    // permutations.
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
+                h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
             // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));
+            h::Sort(h::IndexScanFromStrings(
+                "?_QLever_internal_variable_qp_0", "<label>",
+                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                {Variable{"?g"}}, {3}))));
     h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>* ?b . VALUES ?a { 1 } } }",
         h::transitivePath(
             left, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(h::Distinct(
-                        {0, 1},
-                        // The sorts of index scans are because of missing graph
-                        // permutations.
-                        h::Union(h::Sort(h::IndexScanFromStrings(
-                                     "?a", "?internal_property_path_variable_a",
-                                     "?internal_property_path_variable_b", {},
-                                     {}, {Variable{"?g"}}, {3}, 2)),
-                                 h::Sort(h::IndexScanFromStrings(
-                                     "?internal_property_path_variable_c",
-                                     "?internal_property_path_variable_d", "?a",
-                                     {}, {}, {Variable{"?g"}}, {3}, 2)))),
-                    h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
+            h::Join(
+                h::Distinct(
+                    {0, 1},
+                    // The sorts of index scans are because of missing graph
+                    // permutations.
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
+                h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
             // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));
+            h::Sort(h::IndexScanFromStrings(
+                "?_QLever_internal_variable_qp_0", "<label>",
+                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>* ?b } }",
@@ -4738,17 +4744,17 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     // permutations.
                     h::Union(h::Sort(h::IndexScanFromStrings(
                                  "?a", "?internal_property_path_variable_a",
-                                 "?internal_property_path_variable_b", {}, {},
-                                 {Variable{"?g"}}, {3}, 2)),
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
                              h::Sort(h::IndexScanFromStrings(
                                  "?internal_property_path_variable_c",
                                  "?internal_property_path_variable_d", "?a", {},
-                                 {}, {Variable{"?g"}}, {3}, 2))))),
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2))))),
             // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))),
+            h::Sort(h::IndexScanFromStrings(
+                "?_QLever_internal_variable_qp_0", "<label>",
+                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
 
     TransitivePathSide left2{std::nullopt, 0, Var{"?g"}, 0};
@@ -4756,35 +4762,37 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         "SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }",
         h::transitivePath(
             left2, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(
-                h::IndexScanFromStrings("?g", "?h", "?i"),
-                h::Distinct(
-                    {0, 1},
-                    // The sorts of index scans are because of missing graph
-                    // permutations.
-                    h::Union(
-                        h::Sort(h::IndexScanFromStrings(
-                            "?g", "?internal_property_path_variable_a",
-                            "?internal_property_path_variable_b", {}, {},
-                            {Variable{
-                                "?_Qlever_internal_transitive_path_graph"}},
-                            {3}, 2)),
-                        h::Sort(h::IndexScanFromStrings(
-                            "?internal_property_path_variable_c",
-                            "?internal_property_path_variable_d", "?g", {}, {},
-                            {Variable{
-                                "?_Qlever_internal_transitive_path_graph"}},
-                            {3}, 2))))),
+            h::Join(h::IndexScanFromStrings("?g", "?h", "?i"),
+                    h::Distinct(
+                        {0, 1},
+                        // The sorts of index scans are because of missing graph
+                        // permutations.
+                        h::Union(
+                            h::Sort(h::IndexScanFromStrings(
+                                "?g", "?internal_property_path_variable_a",
+                                "?internal_property_path_variable_b", {},
+                                NamedTag{},
+                                {Variable{
+                                    "?_Qlever_internal_transitive_path_graph"}},
+                                {3}, 2)),
+                            h::Sort(h::IndexScanFromStrings(
+                                "?internal_property_path_variable_c",
+                                "?internal_property_path_variable_d", "?g", {},
+                                NamedTag{},
+                                {Variable{
+                                    "?_Qlever_internal_transitive_path_graph"}},
+                                {3}, 2))))),
             // Sort by ?g
-            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                            "<label>",
-                                            "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));
+            h::Sort(h::IndexScanFromStrings(
+                "?_QLever_internal_variable_qp_0", "<label>",
+                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                {Variable{"?g"}}, {3}))));
   }
 }
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphIri) {
+  using HS = ad_utility::HashSet<std::string>;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
@@ -4795,16 +4803,16 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
                                         "?internal_property_path_variable_x",
                                         "?internal_property_path_variable_a",
                                         "?internal_property_path_variable_b",
-                                        {}, {{"<abc>"}}, {}, {}, 1),
+                                        {}, HS{"<abc>"}, {}, {}, 1),
                                     h::IndexScanFromStrings(
                                         "?internal_property_path_variable_c",
                                         "?internal_property_path_variable_d",
                                         "?internal_property_path_variable_x",
-                                        {}, {{"<abc>"}}, {}, {}, 1))),
+                                        {}, HS{"<abc>"}, {}, {}, 1))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-              "?_QLever_internal_variable_qp_1", {}, {{"<abc>"}})));
+              "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
   h::expect(
       "SELECT * FROM <abc> WHERE { ?x a* ?y } ",
       h::transitivePath(
@@ -4813,16 +4821,16 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
                                         "?internal_property_path_variable_x",
                                         "?internal_property_path_variable_a",
                                         "?internal_property_path_variable_b",
-                                        {}, {{"<abc>"}}, {}, {}, 1),
+                                        {}, HS{"<abc>"}, {}, {}, 1),
                                     h::IndexScanFromStrings(
                                         "?internal_property_path_variable_c",
                                         "?internal_property_path_variable_d",
                                         "?internal_property_path_variable_x",
-                                        {}, {{"<abc>"}}, {}, {}, 1))),
+                                        {}, HS{"<abc>"}, {}, {}, 1))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-              "?_QLever_internal_variable_qp_1", {}, {{"<abc>"}})));
+              "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
 }
 
 // _____________________________________________________________________________
@@ -5221,7 +5229,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                   // The sort is because of missing graph permutations.
                   h::Sort(h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_0", "<a>",
-                      "?_QLever_internal_variable_qp_1", {}, {},
+                      "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                       {Variable{"?g"}}, {3})))),
               h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
@@ -5235,18 +5243,18 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                       {0, 1},
                       h::Union(h::Sort(h::IndexScanFromStrings(
                                    "?s", "?internal_property_path_variable_a",
-                                   "?internal_property_path_variable_b", {}, {},
-                                   {Variable{"?g"}}, {3}, 2)),
+                                   "?internal_property_path_variable_b", {},
+                                   NamedTag{}, {Variable{"?g"}}, {3}, 2)),
                                h::Sort(h::IndexScanFromStrings(
                                    "?internal_property_path_variable_c",
                                    "?internal_property_path_variable_d", "?s",
-                                   {}, {}, {Variable{"?g"}}, {3}, 2)))),
+                                   {}, NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
                   h::IndexScanFromStrings("?s", "<b>", "?s2")),
               // The sort is because of missing graph permutations.
-              h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                              "<a>",
-                                              "?_QLever_internal_variable_qp_1",
-                                              {}, {}, {Variable{"?g"}}, {3})))),
+              h::Sort(h::IndexScanFromStrings(
+                  "?_QLever_internal_variable_qp_0", "<a>",
+                  "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                  {Variable{"?g"}}, {3})))),
           h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
   // Double bind is currently not supported
@@ -5257,7 +5265,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                     // The sort is because of missing graph permutations.
                     h::Sort(h::IndexScanFromStrings(
                         "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, {},
+                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                         {Variable{"?g"}}, {3})))),
                 h::IndexScanFromStrings("?s", "<b>", "?o")),
             qec);
@@ -5270,7 +5278,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                         // The sort is because of missing graph permutations.
                         h::Sort(h::IndexScanFromStrings(
                             "?_QLever_internal_variable_qp_0", "<a>",
-                            "?_QLever_internal_variable_qp_1", {}, {},
+                            "?_QLever_internal_variable_qp_1", {}, NamedTag{},
                             {Variable{"?g"}}, {3})))),
                     h::IndexScanFromStrings("?g", "<b>", "?g2")),
             qec);

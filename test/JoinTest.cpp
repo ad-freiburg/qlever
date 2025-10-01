@@ -577,13 +577,11 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
       qec, POS,
       SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<1>")},
-      std::optional{
-          ad_utility::HashSet<TripleComponent>{Iri::fromIriref("<g1>")}});
+      IndexScan::Graphs::Whitelist({Iri::fromIriref("<g1>")}));
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
       qec, POS,
       SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<2>")},
-      std::optional{
-          ad_utility::HashSet<TripleComponent>{Iri::fromIriref("<g2>")}});
+      IndexScan::Graphs::Whitelist({Iri::fromIriref("<g2>")}));
   auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
 
   VariableToColumnMap expectedVariables{

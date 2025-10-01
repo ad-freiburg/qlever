@@ -111,6 +111,12 @@ struct RuntimeParameters {
   // cost-estimate.
   Bool enableDistributiveUnion_{true, "enable-distributive-union"};
 
+  // If set, the query `SELECT * { GRAPH ?g { ?s ?p ?o } }` will return
+  // triples from the default graph, otherwise it will follow the
+  // behaviour defined by the SPARQL standard which filters them out.
+  Bool treatDefaultGraphAsNamedGraph_{false,
+                                      "treat-default-graph-as-named-graph"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

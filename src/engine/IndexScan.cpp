@@ -112,16 +112,7 @@ string IndexScan::getCacheKeyImpl() const {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
-  if (graphsToFilter_.has_value()) {
-    // The graphs are stored as a hash set, but we need a deterministic order.
-    std::vector<std::string> graphIdVec;
-    ql::ranges::transform(graphsToFilter_.value(),
-                          std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
-    ql::ranges::sort(graphIdVec);
-    os << "\nFiltered by Graphs:";
-    os << absl::StrJoin(graphIdVec, " ");
-  }
+  graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
     os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
