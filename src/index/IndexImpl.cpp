@@ -878,6 +878,14 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // ________________________________________________________________________
+size_t IndexImpl::createPermutationPairPublic(
+    size_t numColumns,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+    const Permutation& p1, const Permutation& p2) {
+  return createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
+}
+
+// ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
 size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         SortedTriplesType&& sortedTriples,

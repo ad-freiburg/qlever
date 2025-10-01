@@ -390,3 +390,45 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
       },
       false);
 }
+
+// _____________________________________________________________________________
+void DeltaTriples::materializeToIndex() {
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  auto snapshot = getSnapshot();
+  CancellationHandle cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  IndexImpl newIndex{index_.allocator()};
+  newIndex.setOnDiskBase("tmp_index");
+  newIndex.setKbName(index_.getKbName());
+  newIndex.blocksizePermutationPerColumn() =
+      index_.blocksizePermutationPerColumn();
+  for (auto permutation : Permutation::ALL) {
+    // Only process half the permutations (the rest is done by the pairs).
+    if (static_cast<int>(permutation) % 2 != 0) {
+      continue;
+    }
+    Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
+        scanSpec, BlockMetadataRanges(
+                      newIndex.getPermutation(permutation)
+                          .getAugmentedMetadataForPermutation(*snapshot))};
+    auto fullScan =
+        index_.getPermutation(permutation)
+            .lazyScan(scanSpecAndBlocks, std::nullopt,
+                      std::array{ADDITIONAL_COLUMN_GRAPH_ID},
+                      cancellationHandle, *snapshot, LimitOffsetClause{});
+    [[maybe_unused]] auto distinct = newIndex.createPermutationPairPublic(
+        4,
+        ad_utility::InputRangeTypeErased{ad_utility::CachingTransformInputRange{
+            std::move(fullScan),
+            [permutation](IdTable& idTable) {
+              auto keyOrder = Permutation::toKeyOrder(permutation);
+              std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
+                                                     keyOrder.keys().end()};
+              idTable.setColumnSubset(columnIndices);
+              return IdTableStatic<0>{std::move(idTable)};
+            }}},
+        newIndex.getPermutation(permutation),
+        newIndex.getPermutation(
+            static_cast<Permutation::Enum>(static_cast<int>(permutation) + 1)));
+  }
+}
