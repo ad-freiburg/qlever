@@ -1247,30 +1247,28 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   // Yield the bindings and compute the result size.
   uint64_t resultSize = 0;
-  size_t numBindingsExported = 0;
-  {
-    auto bindings = [&]() {
-      if (query.hasSelectClause()) {
-        return selectQueryResultBindingsToQLeverJSON(
-            qet, query.selectClause(), query._limitOffset, std::move(result),
-            resultSize, std::move(cancellationHandle));
-      } else if (query.hasConstructClause()) {
-        return constructQueryResultBindingsToQLeverJSON(
-            qet, query.constructClause().triples_, query._limitOffset,
-            std::move(result), resultSize, std::move(cancellationHandle));
-      } else {
-        // TODO<joka921>: Refactor this to use std::visit.
-        return askQueryResultToQLeverJSON(std::move(result));
-      }
-    }();
-
-    for (const std::string& b : bindings) {
-      if (numBindingsExported > 0) [[likely]] {
-        co_yield ",";
-      }
-      co_yield b;
-      ++numBindingsExported;
+  auto bindings = [&]() {
+    if (query.hasSelectClause()) {
+      return selectQueryResultBindingsToQLeverJSON(
+          qet, query.selectClause(), query._limitOffset, std::move(result),
+          resultSize, std::move(cancellationHandle));
+    } else if (query.hasConstructClause()) {
+      return constructQueryResultBindingsToQLeverJSON(
+          qet, query.constructClause().triples_, query._limitOffset,
+          std::move(result), resultSize, std::move(cancellationHandle));
+    } else {
+      // TODO<joka921>: Refactor this to use std::visit.
+      return askQueryResultToQLeverJSON(std::move(result));
     }
+  }();
+
+  size_t numBindingsExported = 0;
+  for (const std::string& b : bindings) {
+    if (numBindingsExported > 0) [[likely]] {
+      co_yield ",";
+    }
+    co_yield b;
+    ++numBindingsExported;
   }
   if (numBindingsExported < resultSize) {
     LOG(INFO) << "Number of bindings exported: " << numBindingsExported
