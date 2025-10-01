@@ -45,7 +45,7 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinMaxNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
-  add(treatDefaultGraphLikeNamedGraph_);
+  add(treatDefaultGraphAsNamedGraph_);
 
   defaultQueryTimeout_.setParameterConstraint(
       [](std::chrono::seconds value, std::string_view parameterName) {

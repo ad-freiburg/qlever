@@ -1328,7 +1328,7 @@ parsedQuery::GraphPatternOperation Visitor::visit(
           [this, &group](const Variable& graphVar) {
             addVisibleVariable(graphVar);
             bool includeDefaultGraph = getRuntimeParameter<
-                &RuntimeParameters::treatDefaultGraphLikeNamedGraph_>();
+                &RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
             using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
             return parsedQuery::GroupGraphPattern{
                 std::move(group), graphVar,

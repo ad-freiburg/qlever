@@ -114,8 +114,8 @@ struct RuntimeParameters {
   // If set, the query `SELECT * { GRAPH ?g { ?s ?p ?o } }` will return
   // triples from the default graph, otherwise it will follow the
   // behaviour defined by the SPARQL standard which filters them out.
-  Bool treatDefaultGraphLikeNamedGraph_{false,
-                                        "treat-default-graph-like-named-graph"};
+  Bool treatDefaultGraphAsNamedGraph_{false,
+                                      "treat-default-graph-as-named-graph"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
