@@ -879,12 +879,13 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     size_t rowLeft_;
     size_t rowRight_;
 
-    QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
-        AddedPair, (const AddedPair& other) const, {
-          return (rowLeft_ == other.rowLeft_)
-                     ? ql::compareThreeWay(rowRight_, other.rowRight_)
-                     : ql::compareThreeWay(rowLeft_, other.rowLeft_);
-        })
+    auto compareThreeWay(const AddedPair& other) const {
+      return (rowLeft_ == other.rowLeft_)
+                 ? ql::compareThreeWay(rowRight_, other.rowRight_)
+                 : ql::compareThreeWay(rowLeft_, other.rowLeft_);
+    }
+
+    QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(AddedPair)
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,

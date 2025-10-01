@@ -160,11 +160,10 @@ class CopyShield {
     return *this;
   }
 
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
-      T,
-      (const T& other)
-          const QL_CONCEPT_OR_NOTHING(requires(std::three_way_comparable<T>)),
-      { return ql::compareThreeWay(*pointer_, other); })
+  auto compareThreeWay(const T& other) const {
+    return ql::compareThreeWay(*pointer_, other);
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
   bool operator==(const T& other) const requires std::equality_comparable<T> {
     return *pointer_ == other;

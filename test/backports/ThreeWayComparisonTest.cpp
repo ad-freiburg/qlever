@@ -38,14 +38,13 @@ class TestClassWithCustomComparison {
   int y;
 
  public:
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(
-      TestClassWithCustomComparison,
-      (const TestClassWithCustomComparison& lhs,
-       const TestClassWithCustomComparison& rhs),
-      {
-        return (lhs.x == rhs.x) ? ql::compareThreeWay(lhs.y, rhs.y)
-                                : ql::compareThreeWay(lhs.x, rhs.x);
-      })
+  friend constexpr auto compareThreeWay(
+      const TestClassWithCustomComparison& lhs,
+      const TestClassWithCustomComparison& rhs) {
+    return (lhs.x == rhs.x) ? ql::compareThreeWay(lhs.y, rhs.y)
+                            : ql::compareThreeWay(lhs.x, rhs.x);
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(TestClassWithCustomComparison)
 
   constexpr bool operator==(const TestClassWithCustomComparison& other) const {
     return ql::compareThreeWay(*this, other) == 0;
@@ -134,19 +133,20 @@ class TestClassWithExternalCompareThreeWay {
   int value;
 
  public:
-  QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
-      TestClassWithExternalCompareThreeWay,
-      (const TestClassWithExternalCompareThreeWay&) const->ql::strong_ordering)
+  constexpr ql::strong_ordering compareThreeWay(
+      const TestClassWithExternalCompareThreeWay&) const;
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
+      TestClassWithExternalCompareThreeWay)
 
   constexpr TestClassWithExternalCompareThreeWay(int val) : value(val) {}
   constexpr int getValue() const { return value; }
 };
 
-QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_IMPL(
-    TestClassWithExternalCompareThreeWay,
-    (const TestClassWithExternalCompareThreeWay& other)
-        const->ql::strong_ordering,
-    { return ql::compareThreeWay(this->getValue(), other.getValue()); })
+constexpr ql::strong_ordering
+TestClassWithExternalCompareThreeWay::compareThreeWay(
+    const TestClassWithExternalCompareThreeWay& other) const {
+  return ql ::compareThreeWay(this->getValue(), other.getValue());
+}
 
 TEST(ThreeWayComparisonTest, ExternalCompareThreeWay) {
   constexpr TestClassWithExternalCompareThreeWay a(1);
@@ -161,10 +161,13 @@ class TestTemplateClass {
   T value;
 
  public:
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR_TEMPLATE(
-      template <typename U>, TestTemplateClass<U>,
-      (const TestTemplateClass<U>& lhs, const TestTemplateClass<U>& rhs),
-      { return ql::compareThreeWay(lhs.value, rhs.value); })
+  template <typename U>
+  static constexpr auto compareThreeWay(const TestTemplateClass<U>& lhs,
+                                        const TestTemplateClass<U>& rhs) {
+    return ql::compareThreeWay(lhs.value, rhs.value);
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR_TEMPLATE(template <typename U>,
+                                                        TestTemplateClass<U>)
 
   constexpr bool operator==(const TestTemplateClass& other) const {
     return ql::compareThreeWay(*this, other) == 0;
@@ -218,20 +221,18 @@ class TestClassWithDeclaredCompareThreeWay {
   int value;
 
  public:
-  QL_DECLARE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
-      TestClassWithDeclaredCompareThreeWay,
-      (const TestClassWithDeclaredCompareThreeWay& other)
-          const->ql::strong_ordering)
+  ql::strong_ordering compareThreeWay(
+      const TestClassWithDeclaredCompareThreeWay& other) const;
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(TestClassWithDeclaredCompareThreeWay)
 
   TestClassWithDeclaredCompareThreeWay(int val) : value(val) {}
   int getValue() const { return value; }
 };
 
-QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(
-    TestClassWithDeclaredCompareThreeWay,
-    (const TestClassWithDeclaredCompareThreeWay& other)
-        const->ql::strong_ordering,
-    { return ql::compareThreeWay(this->value, other.value); })
+ql::strong_ordering TestClassWithDeclaredCompareThreeWay::compareThreeWay(
+    const TestClassWithDeclaredCompareThreeWay& other) const {
+  return ql::compareThreeWay(this->value, other.value);
+}
 
 TEST(ThreeWayComparisonTest, DeclaredAndDefinedCompareThreeWay) {
   TestClassWithDeclaredCompareThreeWay a(1);

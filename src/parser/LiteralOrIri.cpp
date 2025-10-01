@@ -127,17 +127,17 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
 }
 
 // ___________________________________________
-QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_IMPL(
-    LiteralOrIri, (const LiteralOrIri& rhs) const->ql::strong_ordering, {
-      int i = IndexImpl::staticGlobalSingletonComparator().compare(
-          toStringRepresentation(), rhs.toStringRepresentation(),
-          LocaleManager::Level::TOTAL);
-      if (i < 0) {
-        return ql::strong_ordering::less;
-      } else if (i > 0) {
-        return ql::strong_ordering::greater;
-      } else {
-        return ql::strong_ordering::equal;
-      }
-    })
+ql::strong_ordering LiteralOrIri::compareThreeWay(
+    const LiteralOrIri& rhs) const {
+  int i = IndexImpl::staticGlobalSingletonComparator().compare(
+      toStringRepresentation(), rhs.toStringRepresentation(),
+      LocaleManager::Level::TOTAL);
+  if (i < 0) {
+    return ql::strong_ordering::less;
+  } else if (i > 0) {
+    return ql::strong_ordering::greater;
+  } else {
+    return ql::strong_ordering::equal;
+  }
+}
 }  // namespace ad_utility::triple_component

@@ -157,41 +157,40 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
-      ValueId, (const ValueId& other) const, {
-        using enum Datatype;
-        auto type = getDatatype();
-        auto otherType = other.getDatatype();
-        if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
-          return ql::compareThreeWay(_bits, other._bits);
-        }
-        if (type == LocalVocabIndex && otherType == LocalVocabIndex)
-            [[unlikely]] {
-          return ql::compareThreeWay(*getLocalVocabIndex(),
-                                     *other.getLocalVocabIndex());
-        }
+  constexpr auto compareThreeWay(const ValueId& other) const {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return ql::compareThreeWay(_bits, other._bits);
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
+      return ql::compareThreeWay(*getLocalVocabIndex(),
+                                 *other.getLocalVocabIndex());
+    }
 
-        // GCC 11 issues a false positive warning here, so we try to avoid it by
-        // being over-explicit about the branches here.
-        if ((type == VocabIndex || type == EncodedVal) &&
-            otherType == LocalVocabIndex) {
-          return compareVocabAndLocalVocab(
-              LocalVocabEntry::IdProxy::make(getBits()),
-              other.getLocalVocabIndex());
-        } else if (type == LocalVocabIndex &&
-                   (otherType == VocabIndex || otherType == EncodedVal)) {
-          auto inverseOrder = compareVocabAndLocalVocab(
-              LocalVocabEntry::IdProxy::make(other.getBits()),
-              getLocalVocabIndex());
+    // GCC 11 issues a false positive warning here, so we try to avoid it by
+    // being over-explicit about the branches here.
+    if ((type == VocabIndex || type == EncodedVal) &&
+        otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(
+          LocalVocabEntry::IdProxy::make(getBits()),
+          other.getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               (otherType == VocabIndex || otherType == EncodedVal)) {
+      auto inverseOrder = compareVocabAndLocalVocab(
+          LocalVocabEntry::IdProxy::make(other.getBits()),
+          getLocalVocabIndex());
 
-          return ql::compareThreeWay(0, inverseOrder);
-        }
+      return ql::compareThreeWay(0, inverseOrder);
+    }
 
-        // One of the types is `LocalVocab`, and the other one is a non-string
-        // type like `Integer` or `Undefined. Then the comparison by bits
-        // automatically compares by the datatype.
-        return ql::compareThreeWay(_bits, other._bits);
-      })
+    // One of the types is `LocalVocab`, and the other one is a non-string
+    // type like `Integer` or `Undefined. Then the comparison by bits
+    // automatically compares by the datatype.
+    return ql::compareThreeWay(_bits, other._bits);
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
 
   // When there are no local vocab entries, then comparison can only be done
   // on the underlying bits, which allows much better code generation (e.g.

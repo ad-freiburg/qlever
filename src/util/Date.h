@@ -212,9 +212,10 @@ class Date {
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
   /// different time zone values (see the docstring of this class).
-  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
-      Date, (const Date& rhs) const,
-      { return ql::compareThreeWay(toBits(), rhs.toBits()); });
+  [[nodiscard]] constexpr auto compareThreeWay(const Date& rhs) const {
+    return ql::compareThreeWay(toBits(), rhs.toBits());
+  }
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Date);
 
   template <typename H>
   friend H AbslHashValue(H h, const Date& d) {

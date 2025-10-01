@@ -59,16 +59,16 @@ struct IdTriple {
 
   // Note: The payload is not part of the value representation and therefore not
   // compared.
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
-      IdTriple, (const IdTriple& other) const->ql::strong_ordering, {
-        // Note: Libc++ in our clang build neither has three-way comparisons for
-        // `std::array`, nor the `lexicographical_compare_three_way` function.
-        static_assert(NumCols == 4);
-        auto tie = [](const auto& ids) {
-          return std::tie(ids[0], ids[1], ids[2], ids[3]);
-        };
-        return ql::compareThreeWay(tie(ids()), tie(other.ids()));
-      })
+  ql::strong_ordering compareThreeWay(const IdTriple& other) const {
+    // Note: Libc++ in our clang build neither has three-way comparisons for
+    // `std::array`, nor the `lexicographical_compare_three_way` function.
+    static_assert(NumCols == 4);
+    auto tie = [](const auto& ids) {
+      return std::tie(ids[0], ids[1], ids[2], ids[3]);
+    };
+    return ql::compareThreeWay(tie(ids()), tie(other.ids()));
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IdTriple)
 
   bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
 

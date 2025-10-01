@@ -44,20 +44,19 @@ class ParseableDuration {
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(
-      ParseableDuration, (const ParseableDuration& other) const noexcept, {
-        return ql::compareThreeWay(duration_.count(), other.duration_.count());
-      })
+  auto compareThreeWay(const ParseableDuration& other) const noexcept {
+    return ql::compareThreeWay(duration_.count(), other.duration_.count());
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(ParseableDuration)
 
   template <typename Other>
-  using CommonType = std::common_type_t<DurationType, Other>;
-
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(
-      template <typename Other>, ParseableDuration<Other>,
-      (const ParseableDuration<Other>& other) const noexcept, {
-        return ql::compareThreeWay(CommonType<Other>{duration_}.count(),
-                                   CommonType<Other>{other.duration_}.count());
-      })
+  auto compareThreeWay(const ParseableDuration<Other>& other) const noexcept {
+    using CommonType = std::common_type_t<DurationType, Other>;
+    return ql::compareThreeWay(CommonType{duration_}.count(),
+                               CommonType{other.duration_}.count());
+  }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(template <typename Other>,
+                                                    ParseableDuration<Other>)
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(ParseableDuration, duration_)
 
