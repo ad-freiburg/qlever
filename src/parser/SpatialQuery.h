@@ -6,7 +6,7 @@
 #ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
 #define QLEVER_SRC_PARSER_SPATIALQUERY_H
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
@@ -52,6 +52,12 @@ struct SpatialQuery : MagicServiceQuery {
   // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
 
+  // If the s2-point-polyline algorithm is used, the right side of the spatial
+  // join will be an already existing s2 index together with the fully
+  // materialized child result table. Both are pinned to the named query cache.
+  // This parameter indicates the name of the cache entry to be used.
+  std::optional<std::string> rightCacheName_;
+
   // Helper: if the spatial query was constructed from a special triple
   // <nearest-neighbors:...> for backward compatibility, we need to bypass the
   // check for the case of a nearest neighbors search with the right child not
@@ -75,7 +81,20 @@ struct SpatialQuery : MagicServiceQuery {
   // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
   // check if all required values have been provided and otherwise throw.
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
+
+ private:
+  // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.
+  void throwIf(bool throwCondition, std::string_view message) const;
 };
+
+namespace detail {
+
+// Convert a string like `libspatialjoin` to the corresponding enum element.
+// Throws a `SpatialSearchException` for invalid inputs.
+SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
+    std::string_view identifier);
+
+}  // namespace detail
 
 }  // namespace parsedQuery
 

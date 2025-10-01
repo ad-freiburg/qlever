@@ -212,10 +212,13 @@ class Server {
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
-  // in the named query cache. Throws if named pinning is required, but the
-  // access token is not okay.
+  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
+  // expected to be the variable name of a column (without leading `?`) on which
+  // a geometry index should be built. Throws if named pinning is required, but
+  // the access token is not okay.
   static void configurePinnedResultWithName(
-      const std::optional<std::string>& pinResultWithName, bool accessTokenOk,
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.

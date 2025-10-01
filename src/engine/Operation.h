@@ -299,6 +299,10 @@ class Operation {
     // no-op.
   }
 
+  // This function is called when the operation's result is requested to be
+  // cached and pinned to a name.
+  void storeToNamedResultCache(const Result& result);
+
  public:
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
   // result of this operation. If a `LIMIT`/`OFFSET` was previously set, this

@@ -9,6 +9,7 @@
 
 #include <spatialjoin/Sweeper.h>
 #include <spatialjoin/WKTParse.h>
+#include <util/geo/Geo.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -75,6 +76,11 @@ using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
 
+// Forward declaration of s2 classes
+class S2Polyline;
+class S2Point;
+class S2LatLng;
+
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;
@@ -89,6 +95,7 @@ class SpatialJoinAlgorithms {
                         std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
   Result BoundingBoxAlgorithm();
   Result LibspatialjoinAlgorithm();
 
@@ -174,12 +181,18 @@ class SpatialJoinAlgorithms {
   // `LibspatialjoinAlgorithm`.
   static size_t getNumThreads();
 
- private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                   ColumnIndex col) const;
+  static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+                                          ColumnIndex col);
 
+  // Helper function to retrieve and parse a line string from the given cell of
+  // an `IdTable` and convert it to an `S2Polyline`.
+  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
+
+ private:
   // returns everything between the first two quotes. If the string does not
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;
