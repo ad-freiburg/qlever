@@ -248,9 +248,11 @@ TEST(ThreeWayComparisonTest, MixedTypeComparison) {
   // Test comparison between different arithmetic types
   auto result1 = ql::compareThreeWay(1, 2.0);
   auto result2 = ql::compareThreeWay(2.0f, 1);
+  auto result3 = ql::compareThreeWay(5U, 7UL);
 
   EXPECT_TRUE(result1 < 0);
   EXPECT_TRUE(result2 > 0);
+  EXPECT_TRUE(result3 < 0);
 }
 
 #ifdef QLEVER_CPP_17

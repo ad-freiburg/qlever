@@ -160,26 +160,40 @@ struct HasAnyCompareThreeWay
 template <typename LT, typename RT>
 constexpr bool hasAnyCompareThreeWayV = HasAnyCompareThreeWay<LT, RT>::value;
 
-template <typename LT, typename RT,
-          std::enable_if_t<
-              std::disjunction_v<std::conjunction<std::is_floating_point<LT>,
-                                                  std::is_floating_point<RT>>,
-                                 HasAnyCompareThreeWay<LT, RT>,
-                                 HasAllComparisonOperators<LT, RT>>,
-              int> = 0>
+// Helper function for threeway comparisons
+template <typename OrderingType, typename T1, typename T2>
+constexpr auto compareThreeWayCommon(const T1& lhs, const T2& rhs) {
+  if (lhs < rhs) {
+    return OrderingType::less;
+  } else if (lhs > rhs) {
+    return OrderingType::greater;
+  }
+  return OrderingType::equivalent;
+}
+
+template <
+    typename LT, typename RT,
+    std::enable_if_t<
+        std::disjunction_v<
+            std::conjunction<std::is_arithmetic<LT>, std::is_arithmetic<RT>>,
+            HasAnyCompareThreeWay<LT, RT>, HasAllComparisonOperators<LT, RT>>,
+        int> = 0>
 constexpr auto compareThreeWay(const LT& lhs, const RT& rhs) {
-  if constexpr (std::conjunction_v<std::is_floating_point<LT>,
-                                   std::is_floating_point<RT>>) {
-    if (std::isnan(lhs) || std::isnan(rhs)) {
-      return ql::partial_ordering::unordered;
+  if constexpr (std::is_floating_point_v<LT> || std::is_floating_point_v<RT>) {
+    if constexpr (std::is_floating_point_v<LT>) {
+      if (std::isnan(lhs)) {
+        return ql::partial_ordering::unordered;
+      }
     }
-    if (lhs < rhs) {
-      return ql::partial_ordering::less;
+    if constexpr (std::is_floating_point_v<RT>) {
+      if (std::isnan(rhs)) {
+        return ql::partial_ordering::unordered;
+      }
     }
-    if (lhs > rhs) {
-      return ql::partial_ordering::greater;
-    }
-    return ql::partial_ordering::equivalent;
+
+    using CommonType = std::common_type_t<LT, RT>;
+    return compareThreeWayCommon<ql::partial_ordering>(
+        static_cast<CommonType>(lhs), static_cast<CommonType>(rhs));
   } else if constexpr (hasAnyCompareThreeWayV<LT, RT>) {
     if constexpr (hasMemberCompareThreeWayV<LT, RT>) {
       return lhs.compareThreeWay(rhs);
@@ -187,12 +201,7 @@ constexpr auto compareThreeWay(const LT& lhs, const RT& rhs) {
       return compareThreeWay(lhs, rhs);
     }
   } else {
-    if (lhs < rhs) {
-      return ql::strong_ordering::less;
-    } else if (lhs > rhs) {
-      return ql::strong_ordering::greater;
-    }
-    return ql::strong_ordering::equal;
+    return compareThreeWayCommon<ql::strong_ordering>(lhs, rhs);
   }
 }
 
