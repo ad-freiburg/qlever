@@ -43,9 +43,12 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 };
 
@@ -875,6 +878,14 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
               << meta2.statistics() << std::endl;
 
   return metaData;
+}
+
+// ________________________________________________________________________
+size_t IndexImpl::createPermutationPairPublic(
+    size_t numColumns,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+    const Permutation& p1, const Permutation& p2) {
+  return createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
 }
 
 // ________________________________________________________________________

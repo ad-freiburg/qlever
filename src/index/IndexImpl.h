@@ -39,7 +39,6 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MmapVector.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -196,7 +195,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton = true);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -260,6 +260,10 @@ class IndexImpl {
   const auto& getTextVocab() const { return textVocab_; };
 
   const auto& getScoreData() const { return scoreData_; }
+
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  };
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -447,6 +451,10 @@ class IndexImpl {
     return blocksizePermutationPerColumn_;
   }
 
+  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
+    return blocksizePermutationPerColumn_;
+  }
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
@@ -557,6 +565,13 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+ public:
+  [[nodiscard]] size_t createPermutationPairPublic(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+      const Permutation& p1, const Permutation& p2);
+
+ protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
