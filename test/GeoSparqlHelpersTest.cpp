@@ -160,7 +160,7 @@ TEST(GeoSparqlHelpers, IriToUnit) {
 // _____________________________________________________________________________
 template <SpatialJoinType SJType>
 void checkGeoRelationDummyImpl(
-    source_location sourceLocation = source_location::current()) {
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   const auto geoRelationFunction = WktGeometricRelation<SJType>();
   AD_EXPECT_THROW_WITH_MESSAGE(

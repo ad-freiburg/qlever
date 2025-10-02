@@ -79,8 +79,7 @@ TEST(Union, computeUnionLarge) {
 // _____________________________________________________________________________
 TEST(Union, computeUnionLazy) {
   auto runTest = [](bool nonLazyChildren, bool invisibleSubtreeColumns,
-                    ad_utility::source_location loc =
-                        ad_utility::source_location::current()) {
+                    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(loc);
     auto* qec = ad_utility::testing::getQec();
     qec->getQueryTreeCache().clearAll();

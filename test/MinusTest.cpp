@@ -28,8 +28,7 @@ void testMinus(std::vector<IdTable> leftTables,
                std::vector<IdTable> rightTables,
                const std::vector<IdTable>& expectedResult,
                bool singleVar = false,
-               ad_utility::source_location location =
-                   ad_utility::source_location::current()) {
+               ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
   auto qec = ad_utility::testing::getQec();
 

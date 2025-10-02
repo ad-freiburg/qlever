@@ -147,21 +147,20 @@ TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?b"}}));
 
-  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
-                             std::shared_ptr<QueryExecutionTree> right, bool a,
-                             bool b, bool c,
-                             ad_utility::source_location location =
-                                 ad_utility::source_location::current()) {
-    auto trace = generateLocationTrace(location);
+  auto testWithTrees =
+      [qec](std::shared_ptr<QueryExecutionTree> left,
+            std::shared_ptr<QueryExecutionTree> right, bool a, bool b, bool c,
+            ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
 
-    MultiColumnJoin join{qec, std::move(left), std::move(right), false};
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
-    EXPECT_THROW(
-        join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-        ad_utility::Exception);
-  };
+        MultiColumnJoin join{qec, std::move(left), std::move(right), false};
+        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
+        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+        EXPECT_THROW(
+            join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+            ad_utility::Exception);
+      };
 
   testWithTrees(index3, index4, true, true, true);
   testWithTrees(index3, index2, true, true, true);

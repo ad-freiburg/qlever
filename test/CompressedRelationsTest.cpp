@@ -92,7 +92,7 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
 void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
   VectorTable exp;
@@ -495,7 +495,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
                                    const LocatedTriplesPerBlock& =
                                        emptyLocatedTriples,
-                                   Loc loc = Loc::current()) {
+                                   Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     auto firstAndLastTriple = readerPtr->getFirstAndLastTriple(
         {spec, blockMetadata}, emptyLocatedTriples);
@@ -549,7 +549,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   // Test infrastructure.
   using Loc = ad_utility::source_location;
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
-                                   Loc loc = Loc::current()) {
+                                   Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     auto blockMetadata =
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
@@ -727,7 +727,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   const std::vector<Id>& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto [result, numHandledBlocks] =
         CompressedRelationReader::getBlocksForJoin(joinColumn,
@@ -830,7 +830,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
                       expectedBlocks,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto result = CompressedRelationReader::getBlocksForJoin(
         *metadataAndBlocks, *metadataAndBlocksB);
@@ -988,7 +988,7 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
                                const ScanSpecification& scanSpec, size_t lower,
                                size_t upper, size_t exact,
                                ad_utility::source_location sourceLocation =
-                                   ad_utility::source_location::current()) {
+                                   AD_CURRENT_SOURCE_LOC()) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
