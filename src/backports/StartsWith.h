@@ -21,7 +21,7 @@ namespace ql {
 // std::string_view::starts_with as free functions that take the
 // string/string_view as the first parameter.
 
-// Overload 1: starts_with(string_view, string_view)
+// Overload 1: Does a `string_view` start with a `string_view`.
 CPP_template(typename CharT, typename Traits, typename Other)(
     requires ql::concepts::convertible_to<
         const Other&,
@@ -37,7 +37,7 @@ CPP_template(typename CharT, typename Traits, typename Other)(
          Traits::compare(sv.data(), prefix.data(), prefix.size()) == 0;
 }
 
-// Overload 2: starts_with(string_view, CharT)
+// Overload 2: Does a `string_view` start with a `char`.
 CPP_template(typename CharT, typename Traits, typename Other)(
     requires ql::concepts::convertible_to<
         const Other&,
@@ -48,7 +48,7 @@ CPP_template(typename CharT, typename Traits, typename Other)(
   return !sv.empty() && Traits::eq(sv.front(), prefix);
 }
 
-// Overload 3: starts_with(string, string_view)
+// Overload 3: Does a `string` start with a `string_view`.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
     requires ql::concepts::convertible_to<
@@ -63,7 +63,7 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
   return starts_with(std::basic_string_view<CharT, Traits>(str), prefix);
 }
 
-// Overload 4: starts_with(string, CharT)
+// Overload 3: Does a `string` start with a `char`.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
     requires ql::concepts::convertible_to<
