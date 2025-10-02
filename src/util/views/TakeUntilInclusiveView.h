@@ -76,7 +76,15 @@ CPP_template(typename V, typename Pred)(
       if (!std::exchange(doneWasChecked_, true)) {
         doneAfterIncrement_ = std::invoke(*pred_, res);
       }
-      return AD_FWD(res);
+      // We have to distinguish the case of `*current_` returning a reference
+      // vs. an object.
+      if constexpr (std::is_object_v<decltype(res)>) {
+        // For objects, this is NRVO (almost guaranteed copy-elision).
+        return res;
+      } else {
+        // Perfect forwarding for references.
+        return AD_FWD(res);
+      }
     }
 
     Iterator& operator++() {
