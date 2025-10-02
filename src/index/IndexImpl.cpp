@@ -43,9 +43,12 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton)
     : allocator_{std::move(allocator)} {
-  globalSingletonIndex_ = this;
+  if (registerSingleton) {
+    globalSingletonIndex_ = this;
+  }
   deltaTriples_.emplace(*this);
 };
 

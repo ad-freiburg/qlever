@@ -195,7 +195,8 @@ class IndexImpl {
   std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     bool registerSingleton = true);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;

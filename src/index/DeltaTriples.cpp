@@ -404,28 +404,25 @@ void DeltaTriples::materializeToIndex() {
   for (const LocalVocabEntry& entry :
        const_cast<const LocalVocab&>(localVocab_).primaryWordSet()) {
     const auto& [lower, upper] = entry.positionInVocab();
-    if (lower == upper) {
-      localVocabMapping.emplace(
-          Id::makeFromLocalVocabIndex(&entry),
-          Id::makeFromVocabIndex(VocabIndex::make(lower.get())));
-      continue;
-    }
-    insertInfo.emplace_back(VocabIndex::make(upper.get()),
+    AD_CORRECTNESS_CHECK(lower == upper);
+    Id id = Id::fromBits(upper.get());
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
+    insertInfo.emplace_back(id.getVocabIndex(),
                             entry.asLiteralOrIri().toStringRepresentation(),
                             Id::makeFromLocalVocabIndex(&entry));
   }
   ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
-    return std::tie(std::get<VocabIndex>(tupleA).get(),
-                    std::get<std::string_view>(tupleA)) <
-           std::tie(std::get<VocabIndex>(tupleB).get(),
-                    std::get<std::string_view>(tupleB));
+    return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
+           std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
   });
 
-  auto vocabWriter = vocab.makeWordWriterPtr("tmp_vocab");
+  auto vocabWriter = vocab.makeWordWriterPtr("tmp_index.vocabulary");
   for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
     auto actualIndex = VocabIndex::make(vocabIndex);
     while (insertInfo.size() > newWordCount &&
            std::get<VocabIndex>(insertInfo.at(newWordCount)) == actualIndex) {
+      AD_CORRECTNESS_CHECK(std::get<Id>(insertInfo.at(newWordCount)) <
+                           Id::makeFromVocabIndex(actualIndex));
       auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
       auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
       localVocabMapping.emplace(
@@ -435,7 +432,7 @@ void DeltaTriples::materializeToIndex() {
     }
     auto word = vocab[actualIndex];
     auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-    AD_EXPENSIVE_CHECK(newIndex == vocabIndex + newWordCount);
+    AD_CORRECTNESS_CHECK(newIndex == vocabIndex + newWordCount);
   }
 
   for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
@@ -448,7 +445,7 @@ void DeltaTriples::materializeToIndex() {
   auto snapshot = getSnapshot();
   CancellationHandle cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
-  IndexImpl newIndex{index_.allocator()};
+  IndexImpl newIndex{index_.allocator(), false};
   newIndex.setOnDiskBase("tmp_index");
   newIndex.setKbName(index_.getKbName());
   newIndex.blocksizePermutationPerColumn() =
