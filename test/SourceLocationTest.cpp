@@ -11,9 +11,11 @@
 
 #include "util/SourceLocation.h"
 
+namespace {
 auto getSourceLoc(ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   return loc;
 }
+}  // namespace
 
 // Test that the `AD_CURRENT_SOURCE_LOC()` behaves as expected (it captures the
 // location of the call-site).
@@ -26,7 +28,8 @@ TEST(SourceLocation, Current) {
   EXPECT_EQ(loc.file_name(), file);
   EXPECT_EQ(loc.line(), line + 1);
   // The details of the function name are different
-  //(`TestBody` vs `SourceLocation_Current_Test::TestBody`)
+  // (`TestBody` vs `SourceLocation_Current_Test::TestBody`), so we cannot
+  // use `EXPECT_STREQ` etc.
   EXPECT_THAT(loc.function_name(), testing::HasSubstr("TestBody"));
   EXPECT_THAT(function, testing::HasSubstr("TestBody"));
 
