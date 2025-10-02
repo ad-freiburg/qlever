@@ -24,6 +24,7 @@
 #include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
+#include "util/views/TakeUntilInclusiveView.h"
 
 namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -126,6 +127,31 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     return InputRangeTypeErased(ql::span<TableWithRange>());
   }
 
+  // The following structs and variant is used to encode the subrange of an
+  // `IdTable` of the actual `result` that has to be part of the result. An
+  // `IdTable` that is completely before the result (because of `Offset`)
+  struct BeforeOffset {};
+  // An `IdTable` that is completely after the `ExportLimit`, but not yet after
+  // the `Limit`. For these tables we only have to report the number of lines in
+  // the table.
+  struct OnlyCountForExport {};
+
+  // An `IdTable` that completely comes after the `LIMIT` has been fully
+  // exhausted. Once we have reached this point, we can stop the iteration.
+  struct AfterLimit {};
+
+  // An `IdTable` of which a certain subrange becomes part of the result,
+  // together with a bool that indicates whether this is the last `IdTable` (to
+  // stop the computation of possibly expensive results as soon as possible.
+  struct Export {
+    TableWithRange tableWithRange_;
+    bool isLast_;
+  };
+
+  // Encode all the possible states in a variant.
+  using State =
+      std::variant<BeforeOffset, OnlyCountForExport, AfterLimit, Export>;
+
   // The effective offset, limit, and export limit. These will be updated after
   // each block, see `updateEffectiveOffsetAndLimits` below. If they were not
   // specified, they are initialized to their default values (0 for the offset
@@ -144,33 +170,9 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     }
   };
 
-  // The following structs and variant is used to encode the subrange of an
-  // `IdTable` of the actual `result` that has to be part of the result. An
-  // `IdTable` that is completely before the result (because of `Offset`)
-  struct BeforeOffset {};
-  // An `IdTable` that is completely after the `ExportLimit`, but not yet after
-  // the `Limit`. For these tables we only have to report the number of lines in
-  // the table.
-  struct OnlyCountForExport {};
-
-  // An `IdTable` that completely comes after the `LIMIT` has been fully
-  // exhausted. Once we have reached this point, we can stop the iteration.
-  // TODO<joka921> This currently consumes one block too many I think.
-  struct AfterLimit {};
-
-  struct Export {
-    TableWithRange tableWithRange_;
-    bool isLast_;
-  };
-
-  // Encode all of the possible states, the `TableWithRange` is a reference to
-  // an IdTable + a subrange of the rows that actually has to be consumed.
-  using State =
-      std::variant<BeforeOffset, OnlyCountForExport, AfterLimit, Export>;
-
   // Convert a `TableConstRefWithVocab` to a `State`. As this modifies the
   // `limit` and `offset`, this has to be called exactly once per block in the
-  // result and strictly in order.
+  // `result` and strictly in order.
   auto tableToState =
       [reduceLimit, &resultSize, resultSizeMultiplicator,
        limit = effectiveLimit, exportLimit = effectiveExportLimit,
@@ -190,7 +192,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 
     // Compute the range of rows to be exported (can be zero) and to be
     // counted.
-    uint64_t rangeBegin = offset;
+    uint64_t rangeBegin = std::exchange(offset, 0);
     uint64_t numRowsToBeExported =
         std::min(exportLimit, blockSize - rangeBegin);
     uint64_t numRowsToBeCounted = std::min(limit, blockSize - rangeBegin);
@@ -203,7 +205,6 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
     // there).
     resultSize += numRowsToBeCounted * resultSizeMultiplicator;
-    offset = 0;
     reduceLimit(limit, numRowsToBeCounted);
     reduceLimit(exportLimit, numRowsToBeCounted);
 
@@ -217,26 +218,41 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
         (limit == 0 && exportLimit == 0)};
   };
 
+  // Now transform all the blocks in the result to a `State`, and only yield
+  // the blocks of which some part has to be exported. Consume as few blocks
+  // of the result as possible.
   namespace v = ql::views;
   return InputRangeTypeErased{
-      OwningView{getIdTables(result)} | v::transform(tableToState) |
-      ::ranges::views::cache1 | v::drop_while([](const State& state) {
-        return std::holds_alternative<BeforeOffset>(state);
-      }) |
-      v::take_while([](const State& state) {
-        return !std::holds_alternative<AfterLimit>(state);
-      }) |
-      ad_utility::views::takeUntilInclusive([](const State& state) {
-        auto ptr = std::get_if<Export>(&state);
-        return ptr && ptr->isLast_;
-      }) |
-      v::filter([](const State& state) {
-        return std::holds_alternative<Export>(state);
-      }) |
-      ::ranges::views::cache1 |
-      v::transform([](State&& state) -> TableWithRange {
-        return std::get<Export>(state).tableWithRange_;
-      })};
+      OwningView{getIdTables(result)} |
+      v::transform(tableToState)
+      // The caching is required to make the pattern of a modifying transform
+      // (where the operator* may be called at most once per element) work with
+      // a `filter` down the line (which evaluates operator* of its subrange
+      // multiple times). It is also cheap, as we only store reference types.
+      | ::ranges::views::cache1
+      // We have to consume, but do nothing for `BeforeOffset`
+      | v::drop_while(ad_utility::holdsAlternative<BeforeOffset>)
+      // As soon as we encoounter `AfterLimit`, we can immediately stop.
+      | v::take_while(std::not_fn(holdsAlternative<AfterLimit>))
+      // Also make sure to not trigger the result computation of the first
+      // (unneeded) block after the last needed block. Note: With this, the
+      // `take_while` above seems redundant, but it might be that no IdTable is
+      // yielded at all.
+      | ad_utility::views::takeUntilInclusive([](const State& state) {
+          auto ptr = std::get_if<Export>(&state);
+          return ptr && ptr->isLast_;
+        })
+      // At this stage we only see `Export` or `OnlyCountForExport`. For the
+      // latter we don't have to do anything, because the `transformToState`
+      // lambda above has already done the counting for us.
+      | v::filter([](const State& state) {
+          return std::holds_alternative<Export>(state);
+        })
+      // We now only have `Exports`, extract the `TableWithRange`, because that
+      // is what we need as a value for the output.
+      | v::transform([](State&& state) -> TableWithRange {
+          return std::get<Export>(state).tableWithRange_;
+        })};
 }
 
 namespace {
