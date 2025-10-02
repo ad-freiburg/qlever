@@ -7,6 +7,7 @@
 
 #include <string_view>
 
+#include "backports/StartsWith.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlTriple.h"
@@ -75,7 +76,7 @@ std::string_view MagicServiceQuery::extractParameterName(
   // Remove prefix if applicable: this allows users to define the parameter
   // either as magicServicePrefix:parameterName or <parameterName>.
   auto paramString = tripleComponent.getIri().getContent();
-  if (paramString.starts_with(iri)) {
+  if (ql::starts_with(paramString, iri)) {
     paramString.remove_prefix(iri.size());
   }
   return asStringViewUnsafe(paramString);

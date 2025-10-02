@@ -5,6 +5,7 @@
 #ifndef QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 #define QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 
+#include "backports/StartsWith.h"
 #include "parser/TripleComponent.h"
 
 namespace ad_utility::testing {
@@ -16,14 +17,14 @@ namespace ad_utility::testing {
 constexpr auto tripleComponentLiteral =
     [](std::string_view literal, std::string_view langtagOrDatatype = "") {
       std::string dummy;
-      if (!(literal.starts_with('"') && literal.ends_with('"'))) {
+      if (!(ql::starts_with(literal, '"') && literal.ends_with('"'))) {
         dummy = absl::StrCat("\"", literal, "\"");
         literal = dummy;
       }
-      if (langtagOrDatatype.starts_with("@")) {
+      if (ql::starts_with(langtagOrDatatype, "@")) {
         return TripleComponent::Literal::fromEscapedRdfLiteral(
             literal, std::string(langtagOrDatatype));
-      } else if (langtagOrDatatype.starts_with("^^")) {
+      } else if (ql::starts_with(langtagOrDatatype, "^^")) {
         auto iri = ad_utility::triple_component::Iri::fromIriref(
             langtagOrDatatype.substr(2));
         return TripleComponent::Literal::fromEscapedRdfLiteral(literal,

@@ -6,6 +6,7 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include "backports/StartsWith.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
