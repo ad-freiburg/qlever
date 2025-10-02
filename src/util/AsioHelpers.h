@@ -127,7 +127,7 @@ template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
     std::promise<std::function<void()>> cancelCallback,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
@@ -175,7 +175,7 @@ inline net::awaitable<T> interruptible(
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   return interruptible(std::move(awaitable), std::move(handle),
                        std::promise<std::function<void()>>{}, std::move(loc));
 }

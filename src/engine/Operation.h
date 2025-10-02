@@ -385,8 +385,7 @@ class Operation {
   // potentially can take a (too) long time. This function is designed to be
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      ad_utility::source_location location =
-          ad_utility::source_location::current()) const {
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }

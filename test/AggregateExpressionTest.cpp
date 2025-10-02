@@ -44,7 +44,7 @@ static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 template <typename AggregateExpressionT, typename T, typename U = T>
 auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
                         bool distinct = false,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   VectorWithMemoryLimit<T> input(inputAsVector.begin(), inputAsVector.end(),
                                  makeAllocator());
@@ -61,7 +61,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
 template <typename AggregateExpressionT, typename T, typename U = T>
 auto testAggregateWithVariable =
     [](Variable input, U expectedResult, bool distinct = false,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l);
       auto d = std::make_unique<VariableExpression>(std::move(input));
       auto t = TestContext{};

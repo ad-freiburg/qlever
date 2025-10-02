@@ -116,8 +116,7 @@ TEST(GraphStoreProtocolTest, transformGet) {
   auto expectTransformGet =
       [](const GraphOrDefault& graph,
          const testing::Matcher<const ParsedQuery&>& matcher,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         EXPECT_THAT(
             GraphStoreProtocol::transformGet(graph, encodedIriManager()),
@@ -144,7 +143,7 @@ TEST(GraphStoreProtocolTest, transformPut) {
   auto expectTransformPut = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
       const testing::Matcher<std::vector<ParsedQuery>>& matcher,
-      ad_utility::source_location l = ad_utility::source_location::current())(
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(GraphStoreProtocol::transformPut(request, graph, index),
@@ -210,8 +209,7 @@ TEST(GraphStoreProtocolTest, transformDelete) {
   auto expectTransformDelete =
       [&index](const GraphOrDefault& graph,
                const testing::Matcher<const ParsedQuery&>& matcher,
-               ad_utility::source_location l =
-                   ad_utility::source_location::current()) {
+               ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         EXPECT_THAT(GraphStoreProtocol::transformDelete(graph, index), matcher);
       };
@@ -270,19 +268,18 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
                                                iri("<c>"), iri("<foo>")}}),
                           m::GraphPattern())));
-  auto expectUnsupportedMethod =
-      [&index](const http::verb method,
-               ad_utility::source_location l =
-                   ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(l);
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            GraphStoreProtocol::transformGraphStoreProtocol(
-                GraphStoreOperation{DEFAULT{}},
-                ad_utility::testing::makeRequest(method, "/?default"), index),
-            testing::HasSubstr(
-                absl::StrCat(std::string{boost::beast::http::to_string(method)},
-                             " in the SPARQL Graph Store HTTP Protocol")));
-      };
+  auto expectUnsupportedMethod = [&index](const http::verb method,
+                                          ad_utility::source_location l =
+                                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            GraphStoreOperation{DEFAULT{}},
+            ad_utility::testing::makeRequest(method, "/?default"), index),
+        testing::HasSubstr(
+            absl::StrCat(std::string{boost::beast::http::to_string(method)},
+                         " in the SPARQL Graph Store HTTP Protocol")));
+  };
   expectUnsupportedMethod(http::verb::head);
   expectUnsupportedMethod(http::verb::patch);
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -372,8 +369,7 @@ TEST(GraphStoreProtocolTest, convertTriples) {
   auto expectConvert =
       [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
             const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,
-            ad_utility::source_location l =
-                ad_utility::source_location::current()) {
+            ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto convertedTriples =
             GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
@@ -436,7 +432,7 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
   auto expectTransformPost = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
       const testing::Matcher<const ParsedQuery&>& matcher,
-      ad_utility::source_location l = ad_utility::source_location::current())(
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),

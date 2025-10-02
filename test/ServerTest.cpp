@@ -288,8 +288,7 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
               "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
           const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
                                                                       {"12"}}},
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
         Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);

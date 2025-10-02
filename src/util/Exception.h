@@ -47,9 +47,9 @@ class Exception : public std::exception {
   ad_utility::source_location location_;
 
  public:
-  explicit Exception(const std::string& message,
-                     ad_utility::source_location location =
-                         ad_utility::source_location::current())
+  explicit Exception(
+      const std::string& message,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC())
       : location_{location} {
     std::stringstream str;
     // TODO<GCC13> Use `std::format`.
@@ -64,9 +64,9 @@ class Exception : public std::exception {
 }  // namespace ad_utility
 
 // Throw exception with additional assert-like info.
-[[noreturn]] inline void AD_THROW(std::string_view message,
-                                  ad_utility::source_location location =
-                                      ad_utility::source_location::current()) {
+[[noreturn]] inline void AD_THROW(
+    std::string_view message,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   throw ad_utility::Exception{std::string{message}, location};
 }
 
@@ -146,10 +146,9 @@ std::string concatMessages(Args&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
-#define AD_CONTRACT_CHECK(condition, ...)                             \
-  AD_CHECK_IMPL(condition, __STRING(condition),                       \
-                ad_utility::source_location::current() __VA_OPT__(, ) \
-                    __VA_ARGS__)
+#define AD_CONTRACT_CHECK(condition, ...)       \
+  AD_CHECK_IMPL(condition, __STRING(condition), \
+                AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can never be violated via a public (member) function. It is
@@ -169,7 +168,7 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 #define AD_CORRECTNESS_CHECK(condition, ...)             \
   ad_utility::detail::adCorrectnessCheckImpl(            \
       static_cast<bool>(condition), __STRING(condition), \
-      ad_utility::source_location::current() __VA_OPT__(, ) __VA_ARGS__)
+      AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
 // only compiled and executed when either the `NDEBUG` constant is NOT defined

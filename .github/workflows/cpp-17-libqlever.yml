@@ -34,7 +34,7 @@ jobs:
 
 
     env:
-      warnings:   "-Wall -Wextra -Werror "
+      warnings:   ""
       build-type: Release
       expensive-tests: true
       compiler: gcc

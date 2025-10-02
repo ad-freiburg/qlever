@@ -236,7 +236,7 @@ parameter pack and a lambda function argument, which it passes to a
 template <typename F>
 void testConstExprForEachNormalCall(
     const F& callToForEachWrapper, auto callToTypeToStringFactory,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
 

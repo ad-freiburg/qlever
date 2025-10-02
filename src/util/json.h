@@ -154,8 +154,7 @@ struct adl_serializer<std::monostate> {
       throw nlohmann::json::type_error::create(
           302,
           absl::StrCat("Custom type converter (see `",
-                       ad_utility::source_location::current().file_name(),
-                       "`) from json",
+                       AD_CURRENT_SOURCE_LOC().file_name(), "`) from json",
                        " to `std::monostate`: type must be null, but wasn't."),
           nullptr);
     }

@@ -722,8 +722,8 @@ class QueryPlanner {
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet and throw an exception if this is the case.
-  void checkCancellation(ad_utility::source_location location =
-                             ad_utility::source_location::current()) const;
+  void checkCancellation(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const;
 
   // Return a filter that filters the active graphs. Outside of `GRAPH` clauses,
   // the default graphs (implicit, or specified via `FROM`) are active, and

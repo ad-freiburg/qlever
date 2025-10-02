@@ -38,7 +38,7 @@ OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
 // `input` and `expected` accordingly.
 void testOrderBy(IdTable input, const IdTable& expected,
                  std::vector<bool> isDescending,
-                 source_location l = source_location::current()) {
+                 source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 

@@ -497,8 +497,7 @@ TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
 
   auto expectContainsSingleElementAtKey0 =
       [&](bool pinned, std::string expected,
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         using namespace ::testing;
         auto trace = generateLocationTrace(l);
         auto value = cache.getIfContained(0);

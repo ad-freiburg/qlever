@@ -128,7 +128,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 }
 
 auto expectTrue = [](const ExpressionResult& result,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -136,7 +136,7 @@ auto expectTrue = [](const ExpressionResult& result,
 };
 
 auto expectFalse = [](const ExpressionResult& result,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto id = std::get<Id>(result);
   EXPECT_EQ(id.getDatatype(), Datatype::Bool);
@@ -146,7 +146,7 @@ auto expectFalse = [](const ExpressionResult& result,
 // Assert that the given `expression`, when evaluated on the `TestContext` (see
 // above), has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -156,7 +156,7 @@ auto expectTrueBoolean = [](const SparqlExpression& expression,
 
 // Similar to `expectTrueBoolean`, but assert that the boolean is `false`.
 auto expectFalseBoolean = [](const SparqlExpression& expression,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
   auto result = evaluateOnTestContext(expression);
   auto id = std::get<Id>(result);
@@ -165,7 +165,7 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
 };
 
 auto expectUndefined = [](const SparqlExpression& expression,
-                          source_location l = source_location::current()) {
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "expectUndefined was called here");
   auto result = evaluateOnTestContext(expression);
   if (std::holds_alternative<Id>(result)) {
@@ -188,7 +188,7 @@ auto expectUndefined = [](const SparqlExpression& expression,
 template <typename T, typename U>
 auto testLessThanGreaterThanEqualHelper(
     std::pair<T, U> lessThanPair, std::pair<T, U> greaterThanPair,
-    std::pair<T, U> equalPair, source_location l = source_location::current()) {
+    std::pair<T, U> equalPair, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualHelper was called here");
   auto True = expectTrueBoolean;
@@ -221,9 +221,10 @@ auto testLessThanGreaterThanEqualHelper(
 // `ValueId` before the call; the second element  is ...; both elements are ...
 // Requires that both `leftValue` and `rightValue` are numeric constants.
 template <typename L, typename R>
-void testLessThanGreaterThanEqual(
-    std::pair<L, R> lessThanPair, std::pair<L, R> greaterThanPair,
-    std::pair<L, R> equalPair, source_location l = source_location::current()) {
+void testLessThanGreaterThanEqual(std::pair<L, R> lessThanPair,
+                                  std::pair<L, R> greaterThanPair,
+                                  std::pair<L, R> equalPair,
+                                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace =
       generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
 
@@ -241,7 +242,7 @@ void testLessThanGreaterThanEqual(
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
 void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testNotEqualHelper was called here");
@@ -264,7 +265,7 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
 }
 
 void testUndefHelper(auto leftValueIn, auto rightValueIn,
-                     source_location l = source_location::current()) {
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
   auto trace = generateLocationTrace(l, "testUndefHelper was called here");
@@ -290,7 +291,7 @@ void testUndefHelper(auto leftValueIn, auto rightValueIn,
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
 void testNotEqual(auto leftValue, auto rightValue,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
 }
@@ -382,7 +383,7 @@ struct ExpressionEvaluator {
 // rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
 template <typename T, typename U>
 void testLessThanGreaterThanEqualMultipleValuesHelper(
-    T leftValue, U rightValue, source_location l = source_location::current()) {
+    T leftValue, U rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
 
@@ -460,8 +461,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 // or numeric vectors, and that at least one of them is a vector.
 template <typename T1, typename T2>
 void testLessThanGreaterThanEqualMultipleValues(
-    T1 leftValue, T2 rightValue,
-    source_location l = source_location::current()) {
+    T1 leftValue, T2 rightValue, source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
 
@@ -483,7 +483,7 @@ void testLessThanGreaterThanEqualMultipleValues(
 // equal, greater) must be true.
 template <typename T, typename U>
 auto testNotComparableHelper(T leftValue, U rightValue,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{makeAllocator()};
@@ -536,7 +536,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
 // for the `testNotComparableHelper` function.
 template <typename T, typename U>
 auto testNotComparable(T leftValue, U rightValue,
-                       source_location l = source_location::current()) {
+                       source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotComparable was called here");
   /*
   testNotComparableHelper(makeCopy(leftValue), makeCopy(rightValue));
@@ -668,7 +668,7 @@ void testInExpressionVector(T1 leftValue, T2 rightValue, Ctx& ctx,
 template <Comparison Comp, typename T1, typename T2>
 void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
                               std::vector<Id> expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   static TestContext ctx;
   auto expression =
       makeExpression<Comp>(liftToValueId(leftValue), liftToValueId(rightValue));
@@ -685,7 +685,7 @@ void testWithExplicitIdResult(T1 leftValue, T2 rightValue,
 template <Comparison Comp, typename T1, typename T2>
 void testWithExplicitResult(T1 leftValue, T2 rightValue,
                             std::vector<bool> expectedAsBool,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   std::vector<Id> expected;
   ql::ranges::transform(expectedAsBool, std::back_inserter(expected),
@@ -789,7 +789,7 @@ TEST(RelationalExpression, VariableAndVariable) {
 template <Comparison Comp, typename T>
 void testSortedVariableAndConstant(
     Variable leftValue, T rightValue, ad_utility::SetOfIntervals expected,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
@@ -919,8 +919,7 @@ TEST(RelationalExpression, FilterEstimates) {
   // Implementation for testing the size estimates of different relational
   // expressions.
   auto testImpl = [&](auto ti, size_t expectedSize,
-                      ad_utility::source_location l =
-                          source_location::current()) {
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     using T = typename decltype(ti)::type;
 
     auto tr = generateLocationTrace(l);

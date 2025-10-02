@@ -65,9 +65,9 @@ class PrefixRegexExpression : public SparqlExpression {
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.
-  static void checkCancellation(const EvaluationContext* context,
-                                ad_utility::source_location location =
-                                    ad_utility::source_location::current());
+  static void checkCancellation(
+      const EvaluationContext* context,
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC());
 
   // Check if `regex` is a prefix regex which means that it starts with `^` and
   // contains no other "special" regex characters like `*` or `.`. If this check

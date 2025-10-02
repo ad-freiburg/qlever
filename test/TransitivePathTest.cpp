@@ -115,8 +115,7 @@ class TransitivePathTest
   // ___________________________________________________________________________
   static void assertResultMatchesIdTable(
       const Result& result, const IdTable& expected,
-      ad_utility::source_location loc =
-          ad_utility::source_location::current()) {
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(loc);
     using ::testing::UnorderedElementsAreArray;
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
@@ -136,8 +135,7 @@ class TransitivePathTest
       const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
                            bool> auto& testCase,
       IdTable idTable,
-      ad_utility::source_location loc =
-          ad_utility::source_location::current()) {
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     testCase(idTable.clone(), false);
     testCase(split(idTable), false);

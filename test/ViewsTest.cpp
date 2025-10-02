@@ -204,7 +204,7 @@ TEST(Views, RvalueView) {
   // place where it's used (second argument).
   auto testImpl = [&t, &f](auto isConst, bool doMove,
                            ad_utility::source_location loc =
-                               ad_utility::source_location::current()) {
+                               AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(loc);
     std::vector<MoveTracker> vec(10, t);
 

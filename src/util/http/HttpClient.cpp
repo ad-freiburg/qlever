@@ -108,9 +108,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
-  auto wait = [&client, &handle](auto awaitable,
-                                 ad_utility::source_location loc =
-                                     ad_utility::source_location::current()) ->
+  auto wait = [&client, &handle](
+                  auto awaitable,
+                  ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) ->
       typename decltype(awaitable)::value_type {
         static_assert(
             ad_utility::isInstantiation<decltype(awaitable), net::awaitable>);
@@ -148,7 +148,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
           ad_utility::interruptible(
               http::async_read_some(*(client->stream_), buffer, *responseParser,
                                     net::use_awaitable),
-              handle, ad_utility::source_location::current()),
+              handle, AD_CURRENT_SOURCE_LOC()),
           client->ioContext_);
       size_t remainingBytes = responseParser->get().body().size;
       co_yield ql::span{staticBuffer}.first(staticBuffer.size() -

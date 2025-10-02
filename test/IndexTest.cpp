@@ -54,8 +54,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
       [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
                      Permutation::Enum permutation, const VectorTable& expected,
                      Permutation::ColumnIndices additionalColumns = {},
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         IdTable result =
             index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
@@ -74,8 +73,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
   return
       [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
                      const VectorTable& expected,
-                     ad_utility::source_location l =
-                         ad_utility::source_location::current()) {
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         IdTable wol =
             index.scan({c0, std::nullopt, std::nullopt}, permutation,

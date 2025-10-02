@@ -18,8 +18,7 @@ TEST(QuadTest, getQuads) {
       [](ad_utility::sparql_types::Triples triples,
          std::vector<Quads::GraphBlock> graphs,
          const std::vector<SparqlTripleSimpleWithGraph>& expected,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         // For this test, there are no blank nodes. Below you find a dedicated
         // test with blank nodes.
@@ -89,8 +88,7 @@ TEST(QuadTest, getOperations) {
          std::vector<Quads::GraphBlock> graphs,
          const testing::Matcher<
              std::vector<parsedQuery::GraphPatternOperation>>& m,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         const Quads quads{std::move(triples), std::move(graphs)};
         EXPECT_THAT(quads.toGraphPatternOperations(), m);
@@ -131,8 +129,7 @@ TEST(QuadTest, getOperations) {
 TEST(QuadTest, forAllVariables) {
   auto expectForAllVariables =
       [](Quads quads, const ad_utility::HashSet<Variable>& expectVariables,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         ad_utility::HashSet<Variable> calledVariables;
         quads.forAllVariables([&calledVariables](const Variable& var) {

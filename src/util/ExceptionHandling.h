@@ -56,16 +56,13 @@ CPP_template(typename F)(
 // this function must never throw an exception.
 CPP_template(typename F,
              typename TerminateAction = decltype(detail::callStdTerminate))(
-    requires std::invocable<ql::remove_cvref_t<F>> CPP_and
-        std::is_nothrow_invocable_v<
-            TerminateAction>) void terminateIfThrows(F&& f,
-                                                     std::string_view message,
-                                                     TerminateAction
-                                                         terminateAction = {},
-                                                     ad_utility::source_location
-                                                         l = ad_utility::
-                                                             source_location::
-                                                                 current()) noexcept {
+    requires std::invocable<ql::remove_cvref_t<F>> CPP_and std::is_nothrow_invocable_v<
+        TerminateAction>) void terminateIfThrows(F&& f,
+                                                 std::string_view message,
+                                                 TerminateAction
+                                                     terminateAction = {},
+                                                 ad_utility::source_location l =
+                                                     AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(

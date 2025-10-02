@@ -23,7 +23,7 @@ using ::testing::HasSubstr;
 
 using namespace std::chrono_literals;
 
-ad_utility::source_location location = ad_utility::source_location::current();
+ad_utility::source_location location = AD_CURRENT_SOURCE_LOC();
 const int expectedLocationLine = __LINE__ - 1;
 const auto expectedLocation =
     absl::StrCat("CancellationHandleTest.cpp:", expectedLocationLine);

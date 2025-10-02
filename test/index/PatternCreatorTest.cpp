@@ -124,7 +124,7 @@ auto createExamplePatterns(PatternCreator& creator) {
 // from the `createExamplePatterns` function.
 void assertPatternContents(const std::string& filename,
                            const TripleVec& addedTriples,
-                           source_location l = source_location ::current()) {
+                           source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
   double averageNumSubjectsPerPredicate;
   double averageNumPredicatesPerSubject;

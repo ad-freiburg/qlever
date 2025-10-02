@@ -1632,9 +1632,8 @@ well as adding, of a new validator function.
 @param l For better error messages, when the tests fail.
 */
 template <typename F>
-void doValidatorTest(
-    F addValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+void doValidatorTest(F addValidatorFunction,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorTest")};
 
@@ -1883,7 +1882,7 @@ ConstConfigOptionProxy... validatorArguments)`.
 template <typename F>
 void doValidatorExceptionTest(
     F addAlwaysValidValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
 
@@ -1923,7 +1922,7 @@ validatorExceptionMessage, ConfigManager& m, ConstConfigOptionProxy...)`.
 template <typename F>
 void doAddOptionValidatorTest(
     F addNonExceptionValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doAddOptionValidatorTest")};
 
@@ -2097,7 +2096,7 @@ ConstConfigOptionProxy... validatorArguments)`.
 template <typename F>
 void doAddOptionValidatorExceptionTest(
     F addAlwaysValidValidatorFunction,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
 
@@ -2371,7 +2370,7 @@ TEST(ConfigManagerTest, ValidatorsSorting) {
   auto checkOrder = [](const ConfigManager& manager,
                        const ConfigOptionsAndValidatorsOrder& order,
                        ad_utility::source_location l =
-                           ad_utility::source_location::current()) {
+                           AD_CURRENT_SOURCE_LOC()) {
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "checkOrder")};
 
@@ -2518,8 +2517,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   auto testPairVector =
       [](const ConfigManager::ConfigurationDocValidatorAssignment& assignment,
          const auto& pairVector,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "testPairVector")};
         ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
@@ -2685,15 +2683,14 @@ struct AddOptionsAndValidatorToConfigManager {
 // A simple hard coded comparison test.
 TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
   // For comparing strings.
-  auto assertStringEqual = [](const std::string_view a,
-                              const std::string_view b,
-                              ad_utility::source_location l =
-                                  ad_utility::source_location::current()) {
-    // For generating better messages, when failing a test.
-    auto trace{generateLocationTrace(l, "assertStringEqual")};
+  auto assertStringEqual =
+      [](const std::string_view a, const std::string_view b,
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        // For generating better messages, when failing a test.
+        auto trace{generateLocationTrace(l, "assertStringEqual")};
 
-    ASSERT_STREQ(a.data(), b.data());
-  };
+        ASSERT_STREQ(a.data(), b.data());
+      };
 
   // Empty config manager.
   assertStringEqual(emptyConfigManagerExpectedString,

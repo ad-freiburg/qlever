@@ -31,7 +31,7 @@ namespace {
 template <typename Range, typename T = ql::ranges::range_value_t<Range>>
 auto expectAtEachStageOfGenerator(
     Range generator, std::vector<std::function<void()>> functions,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto locationTrace = generateLocationTrace(l);
   size_t index = 0;
   for ([[maybe_unused]] T& _ : generator) {
@@ -43,7 +43,7 @@ auto expectAtEachStageOfGenerator(
 
 void expectRtiHasDimensions(
     RuntimeInformation& rti, uint64_t cols, uint64_t rows,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto locationTrace = generateLocationTrace(l);
   EXPECT_EQ(rti.numCols_, cols);
   EXPECT_EQ(rti.numRows_, rows);
@@ -746,7 +746,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
                     ad_utility::MemorySize runtimeParameterLimit, bool isRoot,
                     ad_utility::MemorySize expectedSize,
                     ad_utility::source_location sourceLocation =
-                        ad_utility::source_location::current()) {
+                        AD_CURRENT_SOURCE_LOC()) {
     auto loc = generateLocationTrace(sourceLocation);
     auto qec = getQec();
     qec->getQueryTreeCache().clearAll();

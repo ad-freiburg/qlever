@@ -72,11 +72,10 @@ struct EvaluateOnChildOperand {
     auto operands = makeGenerator(AD_FWD(operand), inputSize, context);
 
     // Set up cancellation handling.
-    auto checkCancellation =
-        [context](ad_utility::source_location location =
-                      ad_utility::source_location::current()) {
-          context->cancellationHandle_->throwIfCancelled(location);
-        };
+    auto checkCancellation = [context](ad_utility::source_location location =
+                                           AD_CURRENT_SOURCE_LOC()) {
+      context->cancellationHandle_->throwIfCancelled(location);
+    };
 
     // Helper lambda that computes the aggregate of the given operands. This
     // requires that `inputs` is not empty.

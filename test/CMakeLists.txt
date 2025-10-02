@@ -474,3 +474,5 @@ addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
 addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
+
+addLinkAndDiscoverTestNoLibs(SourceLocationTest)

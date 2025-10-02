@@ -42,7 +42,7 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
                   IndexScan& fullScan,
                   const std::vector<IndexPair>& expectedRows,
                   const LimitOffsetClause& limitOffset = {},
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
@@ -103,7 +103,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
     ad_utility::MemorySize blocksizePermutations = 16_B,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
   // blocks.
@@ -134,7 +134,7 @@ void testLazyScanForJoinOfTwoScans(
 void testLazyScanThrows(const std::string& kg,
                         const SparqlTripleSimple& tripleLeft,
                         const SparqlTripleSimple& tripleRight,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
@@ -149,7 +149,7 @@ void testLazyScanForJoinWithColumn(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     std::vector<TripleComponent> columnEntries,
     const std::vector<IndexPair>& expectedRows,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
@@ -169,7 +169,7 @@ void testLazyScanForJoinWithColumn(
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     const std::vector<TripleComponent>& columnEntries,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
@@ -204,7 +204,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
        const std::vector<ValueId>& expectedIdsOnFilterColumn,
        bool prefilterCanBeSet,
        std::optional<IndexScan::PrefilterVariablePair> pr2 = std::nullopt,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
@@ -625,7 +625,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
                                         size_t numCols,
                                         source_location l =
-                                            source_location::current()) {
+                                            AD_CURRENT_SOURCE_LOC()) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
@@ -1356,7 +1356,7 @@ TEST(IndexScanTest, StripColumns) {
                                  const std::vector<Variable>& varsToKeep,
                                  const std::vector<ColumnIndex>& sortedOn,
                                  ad_utility::source_location l =
-                                     ad_utility::source_location::current()) {
+                                     AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     IdTable baseResult =
         baseScan.computeResultOnlyForTesting(false).idTable().clone();
@@ -1511,8 +1511,7 @@ TEST(IndexScanTest, StripColumns) {
                                    IndexScan& baseScanDifferentVars) {
     return [&](const std::vector<Variable>& varsToKeep,
                const std::vector<ColumnIndex>& sortedOn,
-               ad_utility::source_location l =
-                   ad_utility::source_location::current()) {
+               ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
       return testStrippedColumns(baseScan, baseScanDifferentVars, varsToKeep,
                                  sortedOn, l);
     };

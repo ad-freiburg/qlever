@@ -61,7 +61,7 @@ static void compareToColumn(
     const std::vector<T>& expectedContent,
     const ResultTable& tableToCompareAgainst,
     const ColumnNumWithType<T>& columnsToCompareAgainst,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "compareToColumn")};
 
@@ -98,7 +98,7 @@ ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
 template <typename F>
 static void generalExceptionTestTwoInputColumns(
     const F& callTransform,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
 
@@ -176,7 +176,7 @@ ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
 template <typename F>
 static void generalExceptionTestUnlimitedInputColumns(
     const F& callTransform,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{
       generateLocationTrace(l, "generalExceptionTestUnlimitedInputColumns")};
@@ -330,9 +330,9 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
   // Test things for a range of speedups.
   ql::ranges::for_each(
       std::array{2.f, 16.f, 73.696f, 4.2f},
-      [&fillColumnsForSpeedup](const float wantedSpeedup,
-                               ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+      [&fillColumnsForSpeedup](
+          const float wantedSpeedup,
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "testRangeOfSpeedups")};
         ResultTable table{createTestTable(NUM_ROWS, 10)};

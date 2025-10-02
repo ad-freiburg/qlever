@@ -47,8 +47,7 @@ auto testAccessTokenCombinations = [](auto parse, const http::verb& method,
                                       const std::optional<std::string>& body =
                                           std::nullopt,
                                       ad_utility::source_location l =
-                                          ad_utility::source_location::
-                                              current()) {
+                                          AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // Test the cases:
   // 1. No access token
@@ -85,50 +84,50 @@ auto testAccessTokenCombinations = [](auto parse, const http::verb& method,
                          "`Authorization` header and by the `access-token` "
                          "parameter, but they are not the same"));
 };
-auto testAccessTokenCombinationsUrlEncoded =
-    [](auto parse, const std::string& bodyBase,
-       const Operation& expectedOperation,
-       ad_utility::source_location l = ad_utility::source_location::current()) {
-      auto t = generateLocationTrace(l);
-      // Test the cases:
-      // 1. No access token
-      // 2. Access token in query
-      // 3. Access token in `Authorization` header
-      // 4. Different access tokens
-      // 5. Same access token
-      boost::urls::url paramsWithAccessToken{absl::StrCat("/?", bodyBase)};
-      paramsWithAccessToken.params().append({"access-token", "foo"});
-      std::string bodyWithAccessToken{
-          paramsWithAccessToken.encoded_params().buffer()};
-      ad_utility::HashMap<http::field, std::string> headers{
-          {http::field::content_type, {URLENCODED}}};
-      ad_utility::HashMap<http::field, std::string>
-          headersWithDifferentAccessToken{
-              {http::field::content_type, {URLENCODED}},
-              {http::field::authorization, "Bearer bar"}};
-      ad_utility::HashMap<http::field, std::string> headersWithSameAccessToken{
-          {http::field::content_type, {URLENCODED}},
-          {http::field::authorization, "Bearer foo"}};
-      EXPECT_THAT(parse(makeRequest(http::verb::post, "/", headers, bodyBase)),
-                  ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
-      EXPECT_THAT(parse(makeRequest(http::verb::post, "/", headers,
-                                    bodyWithAccessToken)),
-                  ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                                  expectedOperation));
-      EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
-                                    headersWithDifferentAccessToken, bodyBase)),
-                  ParsedRequestIs("/", "bar", {}, expectedOperation));
-      EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
-                                    headersWithSameAccessToken, bodyBase)),
-                  ParsedRequestIs("/", "foo", {}, expectedOperation));
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          parse(makeRequest(http::verb::post, "/",
-                            headersWithDifferentAccessToken,
-                            bodyWithAccessToken)),
-          testing::HasSubstr("Access token is specified both in the "
-                             "`Authorization` header and by the `access-token` "
-                             "parameter, but they are not the same"));
-    };
+auto testAccessTokenCombinationsUrlEncoded = [](auto parse,
+                                                const std::string& bodyBase,
+                                                const Operation&
+                                                    expectedOperation,
+                                                ad_utility::source_location l =
+                                                    AD_CURRENT_SOURCE_LOC()) {
+  auto t = generateLocationTrace(l);
+  // Test the cases:
+  // 1. No access token
+  // 2. Access token in query
+  // 3. Access token in `Authorization` header
+  // 4. Different access tokens
+  // 5. Same access token
+  boost::urls::url paramsWithAccessToken{absl::StrCat("/?", bodyBase)};
+  paramsWithAccessToken.params().append({"access-token", "foo"});
+  std::string bodyWithAccessToken{
+      paramsWithAccessToken.encoded_params().buffer()};
+  ad_utility::HashMap<http::field, std::string> headers{
+      {http::field::content_type, {URLENCODED}}};
+  ad_utility::HashMap<http::field, std::string> headersWithDifferentAccessToken{
+      {http::field::content_type, {URLENCODED}},
+      {http::field::authorization, "Bearer bar"}};
+  ad_utility::HashMap<http::field, std::string> headersWithSameAccessToken{
+      {http::field::content_type, {URLENCODED}},
+      {http::field::authorization, "Bearer foo"}};
+  EXPECT_THAT(parse(makeRequest(http::verb::post, "/", headers, bodyBase)),
+              ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
+  EXPECT_THAT(
+      parse(makeRequest(http::verb::post, "/", headers, bodyWithAccessToken)),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      expectedOperation));
+  EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
+                                headersWithDifferentAccessToken, bodyBase)),
+              ParsedRequestIs("/", "bar", {}, expectedOperation));
+  EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
+                                headersWithSameAccessToken, bodyBase)),
+              ParsedRequestIs("/", "foo", {}, expectedOperation));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makeRequest(http::verb::post, "/", headersWithDifferentAccessToken,
+                        bodyWithAccessToken)),
+      testing::HasSubstr("Access token is specified both in the "
+                         "`Authorization` header and by the `access-token` "
+                         "parameter, but they are not the same"));
+};
 
 }  // namespace
 

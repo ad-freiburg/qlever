@@ -32,7 +32,7 @@ constexpr auto I = Id::makeFromInt;
 void testExistsFromIdTable(
     IdTable left, IdTable right, std::vector<bool> expectedAsBool,
     size_t numJoinColumns,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(loc);
   AD_CORRECTNESS_CHECK(left.numRows() == expectedAsBool.size());
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
@@ -85,10 +85,9 @@ void testExistsFromIdTable(
 
 // Same as the function above, but conveniently takes `VectorTable`s instead of
 // `IdTable`s.
-void testExists(
-    const VectorTable& leftInput, const VectorTable& rightInput,
-    std::vector<bool> expectedAsBool, size_t numJoinColumns,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+void testExists(const VectorTable& leftInput, const VectorTable& rightInput,
+                std::vector<bool> expectedAsBool, size_t numJoinColumns,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto left = makeIdTableFromVector(leftInput);
   auto right = makeIdTableFromVector(rightInput);
   testExistsFromIdTable(std::move(left), std::move(right),
@@ -96,12 +95,10 @@ void testExists(
                         std::move(loc));
 }
 // Helper function to test exists join implementations.
-void testExistsJoin(std::vector<IdTable> leftTables,
-                    std::vector<IdTable> rightTables,
-                    const std::vector<IdTable>& expectedResult,
-                    bool singleVar = false,
-                    ad_utility::source_location location =
-                        ad_utility::source_location::current()) {
+void testExistsJoin(
+    std::vector<IdTable> leftTables, std::vector<IdTable> rightTables,
+    const std::vector<IdTable>& expectedResult, bool singleVar = false,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
   auto qec = ad_utility::testing::getQec();
 

@@ -1737,7 +1737,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   using ad_utility::source_location;
   auto testWithBothInterfaces = [&](bool chooseInterface,
                                     source_location l =
-                                        source_location::current()) {
+                                        AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto getId = makeGetId(qec->getIndex());
     Id idOfX = getId("<x>");
@@ -2429,8 +2429,7 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
   template <size_t N>
   static void expectReturningIdTables(
       GroupBy& groupBy, const std::array<IdTable, N>& idTables,
-      ad_utility::source_location sourceLocation =
-          ad_utility::source_location::current()) {
+      ad_utility::source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     bool lazyResult = GetParam();
     auto result = groupBy.computeResultOnlyForTesting(lazyResult);

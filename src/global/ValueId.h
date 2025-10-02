@@ -126,8 +126,8 @@ class ValueId {
 
    public:
     explicit IndexTooLargeException(
-        T tooBigValue, ad_utility::source_location s =
-                           ad_utility::source_location::current()) {
+        T tooBigValue,
+        ad_utility::source_location s = AD_CURRENT_SOURCE_LOC()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
