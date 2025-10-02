@@ -1709,7 +1709,6 @@ TEST(ExportQueryExecutionTrees,
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
-  /*
   {
     auto throwingGenerator = []() -> Result::Generator {
       std::string message = "Generator was started, but should not have been";
@@ -1725,7 +1724,6 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
-*/
   {
     auto throwAfterYieldGenerator = []() -> Result::Generator {
       Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
