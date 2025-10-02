@@ -6,6 +6,7 @@
 
 #include <boost/url.hpp>
 
+#include "backports/StartsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -253,7 +254,7 @@ using SubstrExpression =
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,
                                          std::string_view pattern) -> Id {
-  return Id::makeFromBool(text.starts_with(pattern));
+  return Id::makeFromBool(ql::starts_with(text, pattern));
 };
 
 namespace {

@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_format.h>
 
+#include "backports/StartsWith.h"
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
@@ -207,7 +208,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
       auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
           context->_qec.getIndex(), id, context->_localVocab);
       return Id::makeFromBool(word.has_value() &&
-                              word.value().first.starts_with(prefix));
+                              ql::starts_with(word.value().first, prefix));
     }
     case Datatype::EncodedVal:
       // We currently only encode IRIs.

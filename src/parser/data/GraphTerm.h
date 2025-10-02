@@ -10,6 +10,7 @@
 #include <string>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
@@ -62,7 +63,7 @@ class GraphTerm : public GraphTermBase,
       } else {
         static_assert(std::is_same_v<T, BlankNode>);
         const auto& blankNode = element.toSparql();
-        AD_CORRECTNESS_CHECK(blankNode.starts_with("_:"));
+        AD_CORRECTNESS_CHECK(ql::starts_with(blankNode, "_:"));
         return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                      blankNode.substr(2))};
       }

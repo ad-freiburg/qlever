@@ -9,6 +9,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
+#include "backports/StartsWith.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CompilerWarnings.h"
 #include "util/Log.h"
@@ -238,7 +239,7 @@ struct SkipWhitespaceAndCommentsMixin {
   // _________________________________________________________________________
   bool skipComments() {
     auto v = self().view();
-    if (v.starts_with('#')) {
+    if (ql::starts_with(v, '#')) {
       auto pos = v.find('\n');
       if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.

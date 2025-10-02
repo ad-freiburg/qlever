@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "backports/StartsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
@@ -268,9 +269,9 @@ inline auto IndexScanFromStrings =
        const std::vector<ColumnIndex>& additionalColumns = {},
        const std::optional<size_t>& strippedSize = std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
-    if (s.starts_with("?")) {
+    if (ql::starts_with(s, "?")) {
       return ::Variable{std::string{s}};
-    } else if (s.starts_with('<')) {
+    } else if (ql::starts_with(s, '<')) {
       return TripleComponent::Iri::fromIriref(s);
     }
     return s;

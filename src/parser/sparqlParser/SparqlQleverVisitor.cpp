@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "backports/StartsWith.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -105,7 +106,7 @@ GraphTerm Visitor::newBlankNodeOrVariable() {
 
 // _____________________________________________________________________________
 Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
-  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+  AD_CONTRACT_CHECK(ql::starts_with(blankNode, "_:"));
   return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                blankNode.substr(2))};
 }
@@ -140,7 +141,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // `prefixName` to the short name of the prefix; see `global/Constants.h`.
   auto checkPrefix = [&functionName, &prefixName](
                          std::pair<std::string_view, std::string_view> prefix) {
-    if (functionName.starts_with(prefix.second)) {
+    if (ql::starts_with(functionName, prefix.second)) {
       prefixName = prefix.first;
       functionName.remove_prefix(prefix.second.size());
       return true;
@@ -1293,8 +1294,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitSpatialQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitTextSearchQuery(ctx);
-  } else if (asStringViewUnsafe(serviceIri.getContent())
-                 .starts_with(CACHED_RESULT_WITH_NAME_PREFIX)) {
+  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+                             CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitNamedCachedResult(serviceIri, ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
@@ -1916,8 +1917,8 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
 
   if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
     std::string name = object.toSparql();
-    if (!((name.starts_with('"') && name.ends_with('"')) ||
-          (name.starts_with('\'') && name.ends_with('\'')))) {
+    if (!((ql::starts_with(name, '"') && name.ends_with('"')) ||
+          (ql::starts_with(name, '\'') && name.ends_with('\'')))) {
       reportError(ctx,
                   "ql:contains-word has to be followed by a string in quotes");
     }
@@ -1960,8 +1961,8 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
 
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
           string name = object.toSparql();
-          if (!((name.starts_with('"') && name.ends_with('"')) ||
-                (name.starts_with('\'') && name.ends_with('\'')))) {
+          if (!((ql::starts_with(name, '"') && name.ends_with('"')) ||
+                (ql::starts_with(name, '\'') && name.ends_with('\'')))) {
             reportError(
                 ctx,
                 "ql:contains-word has to be followed by a string in quotes");
@@ -2196,7 +2197,7 @@ PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
     return a;
   }();
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
-  if (text.starts_with("^")) {
+  if (ql::starts_with(text, "^")) {
     return PropertyPath::makeInverse(propertyPath);
   }
   return propertyPath;
@@ -3141,7 +3142,7 @@ TripleComponent SparqlQleverVisitor::graphTermToTripleComponentWithEncoding(
     } else {
       static_assert(std::is_same_v<T, BlankNode>);
       const auto& blankNode = element.toSparql();
-      AD_CORRECTNESS_CHECK(blankNode.starts_with("_:"));
+      AD_CORRECTNESS_CHECK(ql::starts_with(blankNode, "_:"));
       return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                    blankNode.substr(2))};
     }

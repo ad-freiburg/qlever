@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWith.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -254,7 +255,7 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    if (!variable.name().starts_with(QLEVER_INTERNAL_VARIABLE_PREFIX)) {
+    if (!ql::starts_with(variable.name(), QLEVER_INTERNAL_VARIABLE_PREFIX)) {
       clause.addVisibleVariable(variable);
     }
   };
@@ -286,7 +287,8 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     for (auto& triple : basicPattern->_triples) {
       auto predicate = triple.getSimplePredicate();
       if (triple.o_ == variable && predicate.has_value() &&
-          !predicate.value().starts_with(
+          !ql::starts_with(
+              predicate.value(),
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }

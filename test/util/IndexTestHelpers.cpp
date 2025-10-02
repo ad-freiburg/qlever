@@ -6,6 +6,7 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "backports/StartsWith.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
@@ -191,7 +192,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       // Extract prefixes without angle brackets from the EncodedIriManager
       std::vector<std::string> prefixes;
       for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(prefix.starts_with('<') && !prefix.ends_with('>'));
+        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
+                             !prefix.ends_with('>'));
         prefixes.push_back(prefix.substr(1));
       }
       index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
@@ -355,10 +357,10 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() -> TripleComponent {
-      if (el.starts_with('<') || el.starts_with('@')) {
+      if (ql::starts_with(el, '<') || ql::starts_with(el, '@')) {
         return TripleComponent::Iri::fromIriref(el);
       } else {
-        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        AD_CONTRACT_CHECK(ql::starts_with(el, '\"'));
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();

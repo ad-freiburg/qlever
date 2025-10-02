@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/StartsWith.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -55,7 +56,7 @@ class PrefixCompressor {
   // codebook, and it is currently not a bottleneck in the IndexBuilder.
   [[nodiscard]] std::string compress(std::string_view word) const {
     for (const auto& p : codeToPrefix_) {
-      if (word.starts_with(p.prefix_)) {
+      if (ql::starts_with(word, p.prefix_)) {
         return p.code_ + std::string_view(word).substr(p.prefix_.size());
       }
     }

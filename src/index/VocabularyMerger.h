@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
@@ -81,7 +82,7 @@ struct VocabularyMetaData {
     // words that start with the `prefix_` have to be passed in consecutively
     // and their indices have to be consecutive and ascending.
     bool addIfWordMatches(std::string_view word, size_t wordIndex) {
-      if (!word.starts_with(prefix_)) {
+      if (!ql::starts_with(word, prefix_)) {
         return false;
       }
       if (!beginWasSeen_) {

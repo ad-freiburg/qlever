@@ -4,6 +4,7 @@
 
 #include "ParsedRequestBuilder.h"
 
+#include "backports/StartsWith.h"
 #include "engine/HttpError.h"
 #include "util/Algorithm.h"
 
@@ -177,7 +178,7 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   if (request.find(http::field::authorization) != request.end()) {
     std::string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
-    if (!authorization.starts_with(prefix)) {
+    if (!ql::starts_with(authorization, prefix)) {
       throw std::runtime_error(absl::StrCat(
           "Authorization header doesn't start with \"", prefix, "\"."));
     }

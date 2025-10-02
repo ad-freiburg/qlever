@@ -7,13 +7,15 @@
 
 #include "parser/NamedCachedResult.h"
 
+#include "backports/StartsWith.h"
+
 namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has
 // the expected format and extract the query name.
 std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
   auto view = asStringViewUnsafe(iri.getContent());
   AD_CORRECTNESS_CHECK(
-      view.starts_with(CACHED_RESULT_WITH_NAME_PREFIX),
+      ql::starts_with(view, CACHED_RESULT_WITH_NAME_PREFIX),
       "The target IRI of a named cached query must start with `",
       CACHED_RESULT_WITH_NAME_PREFIX, "`, but was `", view, "`");
   // Remove the prefix

@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
@@ -62,7 +63,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;
       // Remove the question mark from the variable name if requested.
-      if (!includeQuestionMark && varString.starts_with('?')) {
+      if (!includeQuestionMark && ql::starts_with(varString, '?')) {
         varString = varString.substr(1);
       }
       exportColumns.push_back(

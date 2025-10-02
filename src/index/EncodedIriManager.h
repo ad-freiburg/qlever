@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
@@ -99,7 +100,7 @@ class EncodedIriManagerImpl {
     for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
       const auto& a = prefixesWithoutAngleBrackets.at(i);
       const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
-      if (b.starts_with(a)) {
+      if (ql::starts_with(b, a)) {
         throw std::runtime_error(absl::StrCat(
             "None of the prefixes specified with `--encode-as-id` "
             "may be a prefix of another; here is a violating pair: \"",
@@ -108,7 +109,7 @@ class EncodedIriManagerImpl {
     }
     prefixes_.reserve(prefixesWithoutAngleBrackets.size());
     for (const auto& prefix : prefixesWithoutAngleBrackets) {
-      if (prefix.starts_with('<')) {
+      if (ql::starts_with(prefix, '<')) {
         throw std::runtime_error(absl::StrCat(
             "The prefixes specified with `--encode-as-id` must not "
             "be enclosed in angle brackets; here is a violating prefix: \"",
@@ -128,7 +129,7 @@ class EncodedIriManagerImpl {
   std::optional<Id> encode(std::string_view repr) const {
     // Find the matching prefix.
     auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
-      return repr.starts_with(prefix);
+      return ql::starts_with(repr, prefix);
     });
     if (it == prefixes_.end()) {
       return std::nullopt;

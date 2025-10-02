@@ -9,6 +9,7 @@
 #include <exception>
 #include <regex>
 
+#include "backports/StartsWith.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
@@ -134,7 +135,7 @@ TEST_F(ServiceTest, basicMethods) {
   // Test the basic methods.
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
-  ASSERT_TRUE(serviceOp.getCacheKey().starts_with("SERVICE "))
+  ASSERT_TRUE(ql::starts_with(serviceOp.getCacheKey(), "SERVICE "))
       << serviceOp.getCacheKey();
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);

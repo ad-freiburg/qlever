@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/StartsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -38,8 +39,8 @@ ExpressionResult CountStarExpression::evaluate(
 
   auto varToColNoInternalVariables =
       ctx->_variableToColumnMap | ql::views::filter([](const auto& varAndIdx) {
-        return !varAndIdx.first.name().starts_with(
-            QLEVER_INTERNAL_VARIABLE_PREFIX);
+        return !ql::starts_with(varAndIdx.first.name(),
+                                QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
   table.setNumColumns(ql::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());

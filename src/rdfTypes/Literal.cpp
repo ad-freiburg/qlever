@@ -7,6 +7,7 @@
 #include <utility>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "backports/shift.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
@@ -22,7 +23,7 @@ namespace ad_utility::triple_component {
 // __________________________________________
 Literal::Literal(std::string content, size_t beginOfSuffix)
     : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
-  AD_CORRECTNESS_CHECK(content_.starts_with(quote));
+  AD_CORRECTNESS_CHECK(ql::starts_with(content_, quote));
   AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
   AD_CORRECTNESS_CHECK(content_[beginOfSuffix_ - 1] == quote);
   AD_CORRECTNESS_CHECK(beginOfSuffix_ == content_.size() ||
@@ -31,10 +32,12 @@ Literal::Literal(std::string content, size_t beginOfSuffix)
 }
 
 // __________________________________________
-bool Literal::hasLanguageTag() const { return getSuffix().starts_with(at); }
+bool Literal::hasLanguageTag() const {
+  return ql::starts_with(getSuffix(), at);
+}
 
 // __________________________________________
-bool Literal::hasDatatype() const { return getSuffix().starts_with(hat); }
+bool Literal::hasDatatype() const { return ql::starts_with(getSuffix(), hat); }
 
 // __________________________________________
 NormalizedStringView Literal::getContent() const {
@@ -111,7 +114,7 @@ Literal Literal::literalWithNormalizedContent(
 // __________________________________________
 void Literal::addLanguageTag(std::string_view languageTag) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
-  if (languageTag.starts_with('@')) {
+  if (ql::starts_with(languageTag, '@')) {
     absl::StrAppend(&content_, languageTag);
   } else {
     absl::StrAppend(&content_, "@"sv, languageTag);
@@ -134,7 +137,7 @@ std::string& Literal::toStringRepresentation() { return content_; }
 Literal Literal::fromStringRepresentation(std::string internal) {
   // TODO<joka921> This is a little dangerous as there might be quotes in the
   // IRI which might lead to unexpected results here.
-  AD_CORRECTNESS_CHECK(internal.starts_with('"'));
+  AD_CORRECTNESS_CHECK(ql::starts_with(internal, '"'));
   auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
   return Literal{std::move(internal), endIdx + 1};

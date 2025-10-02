@@ -9,6 +9,7 @@
 #include <re2/re2.h>
 
 #include "NaryExpressionImpl.h"
+#include "backports/StartsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -89,7 +90,7 @@ namespace sparqlExpression {
 // _____________________________________________________________________________
 std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     std::string regex) {
-  if (!regex.starts_with('^')) {
+  if (!ql::starts_with(regex, '^')) {
     return std::nullopt;
   }
   // Check if we can use the more efficient prefix filter instead

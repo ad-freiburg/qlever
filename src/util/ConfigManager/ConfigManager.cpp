@@ -23,6 +23,7 @@
 #include <utility>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/iterator.h"
@@ -408,7 +409,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           the
           `/` to the (maybe) prefix, for it to work right.
           */
-          return jsonPointerString.starts_with(absl::StrCat(prefix, "/"));
+          return ql::starts_with(jsonPointerString, absl::StrCat(prefix, "/"));
         };
 
         // Is the new path a prefix of the path of an already
