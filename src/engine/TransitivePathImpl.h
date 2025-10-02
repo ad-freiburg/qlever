@@ -9,6 +9,7 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
+#include <cstdint>
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
@@ -27,6 +28,8 @@ struct TableColumnWithVocab {
   PayloadTable payload_;
   ColumnType startNodes_;
   LocalVocab vocab_;
+
+  using column_type = ColumnType;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
@@ -261,7 +264,6 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent start, TripleComponent target,
                      bool yieldOnce) const {
-    ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
@@ -277,46 +279,99 @@ class TransitivePathImpl : public TransitivePathBase {
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
         start.isVariable() && graphVariable_ == start.getVariable();
-    for (auto&& tableColumn : startNodes) {
-      timer.cont();
-      LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(edgesVocab);
-      for (const auto& [currentRow, pair] :
-           ::ranges::views::enumerate(tableColumn.startNodes_)) {
-        for (const auto& [startNode, graphId] :
-             tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
-          // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
-          // where both `?g` variables are not the same.
-          if (startsWithGraphVariable && startNode != graphId) {
-            continue;
-          }
-          if (sameVariableOnBothSides) {
-            targetId = startNode;
-          } else if (endsWithGraphVariable) {
-            targetId = graphId;
-          }
-          edges.setGraphId(graphId);
-          Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
-          if (!connectedNodes.empty()) {
-            runtimeInfo().addDetail("Hull time", timer.msecs());
-            timer.stop();
-            co_yield NodeWithTargets{startNode,
-                                     graphId,
-                                     std::move(connectedNodes),
-                                     mergedVocab.clone(),
-                                     tableColumn.payload_,
-                                     static_cast<size_t>(currentRow)};
-            timer.cont();
-            // Reset vocab to prevent merging the same vocab over and over
-            // again.
-            if (yieldOnce) {
-              mergedVocab = LocalVocab{};
-            }
-          }
-        }
+
+    // Return the ID of the target node when searching for connected nodes.
+    // Returns either `startNode`, `graphId` or `targetId`,
+    // where the selection logic covers the following case:
+    // SELECT * {
+    //   ?x <a>+ ?x . # sameVariableOnBothSides
+    //   GRAPH ?g {
+    //     ?y <b>+ ?g # endsWithGraphVariable
+    //   }
+    //   # else
+    //   VALUES ?z { <d> }
+    //   ?z <c>+ <e> # <e> would be the target id
+    //   ?z <c>+ ?e  # std::nullopt would be the target id
+    // }
+    auto getTargetId = [targetId = std::move(targetId), sameVariableOnBothSides,
+                        endsWithGraphVariable](
+                           const Id& startNode,
+                           const Id& graphId) -> std::optional<Id> {
+      if (sameVariableOnBothSides) {
+        return startNode;
+      } else if (endsWithGraphVariable) {
+        return graphId;
+      } else {
+        return targetId;
       }
-      timer.stop();
-    }
+    };
+
+    return NodeGenerator(
+        ql::ranges::transform_view(
+            ad_utility::OwningView(std::move(startNodes)),
+            [this, edges = std::move(edges), edgesVocab = std::move(edgesVocab),
+             yieldOnce, getTargetId = std::move(getTargetId),
+             startsWithGraphVariable, targetHelper = std::move(targetHelper),
+             timer = ad_utility::Timer{ad_utility::Timer::Stopped}](
+                auto&& tableColumn) mutable {
+              timer.cont();
+              LocalVocab mergedVocab = std::move(tableColumn.vocab_);
+              mergedVocab.mergeWith(edgesVocab);
+              return ::ranges::views::enumerate(tableColumn.startNodes_) |
+                     ql::views::transform([this, &edges, &getTargetId,
+                                           yieldOnce, &timer,
+                                           startsWithGraphVariable,
+                                           &tableColumn, &mergedVocab](
+                                              const auto& enumerateValue) {
+                       const auto& [currentRow, pair] = enumerateValue;
+                       return ad_utility::OwningView(tableColumn.expandUndef(
+                                  pair, edges, graphVariable_.has_value())) |
+                              ql::views::filter(
+                                  [&timer, startsWithGraphVariable](
+                                      const auto& idPair) {
+                                    timer.cont();
+                                    // Skip generation of values for `SELECT * {
+                                    // GRAPH ?g { ?g a* ?x}}` where both `?g`
+                                    // variables are not the same.
+                                    const auto& [startNode, graphId] = idPair;
+                                    return !(startsWithGraphVariable &&
+                                             startNode != graphId);
+                                  }) |
+                              ql::views::transform(
+                                  [this, &edges, &getTargetId, &tableColumn,
+                                   &mergedVocab,
+                                   &currentRow](const auto& idPair) {
+                                    const auto& [startNode, graphId] = idPair;
+                                    edges.setGraphId(graphId);
+                                    Set connectedNodes = findConnectedNodes(
+                                        edges, startNode,
+                                        getTargetId(startNode, graphId));
+                                    return NodeWithTargets{
+                                        startNode,
+                                        graphId,
+                                        std::move(connectedNodes),
+                                        mergedVocab.clone(),
+                                        tableColumn.payload_,
+                                        static_cast<size_t>(currentRow)};
+                                  }) |
+                              ql::views::filter(
+                                  [this, &mergedVocab, &timer, yieldOnce](
+                                      const NodeWithTargets& result) mutable {
+                                    if (result.targets_.empty()) {
+                                      return false;
+                                    }
+                                    runtimeInfo().addDetail("Hull time",
+                                                            timer.msecs());
+                                    timer.stop();
+                                    if (yieldOnce) {
+                                      mergedVocab = LocalVocab{};
+                                    }
+                                    return true;
+                                  });
+                     }) |
+                     ql::views::join;
+            }) |
+        ql::views::join);
   }
 
   /**

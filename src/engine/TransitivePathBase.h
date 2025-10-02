@@ -116,7 +116,7 @@ struct NodeWithTargets {
         row_{row} {}
 };
 
-using NodeGenerator = cppcoro::generator<NodeWithTargets>;
+using NodeGenerator = ad_utility::InputRangeTypeErased<NodeWithTargets>;
 
 /**
  * @class TransitivePathBase
