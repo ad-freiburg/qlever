@@ -192,8 +192,9 @@ CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
-    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp,
+             typename Compare)(requires ql::concepts::forward_iterator<
+                               ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
   using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
