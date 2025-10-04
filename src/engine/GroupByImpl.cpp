@@ -1646,10 +1646,9 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       runtimeInfo().addDetail("hybridInitialProcessing",
                               initialProcessingTimer.msecs());
 
-      AD_LOG_DEBUG << "GroupBy HashMap groups: (est: "
-                   << aggregationData.numGroups()
-                   << ") > (thr: " << groupThreshold
-                   << "), switching to hybrid approach during block processing"
+      AD_LOG_DEBUG << "GroupBy HashMap groups: " << aggregationData.numGroups()
+                   << " > (threshold=) " << groupThreshold
+                   << ", switching to hybrid approach during block processing"
                    << std::endl;
       // If threshold was exceeded, we need to handle remaining unprocessed rows
       // Note: nonMatchingRows contains only the unprocessed rows from current
@@ -1730,10 +1729,11 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   }
 
   // perform sort-based grouping on buffered new groups
-  restSortTimer.cont();
-  Engine::sort(restTable, data.columnIndices_.value());
-  restSortTimer.stop();
-
+  if (restTable.numRows() > 0) {
+    restSortTimer.cont();
+    Engine::sort(restTable, data.columnIndices_.value());
+    restSortTimer.stop();
+  }
   restGroupByTimer.cont();
   IdTable restResult = CALL_FIXED_SIZE((std::array{inWidth, getResultWidth()}),
                                        &GroupByImpl::doGroupBy, this, restTable,
@@ -1746,13 +1746,15 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       aggregationData, data.aggregateAliases_, &localVocab);
   hashResultTimer.stop();
 
-  finalMergeTimer.cont();
-  hashResult.insertAtEnd(restResult);
-  finalMergeTimer.stop();
+  if (restTable.numRows() > 0) {
+    finalMergeTimer.cont();
+    hashResult.insertAtEnd(restResult);
+    finalMergeTimer.stop();
 
-  finalSortTimer.cont();
-  Engine::sort(hashResult, resultSortedOn());
-  finalSortTimer.stop();
+    finalSortTimer.cont();
+    Engine::sort(hashResult, resultSortedOn());
+    finalSortTimer.stop();
+  }
 
   remainderProcessingTimer.stop();
 
@@ -1828,9 +1830,10 @@ GroupByImpl::updateHashMapWithTable(
         table, evaluationContext._beginIndex, evaluationContext.size(),
         data.columnIndices_.value());
 
+    auto offset = thresholdExceededDuringThisTable ? i : 0;
     timers.lookupTimer_.cont();
     auto lookupResult = aggregationData.getHashEntries(
-        groupValues, onlyInsertPreexistingKeys, evaluationContext._beginIndex);
+        groupValues, onlyInsertPreexistingKeys, offset);
     timers.lookupTimer_.stop();
 
     if (onlyInsertPreexistingKeys) {

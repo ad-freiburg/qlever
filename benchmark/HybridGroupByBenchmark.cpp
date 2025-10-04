@@ -54,7 +54,7 @@ static std::unordered_map<std::string, std::string> runGroupByCount(
 }
 
 std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
-                                QueryExecutionContext* qec) {
+                                size_t numGroups, QueryExecutionContext* qec) {
   std::vector<IdTable> blocks;
   blocks.reserve((numRows + blockSize - 1) / blockSize);
   ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
@@ -69,7 +69,7 @@ std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
     for (size_t i = 0; i < nThis; ++i) {
       size_t gIdx = produced + i;
 
-      c0[i] = ValueId::makeFromInt(static_cast<int64_t>(gIdx / 1.2));
+      c0[i] = ValueId::makeFromInt(static_cast<int64_t>(gIdx % numGroups));
       c1[i] = ValueId::makeFromInt(gen());
     }
     blocks.push_back(std::move(t));
@@ -79,12 +79,12 @@ std::vector<IdTable> makeBlocks(size_t numRows, size_t blockSize,
 }
 
 std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
-    bool useBlocks, size_t numRows, size_t blockSize,
+    bool useBlocks, size_t numRows, size_t blockSize, size_t numGroups,
     QueryExecutionContext* qec) {
   std::vector<std::optional<Variable>> vars = {Variable{"?a"}, Variable{"?b"}};
   std::shared_ptr<QueryExecutionTree> valuesTree;
   if (useBlocks) {
-    auto blocks = makeBlocks(numRows, blockSize, qec);
+    auto blocks = makeBlocks(numRows, blockSize, numGroups, qec);
     // DON'T advertise sortedColumns - let the explicit Sort do the work
     valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(blocks), vars, /*mayHaveUnbound=*/false);
@@ -94,7 +94,7 @@ std::shared_ptr<QueryExecutionTree> buildSortedSubtree(
     table.resize(numRows);
     auto col1 = table.getColumn(0);
     for (size_t i = 0; i < col1.size(); ++i) {
-      col1[i] = ValueId::makeFromInt(static_cast<int64_t>(i / 1.2));
+      col1[i] = ValueId::makeFromInt(static_cast<int64_t>(i % numGroups));
     }
     auto col2 = table.getColumn(1);
     ad_utility::SlowRandomIntGenerator<int64_t> gen{0, 1000};
@@ -155,67 +155,74 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
          /*hybrid*/ true},
     };
 
-    size_t numMeasurements = 10;
-    size_t startNumRows = 100'000;
-    size_t endNumRows = 100'000'000;
+    size_t numMeasurements = 1;
+    size_t startNumRows = 1'000'000;
+    size_t endNumRows = 1'000'000;
     float blockSizeFactor = 0.08;
-    size_t startThreshold = 10'000;
-    size_t endThreshold = 10'000'000;
+    size_t startThreshold = 100'000;
+    size_t endThreshold = 100'000;
+    size_t totalNumGroups = 1'000'000;
+    size_t groupSegments = 20;
 
     for (const auto& s : scenarios) {
       RuntimeParameters().set<"group-by-hash-map-enabled">(s.useHashMap_);
 
-      size_t numRows = startNumRows;
-      while (numRows <= endNumRows) {
-        size_t blockSize = size_t(numRows * blockSizeFactor);
+      size_t numGroups = totalNumGroups / groupSegments;
+      while (numGroups <= totalNumGroups) {
+        size_t numRows = startNumRows;
+        while (numRows <= endNumRows) {
+          size_t blockSize = size_t(numRows * blockSizeFactor);
 
-        // For hybrid scenarios, vary the threshold; for others, run once with
-        // a huge threshold to effectively disable fallback.
-        std::vector<size_t> thresholds;
-        if (s.hybrid_) {
-          for (size_t t = startThreshold; t <= endThreshold && t < numRows;
-               t *= 10) {
-            thresholds.push_back(t);
+          // For hybrid scenarios, vary the threshold; for others, run once with
+          // a huge threshold to effectively disable fallback.
+          std::vector<size_t> thresholds;
+          if (s.hybrid_) {
+            for (size_t t = startThreshold; t <= endThreshold && t < numRows;
+                 t *= 10) {
+              thresholds.push_back(t);
+            }
+          } else {
+            thresholds.push_back(hugeThreshold);
           }
-        } else {
-          thresholds.push_back(hugeThreshold);
-        }
 
-        for (size_t threshold : thresholds) {
-          RuntimeParameters().set<"group-by-hash-map-group-threshold">(
-              threshold);
-          // Create a group per parameter setting (Rows x BlockSize).
-          std::string subName =
-              absl::StrCat(s.name_, "|rows=", numRows, "|block=", blockSize,
-                           "|thresh=", threshold);
-          auto& group = results.addGroup(subName);
-          // Inherit scenario metadata and add per-config values.
-          group.metadata().addKeyValuePair("ParentGroup", s.name_);
-          group.metadata().addKeyValuePair("Sorted", false);
-          group.metadata().addKeyValuePair("HashMapEnabled", s.useHashMap_);
-          group.metadata().addKeyValuePair("Threshold", threshold);
-          group.metadata().addKeyValuePair("Note", s.note_);
-          group.metadata().addKeyValuePair("Rows", numRows);
-          group.metadata().addKeyValuePair("BlockSize", blockSize);
+          for (size_t threshold : thresholds) {
+            RuntimeParameters().set<"group-by-hash-map-group-threshold">(
+                threshold);
+            // Create a group per parameter setting (Rows x BlockSize).
+            std::string subName =
+                absl::StrCat(s.name_, "|rows=", numRows, "|block=", blockSize,
+                             "|thresh=", threshold, "|groups=", numGroups);
+            auto& group = results.addGroup(subName);
+            // Inherit scenario metadata and add per-config values.
+            group.metadata().addKeyValuePair("ParentGroup", s.name_);
+            group.metadata().addKeyValuePair("Sorted", false);
+            group.metadata().addKeyValuePair("HashMapEnabled", s.useHashMap_);
+            group.metadata().addKeyValuePair("Threshold", threshold);
+            group.metadata().addKeyValuePair("Note", s.note_);
+            group.metadata().addKeyValuePair("Rows", numRows);
+            group.metadata().addKeyValuePair("BlockSize", blockSize);
 
-          for (size_t i = 0; i < numMeasurements; ++i) {
-            std::unordered_map<std::string, std::string> timingsForMeasurement;
+            for (size_t i = 0; i < numMeasurements; ++i) {
+              std::unordered_map<std::string, std::string>
+                  timingsForMeasurement;
 
-            auto& measurement = group.addMeasurement(std::to_string(i), [&]() {
-              // Build fresh tree for each measurement to ensure clean state
-              auto sortedTree =
-                  buildSortedSubtree(s.useBlocks_, numRows, blockSize, qec);
-              timingsForMeasurement = runGroupByCount(qec, sortedTree);
-            });
+              auto& measurement =
+                  group.addMeasurement(std::to_string(i), [&]() {
+                    auto sortedTree = buildSortedSubtree(
+                        s.useBlocks_, numRows, blockSize, numGroups, qec);
+                    timingsForMeasurement = runGroupByCount(qec, sortedTree);
+                  });
 
-            // After the measured function has run, attach all timing key/values
-            // to the metadata of this measurement.
-            for (const auto& [key, value] : timingsForMeasurement) {
-              measurement.metadata().addKeyValuePair(key, value);
+              // After the measured function has run, attach all timing
+              // key/values to the metadata of this measurement.
+              for (const auto& [key, value] : timingsForMeasurement) {
+                measurement.metadata().addKeyValuePair(key, value);
+              }
             }
           }
+          numRows *= 10;
         }
-        numRows *= 10;
+        numGroups += totalNumGroups / groupSegments;
       }
     }
 
