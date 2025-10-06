@@ -297,11 +297,11 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   using namespace ad_utility::memory_literals;
   auto alloc = ad_utility::testing::makeAllocator();
 
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
-                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
+      filename, NUM_COLS, 10_B, alloc};
   ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
-  IdTableStatic<0> t1{3, alloc};
+  IdTableStatic<0> t1{NUM_COLS, alloc};
   EXPECT_NO_THROW(erased.pushBlock(t1));
-  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_NO_THROW(t1.setNumColumns(NUM_COLS + 1));
   EXPECT_ANY_THROW(erased.pushBlock(t1));
 }
