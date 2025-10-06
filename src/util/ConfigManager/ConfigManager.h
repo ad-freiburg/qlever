@@ -761,18 +761,18 @@ class ConfigManager {
     // Return either `configOption_` or `configManager_`, based on type.
     CPP_template(typename T)(requires ConfigOptionOrManager<T>) constexpr const
         MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
-      if constexpr (std::same_as<T, ConfigOption>) {
+      if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
-      } else if constexpr (std::same_as<T, ConfigManager>) {
+      } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {
         return configManager_;
       }
     }
     CPP_template(typename T)(
         requires ConfigOptionOrManager<
             T>) constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
-      if constexpr (std::same_as<T, ConfigOption>) {
+      if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
-      } else if constexpr (std::same_as<T, ConfigManager>) {
+      } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {
         return configManager_;
       }
     }

@@ -31,7 +31,7 @@ using SetIndexToEndAction =
 /// where `*` can be any type. False otherwise.
 template <typename Func>
 CPP_concept IteratorWithBreak =
-    std::invocable<Func, size_t, SetIndexToEndAction>;
+    ql::concepts::invocable<Func, size_t, SetIndexToEndAction>;
 
 /// Helper concept that allows `chunkedForLoop` to offer an action with an
 /// optional second argument in `action`.

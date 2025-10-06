@@ -854,7 +854,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
   using ProjectedEl = LeftSide::ProjectedEl;
-  static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
+  static_assert(
+      ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
       !std::is_same_v<IsUndef, AlwaysFalse>;
 
