@@ -117,7 +117,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   // result, no matter if it is done on the level of strings or on `SortKey`s.
   auto assertConsistent = [&comparator, &comp](
                               const auto& a, const auto& b,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     bool ab = comp(a, b);
     bool ba = comp(b, a);
@@ -136,14 +136,14 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 
   auto assertTrue = [&comp, &assertConsistent](
                         const auto& a, const auto& b,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_TRUE(comp(a, b));
     assertConsistent(a, b);
   };
   auto assertFalse = [&comp, &assertConsistent](
                          const auto& a, const auto& b,
-                         source_location l = source_location::current()) {
+                         source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_FALSE(comp(a, b));
     assertConsistent(a, b);

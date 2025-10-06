@@ -15,10 +15,10 @@ auto iri = ad_utility::testing::iri;
 TEST(SparqlParser, Update) {
   auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   // Automatically test all updates for their `_originalString`.
-  auto expectUpdate = [&expectUpdate_](
-                          const std::string& query, auto&& expected,
-                          ad_utility::source_location l =
-                              ad_utility::source_location::current()) {
+  auto expectUpdate = [&expectUpdate_](const std::string& query,
+                                       auto&& expected,
+                                       ad_utility::source_location l =
+                                           AD_CURRENT_SOURCE_LOC()) {
     expectUpdate_(query,
                   testing::ElementsAre(
                       testing::AllOf(expected, m::pq::OriginalString(query))),

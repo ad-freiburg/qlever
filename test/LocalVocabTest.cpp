@@ -216,8 +216,7 @@ TEST(LocalVocab, propagation) {
   auto checkLocalVocab =
       [&](Operation& operation,
           const std::vector<std::string>& expectedWordsAsStrings,
-          ad_utility::source_location loc =
-              ad_utility::source_location::current()) -> void {
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
     TestWords expectedWords;
     auto toLitOrIri = [](const auto& word) {

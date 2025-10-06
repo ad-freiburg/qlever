@@ -620,7 +620,7 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudget(std::string query, auto matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
-                           source_location l = source_location::current()) {
+                           source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto budgetBackup =
       getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
   setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
@@ -642,7 +642,7 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudgets(std::string query, auto matcher,
                             std::optional<QueryExecutionContext*> optQec,
                             std::vector<size_t> queryPlanningBudgets,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   for (size_t budget : queryPlanningBudgets) {
     expectWithGivenBudget<QueryPlannerClass>(query, matcher, optQec, budget, l);
   }
@@ -653,7 +653,7 @@ void expectWithGivenBudgets(std::string query, auto matcher,
 template <typename QueryPlannerClass = QueryPlanner>
 void expectGreedy(std::string query, auto matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
                                            optQec, 0, l);
 }
@@ -663,7 +663,7 @@ template <typename QueryPlannerClass = QueryPlanner>
 void expectDynamicProgramming(
     std::string query, auto matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(
       std::move(query), std::move(matcher), optQec,
       std::numeric_limits<size_t>::max(), l);
@@ -675,7 +675,7 @@ void expectDynamicProgramming(
 template <typename QueryPlannerClass = QueryPlanner>
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
-            source_location l = source_location::current()) {
+            source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudgets<QueryPlannerClass>(
       std::move(query), std::move(matcher), std::move(optQec),
       {0, 1, 4, 16, 64'000'000}, l);

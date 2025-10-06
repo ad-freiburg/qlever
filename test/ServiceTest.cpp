@@ -62,7 +62,7 @@ class ServiceTest : public ::testing::Test {
          std::string contentType = "application/sparql-results+json",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> SendRequestType {
+             AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     // Check that the request parameters are as expected.
     //
     // NOTE: Method, Content-Type and Accept are hard-coded in
@@ -185,7 +185,7 @@ TEST_F(ServiceTest, computeResult) {
             std::string contentType = "application/sparql-results+json",
             bool silent = false,
             ad_utility::source_location loc =
-                ad_utility::source_location::current()) -> Result {
+                AD_CURRENT_SOURCE_LOC()) -> Result {
       Service s{
           testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
           getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
@@ -248,8 +248,7 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result, std::string_view errorMsg,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            ad_utility::source_location loc =
-                ad_utility::source_location::current()) {
+            ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
           auto g = generateLocationTrace(loc);
           AD_EXPECT_THROW_WITH_MESSAGE(
               runComputeResult(result, status, contentType, false),
