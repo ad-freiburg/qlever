@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
+#include "backports/StartsWith.h"
 #include "index/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
@@ -241,7 +242,7 @@ TEST(LocaleManager, PrefixSortKey) {
     for (size_t i = 0; i < s.size(); ++i) {
       auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
       (void)numCodepoints;
-      ASSERT_TRUE(complete.starts_with(partial.get()));
+      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
       print(partial.get());
     }
   };

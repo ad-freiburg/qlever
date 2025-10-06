@@ -9,6 +9,7 @@
 
 #include <iostream>
 
+#include "backports/StartsWith.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
@@ -82,7 +83,7 @@ void Vocabulary<S, C, I>::createFromSet(
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
-  return s.starts_with('"');
+  return ql::starts_with(s, '"');
 }
 
 // _____________________________________________________________________________
@@ -104,7 +105,8 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
   // Never externalize the internal IRIs as they are sometimes added before or
   // after the externalization happens, and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
-  if (word.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
+  if (ql::starts_with(word,
+                      QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
     return false;
   }
   // Never externalize the special IRIs starting with `@` (for example,
@@ -113,13 +115,13 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
   // `.settings.json` file.
   //
   // TODO: This points to a bug or inconsistency elsewhere in the code.
-  if (word.starts_with("@")) {
+  if (ql::starts_with(word, "@")) {
     return false;
   }
   // Otherwise, externalize if and only if there is a prefix match for one of
   // `externalizedPrefixes_`.
   return ql::ranges::any_of(externalizedPrefixes_, [&word](const auto& p) {
-    return word.starts_with(p);
+    return ql::starts_with(word, p);
   });
 }
 
@@ -128,7 +130,7 @@ template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
     std::string_view word) const {
   for (const auto& p : externalizedPrefixes_) {
-    if (word.starts_with(p)) {
+    if (ql::starts_with(word, p)) {
       return true;
     }
   }

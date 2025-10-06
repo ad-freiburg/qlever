@@ -4,6 +4,7 @@
 
 #include "engine/SparqlProtocol.h"
 
+#include "backports/StartsWith.h"
 #include "engine/HttpError.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -127,13 +128,13 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parsePOST(
   // currently always expect UTF-8.
   // TODO<joka921> Implement more complete parsing that allows the checking
   // of these parameters.
-  if (contentType.starts_with(contentTypeUrlEncoded)) {
+  if (ql::starts_with(contentType, contentTypeUrlEncoded)) {
     return parseUrlencodedPOST(request);
   }
-  if (contentType.starts_with(contentTypeSparqlQuery)) {
+  if (ql::starts_with(contentType, contentTypeSparqlQuery)) {
     return parseSPARQLPOST<Query>(request, contentTypeSparqlQuery);
   }
-  if (contentType.starts_with(contentTypeSparqlUpdate)) {
+  if (ql::starts_with(contentType, contentTypeSparqlUpdate)) {
     return parseSPARQLPOST<Update>(request, contentTypeSparqlUpdate);
   }
   // No content type applies, we expect the request to be a graph store
@@ -182,7 +183,7 @@ ad_utility::url_parser::ParsedRequest SparqlProtocol::parseHttpRequest(
   // TODO<qup42>: make request const again once the conformance tests are fixed.
   // Fixup for request target missing the leading slash.
   std::string target = request.target();
-  if (!target.starts_with("/")) {
+  if (!ql::starts_with(target, "/")) {
     target = absl::StrCat("/", target);
   }
   request.target(target);

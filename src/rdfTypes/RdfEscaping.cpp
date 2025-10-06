@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/StartsWith.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -173,12 +174,13 @@ static void literalUnescape(std::string_view input, std::string& res) {
 // ____________________________________________________________________________
 static void literalUnescapeWithQuotesRemoved(std::string_view input,
                                              std::string& res) {
-  if (input.starts_with(R"(""")") || input.starts_with(R"(''')")) {
+  if (ql::starts_with(input, R"(""")") || input.starts_with(R"(''')")) {
     AD_CONTRACT_CHECK(input.ends_with(input.substr(0, 3)));
     input.remove_prefix(3);
     input.remove_suffix(3);
   } else {
-    AD_CONTRACT_CHECK(input.starts_with("\"") || input.starts_with("'"));
+    AD_CONTRACT_CHECK(ql::starts_with(input, "\"") ||
+                      ql::starts_with(input, "'"));
     AD_CONTRACT_CHECK(input.ends_with(input[0]));
     input.remove_prefix(1);
     input.remove_suffix(1);
@@ -200,7 +202,7 @@ NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
 
 // ____________________________________________________________________________
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
-  AD_CONTRACT_CHECK(normLiteral.starts_with('"'));
+  AD_CONTRACT_CHECK(ql::starts_with(normLiteral, '"'));
   size_t posSecondQuote = normLiteral.find('"', 1);
   AD_CONTRACT_CHECK(posSecondQuote != std::string::npos);
   size_t posLastQuote = normLiteral.rfind('"');
@@ -230,7 +232,7 @@ static void unescapeIriWithoutBrackets(std::string_view input,
 
 // __________________________________________________________________________
 static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
-  AD_CONTRACT_CHECK(input.starts_with("<") && input.ends_with(">"));
+  AD_CONTRACT_CHECK(ql::starts_with(input, "<") && input.ends_with(">"));
   input.remove_prefix(1);
   input.remove_suffix(1);
   unescapeIriWithoutBrackets(input, res);
@@ -310,11 +312,11 @@ std::string escapeForXml(std::string input) {
 
 // __________________________________________________________________________
 std::string normalizedContentFromLiteralOrIri(std::string&& input) {
-  if (input.starts_with('<')) {
+  if (ql::starts_with(input, '<')) {
     AD_CORRECTNESS_CHECK(input.ends_with('>'));
     ql::shift_left(input.begin(), input.end(), 1);
     input.resize(input.size() - 2);
-  } else if (input.starts_with('"')) {
+  } else if (ql::starts_with(input, '"')) {
     auto posLastQuote = static_cast<int64_t>(input.rfind('"'));
     AD_CORRECTNESS_CHECK(posLastQuote > 0);
     ql::shift_left(input.begin(), input.begin() + posLastQuote, 1);
@@ -364,7 +366,7 @@ NormalizedString normalizeIriWithoutBrackets(std::string_view input) {
 
 // __________________________________________________________________________
 NormalizedString normalizeLanguageTag(std::string_view input) {
-  if (input.starts_with('@')) {
+  if (ql::starts_with(input, '@')) {
     input.remove_prefix(1);
   }
   return toNormalizedString(input);

@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include "backports/StartsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -172,8 +173,8 @@ Result Service::computeResultImpl(bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ad_utility::utf8ToLower(response.contentType_)
-           .starts_with("application/sparql-results+json")) {
+  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
+                       "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
@@ -526,7 +527,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
-      } else if (value.starts_with('<')) {
+      } else if (ql::starts_with(value, '<')) {
         return value;
       } else {
         return RdfEscaping::validRDFLiteralFromNormalized(value);

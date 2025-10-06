@@ -6,6 +6,7 @@
 
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -17,7 +18,7 @@ using SGV =
 using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
 [[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
-  return s.starts_with("\"a");
+  return ql::starts_with(s, "\"a");
 };
 
 [[maybe_unused]] auto testSplitFnTwoFunction =
@@ -32,7 +33,7 @@ using TwoSplitVocabulary =
 
 [[maybe_unused]] auto testSplitThreeFunction =
     [](std::string_view s) -> uint8_t {
-  if (s.starts_with("\"")) {
+  if (ql::starts_with(s, "\"")) {
     if (s.ends_with("\"^^<http://example.com>")) {
       return 1;
     } else if (s.ends_with("\"^^<blabliblu>")) {

@@ -22,6 +22,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
+#include "backports/StartsWith.h"
 #include "backports/type_traits.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
@@ -1076,7 +1077,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
       mFirstLetter.addOption("dValue", "", &firstInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt) {
-        return opt.getIdentifier().starts_with('d');
+        return ql::starts_with(opt.getIdentifier(), 'd');
       },
       "Every option name must start with the letter d.", "", correctLetter);
   ASSERT_NO_THROW(
@@ -1084,8 +1085,8 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
   decltype(auto) wrongLetter = mFirstLetter.addOption("value", "", &secondInt);
   mFirstLetter.addOptionValidator(
       [](const ConfigOption& opt1, const ConfigOption& opt2) {
-        return opt1.getIdentifier().starts_with('d') &&
-               opt2.getIdentifier().starts_with('d');
+        return ql::starts_with(opt1.getIdentifier(), 'd') &&
+               ql::starts_with(opt2.getIdentifier(), 'd');
       },
       "Every option name must start with the letter d.", "", correctLetter,
       wrongLetter);
