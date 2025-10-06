@@ -33,6 +33,13 @@
 #include "util/Timer.h"
 
 namespace groupBy::detail {
+
+template <typename T>
+CPP_requires(HasResize, requires(T& val)(val.resize(std::declval<size_t>())));
+
+template <typename T>
+CPP_concept HasResize = CPP_requires_ref(HasResize, T);
+
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 class LazyGroupByRange
     : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
@@ -1261,7 +1268,7 @@ void GroupByImpl::extractValues(
 
 // _____________________________________________________________________________
 static constexpr auto resizeIfVector = [](auto& val, size_t size) {
-  if constexpr (requires { val.resize(size); }) {
+  if constexpr (groupBy::detail::HasResize<decltype(val)>) {
     val.resize(size);
   }
 };
@@ -1398,8 +1405,8 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
       T & arg, size_t numberOfGroups,
       [[maybe_unused]] const HashMapAggregateTypeWithData& info)(
       requires true) {
-    if constexpr (std::same_as<typename T::value_type,
-                               GroupConcatAggregationData>) {
+    if constexpr (ql::concepts::same_as<typename T::value_type,
+                                        GroupConcatAggregationData>) {
       arg.resize(numberOfGroups,
                  GroupConcatAggregationData{info.separator_.value()});
     } else {

@@ -410,9 +410,11 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // `GeometryInfo` is available, the WKT literal is parsed and only the
 // `RequestedInfo` is computed ad hoc (for example the bounding box is not
 // calculated, when requesting the centroid).
-template <typename RequestedInfo = ad_utility::GeometryInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+
+CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
+    requires ad_utility::RequestedInfoT<
+        RequestedInfo>) struct GeometryInfoValueGetter
+    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;

@@ -349,8 +349,7 @@ class IdTable {
   // Throw if the row or the column is out of bounds. See the note for
   // `operator()` above.
   CPP_template(typename = void)(requires(!isView)) T& at(size_t row,
-                                                         size_t column)
-      requires(!isView) {
+                                                         size_t column) {
     return data().at(column).at(row);
   }
   // TODO<C++26> Remove overload for `isView` and drop requires clause.
@@ -360,7 +359,7 @@ class IdTable {
   }
   // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
   CPP_template(typename = void)(requires(isView)) const T& at(
-      size_t row, size_t column) const requires(isView) {
+      size_t row, size_t column) const {
     const auto& col = data().at(column);
     AD_CONTRACT_CHECK(row < col.size());
     return col[row];
@@ -465,8 +464,9 @@ class IdTable {
   // stores the right type and has the right size.
   CPP_template(typename RowLike)(
       requires CPP_NOT(isView) CPP_and ql::ranges::random_access_range<RowLike>
-          CPP_and std::same_as<ql::ranges::range_value_t<RowLike>,
-                               T>) void push_back(const RowLike& newRow) {
+          CPP_and
+              ql::concepts::same_as<ql::ranges::range_value_t<RowLike>,
+                                    T>) void push_back(const RowLike& newRow) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     ql::ranges::for_each(ad_utility::integerRange(numColumns()),
