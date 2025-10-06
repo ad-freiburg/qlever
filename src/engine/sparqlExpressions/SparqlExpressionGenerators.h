@@ -116,9 +116,9 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   using V = ql::ranges::range_value_t<decltype(gen)>;
 
   if constexpr (std::is_trivially_copyable_v<V>) {
-    auto chunked = ::ranges::views::chunk(std::move(gen), 1000);
+    auto chunked = ::ranges::views::chunk(std::move(gen), 10000);
     auto toVector = [](const auto& chunk) {
-      absl::InlinedVector<V, 1000> v;
+      absl::InlinedVector<V, 10000> v;
       ql::ranges::copy(chunk, std::back_inserter(v));
       return v;
     };
