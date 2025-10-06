@@ -41,8 +41,8 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     EngineConfig ec{c};
     Qlever engine{ec};
     // Run a simple query.
-    auto res = engine.query("SELECT ?s WHERE { ?s <p> <o> }",
-                            ad_utility::MediaType::tsv);
+    std::string query = "SELECT ?s WHERE { ?s <p> <o> }";
+    auto res = engine.query(query, ad_utility::MediaType::tsv);
     EXPECT_EQ(res, "?s\n<s>\n");
 
     // Run with a different media type.
@@ -54,8 +54,33 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     auto plan = engine.parseAndPlanQuery("SELECT * WHERE { <s> <p> ?o }");
     res = engine.query(plan, ad_utility::MediaType::csv);
     EXPECT_EQ(res, "o\no\n");
+
+    // Test the explicit query cache.
+    engine.queryAndPinResultWithName("pin1", query);
+    std::string serviceQuery =
+        "SELECT ?s WHERE { SERVICE ql:cached-result-with-name-pin1 {}}";
+    std::string serviceQuery2 =
+        "SELECT ?s WHERE { SERVICE ql:cached-result-with-name-pin2 {}}";
+    res = engine.query(serviceQuery, ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?s\n<s>\n");
+    engine.eraseResultWithName("pin1");
+    auto notPinned =
+        ::testing::HasSubstr("is not contained in the named result cache");
+    AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
+
+    // Pin again.
+    engine.queryAndPinResultWithName("pin1", query);
+    engine.queryAndPinResultWithName("pin2", query);
+    EXPECT_NO_THROW(engine.query(serviceQuery));
+    EXPECT_NO_THROW(engine.query(serviceQuery2));
+
+    // Clearing erases all queries.
+    engine.clearNamedResultCache();
+    AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
+    AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);
   }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   c.addWordsFromLiterals_ = true;
 
   // Note: Currently the `addWordsFromLiterals` feature is broken, but
@@ -64,10 +89,16 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   EngineConfig ec{c};
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
+#endif
 }
 
 // _____________________________________________________________________________
 TEST(LibQlever, fulltextIndex) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  GTEST_SKIP_(
+      "Fulltext index not available in the reduced feature set (at least for "
+      "now)");
+#endif
   auto basename = "libQleverFulltextIndex";
   std::string filename = absl::StrCat(basename, ".ttl");
   std::string wordsfileName = absl::StrCat(basename, ".words");

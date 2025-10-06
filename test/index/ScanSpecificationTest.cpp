@@ -16,18 +16,18 @@ TEST(ScanSpecification, getters) {
   EXPECT_EQ(s.col0Id(), i);
   EXPECT_EQ(s.col1Id(), j);
   EXPECT_EQ(s.col2Id(), k);
-  AD_EXPECT_NULLOPT(s.graphsToFilter());
+  EXPECT_EQ(s.graphFilter(), ScanSpecification::GraphFilter::All());
 
   auto graphsToFilter = ad_utility::HashSet<Id>{i, k};
 
   auto n = std::nullopt;
-  s = ScanSpecification{n, n, n, {}, graphsToFilter};
+  s = ScanSpecification{
+      n, n, n, {}, ScanSpecification::GraphFilter::Whitelist(graphsToFilter)};
   AD_EXPECT_NULLOPT(s.col0Id());
   AD_EXPECT_NULLOPT(s.col1Id());
   AD_EXPECT_NULLOPT(s.col2Id());
-  EXPECT_THAT(s.graphsToFilter(),
-              ::testing::Optional(
-                  ::testing::UnorderedElementsAreArray(graphsToFilter)));
+  EXPECT_EQ(s.graphFilter(),
+            ScanSpecification::GraphFilter::Whitelist(graphsToFilter));
 }
 // _____________________________________________________________________________
 TEST(ScanSpecification, validate) {
@@ -60,7 +60,7 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
 
   const auto& index = ad_utility::testing::getQec()->getIndex();
   auto toScanSpec = [&index](const STc& s) {
-    return s.toScanSpecification(index);
+    return s.toScanSpecification(index.getImpl());
   };
 
   // Match that a `ScanSpecificationAsTripleComponent` has the expected number
@@ -71,19 +71,11 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
                                          0) -> ::testing::Matcher<const STc&> {
     auto innerMatcher = [&toScanSpec, &spec] {
       using namespace ::testing;
-      auto graphMatcher = [&spec]() -> Matcher<const S::Graphs&> {
-        if (!spec.graphsToFilter().has_value()) {
-          return Eq(std::nullopt);
-        } else {
-          return Optional(
-              UnorderedElementsAreArray(spec.graphsToFilter().value()));
-        }
-      };
-      return ResultOf(toScanSpec,
-                      AllOf(AD_PROPERTY(S, col0Id, spec.col0Id()),
-                            AD_PROPERTY(S, col1Id, spec.col1Id()),
-                            AD_PROPERTY(S, col2Id, spec.col2Id()),
-                            AD_PROPERTY(S, graphsToFilter, graphMatcher())));
+      return ResultOf(toScanSpec, AllOf(AD_PROPERTY(S, col0Id, spec.col0Id()),
+                                        AD_PROPERTY(S, col1Id, spec.col1Id()),
+                                        AD_PROPERTY(S, col2Id, spec.col2Id()),
+                                        AD_PROPERTY(S, graphFilter,
+                                                    Eq(spec.graphFilter()))));
     };
     return AllOf(AD_PROPERTY(STc, numColumns, numColumns), innerMatcher());
   };
@@ -95,9 +87,11 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
   using GIri = ad_utility::HashSet<TripleComponent>;
   using G = ad_utility::HashSet<Id>;
   ad_utility::HashSet<Id> graphs{i};
-  EXPECT_THAT(STc(n, n, n, GIri{iTc}), matchScanSpec(S(n, n, n, {}, G{i}), 3));
+  EXPECT_THAT(
+      STc(n, n, n, STc::GraphFilter::Whitelist(GIri{iTc})),
+      matchScanSpec(S(n, n, n, {}, S::GraphFilter::Whitelist(G{i})), 3));
   // Test that the matcher is in fact sensitive to the Graph ID.
-  EXPECT_THAT(STc(n, n, n, GIri{iTc}),
+  EXPECT_THAT(STc(n, n, n, STc::GraphFilter::Whitelist(GIri{iTc})),
               ::testing::Not(matchScanSpec(S(n, n, n), 3)));
 
   // Test the resolution of vocab entries.
@@ -117,8 +111,11 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
               matchScanSpec(S(localVocabId, x, x)));
   EXPECT_THAT(STc(xIri, notInVocab, xIri),
               matchScanSpec(S(x, localVocabId, x)));
-  EXPECT_THAT(STc(xIri, xIri, notInVocab, GIri{xIri, notInVocab}),
-              matchScanSpec(S(x, x, localVocabId, {}, G{x, localVocabId})));
-  EXPECT_THAT(STc(xIri, xIri, notInVocab, GIri{xIri, notInVocab}),
+  EXPECT_THAT(STc(xIri, xIri, notInVocab,
+                  STc::GraphFilter::Whitelist(GIri{xIri, notInVocab})),
+              matchScanSpec(S(x, x, localVocabId, {},
+                              S::GraphFilter::Whitelist(G{x, localVocabId}))));
+  EXPECT_THAT(STc(xIri, xIri, notInVocab,
+                  STc::GraphFilter::Whitelist(GIri{xIri, notInVocab})),
               ::testing::Not(matchScanSpec(S(x, x, localVocabId))));
 }

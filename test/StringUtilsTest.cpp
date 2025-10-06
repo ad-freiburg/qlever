@@ -186,7 +186,7 @@ TEST(StringUtils, insertThousandSeparator) {
   */
   auto doNotExceptionTest = [](auto valueIdentity, const char separatorSymbol,
                                ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+                                   AD_CURRENT_SOURCE_LOC()) {
     static constexpr char floatingPointSignifier = valueIdentity.value;
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "doNotExceptionTest")};
@@ -205,9 +205,9 @@ TEST(StringUtils, insertThousandSeparator) {
     number 4", "198."}`.
     */
     auto simpleComparisonTest =
-        [&separatorSymbol](const std::vector<std::string>& stringPieces,
-                           ad_utility::source_location l =
-                               ad_utility::source_location::current()) {
+        [&separatorSymbol](
+            const std::vector<std::string>& stringPieces,
+            ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
           // For generating better messages, when failing a test.
           auto trace{generateLocationTrace(l, "simpleComparisonTest")};
           ASSERT_STREQ(
@@ -400,7 +400,7 @@ TEST(StringUtils, constexprStrCatImpl) {
 TEST(StringUtils, truncateOperationString) {
   auto expectTruncate = [](std::string_view test, bool willTruncate,
                            ad_utility::source_location l =
-                               ad_utility::source_location::current()) {
+                               AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     const std::string truncated = ad_utility::truncateOperationString(test);
     if (willTruncate) {

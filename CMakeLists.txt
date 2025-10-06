@@ -25,9 +25,18 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# By default, QLever uses precompiled headers for widely used modules. However when heavily modifying the headers that
+# contribute to the precompiled headers, then it might be beneficial to deactivate precompiled headers.
+option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times" ON)
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17)
+endif()
 
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -82,7 +91,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
+        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
 )
 
 ################################
@@ -131,7 +140,7 @@ add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+        GIT_TAG 7f5c9007090cd1b902ad1873beb064820caebf39
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -434,9 +443,11 @@ set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h sr
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
-target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
-target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+if (USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
+endif ()
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
@@ -455,11 +466,13 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+if (USE_PRECOMPILED_HEADERS)
 target_precompile_headers(ServerMain REUSE_FROM engine)
+endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)

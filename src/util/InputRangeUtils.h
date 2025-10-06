@@ -7,6 +7,8 @@
 #include <optional>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "util/Iterators.h"
 #include "util/Views.h"
 
 // This file contains helper classes that can be used to replace
@@ -27,15 +29,25 @@ namespace ad_utility {
 // optimization (RVO).
 // 3. This class only yields an input range, independent of the range category
 // of the input.
-CPP_class_template(typename View, typename F)(requires(
+// 4. Optionally, this class can propagate the `Details` of an underlying view.
+//    To make this work, the template parameters have to be explicitly stated,
+//    and the underlying view must inherit from the `DetailsProvider`. See
+//    `InputRangeUtilsTest.cpp` for an example, and `IndexScan.cpp` for a
+//    real-life usage.
+CPP_class_template(typename View, typename F,
+                   typename Details = NoDetails)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
                                      View>>)) struct CachingTransformInputRange
-    : InputRangeFromGet<std::decay_t<
-          std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>> {
+    : InputRangeFromGet<std::decay_t<std::invoke_result_t<
+                            F, ql::ranges::range_reference_t<View>>>,
+                        Details> {
  private:
   using Res = std::invoke_result_t<F, ql::ranges::range_reference_t<View>>;
+  using Base = InputRangeFromGet<std::decay_t<std::invoke_result_t<
+                                     F, ql::ranges::range_reference_t<View>>>,
+                                 Details>;
   static_assert(std::is_object_v<Res>,
                 "The functor of `CachingTransformInputRange` must yield an "
                 "object type, not a reference");
@@ -49,7 +61,11 @@ CPP_class_template(typename View, typename F)(requires(
  public:
   // Constructor.
   explicit CachingTransformInputRange(View view, F transformation = {})
-      : view_{std::move(view)}, transfomation_(std::move(transformation)) {}
+      : view_{std::move(view)}, transfomation_(std::move(transformation)) {
+    if constexpr (!std::is_same_v<Details, NoDetails>) {
+      static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
+    }
+  }
 
   // TODO<joka921> Make this private again and give explicit access to low-level
   // tools like the ones below.
@@ -101,19 +117,36 @@ struct LoopControl {
  public:
   using type = T;
   using Range = InputRangeTypeErased<T>;
-  using V = std::variant<T, Continue, Break, BreakWithValue, Range>;
+
+ private:
+  // A statement that yields all values from a range and then immediately breaks
+  // the loop.
+  struct BreakWithYieldAll {
+    Range range_;
+  };
+
+ public:
+  using V = std::variant<T, Continue, Break, BreakWithValue, Range,
+                         BreakWithYieldAll>;
   V v_;
   bool isContinue() const { return std::holds_alternative<Continue>(v_); }
   bool isBreak() const {
     return std::holds_alternative<Break>(v_) ||
-           std::holds_alternative<BreakWithValue>(v_);
+           std::holds_alternative<BreakWithValue>(v_) ||
+           std::holds_alternative<BreakWithYieldAll>(v_);
+  }
+  bool isBreakWithYieldAll() const {
+    return std::holds_alternative<BreakWithYieldAll>(v_);
   }
 
-  // If the variant holds a `Range<T>`, return the range by moving it out,
-  // else `nullopt`.
+  // If the variant holds a `Range<T>` or `BreakWithYieldAll`, return the range
+  // by moving it out, else `nullopt`.
   std::optional<Range> moveRangeIfPresent() {
     if (std::holds_alternative<Range>(v_)) {
       return std::move(std::get<Range>(v_));
+    }
+    if (std::holds_alternative<BreakWithYieldAll>(v_)) {
+      return std::move(std::get<BreakWithYieldAll>(v_).range_);
     }
     return std::nullopt;
   }
@@ -127,7 +160,8 @@ struct LoopControl {
         return std::nullopt;
       } else if constexpr (ad_utility::SimilarTo<U, T>) {
         return std::move(v);
-      } else if constexpr (ad_utility::SimilarTo<U, InputRangeTypeErased<T>>) {
+      } else if constexpr (ad_utility::SimilarToAny<U, Range,
+                                                    BreakWithYieldAll>) {
         AD_FAIL();
       } else {
         static_assert(ad_utility::SimilarTo<U, BreakWithValue>);
@@ -142,6 +176,11 @@ struct LoopControl {
   static LoopControl makeBreak() { return LoopControl{Break{}}; }
   static LoopControl breakWithValue(T t) {
     return LoopControl{BreakWithValue{std::move(t)}};
+  }
+  template <typename R>
+  static LoopControl breakWithYieldAll(R&& r) {
+    return LoopControl{BreakWithYieldAll{
+        InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}}};
   }
   static LoopControl yieldValue(T t) { return LoopControl{std::move(t)}; }
 
@@ -210,7 +249,7 @@ CPP_class_template(typename F)(
     : InputRangeFromGet<detail::ResFromFunction<F>> {
  private:
   using T = detail::ResFromFunction<F>;
-  F getFunction_;
+  [[no_unique_address]] F getFunction_;
   std::optional<InputRangeTypeErased<T>> innerRange_;
   using Res = detail::ResFromFunction<F>;
   static_assert(std::is_object_v<Res>,
@@ -220,6 +259,10 @@ CPP_class_template(typename F)(
   // If set to true then we have seen a `break` statement and no more values
   // are yielded.
   bool receivedBreak_ = false;
+
+  // If set to true, we should break after the current innerRange_ is exhausted.
+  // This is used for BreakWithYieldAll.
+  bool shouldBreakAfterRange_ = false;
 
  public:
   // Constructor.
@@ -236,22 +279,33 @@ CPP_class_template(typename F)(
     while (true) {
       if (innerRange_.has_value()) {
         auto res = innerRange_.value().get();
-        if (!res.has_value()) {
-          innerRange_.reset();
-        } else {
+        if (res.has_value()) {
           return res;
+        }
+        // Range is exhausted.
+        innerRange_.reset();
+        // If we were supposed to break after this range, do so now and end.
+        if (shouldBreakAfterRange_) {
+          receivedBreak_ = true;
+          shouldBreakAfterRange_ = false;
+          return std::nullopt;
         }
       }
       auto loopControl = getFunction_();
       if (loopControl.isContinue()) {
         continue;
       }
-      if (loopControl.isBreak()) {
+      if (loopControl.isBreak() && !loopControl.isBreakWithYieldAll()) {
         receivedBreak_ = true;
       }
 
       innerRange_ = loopControl.moveRangeIfPresent();
       if (innerRange_.has_value()) {
+        // For BreakWithYieldAll, we set shouldBreakAfterRange_ so that
+        // once this range is exhausted, we don't call getFunction_ again
+        if (loopControl.isBreakWithYieldAll()) {
+          shouldBreakAfterRange_ = true;
+        }
         continue;
       }
       return loopControl.moveValueIfPresent();

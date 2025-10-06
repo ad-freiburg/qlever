@@ -32,6 +32,11 @@ class QueryPlanner {
   // Note: The behavior of only taking the innermost graph variable into account
   // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
+  // Store a flag that decides if only named graphs or all graphs including the
+  // default graph are supposed to be bound to the graph variable.
+  parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+      defaultGraphBehaviour_ =
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL;
 
  public:
   using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
@@ -660,6 +665,7 @@ class QueryPlanner {
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
+    void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
@@ -716,8 +722,14 @@ class QueryPlanner {
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet and throw an exception if this is the case.
-  void checkCancellation(ad_utility::source_location location =
-                             ad_utility::source_location::current()) const;
+  void checkCancellation(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const;
+
+  // Return a filter that filters the active graphs. Outside of `GRAPH` clauses,
+  // the default graphs (implicit, or specified via `FROM`) are active, and
+  // inside a `GRAPH` clause, the named graphs are active (specified via an
+  // explicit IRI in the `GRAPH` clause, or via `FROM NAMED`).
+  qlever::index::GraphFilter<TripleComponent> getActiveGraphs() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

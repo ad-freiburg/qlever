@@ -131,7 +131,8 @@ void PatternCreator::readPatternsFromFile(
     uint64_t& numDistinctSubjectPredicatePairs,
     CompactVectorOfStrings<Id>& patterns) {
   // Read the pattern info from the patterns file.
-  LOG(INFO) << "Reading patterns from file " << filename << " ..." << std::endl;
+  AD_LOG_INFO << "Reading patterns from file " << filename << " ..."
+              << std::endl;
 
   // Read the subjectToPatternMap.
   ad_utility::serialization::FileReadSerializer patternReader(filename);
@@ -150,18 +151,18 @@ void PatternCreator::readPatternsFromFile(
 // ____________________________________________________________________________
 void PatternCreator::printStatistics(
     PatternStatistics patternStatistics) const {
-  LOG(INFO) << "Number of distinct patterns: " << patternToIdAndCount_.size()
-            << std::endl;
-  LOG(INFO) << "Number of subjects with pattern: " << numDistinctSubjects_
-            << " [all]" << std::endl;
-  LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-            << numDistinctSubjectPredicatePairs_ << std::endl;
-  LOG(INFO) << "Average number of predicates per subject: " << std::fixed
-            << std::setprecision(1)
-            << patternStatistics.avgNumDistinctPredicatesPerSubject_
-            << std::endl;
-  LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
-            << std::setprecision(0)
-            << patternStatistics.avgNumDistinctSubjectsPerPredicate_
-            << std::endl;
+  AD_LOG_INFO << "Number of distinct patterns: " << patternToIdAndCount_.size()
+              << std::endl;
+  AD_LOG_INFO << "Number of subjects with pattern: " << numDistinctSubjects_
+              << " [all]" << std::endl;
+  AD_LOG_INFO << "Total number of distinct subject-predicate pairs: "
+              << numDistinctSubjectPredicatePairs_ << std::endl;
+  AD_LOG_INFO << "Average number of predicates per subject: " << std::fixed
+              << std::setprecision(1)
+              << patternStatistics.avgNumDistinctPredicatesPerSubject_
+              << std::endl;
+  AD_LOG_INFO << "Average number of subjects per predicate: " << std::fixed
+              << std::setprecision(0)
+              << patternStatistics.avgNumDistinctSubjectsPerPredicate_
+              << std::endl;
 }

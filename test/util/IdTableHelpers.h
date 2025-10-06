@@ -135,7 +135,7 @@ void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
-    ad_utility::source_location l = ad_utility::source_location::current());
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC());
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during
