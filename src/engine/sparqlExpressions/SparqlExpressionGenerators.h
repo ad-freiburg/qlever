@@ -122,7 +122,8 @@ inline auto resultGenerator(S&& input, size_t targetSize,
       ql::ranges::copy(chunk, std::back_inserter(v));
       return v;
     };
-    return std::move(chunked) | ql::views::transform(toVector) |
+    return ad_utility::OwningView{ad_utility::InputRangeTypeErased{
+               std::move(chunked) | ql::views::transform(toVector)}} |
            ql::views::join;
   } else {
     return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
