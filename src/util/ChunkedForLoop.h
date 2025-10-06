@@ -47,7 +47,7 @@ CPP_concept IteratorAction =
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
 CPP_template(std::size_t CHUNK_SIZE, typename Action, typename ChunkOpT)(
-    requires detail::IteratorAction<Action> CPP_and std::invocable<
+    requires detail::IteratorAction<Action> CPP_and ql::concepts::invocable<
         ChunkOpT>) inline void chunkedForLoop(std::size_t start,
                                               std::size_t end,
                                               const Action& action,
@@ -77,9 +77,9 @@ CPP_concept SizedInputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename R, typename O, typename ChunkOperationFunc)(
-    requires SizedInputRange<R> CPP_and std::weakly_incrementable<O> CPP_and
-        std::invocable<ChunkOperationFunc>
-            CPP_and std::indirectly_copyable<
+    requires SizedInputRange<R> CPP_and ql::concepts::weakly_incrementable<O>
+        CPP_and ql::concepts::invocable<ChunkOperationFunc>
+            CPP_and ql::concepts::indirectly_copyable<
                 ql::ranges::iterator_t<R>,
                 O>) inline void chunkedCopy(R&& inputRange, O result,
                                             ql::ranges::range_difference_t<R>

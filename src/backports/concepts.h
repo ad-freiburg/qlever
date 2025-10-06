@@ -113,11 +113,14 @@ using namespace ::concepts;
 using ::ranges::bidirectional_iterator;
 using ::ranges::contiguous_iterator;
 using ::ranges::forward_iterator;
+using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
+using ::ranges::invocable;
 using ::ranges::random_access_iterator;
 using ::ranges::same_as;
 using ::ranges::sentinel_for;
 using ::ranges::sized_sentinel_for;
+using ::ranges::weakly_incrementable;
 #else
 using namespace std;
 #endif
