@@ -68,7 +68,7 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper, &indexConfig](
           const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         Index index = ad_utility::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig);
@@ -90,7 +90,7 @@ TEST(ExecuteUpdate, executeUpdate) {
       [&expectExecuteUpdateHelper](
           Index& index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
@@ -107,7 +107,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         [&expectExecuteUpdateFails_](
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
+            source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
           Index index = ad_utility::testing::makeTestIndex(
               "ExecuteUpdate_executeUpdate",
               ad_utility::testing::TestIndexConfig());
@@ -252,7 +252,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
               toInsertMatchers,
           std::vector<Matcher<const std::vector<::IdTriple<>>&>>
               toDeleteMatchers,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
@@ -278,7 +278,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
           const Matcher<const std::string&>& messageMatcher,
-          source_location sourceLocation = source_location::current()) {
+          source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
                                      messageMatcher);
@@ -588,7 +588,7 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
 TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
   auto expect = [](std::vector<IdTriple<>> input,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     ExecuteUpdate::sortAndRemoveDuplicates(input);
     EXPECT_THAT(input, testing::ElementsAreArray(expected));
@@ -610,7 +610,7 @@ TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
 TEST(ExecuteUpdate, setMinus) {
   auto expect = [](std::vector<IdTriple<>> a, std::vector<IdTriple<>> b,
                    const std::vector<IdTriple<>>& expected,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(ExecuteUpdate::setMinus(a, b),
                 testing::ElementsAreArray(expected));

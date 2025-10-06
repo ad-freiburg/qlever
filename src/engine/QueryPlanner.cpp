@@ -16,6 +16,7 @@
 #include <range/v3/view/cartesian_product.hpp>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/Bind.h"
@@ -843,14 +844,14 @@ auto QueryPlanner::seedWithScansAndText(
               return var.name();
             }},
         node.triple_.p_);
-    if ((input.starts_with(MAX_DIST_IN_METERS) ||
-         input.starts_with(NEAREST_NEIGHBORS)) &&
+    if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
+         ql::starts_with(input, NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
       parsedQuery::SpatialQuery config{node.triple_};
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, config.toSpatialJoinConfiguration(), std::nullopt,
           std::nullopt);
-      if (input.starts_with(NEAREST_NEIGHBORS)) {
+      if (ql::starts_with(input, NEAREST_NEIGHBORS)) {
         plan._qet->getRootOperation()->addWarning(absl::StrCat(
             "The special predicate <nearest-neighbors:...> is deprecated due "
             "to confusing semantics. Please upgrade your query to the new "

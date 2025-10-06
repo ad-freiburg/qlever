@@ -4,11 +4,12 @@
 
 #include "Quads.h"
 
+#include "backports/StartsWith.h"
 #include "parser/UpdateClause.h"
 
 // ____________________________________________________________________________________
 Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
-  AD_CORRECTNESS_CHECK(label.starts_with("_:"));
+  AD_CORRECTNESS_CHECK(ql::starts_with(label, "_:"));
   auto [it, isNew] = map_.try_emplace(label.substr(2), Id::makeUndefined());
   auto& id = it->second;
   if (isNew) {
