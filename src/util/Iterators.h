@@ -311,6 +311,9 @@ class InputRangeFromGet
  public:
   using Storage = std::optional<ValueType>;
   using Details = DetailsType;
+  using Base =
+      DetailsProvider<InputRangeFromGet<ValueType, DetailsType>, DetailsType>;
+  using Base::setDetailsPointer;
 
   Storage storage_ = std::nullopt;
 

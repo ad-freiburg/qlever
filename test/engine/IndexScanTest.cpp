@@ -896,11 +896,11 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return IndexScan{qec_, Permutation::PSO, xpy};
   }
 
-  // Consume generator `first` first and store it in a vector, then do the same
+  // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeSequentially(Result::Generator first, Result::Generator second) {
+  consumeSequentially(Result::LazyResult first, Result::LazyResult second) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 
@@ -913,22 +913,21 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return {std::move(firstResult), std::move(secondResult)};
   }
 
-  // Consume the generators and store the results in vectors using the
+  // Consume the ranges and store the results in vectors using the
   // parameterized strategy.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeGenerators(
-      std::pair<Result::Generator, Result::Generator> generatorPair) {
+  consumeRanges(std::pair<Result::LazyResult, Result::LazyResult> rangePair) {
     std::vector<Result::IdTableVocabPair> joinSideResults;
     std::vector<Result::IdTableVocabPair> scanResults;
 
     bool rightFirst = GetParam();
     if (rightFirst) {
       std::tie(scanResults, joinSideResults) = consumeSequentially(
-          std::move(generatorPair.second), std::move(generatorPair.first));
+          std::move(rangePair.second), std::move(rangePair.first));
     } else {
       std::tie(joinSideResults, scanResults) = consumeSequentially(
-          std::move(generatorPair.first), std::move(generatorPair.second));
+          std::move(rangePair.first), std::move(rangePair.second));
     }
     return {std::move(joinSideResults), std::move(scanResults)};
   }
@@ -952,8 +951,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     co_yield p3;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -996,8 +995,8 @@ TEST_P(IndexScanWithLazyJoin,
     co_yield p2;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -1030,7 +1029,7 @@ TEST_P(IndexScanWithLazyJoin,
   };
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
@@ -1054,7 +1053,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
                    P{makeIdTable({iri("<c>")}), LocalVocab{}}};
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -1086,7 +1085,7 @@ TEST_P(IndexScanWithLazyJoin,
 
   size_t counter = 0;
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
+  auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{ad_utility::CachingTransformInputRange{
                                std::move(pairs),
                                [&counter, &indexG](auto& pair) mutable {
@@ -1128,8 +1127,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
     co_yield p7;
   };
 
-  auto [_, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [_, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1160,7 +1159,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1191,7 +1190,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1203,7 +1202,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
   auto makeJoinSide = []() -> Result::Generator { co_return; };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
