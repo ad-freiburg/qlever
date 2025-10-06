@@ -108,7 +108,7 @@ CPP_concept SizedOutputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename T, typename R, typename ChunkOperationFunc)(
-    requires SizedOutputRange<R, T> CPP_and std::invocable<
+    requires SizedOutputRange<R, T> CPP_and ql::concepts::invocable<
         ChunkOperationFunc>) inline void chunkedFill(R&& outputRange,
                                                      const T& value,
                                                      ql::ranges::

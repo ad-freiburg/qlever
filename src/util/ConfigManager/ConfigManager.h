@@ -93,12 +93,12 @@ class ConfigManager {
 
     // Wrapper for calling `std::visit` on the saved `Data`.
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis);
     CPP_template(typename Visitor)(
-        requires std::invocable<Visitor, ConfigOption&> CPP_and
-            std::invocable<Visitor, ConfigManager&>) decltype(auto)
+        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
+            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
         visit(Visitor&& vis) const;
 
    private:
@@ -131,10 +131,10 @@ class ConfigManager {
     CPP_template(typename Visitor, typename PointerType)(
         requires ad_utility::SimilarTo<
             std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-            CPP_and std::invocable<
+            CPP_and ql::concepts::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigOption&, ConfigOption&>>
-                CPP_and std::invocable<
+                CPP_and ql::concepts::invocable<
                     Visitor,
                     std::conditional_t<std::is_const_v<PointerType>,
                                        const ConfigManager&,
@@ -212,7 +212,7 @@ class ConfigManager {
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
       requires SupportedConfigOptionType<OptionType> CPP_and
-          std::same_as<OptionType, DefaultValueType>)
+          ql::concepts::same_as<OptionType, DefaultValueType>)
       ConstConfigOptionProxy<OptionType> addOption(
           const std::vector<std::string>& pathToOption,
           std::string_view optionDescription,
@@ -251,7 +251,7 @@ class ConfigManager {
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
       requires SupportedConfigOptionType<OptionType> CPP_and
-          std::same_as<OptionType, DefaultValueType>)
+          ql::concepts::same_as<OptionType, DefaultValueType>)
       ConstConfigOptionProxy<OptionType> addOption(
           std::string optionName, std::string_view optionDescription,
           OptionType* variableToPutValueOfTheOptionIn,

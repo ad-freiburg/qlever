@@ -111,16 +111,25 @@ namespace ql::concepts {
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
 using ::ranges::bidirectional_iterator;
+using ::ranges::constructible_from;
 using ::ranges::contiguous_iterator;
 using ::ranges::forward_iterator;
 using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
+using ::ranges::integral;
 using ::ranges::invocable;
 using ::ranges::random_access_iterator;
 using ::ranges::same_as;
 using ::ranges::sentinel_for;
 using ::ranges::sized_sentinel_for;
+using ::ranges::unsigned_integral;
 using ::ranges::weakly_incrementable;
+
+template <typename T>
+CPP_requires(default_initializable, requires(const T& t)(T{}, ::new T));
+
+template <typename T>
+CPP_concept default_initializable = CPP_requires_ref(default_initializable, T);
 #else
 using namespace std;
 #endif
