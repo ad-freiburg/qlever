@@ -261,7 +261,7 @@ args)`.
 template <typename F>
 void doConstructorTest(
     F generateValidatorManager,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};
 
@@ -442,7 +442,7 @@ auto checkValidator(
     // ValidatorFunction<ParameterTypes...> auto func,
     ValidatorFunc func, const std::tuple<ParameterTypes...>& validValues,
     const std::tuple<ParameterTypes...>& nonValidValues,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "checkValidator")};
 

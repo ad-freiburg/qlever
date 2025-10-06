@@ -255,7 +255,7 @@ auto testNaryExpression = [](auto&& makeExpression,
 template <auto makeFunction>
 auto testBinaryExpressionCommutative =
     [](const auto& expected, const auto& op1, const auto& op2,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       CPP_assert(SingleExpressionResult<decltype(expected)> &&
                  SingleExpressionResult<decltype(op1)> &&
                  SingleExpressionResult<decltype(op2)>);
@@ -272,7 +272,7 @@ template <auto makeFunction>
 struct TestNaryExpressionVec {
   template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
   void operator()(Exp expected, std::tuple<Ops...> ops,
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
     std::apply(
@@ -479,7 +479,7 @@ TEST(SparqlExpression, arithmeticOperators) {
 template <auto makeFunction>
 auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
                               VectorOrExpressionResult auto const& expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   testNaryExpression(makeFunction, expected, operand);
 };
@@ -504,7 +504,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
-                   std::source_location l = std::source_location::current()) {
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
       if (opt.has_value()) {

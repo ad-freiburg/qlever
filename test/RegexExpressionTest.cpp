@@ -85,7 +85,7 @@ SparqlExpression::Ptr makeRegexExpression(
 void testWithExplicitResult(
     const SparqlExpression& expression, const std::vector<Id>& expected,
     const std::optional<size_t>& numInputs = std::nullopt,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
   auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   if (numInputs.has_value()) {
@@ -104,7 +104,7 @@ void testWithExplicitResult(
 void testValuesInVariables(
     const std::vector<std::array<std::string, 3>>& inputValues,
     const std::vector<Id>& expected, bool flagsUsed,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   TestContext ctx;
   auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   ctx.varToColMap.clear();
@@ -137,7 +137,7 @@ void testValuesInVariables(
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
-                             source_location l = source_location::current()) {
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(std::move(l), "testNonPrefixRegex");
   auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                   std::nullopt, childAsStr);
@@ -233,7 +233,7 @@ TEST(RegexExpression, inputNotVariable) {
 auto testNonPrefixRegexWithFlags =
     [](std::string variable, std::string regex, std::string flags,
        const std::vector<Id>& expectedResult,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testNonPrefixRegexWithFlags");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::move(flags));
@@ -324,7 +324,7 @@ TEST(RegexExpression, getPrefixRegex) {
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
        const std::vector<Id>& expectedResult, bool childAsStr = false,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::nullopt, childAsStr);
@@ -359,7 +359,7 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
 auto testPrefixRegexOrderedColumn =
     [](std::string variableAsString, std::string regex,
        ad_utility::SetOfIntervals expected, bool childAsStr = false,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
       auto variable = Variable{variableAsString};
       TestContext ctx = TestContext::sortedBy(variable);

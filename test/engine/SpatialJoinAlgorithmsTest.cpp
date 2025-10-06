@@ -1691,7 +1691,7 @@ using Loc = ad_utility::source_location;
 // used number of threads is the expected.
 void testNumberOfThreads(size_t runtimeParamNumThreads,
                          size_t expectedNumberOfThreads,
-                         Loc sourceLocation = Loc::current()) {
+                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto cleanUp =
       setRuntimeParameterForTest<&RuntimeParameters::spatialJoinMaxNumThreads_>(
           runtimeParamNumThreads);

@@ -68,7 +68,7 @@ using ad_utility::source_location;
 // more test cases automatically.
 template <bool DoOptionalJoin = false>
 void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   JoinResult result;
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
@@ -104,7 +104,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
 }
 void testOptionalJoin(const NestedBlock& a, const NestedBlock& b,
                       JoinResult expected,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   testJoin<true>(a, b, std::move(expected), l);
 }
 }  // namespace
@@ -346,7 +346,7 @@ struct RowAdderWithUndef {
 void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
                               const std::vector<std::vector<FakeId>>& b,
                               std::vector<std::array<FakeId, 2>> expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   using namespace std::placeholders;
   using namespace std::ranges;
   auto trace = generateLocationTrace(l);

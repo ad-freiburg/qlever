@@ -9,6 +9,7 @@
 
 #include <memory_resource>
 
+#include "backports/StartsWith.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -45,7 +46,7 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
+  bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;

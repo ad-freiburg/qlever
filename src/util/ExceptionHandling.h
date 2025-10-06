@@ -62,10 +62,8 @@ CPP_template(typename F,
                                                      std::string_view message,
                                                      TerminateAction
                                                          terminateAction = {},
-                                                     ad_utility::source_location
-                                                         l = ad_utility::
-                                                             source_location::
-                                                                 current()) noexcept {
+                                                     ad_utility::source_location l =
+                                                         AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(

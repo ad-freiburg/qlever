@@ -7,6 +7,7 @@
 #include <absl/strings/ascii.h>
 #include <absl/strings/charconv.h>
 
+#include "backports/StartsWith.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 /*
@@ -41,7 +42,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
     auto str = absl::StripAsciiWhitespace(input);
     // Abseil and the standard library don't match leading + signs, so we skip
     // them.
-    if (str.starts_with('+')) {
+    if (ql::starts_with(str, '+')) {
       str.remove_prefix(1);
     }
     auto strEnd = str.data() + str.size();

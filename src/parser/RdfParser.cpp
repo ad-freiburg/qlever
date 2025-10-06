@@ -12,6 +12,7 @@
 #include <exception>
 #include <optional>
 
+#include "backports/StartsWith.h"
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedIriManager.h"
@@ -334,7 +335,7 @@ template <class T>
 void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   double result;
   // The functions used below cannot deal with leading redundant '+' signs.
-  if (input.starts_with('+')) {
+  if (ql::starts_with(input, '+')) {
     input.remove_prefix(1);
   }
   auto [firstNonMatching, errorCode] =
@@ -356,7 +357,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
   }
   int64_t result{0};
   // The functions used below cannot deal with leading redundant '+' signs.
-  if (input.starts_with('+')) {
+  if (ql::starts_with(input, '+')) {
     input.remove_prefix(1);
   }
   // We cannot directly store this in `lastParseResult_` because this might
@@ -658,7 +659,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
                                                           "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
-    if (view.starts_with(q)) {
+    if (ql::starts_with(view, q)) {
       foundString = true;
       startPos = q.size();
       if (!allowMultilineLiterals && q.size() > 1) {
@@ -879,7 +880,7 @@ bool TurtleParser<T>::iriref() {
   // certainly not an IRI reference.
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
-  if (!view.starts_with('<')) {
+  if (!ql::starts_with(view, '<')) {
     return false;
   }
   auto endPos = view.find_first_of("<>\"\n", 1);
