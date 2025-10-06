@@ -52,8 +52,8 @@ using namespace std::views;
 // Backported versions of `std::erase(_if)`
 namespace backports {
 template <class T, class Alloc, class U>
-constexpr std::vector<T, Alloc>::size_type erase(std::vector<T, Alloc>& c,
-                                                 const U& value) {
+constexpr typename std::vector<T, Alloc>::size_type erase(
+    std::vector<T, Alloc>& c, const U& value) {
   auto it = std::remove(c.begin(), c.end(), value);
   auto r = c.end() - it;
   c.erase(it, c.end());
@@ -61,8 +61,8 @@ constexpr std::vector<T, Alloc>::size_type erase(std::vector<T, Alloc>& c,
 }
 
 template <class T, class Alloc, class Pred>
-constexpr std::vector<T, Alloc>::size_type erase_if(std::vector<T, Alloc>& c,
-                                                    Pred pred) {
+constexpr typename std::vector<T, Alloc>::size_type erase_if(
+    std::vector<T, Alloc>& c, Pred pred) {
   auto it = std::remove_if(c.begin(), c.end(), pred);
   auto r = c.end() - it;
   c.erase(it, c.end());
