@@ -423,12 +423,12 @@ class CompressedExternalIdTableBase {
       return numBlocksPushed_ != 0;
     }
 
-    AD_LOG_INFO
-        << "calling transformAndPushLastBlock for an external idTable with "
-        << this->size() << "elements that was created at "
-        << this->timeOfCreation << "and instance number " << instanceNumber
-        << std::endl;
-    ;
+    // AD_LOG_INFO
+    //     << "calling transformAndPushLastBlock for an external idTable with "
+    //     << this->size() << "elements that was created at "
+    //     << this->timeOfCreation << "and instance number " << instanceNumber
+    //     << std::endl;
+
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
