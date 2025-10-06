@@ -33,6 +33,11 @@ option(USE_PRECOMPILED_HEADERS "Use precompiled headers to reduce compile times"
 # on clang and g++
 option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 
+option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
+if (REDUCED_FEATURE_SET_FOR_CPP17)
+    add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17)
+endif()
+
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
@@ -133,7 +138,7 @@ add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+        GIT_TAG 7f5c9007090cd1b902ad1873beb064820caebf39
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -458,10 +463,10 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 if (USE_PRECOMPILED_HEADERS)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 endif()

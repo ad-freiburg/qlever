@@ -10,6 +10,7 @@
 
 #include <re2/re2.h>
 
+#include "backports/StartsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
@@ -216,8 +217,8 @@ struct IsSomethingValueGetter
   Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
     // TODO<joka921> Use the `isLiteral` etc. functions directly as soon as the
     // local vocabulary also stores `LiteralOrIri`.
-    return Id::makeFromBool(s.toStringRepresentation().starts_with(
-        isLiteralOrIriSomethingFunction));
+    return Id::makeFromBool(ql::starts_with(s.toStringRepresentation(),
+                                            isLiteralOrIriSomethingFunction));
   }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};

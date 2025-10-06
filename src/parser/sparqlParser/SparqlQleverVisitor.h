@@ -324,6 +324,8 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::ServiceGraphPatternContext* ctx);
 
+  // Visitor functions for special builtin features that are triggered via
+  // `SERVICE` requests with "magic" IRIs.
   parsedQuery::GraphPatternOperation visitPathQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
@@ -332,6 +334,19 @@ class SparqlQleverVisitor {
 
   parsedQuery::GraphPatternOperation visitTextSearchQuery(
       Parser::ServiceGraphPatternContext* ctx);
+
+  GraphPatternOperation visitNamedCachedResult(
+      const TripleComponent::Iri& target,
+      Parser::ServiceGraphPatternContext* ctx);
+
+  // Parse the body of a `MagicServiceQuery`, in particular call
+  // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
+  // throw an exception if an unsupported element is encountered. This function
+  // implements common functionality of `visitNamedCachedResult`,
+  // `visitTextQuery`, ... above.
+  void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
+                                    Parser::ServiceGraphPatternContext* ctx,
+                                    std::string_view operationName);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
@@ -694,7 +709,6 @@ class SparqlQleverVisitor {
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
-  ParsedQuery makeClear(SparqlTripleSimpleWithGraph::Graph graph);
 
   // Construct a `ParsedQuery` that adds all triples from the source graph to
   // the target graph equivalent to `INSERT { GRAPH target { ?s ?p ?o } } WHERE

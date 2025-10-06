@@ -11,6 +11,7 @@
 #include <string>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
@@ -78,9 +79,9 @@ class TripleComponent {
     if (isString()) {
       // Storing variables and literals as strings is deprecated. The following
       // checks help find places, where this is accidentally still done.
-      AD_CONTRACT_CHECK(!getString().starts_with("?"));
-      AD_CONTRACT_CHECK(!getString().starts_with('"'));
-      AD_CONTRACT_CHECK(!getString().starts_with("'"));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), "?"));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), '"'));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), "'"));
     }
   }
 
@@ -286,9 +287,9 @@ class TripleComponent {
   void checkThatStringIsValid() {
     if (isString()) {
       const auto& s = getString();
-      AD_CONTRACT_CHECK(!s.starts_with('?'));
-      AD_CONTRACT_CHECK(!s.starts_with('"'));
-      AD_CONTRACT_CHECK(!s.starts_with('\''));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '?'));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '"'));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '\''));
     }
   }
 };

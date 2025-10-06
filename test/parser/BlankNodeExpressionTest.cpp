@@ -61,7 +61,7 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
   auto expectIrisAre = [&context](std::string_view input,
                                   const std::vector<std::string_view>& expected,
                                   ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
+                                      AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(loc);
     auto expression =
         makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
