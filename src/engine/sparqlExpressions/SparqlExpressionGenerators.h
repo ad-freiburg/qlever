@@ -113,8 +113,21 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   // deactivating the type erasure for certain expressions + datatypes (e.g.
   // addition of IDs) etc.
   static constexpr auto Cat = ::ranges::category::input;
-  return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>, Cat>{
-      std::move(gen)};
+  using V = ql::ranges::range_value_t<decltype(gen)>;
+
+  if constexpr (std::is_trivially_copyable_v<V>) {
+    auto chunked = ::ranges::views::chunk(std::move(gen), 1000);
+    auto toVector = [](const auto& chunk) {
+      absl::InlinedVector<V, 1000> v;
+      ql::ranges::copy(chunk, std::back_inserter(v));
+      return v;
+    };
+    return std::move(chunked) | ql::views::transform(toVector) |
+           ql::views::join;
+  } else {
+    return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
+                              Cat>{std::move(gen)};
+  }
 }
 
 /// Return a generator that yields `numItems` many items for the various
