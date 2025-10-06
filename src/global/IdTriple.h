@@ -39,7 +39,8 @@ struct IdTriple {
   const auto& payload() const { return std::get<1>(data_); }
   auto& payload() { return std::get<1>(data_); }
 
-  explicit IdTriple(const std::array<Id, NumCols>& idsIn) requires(N == 0)
+  CPP_template_2(typename = void)(requires(N == 0)) explicit IdTriple(
+      const std::array<Id, NumCols>& idsIn)
       : data_{idsIn, {}} {};
 
   explicit IdTriple(const std::array<Id, NumCols>& idsIn,
@@ -81,8 +82,8 @@ struct IdTriple {
     return IdTriple{keyOrder.permuteTuple(ids()), payload()};
   }
 
-  CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
-      requires(N == 0) {
+  CPP_template_2(typename = void)(requires(N == 0))
+      CompressedBlockMetadata::PermutedTriple toPermutedTriple() const {
     static_assert(NumCols == 4);
     return {ids()[0], ids()[1], ids()[2], ids()[3]};
   }
