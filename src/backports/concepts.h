@@ -120,6 +120,7 @@ using ::ranges::input_iterator;
 using ::ranges::integral;
 using ::ranges::invocable;
 using ::ranges::random_access_iterator;
+using ::ranges::regular_invocable;
 using ::ranges::same_as;
 using ::ranges::sentinel_for;
 using ::ranges::sized_sentinel_for;

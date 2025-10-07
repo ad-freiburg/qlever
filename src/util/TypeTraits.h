@@ -369,7 +369,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithSimilarReturnType =
-    std::regular_invocable<Fn, Args...> &&
+    ql::concepts::regular_invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
@@ -383,7 +383,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithExactReturnType =
-    std::regular_invocable<Fn, Args...> &&
+    ql::concepts::regular_invocable<Fn, Args...> &&
     ql::concepts::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 // True iff `T` is a value type or an rvalue reference. Can be used to force
