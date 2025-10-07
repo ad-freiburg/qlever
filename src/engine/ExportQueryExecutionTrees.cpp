@@ -1026,14 +1026,21 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 
 // _____________________________________________________________________________
 template <>
-ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    selectQueryResultToStream<ad_utility::MediaType::binaryQleverExport>(
-        const QueryExecutionTree& qet,
-        const parsedQuery::SelectClause& selectClause,
-        LimitOffsetClause limitAndOffset,
-        CancellationHandle cancellationHandle) {
+STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
+    ad_utility::MediaType::binaryQleverExport>(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  // TODO<joka921> fix this
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   return qlever::binary_export::exportAsQLeverBinary(
       qet, selectClause, limitAndOffset, std::move(cancellationHandle));
+#else
+  throw std::runtime_error{
+      "The special binary export is currently not supported in the reduced "
+      "feature mode for C++17"};
+#endif
 }
 
 // _____________________________________________________________________________

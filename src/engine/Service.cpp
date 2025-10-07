@@ -183,8 +183,8 @@ Result Service::computeResultImpl(bool requestLaziness) {
                       "application/qlever-export+octet-stream")) {
     return computeBinaryResult(requestLaziness, std::move(response));
   }
-  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_)
-                           .starts_with "application/sparql-results+json")) {
+  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
+                       "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
