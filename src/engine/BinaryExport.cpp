@@ -58,12 +58,21 @@ AD_ALWAYS_INLINE auto isTrivial(Id id) {
 
 namespace qlever::binary_export {
 // _____________________________________________________________________________
-std::string StringMapping::flush() {
+std::string StringMapping::flush(const Index& index) {
   numProcessedRows_ = 0;
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
-  for (auto& [string, index] : stringMapping_) {
-    sortedStrings[index] = string;
+  for (auto& [oldId, newId] : stringMapping_) {
+    auto type = oldId.getDatatype();
+    if (type == Datatype::LocalVocabIndex) {
+      sortedStrings[newId] =
+          oldId.getLocalVocabIndex()->toStringRepresentation();
+    } else {
+      // TODO<joka921, RobinTF>, make the list exhaustive.
+      AD_CONTRACT_CHECK(type == Datatype::VocabIndex);
+      // TODO<joka921> Deduplicate on the level of IDs for the string mapping.
+      sortedStrings[newId] = index.indexToString(oldId.getVocabIndex());
+    }
   }
   stringMapping_.clear();
 
@@ -79,13 +88,12 @@ std::string StringMapping::flush() {
 }
 
 // _____________________________________________________________________________
-Id StringMapping::stringToId(const std::string& stringValue) {
+Id StringMapping::remapId(Id id) {
   size_t distinctIndex = 0;
-  if (stringMapping_.contains(stringValue)) {
-    distinctIndex = stringMapping_.at(stringValue);
+  if (stringMapping_.contains(id)) {
+    distinctIndex = stringMapping_.at(id);
   } else {
-    distinctIndex = stringMapping_[std::move(stringValue)] =
-        stringMapping_.size();
+    distinctIndex = stringMapping_[id] = stringMapping_.size();
   }
   return Id::makeFromLocalVocabIndex(
       reinterpret_cast<LocalVocabIndex>(distinctIndex));
@@ -93,23 +101,13 @@ Id StringMapping::stringToId(const std::string& stringValue) {
 
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE Id
-toExportableId(Id originalId, const QueryExecutionTree& qet,
-               [[maybe_unused]] const LocalVocab& localVocab,
+toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
-  auto type = originalId.getDatatype();
   if (isTrivial(originalId)) {
     return originalId;
-  } else if (type == Datatype::LocalVocabIndex) {
-    return stringMapping.stringToId(
-        originalId.getLocalVocabIndex()->toStringRepresentation());
-  } else if (type == Datatype::VocabIndex) {
-    // TODO<joka921> Deduplicate on the level of IDs for the string mapping.
-    const auto& string =
-        qet.getQec()->getIndex().indexToString(originalId.getVocabIndex());
-    return stringMapping.stringToId(string);
   } else {
     // TODO<joka921, RobinTF>, make the list exhaustive.
-    return Id::makeUndefined();
+    return stringMapping.remapId(originalId);
   }
 }
 
@@ -164,11 +162,11 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
       for (const auto& column : columns) {
         Id id = pair.idTable_(i, column->columnIndex_);
         co_yield raw(
-            toExportableId(id, qet, pair.localVocab_, stringMapping).getBits());
+            toExportableId(id, pair.localVocab_, stringMapping).getBits());
       }
       if (stringMapping.needsFlush()) {
         co_yield raw(vocabMarker);
-        co_yield stringMapping.flush();
+        co_yield stringMapping.flush(qet.getQec()->getIndex());
         co_yield raw(static_cast<size_t>(0));
       }
       cancellationHandle->throwIfCancelled();
@@ -176,7 +174,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
     }
   }
 
-  std::string trailingVocab = stringMapping.flush();
+  std::string trailingVocab = stringMapping.flush(qet.getQec()->getIndex());
   if (!trailingVocab.empty()) {
     co_yield raw(vocabMarker);
     co_yield trailingVocab;
@@ -269,7 +267,7 @@ void rewriteVocabIds(IdTable& result, const size_t dirtyIndex, const auto& qec,
 Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
                                 const QueryExecutionContext& qec,
-                                const std::vector<ColumnIndex> resultSortedOn) {
+                                std::vector<ColumnIndex> resultSortedOn) {
   // TODO<RobinTF> honor laziness setting.
   (void)requestLaziness;
   auto bytes = response.body_ | ql::views::join;
@@ -313,7 +311,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
   if (columns.empty()) {
     auto numRows = read<uint64_t>(it, end);
     result.resize(numRows);
-    return Result{std::move(result), resultSortedOn, LocalVocab{}};
+    return Result{std::move(result), std::move(resultSortedOn), LocalVocab{}};
   }
 
   // TODO<joka921> only serialize the variable names when exporting.
@@ -377,6 +375,6 @@ Result importBinaryHttpResponse(bool requestLaziness,
     }
   }
 
-  return Result{std::move(result), resultSortedOn, std::move(vocab)};
+  return Result{std::move(result), std::move(resultSortedOn), std::move(vocab)};
 }
 }  // namespace qlever::binary_export

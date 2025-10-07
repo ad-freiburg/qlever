@@ -15,14 +15,16 @@ namespace qlever::binary_export {
 // Helper struct to temporarily store strings and aggregate them to avoid
 // sending the same strings over and over again.
 struct StringMapping {
-  // Store the actual mapping from a string to the corresponding insertion
-  // order. (The first newly inserted string will get id 0, the second id 1,
-  // and so on.)
-  ad_utility::HashMap<std::string, uint64_t> stringMapping_;
+  // Store the actual mapping from an id to the corresponding insertion order.
+  // (The first newly inserted string will get id 0, the second id 1, and so
+  // on.)
+  // TODO<RobinTF, joka921> consider mapping from `Id::T` instead of `Id` to get
+  // a cheaper lookup.
+  ad_utility::HashMap<Id, uint64_t> stringMapping_;
   uint64_t numProcessedRows_ = 0;
 
   // Serialize the internal datastructure to a string and clear it.
-  std::string flush();
+  std::string flush(const Index& index);
 
   // Increment the row counter by one if the mapping contains elements.
   void nextRow() {
@@ -31,11 +33,10 @@ struct StringMapping {
     }
   }
 
-  // Convert a literal with optional datatype into an Id, which internally
-  // uses the `LocalVocab` datatype, but instead of a pointer it uses the
-  // index provided by `stringMapping_`, creating a new index if not already
-  // present.
-  Id stringToId(const std::string& string);
+  // Remap an `Id` to another `Id` which internally uses the `LocalVocab`
+  // datatype, but instead of a pointer it uses the index provided by
+  // `stringMapping_`, creating a new index if not already present.
+  Id remapId(Id id);
 
   // Return true if the datastructure has grown large enough, or wasn't
   // cleared recently enough to avoid stalling the consumer.
@@ -47,8 +48,8 @@ struct StringMapping {
 // Convert `originalId`, which might contain references into this process'
 // memory space to an id that completely inlines a value, or one that only has
 // a reference to the passed `stringMapping`.
-Id toExportableId(Id originalId, const QueryExecutionTree& qet,
-                  const LocalVocab& localVocab, StringMapping& stringMapping);
+Id toExportableId(Id originalId, const LocalVocab& localVocab,
+                  StringMapping& stringMapping);
 
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
@@ -59,7 +60,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
                                 const QueryExecutionContext& qec,
-                                const std::vector<ColumnIndex> resultSortedOn);
+                                std::vector<ColumnIndex> resultSortedOn);
 }  // namespace qlever::binary_export
 
 #endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H
