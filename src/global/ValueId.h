@@ -11,9 +11,9 @@
 
 #include <bit>
 #include <cstdint>
-#include <functional>
 #include <limits>
 
+#include "backports/functional.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"

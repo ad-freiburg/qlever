@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -15,6 +14,7 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"

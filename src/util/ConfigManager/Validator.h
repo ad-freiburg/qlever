@@ -8,12 +8,12 @@
 
 #include <atomic>
 #include <concepts>
-#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
 
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/HashSet.h"

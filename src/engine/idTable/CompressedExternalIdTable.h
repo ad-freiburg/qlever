@@ -372,7 +372,7 @@ class CompressedExternalIdTableBase {
   // Asynchronously compress the `block` and write it to the underlying
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
-  template <typename Transformation = std::identity>
+  template <typename Transformation = ql::identity>
   void pushBlock(IdTableStatic<NumStaticCols> block) {
     if (compressAndWriteFuture_.valid()) {
       compressAndWriteFuture_.get();

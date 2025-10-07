@@ -12,7 +12,6 @@
 #include <absl/strings/str_replace.h>
 #include <antlr4-runtime.h>
 
-#include <functional>
 #include <iostream>
 #include <ranges>
 #include <regex>
@@ -26,6 +25,7 @@
 #include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Algorithm.h"

@@ -210,7 +210,7 @@ using Double = Parameter<double, n::dbl, n::toString>;
 
 using SizeT = Parameter<size_t, n::szt, n::toString>;
 
-using String = Parameter<std::string, std::identity, std::identity>;
+using String = Parameter<std::string, ql::identity, ql::identity>;
 
 using Bool = Parameter<bool, n::bl, n::boolToString>;
 

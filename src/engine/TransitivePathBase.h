@@ -10,9 +10,9 @@
 
 #include <absl/hash/hash.h>
 
-#include <functional>
 #include <memory>
 
+#include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 

@@ -1534,8 +1534,8 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
  * `flush`.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithoutUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
@@ -1553,8 +1553,8 @@ void zipperJoinForBlocksWithoutUndef(
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
 // a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,

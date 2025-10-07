@@ -459,7 +459,9 @@ add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
-add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp
+        src/backports/memory_resource.h
+        src/backports/functional.h)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)

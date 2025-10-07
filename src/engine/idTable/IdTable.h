@@ -8,12 +8,12 @@
 #include <array>
 #include <cassert>
 #include <cstdlib>
-#include <functional>
 #include <initializer_list>
 #include <variant>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "backports/span.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"

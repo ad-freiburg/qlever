@@ -640,15 +640,15 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, false, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, true, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // This explicit instantiation is necessary because the `Variable` class
 // currently still uses it.
@@ -657,7 +657,7 @@ ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
-                                             std::identity&& escapeFunction);
+                                             ql::identity&& escapeFunction);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,

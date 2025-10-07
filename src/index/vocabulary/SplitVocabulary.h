@@ -6,12 +6,12 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 #include <variant>
 
 #include "backports/StartsWith.h"
+#include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"

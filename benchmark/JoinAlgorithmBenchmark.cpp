@@ -16,7 +16,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
-#include <functional>
 #include <iterator>
 #include <limits>
 #include <numeric>
@@ -37,6 +36,7 @@
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 #include "../test/util/RandomTestHelpers.h"
+#include "backports/functional.h"
 #include "backports/keywords.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
