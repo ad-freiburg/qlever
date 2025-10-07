@@ -95,8 +95,9 @@ Id StringMapping::remapId(Id id) {
   } else {
     distinctIndex = stringMapping_[id] = stringMapping_.size();
   }
+  // The shift is required to imitate the unused bits of a pointer.
   return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(distinctIndex));
+      reinterpret_cast<LocalVocabIndex>(distinctIndex << Id::numDatatypeBits));
 }
 
 // _____________________________________________________________________________
@@ -243,9 +244,11 @@ void rewriteVocabIds(IdTable& result, const size_t dirtyIndex, const auto& qec,
     ql::ranges::for_each(
         col.subspan(dirtyIndex), [&qec, &vocab, &transmittedStrings](Id& id) {
           if (id.getDatatype() == Datatype::LocalVocabIndex) {
+            // Undo the shift done during encoding.
             auto literalOrIri = ad_utility::triple_component::LiteralOrIri::
                 fromStringRepresentation(transmittedStrings.at(
-                    reinterpret_cast<size_t>(id.getLocalVocabIndex())));
+                    reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
+                    Id::numDatatypeBits));
             auto tc = [&]() {
               if (literalOrIri.isIri()) {
                 return TripleComponent{std::move(literalOrIri.getIri())};
