@@ -5,6 +5,8 @@
 
 #include "engine/BinaryExport.h"
 
+#include <absl/functional/bind_front.h>
+
 #include "ExportQueryExecutionTrees.h"
 // TODO<joka921> Can we get further type erasure here to not include this
 // detail?
@@ -112,6 +114,49 @@ toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
   }
 }
 
+void writeHeader(auto& serializer, const auto& qet, const auto& columns) {
+  // Magic bytes
+  serializer << "QLEVER.EXPORT"sv;
+  // Export format version.
+  serializer << uint16_t{0};
+
+  // Export encoded values.
+  const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
+  serializer << prefixes;
+  serializer << columns;
+}
+
+auto readHeader(auto& serializer) {
+  // If we don't get the magic bytes this is not a QLever instance on the other
+  // end.
+  std::string magicBytes;
+  serializer >> magicBytes;
+  AD_CONTRACT_CHECK(std::string_view(magicBytes.data(), magicBytes.size()) ==
+                    "QLEVER.EXPORT");
+
+  uint16_t version;
+  serializer >> version;
+  // We only support version 0.
+  AD_CONTRACT_CHECK(version == 0);
+
+  std::vector<std::string> prefixes;
+  serializer >> prefixes;
+
+  QueryExecutionTree::ColumnIndicesAndTypes columns;
+  serializer >> columns;
+  // TODO<joka921> only serialize the variable names when exporting.
+  std::vector<std::string> variableNames;
+  for (auto& opt : columns) {
+    variableNames.push_back(std::move(opt.value().variable_));
+  }
+
+  return std::pair{std::move(prefixes), std::move(variableNames)};
+}
+
+// Use special undefined value that's not actually used as a real value.
+static constexpr Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
+static_assert(Id::fromBits(vocabMarker).getDatatype() == Datatype::Undefined);
+
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
@@ -124,33 +169,16 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   ad_utility::serialization::ByteBufferWriteSerializer serializer{};
 
   using namespace std::string_view_literals;
-  // Magic bytes
-  serializer << "QLEVER.EXPORT"sv;
-  // Export format version.
-  serializer << uint16_t{0};
-
-  // Export encoded values.
-  const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
-  serializer << prefixes;
-
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
 
-  serializer << columns;
+  writeHeader(serializer, qet, columns);
 
   // TODO<joka921> Use serialization for additional stuff.
   co_yield std::string_view{serializer.data().data(), serializer.data().size()};
   serializer.clear();
-
-  // Use special undefined value that's not actually used as a real value.
-  Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
-  Id::T idTableMarker = Id::makeUndefined().getBits() + 0b10101011;
-  AD_CORRECTNESS_CHECK(Id::fromBits(vocabMarker).getDatatype() ==
-                       Datatype::Undefined);
-  AD_CORRECTNESS_CHECK(Id::fromBits(idTableMarker).getDatatype() ==
-                       Datatype::Undefined);
 
   // Maps strings to reusable ids.
   StringMapping stringMapping;
@@ -264,6 +292,55 @@ void rewriteVocabIds(IdTable& result, const size_t dirtyIndex, const auto& qec,
   }
 }
 
+Id toIdImpl(const auto& qec, const auto& prefixes, const auto& prefixMapping,
+            auto& vocab, Id::T bits) {
+  // TODO<RobinTF> check local vocab for id conversion. Also the strings are
+  // transmitted after the ids, so we might need to search `result` for
+  // changes.
+  Id id = Id::fromBits(bits);
+  if (id.getDatatype() == Datatype::EncodedVal) {
+    // TODO<RobinTF> This is basically EncodedIriManager::toString copy
+    // pasted.
+    static constexpr auto mask =
+        ad_utility::bitMaskForLowerBits(EncodedIriManager::NumBitsEncoding);
+    auto digitEncoding = id.getEncodedVal() & mask;
+    // Get the index of the prefix.
+    auto prefixIdx = id.getEncodedVal() >> EncodedIriManager::NumBitsEncoding;
+    if (prefixMapping.contains(prefixIdx)) {
+      return Id::makeFromEncodedVal(
+          digitEncoding | (static_cast<uint64_t>(prefixMapping.at(prefixIdx))
+                           << EncodedIriManager::NumBitsEncoding));
+    }
+    std::string result;
+    const auto& prefix = prefixes.at(prefixIdx);
+    result.reserve(prefix.size() + EncodedIriManager::NumDigits + 1);
+    result = prefix;
+    EncodedIriManager::decodeDecimalFrom64Bit(result, digitEncoding);
+    result.push_back('>');
+    return TripleComponent{
+        ad_utility::triple_component::Iri::fromStringRepresentation(
+            std::move(result))}
+        .toValueId(qec.getIndex().getVocab(), vocab,
+                   qec.getIndex().encodedIriManager());
+  }
+  // TODO<RobinTF> Add assertion that type is either trivial or local vocab
+  // index here.
+  return id;
+};
+
+auto getPrefixMapping(const auto& qec, const auto& prefixes) {
+  ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
+  const auto& localPrefixes = qec.getIndex().encodedIriManager().prefixes_;
+  for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
+    auto prefixIt = ql::ranges::find(localPrefixes, prefix);
+    if (prefixIt != localPrefixes.end()) {
+      prefixMapping[index] = static_cast<uint8_t>(
+          ql::ranges::distance(localPrefixes.begin(), prefixIt));
+    }
+  }
+  return prefixMapping;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -277,42 +354,15 @@ Result importBinaryHttpResponse(bool requestLaziness,
   auto it = ql::ranges::begin(bytes);
   auto end = ql::ranges::end(bytes);
 
-  using ItReader = IteratorReader<decltype(it), decltype(end)>;
-  ItReader itReader{it, end};
-  ad_utility::serialization::ReadViaCallableSerializer<
-      std::reference_wrapper<ItReader>>
-      serializer{std::ref(itReader)};
-  static_assert(
-      ad_utility::serialization::ReadSerializer<decltype(serializer)>);
+  IteratorReader<decltype(it), decltype(end)> itReader{it, end};
+  ad_utility::serialization::ReadViaCallableSerializer serializer{
+      std::ref(itReader)};
 
-  // If we don't get the magic bytes this is not a QLever instance on the other
-  // end.
-  std::string magicBytes;
-  serializer >> magicBytes;
-  AD_CONTRACT_CHECK(std::string_view(magicBytes.data(), magicBytes.size()) ==
-                    "QLEVER.EXPORT");
+  auto [prefixes, variableNames] = readHeader(serializer);
 
-  uint16_t version;
-  serializer >> version;
-  // We only support version 0.
-  AD_CONTRACT_CHECK(version == 0);
+  auto prefixMapping = getPrefixMapping(qec, prefixes);
 
-  std::vector<std::string> prefixes;
-  serializer >> prefixes;
-
-  ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
-  const auto& localPrefixes = qec.getIndex().encodedIriManager().prefixes_;
-  for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
-    auto prefixIt = ql::ranges::find(localPrefixes, prefix);
-    if (prefixIt != localPrefixes.end()) {
-      prefixMapping[index] = static_cast<uint8_t>(
-          ql::ranges::distance(localPrefixes.begin(), prefixIt));
-    }
-  }
-
-  QueryExecutionTree::ColumnIndicesAndTypes columns;
-  serializer >> columns;
-  auto numColumns = columns.size();
+  auto numColumns = variableNames.size();
 
   // Done with the serializer for now, reextracting the iterator.
   it = itReader.it;
@@ -321,58 +371,18 @@ Result importBinaryHttpResponse(bool requestLaziness,
 
   // Special case 0 columns. In this case just return the correct amount of
   // columns.
-  if (columns.empty()) {
+  if (variableNames.empty()) {
     auto numRows = read<uint64_t>(it, end);
     result.resize(numRows);
     return Result{std::move(result), std::move(resultSortedOn), LocalVocab{}};
   }
 
-  // TODO<joka921> only serialize the variable names when exporting.
-  std::vector<std::string> variableNames;
-  for (auto& opt : columns) {
-    variableNames.push_back(std::move(opt.value().variable_));
-  }
-
   // TODO<RobinTF> check if variable names do actually match expected names.
 
-  Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
-  AD_CORRECTNESS_CHECK(Id::fromBits(vocabMarker).getDatatype() ==
-                       Datatype::Undefined);
-
   LocalVocab vocab;
+
   auto toId = [&qec, &prefixes, &vocab, &prefixMapping](Id::T bits) mutable {
-    // TODO<RobinTF> check local vocab for id conversion. Also the strings are
-    // transmitted after the ids, so we might need to search `result` for
-    // changes.
-    Id id = Id::fromBits(bits);
-    if (id.getDatatype() == Datatype::EncodedVal) {
-      // TODO<RobinTF> This is basically EncodedIriManager::toString copy
-      // pasted.
-      static constexpr auto mask =
-          ad_utility::bitMaskForLowerBits(EncodedIriManager::NumBitsEncoding);
-      auto digitEncoding = id.getEncodedVal() & mask;
-      // Get the index of the prefix.
-      auto prefixIdx = id.getEncodedVal() >> EncodedIriManager::NumBitsEncoding;
-      if (prefixMapping.contains(prefixIdx)) {
-        return Id::makeFromEncodedVal(
-            digitEncoding | (static_cast<uint64_t>(prefixMapping[prefixIdx])
-                             << EncodedIriManager::NumBitsEncoding));
-      }
-      std::string result;
-      const auto& prefix = prefixes.at(prefixIdx);
-      result.reserve(prefix.size() + EncodedIriManager::NumDigits + 1);
-      result = prefix;
-      EncodedIriManager::decodeDecimalFrom64Bit(result, digitEncoding);
-      result.push_back('>');
-      return TripleComponent{
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              std::move(result))}
-          .toValueId(qec.getIndex().getVocab(), vocab,
-                     qec.getIndex().encodedIriManager());
-    }
-    // TODO<RobinTF> Add assertion that type is either trivial or local vocab
-    // index here.
-    return id;
+    return toIdImpl(qec, prefixes, prefixMapping, vocab, bits);
   };
 
   // At which index we need to start converting values.
