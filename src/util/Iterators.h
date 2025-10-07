@@ -484,7 +484,7 @@ class InputRangeTypeErased
       requires CPP_NOT(
           std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>, Range>)
           CPP_and ql::ranges::range<Range>
-              CPP_and std::same_as<
+              CPP_and ql::concepts::same_as<
                   ql::ranges::range_value_t<Range>,
                   ValueType>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(

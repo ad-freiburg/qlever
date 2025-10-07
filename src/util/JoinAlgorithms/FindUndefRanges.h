@@ -41,7 +41,7 @@ namespace ad_utility {
 // TODO<joka921> This can be optimized when we also know which columns of
 // `[begin, end)` can possibly contain UNDEF values.
 CPP_template(typename R,
-             typename It)(requires std::random_access_iterator<It>)  //
+             typename It)(requires ql::concepts::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithoutUndef(
         const R& row, It begin, It end,
         [[maybe_unused]] bool& resultMightBeUnsorted) {
@@ -85,7 +85,7 @@ CPP_template(typename R,
 
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-CPP_template(typename It)(requires std::random_access_iterator<It>)  //
+CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
         const auto& row, const size_t numLastUndefined, It begin, It end,
         bool& resultMightBeUnsorted) {
@@ -138,7 +138,7 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
-CPP_template(typename It)(requires std::random_access_iterator<It>)  //
+CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
     auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
                                          bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
@@ -185,8 +185,8 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 // columns contain no UNDEF at all) and therefore a more specialized routine
 // should be chosen.
 struct FindSmallerUndefRanges {
-  CPP_template(typename Row,
-               typename It)(requires std::random_access_iterator<It>) auto
+  CPP_template(typename Row, typename It)(
+      requires ql::concepts::random_access_iterator<It>) auto
   operator()(const Row& row, It begin, It end,
              bool& resultMightBeUnsorted) const {
     size_t numLastUndefined = 0;

@@ -42,6 +42,9 @@ static const struct {
     {60, 1, 0, 0x0FFFFFFFFFFFFFFF},    // selector 15
 };
 
+template <typename T>
+CPP_requires(HasGet, requires(T t)(t.get()));
+
 //! Simple8b Compression Scheme.
 //! See: Anh & Moffat: Index compression using 64-bit words.
 //! Changed the following:
@@ -62,7 +65,7 @@ class Simple8bCode {
                        uint64_t* encoded) {
     // TODO<joka921> Hack for the IDs as long as we have no proper textIds.
     auto get = [&plaintext](uint64_t index) {
-      if constexpr (requires(Numeric n) { n.get(); }) {
+      if constexpr (CPP_requires_ref(HasGet, Numeric)) {
         return plaintext[index].get();
       } else {
         return plaintext[index];

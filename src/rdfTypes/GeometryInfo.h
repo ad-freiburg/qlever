@@ -151,13 +151,14 @@ class GeometryInfo {
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
 
   // Extract the requested information from this object.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo> RequestedInfo getRequestedInfo() const;
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) RequestedInfo
+      getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo>
-  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) static std::
+      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // For the disk serialization we require that a `GeometryInfo` is trivially

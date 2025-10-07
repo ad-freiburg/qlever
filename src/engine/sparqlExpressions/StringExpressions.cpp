@@ -190,7 +190,7 @@ class SubstrImpl {
   // SPARQL standard. This means that -1.5 is rounded to -1.
   static constexpr auto round = [](const auto& value) -> int64_t {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (ad_utility::FloatingPoint<T>) {
+    if constexpr (ql::concepts::floating_point<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
       } else {

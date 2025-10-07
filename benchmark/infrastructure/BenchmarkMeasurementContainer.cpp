@@ -378,10 +378,10 @@ template <typename T>
 void ResultGroup::deleteEntryImpl(T& entry) {
   // The vector, that holds our entries.
   auto& vec = [this]() -> auto& {
-    if constexpr (std::same_as<T, ResultEntry>) {
+    if constexpr (ql::concepts::same_as<T, ResultEntry>) {
       return resultEntries_;
     } else {
-      static_assert(std::same_as<T, ResultTable>);
+      static_assert(ql::concepts::same_as<T, ResultTable>);
       return resultTables_;
     }
   }();

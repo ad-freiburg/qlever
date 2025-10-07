@@ -51,7 +51,7 @@ using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 // Ensures that the T value is convertible to a numeric Id.
 template <typename T>
 CPP_concept ValueAsNumericId =
-    concepts::integral<T> || ad_utility::FloatingPoint<T> ||
+    concepts::integral<T> || ql::concepts::floating_point<T> ||
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
@@ -61,9 +61,9 @@ CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
     return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();

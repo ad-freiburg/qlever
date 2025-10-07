@@ -29,7 +29,7 @@ std::string MemorySize::asString() const {
     if constexpr (std::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
-      static_assert(std::floating_point<T>);
+      static_assert(ql::concepts::floating_point<T>);
       return number * 10 == std::floor(number * 10)
                  ? absl::StrCat(number, " ", unitName)
                  : absl::StrCat(std::round(number * 10) / 10, " ", unitName);

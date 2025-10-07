@@ -1045,8 +1045,10 @@ auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
 }
 
 // Same as `matchPtrWithChildren` above, but the children are all variables.
-template <typename Expression>
-auto matchPtrWithVariables(const std::same_as<::Variable> auto&... children)
+CPP_template(typename Expression, typename... Children)(requires(
+    ql::concepts::same_as<
+        ::Variable,
+        Children>&&...)) auto matchPtrWithVariables(const Children&... children)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtrWithChildren<Expression>(
       variableExpressionMatcher(children)...);

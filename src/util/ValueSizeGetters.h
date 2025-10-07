@@ -19,7 +19,7 @@ with the given value type as const l-value reference and return a `MemorySize`.
 */
 template <typename T, typename ValueType>
 CPP_concept ValueSizeGetter =
-    std::default_initializable<T> &&
+    ql::concepts::default_initializable<T> &&
     RegularInvocableWithSimilarReturnType<T, MemorySize, const ValueType&>;
 
 // A templated default value size getter. Can be specialized for additional
