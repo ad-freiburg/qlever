@@ -33,7 +33,7 @@ namespace ad_benchmark {
 @param measurementSubjectName A description/name of what is being measured.
 */
 CPP_template(typename Function)(requires(
-    std::invocable<
+    ql::concepts::invocable<
         Function>)) static float measureTimeOfFunction(const Function&
                                                            functionToMeasure,
                                                        std::string_view
@@ -95,7 +95,7 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename F)(requires(std::invocable<F>))
+  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
       ResultEntry(const std::string& descriptor, const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
@@ -111,7 +111,7 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename F)(requires(std::invocable<F>))
+  CPP_template(typename F)(requires(ql::concepts::invocable<F>))
       ResultEntry(const std::string& descriptor,
                   std::string_view descriptorForLog, const F& functionToMeasure)
       : descriptor_{descriptor},
@@ -200,10 +200,10 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, which execution time will be measured.
   */
   CPP_template(typename Function)(requires(
-      std::invocable<Function>)) void addMeasurement(const size_t& row,
-                                                     const size_t& column,
-                                                     const Function&
-                                                         functionToMeasure) {
+      ql::concepts::invocable<
+          Function>)) void addMeasurement(const size_t& row,
+                                          const size_t& column,
+                                          const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     entries_.at(row).at(column) = measureTimeOfFunction(
         functionToMeasure,
@@ -331,7 +331,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  CPP_template(typename Function)(requires(std::invocable<Function>))
+  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
       ResultEntry& addMeasurement(const std::string& descriptor,
                                   const Function& functionToMeasure) {
     resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(

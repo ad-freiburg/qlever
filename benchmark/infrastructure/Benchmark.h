@@ -93,7 +93,7 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  CPP_template(typename Function)(requires(std::invocable<Function>))
+  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
       ResultEntry& addMeasurement(const std::string& descriptor,
                                   const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
