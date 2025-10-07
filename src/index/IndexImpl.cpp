@@ -640,7 +640,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
-    deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
+    deleteTemporaryFile(
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
   return res;
@@ -774,11 +775,12 @@ auto IndexImpl::convertPartialToGlobalIds(
     if (idx >= actualLinesPerPartial.size()) {
       return std::nullopt;
     }
-    std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
+    std::string filename =
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
     auto map =
-        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(mmapFilename);
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
-    deleteTemporaryFile(mmapFilename);
+    deleteTemporaryFile(filename);
     return std::pair{idx, std::move(map)};
   };
 
@@ -858,14 +860,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  // TODO: remove this conversion once CompressedRelationWriter will be
-  // migrated to non coroutines
-  auto sortedTriplesGenerator{
-      cppcoro::fromInputRange(std::forward<T>(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          std::move(sortedTriplesGenerator), permutation, perBlockCallbacks);
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -1442,9 +1440,10 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  std::string partialCompressionFilename = absl::StrCat(
-      onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
+      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
+  std::string partialCompressionFilename =
+      absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
+                   PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,

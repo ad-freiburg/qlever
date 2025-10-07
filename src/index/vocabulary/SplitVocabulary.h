@@ -11,6 +11,7 @@
 #include <string_view>
 #include <variant>
 
+#include "backports/StartsWith.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -295,7 +296,7 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 [[maybe_unused]] inline auto geoSplitFunc =
     [](std::string_view word) -> uint8_t {
-  return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
+  return ql::starts_with(word, "\"") && word.ends_with(GEO_LITERAL_SUFFIX);
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is

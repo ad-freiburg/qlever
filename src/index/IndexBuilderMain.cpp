@@ -271,9 +271,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
-            << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever IndexBuilder, compiled on "
+              << qlever::version::DatetimeOfCompilation << " using git hash "
+              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
@@ -282,9 +282,9 @@ int main(int argc, char** argv) {
     qlever::Qlever::buildIndex(config);
 
   } catch (std::exception& e) {
-    LOG(ERROR) << "Creating the index for QLever failed with the following "
-                  "exception: "
-               << e.what() << std::endl;
+    AD_LOG_ERROR << "Creating the index for QLever failed with the following "
+                    "exception: "
+                 << e.what() << std::endl;
     return 2;
   }
   return 0;

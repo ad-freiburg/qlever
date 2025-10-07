@@ -19,6 +19,7 @@
 #include <memory>
 #include <memory_resource>
 
+#include "backports/StartsWith.h"
 #include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
@@ -74,7 +75,7 @@ class LocaleManager {
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
     bool starts_with(const SortKeyImpl& rhs) const noexcept {
-      return get().starts_with(rhs.get());
+      return ql::starts_with(get(), rhs.get());
     }
 
     /// Return the number of bytes in the `SortKey`
@@ -777,7 +778,7 @@ class TripleComponentComparator {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (res.starts_with('"')) {
+    if (ql::starts_with(res, '"')) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks

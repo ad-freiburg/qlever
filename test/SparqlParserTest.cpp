@@ -1447,7 +1447,7 @@ TEST(ParserTest, parseWithDatasets) {
                                   DatasetClause{Iri("<baz>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                              {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
-  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<h>")}};
+  parsedQuery::DatasetClauses::Graphs datasets{{Iri("<h>")}};
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
@@ -1528,4 +1528,45 @@ TEST(ParserTest, variablesInMinusAreHidden) {
               m::Minus(m::GraphPattern(m::InlineData(
                   {Variable{"?a"}, Variable{"?b"}},
                   {{TripleComponent{2}, TripleComponent{2}}}))))));
+}
+
+// _____________________________________________________________________________
+TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
+  // This is a regression test for
+  // https://github.com/ad-freiburg/qlever/issues/2350
+  EXPECT_THAT(
+      parseQuery(
+          "SELECT * "
+          "{ ?s !<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?o }"),
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::fromIri(
+                  ad_utility::triple_component::Iri::fromIriref(
+                      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              TripleComponent{Variable{"?o"}}}}))));
+
+  // Other tests for similar variants.
+  EXPECT_THAT(
+      parseQuery("SELECT * { ?s !a ?o }"),
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::fromIri(
+                  ad_utility::triple_component::Iri::fromIriref(
+                      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              TripleComponent{Variable{"?o"}}}}))));
+  EXPECT_THAT(
+      parseQuery("SELECT * { ?s !^a ?o }"),
+      m::SelectQuery(m::AsteriskSelect(),
+                     m::GraphPattern(m::Triples({SparqlTriple{
+                         TripleComponent{Variable{"?s"}},
+                         PropertyPath::makeNegated(
+                             {PropertyPath::makeInverse(PropertyPath::fromIri(
+                                 ad_utility::triple_component::Iri::fromIriref(
+                                     "<http://www.w3.org/1999/02/"
+                                     "22-rdf-syntax-ns#type>")))}),
+                         TripleComponent{Variable{"?o"}}}}))));
 }

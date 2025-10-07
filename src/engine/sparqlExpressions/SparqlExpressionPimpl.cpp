@@ -1,9 +1,11 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./SparqlExpressionPimpl.h"
 
+#include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -38,8 +40,8 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
 std::vector<Variable> SparqlExpressionPimpl::getUnaggregatedVariables(
     const ad_utility::HashSet<Variable>& groupedVariables) const {
   auto vars = _pimpl->getUnaggregatedVariables();
-  std::erase_if(
-      vars, [&](const auto& var) { return groupedVariables.contains(var); });
+  ql::erase_if(vars,
+               [&](const auto& var) { return groupedVariables.contains(var); });
   return vars;
 }
 

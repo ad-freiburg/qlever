@@ -136,8 +136,7 @@ auto litOrIri = [](const std::string& literal) {
 auto assertLangTagValueGetter =
     [](const std::vector<Id>& input, const std::vector<strOpt>& expected,
        LanguageTagGetter& langTagValueGetter, TestContext& testContext,
-       ad_utility::source_location loc =
-           ad_utility::source_location::current()) {
+       ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(loc);
       EXPECT_EQ(input.size(), expected.size());
       auto ctx = &testContext.context;

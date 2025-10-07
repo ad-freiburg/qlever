@@ -9,6 +9,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
@@ -232,14 +233,14 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   AD_CORRECTNESS_CHECK(subtree != nullptr);
   // Remove all undefined GROUP BY variables (according to the SPARQL standard
   // they are allowed, but have no effect on the result).
-  std::erase_if(_groupByVariables,
-                [&map = subtree->getVariableColumns()](const auto& var) {
-                  return !map.contains(var);
-                });
+  ql::erase_if(_groupByVariables,
+               [&map = subtree->getVariableColumns()](const auto& var) {
+                 return !map.contains(var);
+               });
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
-  if (RuntimeParameters().get<"strip-columns">()) {
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
@@ -456,7 +457,7 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
                                const vector<size_t>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
-  LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
+  AD_LOG_DEBUG << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
 
   // If the input is empty, the result is also empty, except for an implicit
@@ -526,7 +527,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 
 // _____________________________________________________________________________
 Result GroupByImpl::computeResult(bool requestLaziness) {
-  LOG(DEBUG) << "GroupBy result computation..." << std::endl;
+  AD_LOG_DEBUG << "GroupBy result computation..." << std::endl;
 
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
@@ -568,7 +569,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     subresult = _subtree->getResult(metadataForUnsequentialData.has_value());
   }
 
-  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
+  AD_LOG_DEBUG << "GroupBy subresult computation done" << std::endl;
 
   std::vector<size_t> groupByColumns;
 
@@ -643,7 +644,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
       (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
       subresult->idTable(), groupByCols, aggregates, &localVocab);
 
-  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
@@ -736,7 +737,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   }
 
   if (indexScan->numVariables() <= 1 ||
-      indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
+      !indexScan->graphsToFilter().areAllGraphsAllowed() ||
+      !_groupByVariables.empty()) {
     return std::nullopt;
   }
 
@@ -781,7 +783,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
-  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+  if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 2) {
     return std::nullopt;
   }
@@ -901,7 +903,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
-  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+  if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 3) {
     return std::nullopt;
   }
@@ -1039,7 +1041,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   // TODO<C++23> Use `std::optional::or_else`.
-  if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::groupByDisableIndexScanOptimizations_>()) {
     if (auto result = computeGroupByForSingleIndexScan()) {
       return result;
     }
@@ -1101,7 +1104,7 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
 std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::checkIfHashMapOptimizationPossible(
     std::vector<Aggregate>& aliases) const {
-  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
+  if (!getRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>()) {
     return std::nullopt;
   }
 
@@ -1307,13 +1310,17 @@ GroupByImpl::getHashMapAggregationResults(
 }
 
 // _____________________________________________________________________________
-void GroupByImpl::substituteGroupVariable(
+std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+GroupByImpl::substituteGroupVariable(
     const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
     size_t beginIndex, size_t count, size_t columnIndex,
     const Allocator& allocator) {
   decltype(auto) groupValues =
       resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
+  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+      originalChildren;
+  originalChildren.reserve(occurrences.size());
   for (const auto& occurrence : occurrences) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
     values.resize(groupValues.size());
@@ -1322,9 +1329,10 @@ void GroupByImpl::substituteGroupVariable(
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
         std::move(values));
 
-    occurrence.parent_->replaceChild(occurrence.nThChild_,
-                                     std::move(newExpression));
+    originalChildren.push_back(occurrence.parent_->replaceChild(
+        occurrence.nThChild_, std::move(newExpression)));
   }
+  return originalChildren;
 }
 
 // _____________________________________________________________________________
@@ -1445,6 +1453,76 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
+void GroupByImpl::substituteAndEvaluate(
+    HashMapAliasInformation& alias, IdTable* result,
+    sparqlExpression::EvaluationContext& evaluationContext,
+    const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+    LocalVocab* localVocab, const Allocator& allocator,
+    std::vector<HashMapAggregateInformation>& info,
+    const std::vector<HashMapGroupedVariableInformation>& substitutions) {
+  // Store which SPARQL expressions of grouped variables have been substituted.
+  std::vector<std::pair<
+      const std::vector<ParentAndChildIndex>&,
+      std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>>>
+      originalChildrenForGroupVariable;
+  originalChildrenForGroupVariable.reserve(substitutions.size());
+  for (const auto& substitution : substitutions) {
+    const auto& occurrences =
+        get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
+    // Substitute in the values of the grouped variable and store the original
+    // expressions.
+    originalChildrenForGroupVariable.emplace_back(
+        occurrences, substituteGroupVariable(
+                         occurrences, result, evaluationContext._beginIndex,
+                         evaluationContext.size(),
+                         substitution.resultColumnIndex_, allocator));
+  }
+
+  // Substitute in the results of all aggregates contained in the
+  // expression of the current alias, if `info` is non-empty and keep the
+  // original expressions.
+  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+      originalChildren = substituteAllAggregates(
+          info, evaluationContext._beginIndex, evaluationContext._endIndex,
+          aggregationData, result, localVocab, allocator);
+
+  // Evaluate top-level alias expression.
+  sparqlExpression::ExpressionResult expressionResult =
+      alias.expr_.getPimpl()->evaluate(&evaluationContext);
+
+  // Restore original children. Only necessary when the expression will be
+  // used in the future (not the case for the hash map optimization).
+  auto restoreOriginalExpressions = [](auto&& range, auto& originalChildren) {
+    for (auto&& [parentAndIndex, originalExpression] :
+         ::ranges::views::zip(AD_FWD(range), originalChildren)) {
+      parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
+                                           std::move(originalExpression));
+    }
+  };
+
+  // Restore grouped variable expressions.
+  for (auto& [occurrences, children] : originalChildrenForGroupVariable) {
+    restoreOriginalExpressions(occurrences, children);
+  }
+
+  // Restore aggregated variable expressions.
+  restoreOriginalExpressions(
+      info | ql::views::transform(
+                 [](auto& aggregate) -> const ParentAndChildIndex& {
+                   return aggregate.parentAndIndex_.value();
+                 }),
+      originalChildren);
+
+  // Copy the result so that future aliases may reuse it.
+  evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
+      sparqlExpression::copyExpressionResult(expressionResult);
+
+  // Extract values.
+  extractValues(std::move(expressionResult), evaluationContext, result,
+                localVocab, alias.outCol_);
+}
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
 void GroupByImpl::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
@@ -1459,10 +1537,10 @@ void GroupByImpl::evaluateAlias(
   // - Possibly multiple aggregates and occurrences of grouped variables. All
   // have to be substituted away before evaluation
 
-  auto substitutions = alias.groupedVariables_;
+  const auto& substitutions = alias.groupedVariables_;
   auto topLevelGroupedVariable = ql::ranges::find_if(
-      substitutions, [](HashMapGroupedVariableInformation& val) {
-        return std::get_if<OccurAsRoot>(&val.occurrences_);
+      substitutions, [](const HashMapGroupedVariableInformation& val) {
+        return std::holds_alternative<OccurAsRoot>(val.occurrences_);
       });
 
   if (topLevelGroupedVariable != substitutions.end()) {
@@ -1506,43 +1584,9 @@ void GroupByImpl::evaluateAlias(
         sparqlExpression::copyExpressionResult(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
-    for (const auto& substitution : substitutions) {
-      const auto& occurrences =
-          get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
-      // Substitute in the values of the grouped variable
-      substituteGroupVariable(
-          occurrences, result, evaluationContext._beginIndex,
-          evaluationContext.size(), substitution.resultColumnIndex_, allocator);
-    }
-
-    // Substitute in the results of all aggregates contained in the
-    // expression of the current alias, if `info` is non-empty.
-    std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
-        originalChildren = substituteAllAggregates(
-            info, evaluationContext._beginIndex, evaluationContext._endIndex,
-            aggregationData, result, localVocab, allocator);
-
-    // Evaluate top-level alias expression
-    sparqlExpression::ExpressionResult expressionResult =
-        alias.expr_.getPimpl()->evaluate(&evaluationContext);
-
-    // Restore original children. Only necessary when the expression will be
-    // used in the future (not the case for the hash map optimization).
-    // TODO<C++23> Use `ql::views::zip(info, originalChildren)`.
-    for (size_t i = 0; i < info.size(); ++i) {
-      auto& aggregate = info.at(i);
-      auto parentAndIndex = aggregate.parentAndIndex_.value();
-      parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                           std::move(originalChildren.at(i)));
-    }
-
-    // Copy the result so that future aliases may reuse it
-    evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-        sparqlExpression::copyExpressionResult(expressionResult);
-
-    // Extract values
-    extractValues(std::move(expressionResult), evaluationContext, result,
-                  localVocab, alias.outCol_);
+    substituteAndEvaluate<NUM_GROUP_COLUMNS>(alias, result, evaluationContext,
+                                             aggregationData, localVocab,
+                                             allocator, info, substitutions);
   }
 }
 
