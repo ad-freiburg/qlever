@@ -235,7 +235,8 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 // Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
 // children means that it's a full scan.
 struct CountAvailablePredicatesMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(size_t subjectColumnIdx, const Variable& predicateVar,
                   const Variable& countVar,
                   const ChildArgs&... childMatchers) const
@@ -349,7 +350,8 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 
 // Match a TransitivePath operation
 struct TransitivePath {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(TransitivePathSide left, TransitivePathSide right,
                   size_t minDist, size_t maxDist,
                   const ChildArgs&... childMatchers) const {
@@ -383,7 +385,8 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 
 // Match a PathSearch operation
 struct PathSearch {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(PathSearchConfiguration config, bool sourceBound,
                   bool targetBound, const ChildArgs&... childMatchers) const {
     return RootOperation<::PathSearch>(AllOf(
@@ -403,7 +406,8 @@ inline auto ValuesClause = [](std::string cacheKey) {
 // Match a SpatialJoin operation, set arguments to ignore to -1
 template <bool Substitute = false>
 struct SpatialJoinMatcher {
-  template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
                   PayloadVariables payloadVariables,
