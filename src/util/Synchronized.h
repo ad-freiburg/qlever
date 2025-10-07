@@ -8,7 +8,6 @@
 #define QLEVER_SYNCHRONIZED_H
 
 #include <atomic>
-#include <concepts>
 #include <condition_variable>
 #include <shared_mutex>
 

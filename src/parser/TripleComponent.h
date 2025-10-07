@@ -6,7 +6,6 @@
 #ifndef QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
-#include <concepts>
 #include <cstdint>
 #include <string>
 #include <variant>

@@ -4,7 +4,6 @@
 
 #ifndef QLEVER_CONCURRENTCACHE_H
 #define QLEVER_CONCURRENTCACHE_H
-#include <concepts>
 #include <condition_variable>
 #include <memory>
 #include <mutex>

@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_UTIL_TYPETRAITS_H
 #define QLEVER_SRC_UTIL_TYPETRAITS_H
 
-#include <concepts>
 #include <optional>
 #include <tuple>
 #include <utility>

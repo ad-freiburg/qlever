@@ -7,7 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <exception>
 #include <iostream>
 

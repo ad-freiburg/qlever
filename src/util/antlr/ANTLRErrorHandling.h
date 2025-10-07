@@ -12,7 +12,6 @@
 #include <Token.h>
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <string>
 
 #include "backports/concepts.h"

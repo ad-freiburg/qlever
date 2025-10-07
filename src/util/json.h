@@ -24,7 +24,6 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>

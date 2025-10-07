@@ -11,7 +11,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
-#include <concepts>
 #include <functional>
 #include <memory>
 #include <optional>

@@ -5,7 +5,6 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
-#include <concepts>
 #include <cstdint>
 
 #include "backports/algorithm.h"
@@ -37,7 +36,7 @@ CPP_concept IteratorWithBreak =
 /// optional second argument in `action`.
 template <typename Func>
 CPP_concept IteratorAction =
-    std::is_invocable_v<Func, std::size_t> || IteratorWithBreak<Func>;
+    ql::concepts::invocable<Func, std::size_t> || IteratorWithBreak<Func>;
 }  // namespace detail
 
 /// Helper function to run a classic for-loop from `start` to `end`, where

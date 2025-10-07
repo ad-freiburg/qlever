@@ -7,7 +7,6 @@
 #define QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H
 
 #include <atomic>
-#include <concepts>
 #include <functional>
 #include <optional>
 #include <stdexcept>
