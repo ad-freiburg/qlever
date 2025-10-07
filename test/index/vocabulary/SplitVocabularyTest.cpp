@@ -34,9 +34,9 @@ using TwoSplitVocabulary =
 [[maybe_unused]] auto testSplitThreeFunction =
     [](std::string_view s) -> uint8_t {
   if (ql::starts_with(s, "\"")) {
-    if (s.ends_with("\"^^<http://example.com>")) {
+    if (ql::ends_with(s, "\"^^<http://example.com>")) {
       return 1;
-    } else if (s.ends_with("\"^^<blabliblu>")) {
+    } else if (ql::ends_with(s, "\"^^<blabliblu>")) {
       return 2;
     }
   }

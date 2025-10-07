@@ -17,7 +17,7 @@ namespace ad_utility::testing {
 constexpr auto tripleComponentLiteral =
     [](std::string_view literal, std::string_view langtagOrDatatype = "") {
       std::string dummy;
-      if (!(ql::starts_with(literal, '"') && literal.ends_with('"'))) {
+      if (!(ql::starts_with(literal, '"') && ql::ends_with(literal, '"'))) {
         dummy = absl::StrCat("\"", literal, "\"");
         literal = dummy;
       }

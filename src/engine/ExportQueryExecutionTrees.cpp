@@ -417,7 +417,7 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
   AD_CORRECTNESS_CHECK(ql::starts_with(iriString, '<'));
-  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  AD_CORRECTNESS_CHECK(ql::ends_with(iriString, '>'));
   iriString[0] = '"';
   iriString[iriString.size() - 1] = '"';
   return iriString;

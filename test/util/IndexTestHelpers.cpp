@@ -193,7 +193,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       std::vector<std::string> prefixes;
       for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
         AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !prefix.ends_with('>'));
+                             !ql::ends_with(prefix, '>'));
         prefixes.push_back(prefix.substr(1));
       }
       index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));

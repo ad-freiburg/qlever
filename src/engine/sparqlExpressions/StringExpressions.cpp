@@ -295,7 +295,7 @@ using StrStartsExpression = StrStartsExpressionImpl<Operation<
 // STRENDS
 [[maybe_unused]] auto strEndsImpl = [](std::string_view text,
                                        std::string_view pattern) {
-  return Id::makeFromBool(text.ends_with(pattern));
+  return Id::makeFromBool(ql::ends_with(text, pattern));
 };
 
 using StrEndsExpression =

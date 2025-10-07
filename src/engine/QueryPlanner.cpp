@@ -846,7 +846,7 @@ auto QueryPlanner::seedWithScansAndText(
         node.triple_.p_);
     if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
          ql::starts_with(input, NEAREST_NEIGHBORS)) &&
-        input.ends_with('>')) {
+        ql::ends_with(input, '>')) {
       parsedQuery::SpatialQuery config{node.triple_};
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, config.toSpatialJoinConfiguration(), std::nullopt,

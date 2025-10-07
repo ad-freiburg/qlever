@@ -15,14 +15,14 @@
 #include <boost/container/pmr/monotonic_buffer_resource.hpp>
 #include <boost/container/pmr/polymorphic_allocator.hpp>
 #else
-#include "backports/memory_resource.h"
+#include <memory_resource>
 #endif
 
 namespace ql {
 #ifdef QLEVER_CPP_17
 namespace pmr = ::boost::container::pmr;
 #else
-namespace pmr = ::ql::pmr;
+namespace pmr = ::std::pmr;
 #endif
 }  // namespace ql
 

@@ -296,7 +296,7 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 [[maybe_unused]] inline auto geoSplitFunc =
     [](std::string_view word) -> uint8_t {
-  return ql::starts_with(word, "\"") && word.ends_with(GEO_LITERAL_SUFFIX);
+  return ql::starts_with(word, "\"") && ql::ends_with(word, GEO_LITERAL_SUFFIX);
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is

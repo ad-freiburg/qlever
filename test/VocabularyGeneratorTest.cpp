@@ -193,8 +193,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
                                         const auto& word,
                                         bool isExternal) -> uint64_t {
       if (ql::starts_with(word, "\"") &&
-          word.ends_with(
-              "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
+          ql::ends_with(
+              word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
         geoMergeResult.emplace_back(word, isExternal);
         return (geoMergeResult.size() - 1) | (1ull << 59);
       } else {

@@ -10,7 +10,7 @@
 #ifndef QLEVER_SRC_BACKPORTS_FUNCTIONAL_H
 #define QLEVER_SRC_BACKPORTS_FUNCTIONAL_H
 
-#include "backports/functional.h"
+#include <functional>
 
 namespace ql {
 // Backport of `ql::identity` that can be used in C++17.
