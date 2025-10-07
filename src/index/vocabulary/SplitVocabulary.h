@@ -10,7 +10,7 @@
 #include <string_view>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"

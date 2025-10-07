@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"

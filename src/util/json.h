@@ -31,7 +31,7 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <utility>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"

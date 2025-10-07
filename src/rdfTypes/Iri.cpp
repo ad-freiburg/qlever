@@ -9,7 +9,7 @@
 
 #include <utility>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"

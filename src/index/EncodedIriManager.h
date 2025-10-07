@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"

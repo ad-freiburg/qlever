@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"

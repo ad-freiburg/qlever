@@ -4,7 +4,7 @@
 
 #include "Quads.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/UpdateClause.h"
 
 // ____________________________________________________________________________________

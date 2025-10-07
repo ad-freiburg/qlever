@@ -4,7 +4,7 @@
 
 #include "engine/TextIndexScanForWord.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(

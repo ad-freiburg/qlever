@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_BACKPORTS_STARTSWITH_H
-#define QLEVER_SRC_BACKPORTS_STARTSWITH_H
+#ifndef QLEVER_SRC_BACKPORTS_STARTSWITHANDENDSWITH_H
+#define QLEVER_SRC_BACKPORTS_STARTSWITHANDENDSWITH_H
 
 #include <string>
 #include <string_view>
@@ -136,4 +136,4 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
 
 }  // namespace ql
 
-#endif  // QLEVER_SRC_BACKPORTS_STARTSWITH_H
+#endif  // QLEVER_SRC_BACKPORTS_STARTSWITHANDENDSWITH_H

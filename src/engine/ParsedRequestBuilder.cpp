@@ -4,7 +4,7 @@
 
 #include "ParsedRequestBuilder.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
 #include "util/Algorithm.h"
 

@@ -7,7 +7,7 @@
 #include <absl/strings/ascii.h>
 #include <absl/strings/charconv.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 /*

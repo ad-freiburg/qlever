@@ -12,7 +12,7 @@
 #include <exception>
 #include <optional>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/EncodedIriManager.h"

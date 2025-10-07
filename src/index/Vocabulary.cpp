@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"

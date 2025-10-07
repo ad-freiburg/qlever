@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/TypedIndex.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"

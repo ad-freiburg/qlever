@@ -12,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 
 class EndsWithTest : public ::testing::Test {
  protected:

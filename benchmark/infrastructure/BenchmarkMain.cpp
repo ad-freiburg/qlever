@@ -20,7 +20,7 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"

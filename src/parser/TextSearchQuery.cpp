@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_split.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 

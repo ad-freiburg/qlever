@@ -12,7 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"

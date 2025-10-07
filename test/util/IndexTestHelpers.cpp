@@ -6,7 +6,7 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"

@@ -18,7 +18,7 @@
 #include <cstring>
 #include <memory>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/memory_resource.h"
 #include "global/Constants.h"

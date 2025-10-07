@@ -14,7 +14,7 @@
 
 #include <ranges>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"

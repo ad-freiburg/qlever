@@ -9,7 +9,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"

@@ -5,7 +5,7 @@
 #ifndef QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 #define QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/TripleComponent.h"
 
 namespace ad_utility::testing {

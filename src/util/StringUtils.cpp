@@ -10,7 +10,7 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"

@@ -13,7 +13,7 @@
 #include <tuple>
 #include <utility>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"

@@ -12,7 +12,7 @@
 #include <string>
 
 #include "./util/IdTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
