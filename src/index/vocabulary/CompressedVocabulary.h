@@ -188,15 +188,16 @@ CPP_template(typename UnderlyingVocabulary,
           std::max(uncompressedSize_.getBytes(), size_t(1));
       std::string nameString =
           readableName().empty() ? std::string{"vocabulary"} : readableName();
-      LOG(INFO) << "Finished writing compressed " << nameString
-                << ", size = " << compressedSize_
-                << " [uncompressed = " << uncompressedSize_
-                << ", ratio = " << compressionRatio << "%]" << std::endl;
+      AD_LOG_INFO << "Finished writing compressed " << nameString
+                  << ", size = " << compressedSize_
+                  << " [uncompressed = " << uncompressedSize_
+                  << ", ratio = " << compressionRatio << "%]" << std::endl;
       if (numBlocksLargerWhenCompressed_ > 0) {
-        LOG(WARN) << "Number of blocks made larger by the compression instead "
-                     "of smaller: "
-                  << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
-                  << std::endl;
+        AD_LOG_WARN
+            << "Number of blocks made larger by the compression instead "
+               "of smaller: "
+            << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
+            << std::endl;
       }
     }
 

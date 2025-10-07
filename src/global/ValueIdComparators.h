@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
@@ -359,7 +360,7 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
                     bool removeEmptyRanges = true) {
   if (removeEmptyRanges) {
     // Eliminate empty ranges
-    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+    ql::erase_if(input, [](const auto& p) { return p.first == p.second; });
   }
   std::sort(input.begin(), input.end());
   if (input.empty()) {

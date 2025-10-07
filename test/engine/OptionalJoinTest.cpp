@@ -72,12 +72,10 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
 }
 
 // Helper function to test lazy join implementations.
-void testLazyOptionalJoin(std::vector<IdTable> leftTables,
-                          std::vector<IdTable> rightTables,
-                          const std::vector<IdTable>& expectedResult,
-                          bool singleVar = false,
-                          ad_utility::source_location location =
-                              ad_utility::source_location::current()) {
+void testLazyOptionalJoin(
+    std::vector<IdTable> leftTables, std::vector<IdTable> rightTables,
+    const std::vector<IdTable>& expectedResult, bool singleVar = false,
+    ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
   auto qec = ad_utility::testing::getQec();
 
@@ -742,21 +740,20 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?c"}}));
 
-  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
-                             std::shared_ptr<QueryExecutionTree> right, bool a,
-                             bool b, bool c,
-                             ad_utility::source_location location =
-                                 ad_utility::source_location::current()) {
-    auto trace = generateLocationTrace(location);
+  auto testWithTrees =
+      [qec](std::shared_ptr<QueryExecutionTree> left,
+            std::shared_ptr<QueryExecutionTree> right, bool a, bool b, bool c,
+            ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
 
-    OptionalJoin optional{qec, std::move(left), std::move(right)};
-    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
-    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
-    EXPECT_THROW(
-        optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-        ad_utility::Exception);
-  };
+        OptionalJoin optional{qec, std::move(left), std::move(right)};
+        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
+        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+        EXPECT_THROW(
+            optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+            ad_utility::Exception);
+      };
 
   OptionalJoin optional{qec, values1, values1};
   EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}));

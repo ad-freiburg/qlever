@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "backports/algorithm.h"
+#include "backports/keywords.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
@@ -26,7 +27,8 @@ class alignas(16) LocalVocabEntry
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
-  using IdProxy = ad_utility::TypedIndex<uint64_t, "LveIdProxy">;
+  static constexpr std::string_view proxyTag = "LveIdProxy";
+  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
 
  private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
@@ -45,9 +47,9 @@ class alignas(16) LocalVocabEntry
   using Base::Base;
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  explicit(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  explicit(false) LocalVocabEntry(Base&& base) noexcept
-      : Base{std::move(base)} {}
+  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
+  QL_EXPLICIT(false)
+  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {

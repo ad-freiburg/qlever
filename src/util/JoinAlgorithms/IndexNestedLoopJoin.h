@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CancellationHandle.h"

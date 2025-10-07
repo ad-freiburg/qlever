@@ -36,10 +36,16 @@ class ExportQueryExecutionTrees {
   // `mediaType` and the query type will throw. The result is returned as a
   // `generator` that lazily computes the serialized result in large chunks of
   // bytes.
-  static cppcoro::generator<std::string> computeResult(
+  using ComputeResultReturnType =
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      cppcoro::generator<std::string>;
+#else
+      void;
+#endif
+  static ComputeResultReturnType computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Return the corresponding blank node string representation for the export if
   // this iri is a blank node iri. Otherwise, return std::nullopt.
@@ -153,9 +159,12 @@ class ExportQueryExecutionTrees {
   // the resulting `generator<string>` together with a message, that explains,
   // that there is no good mechanism for handling errors during a chunked HTTP
   // response transfer.
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static cppcoro::generator<std::string>
   convertStreamGeneratorForChunkedTransfer(
-      ad_utility::streams::stream_generator streamGenerator);
+      STREAMABLE_GENERATOR_TYPE streamGenerator);
+#endif
 
  private:
   // Make sure that the offset is not applied again when exporting the
@@ -173,10 +182,10 @@ class ExportQueryExecutionTrees {
   // `constructQueryResultBindingsToQLeverJSON` for the bindings and adds the
   // remaining (meta) fields needed for the `application/qlever-results+json`
   // format.
-  static ad_utility::streams::stream_generator computeResultAsQLeverJSON(
+  static STREAMABLE_GENERATOR_TYPE computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the bindings of the result of a SELECT query in the
   // `application/ qlever+json` format.
@@ -217,18 +226,19 @@ class ExportQueryExecutionTrees {
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
   template <MediaType format>
-  static ad_utility::streams::stream_generator constructQueryResultToStream(
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the result of a SELECT query as a CSV or TSV or binary stream.
   template <MediaType format>
-  static ad_utility::streams::stream_generator selectQueryResultToStream(
+  static STREAMABLE_GENERATOR_TYPE selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
+      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+      STREAMABLE_YIELDER_ARG_DECL);
 
   // Public for testing.
  public:

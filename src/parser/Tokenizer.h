@@ -9,6 +9,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
+#include "backports/StartsWith.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CompilerWarnings.h"
 #include "util/Log.h"
@@ -22,7 +23,6 @@ using namespace std::string_literals;
  */
 struct TurtleToken {
   using string = std::string;
-  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
       // them
@@ -66,8 +66,6 @@ struct TurtleToken {
         WsMultiple(grp(WsMultipleString)),
         Anon(grp(AnonString)),
         Comment(grp(CommentString)) {}
-
-  GCC_REENABLE_WARNINGS
 
   TurtleToken(const TurtleToken& other) : TurtleToken() { (void)other; }
   TurtleToken& operator=([[maybe_unused]] const TurtleToken& other) {
@@ -241,12 +239,12 @@ struct SkipWhitespaceAndCommentsMixin {
   // _________________________________________________________________________
   bool skipComments() {
     auto v = self().view();
-    if (v.starts_with('#')) {
+    if (ql::starts_with(v, '#')) {
       auto pos = v.find('\n');
       if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.
-        LOG(INFO) << "Warning, unfinished comment found while parsing"
-                  << std::endl;
+        AD_LOG_INFO << "Warning, unfinished comment found while parsing"
+                    << std::endl;
       } else {
         self()._data.remove_prefix(pos + 1);
       }

@@ -72,7 +72,7 @@ namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
-template <typename Row, template <typename, size_t...> typename Tp, size_t... I>
+template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
 };
@@ -232,7 +232,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    ql::span<const LocatedTriple> locatedTriples) {
+    ql::span<const LocatedTriple> locatedTriples,
+    ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("adding");
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
@@ -244,7 +246,10 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     handles.emplace_back(handle);
   }
 
+  tracer.endTrace("adding");
+  tracer.beginTrace("updateMetadata");
   updateAugmentedMetadata();
+  tracer.endTrace("updateMetadata");
 
   return handles;
 }
