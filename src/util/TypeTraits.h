@@ -392,10 +392,6 @@ CPP_concept RegularInvocableWithExactReturnType =
 template <typename T>
 CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 
-// Ensures that T is a floating-point type.
-template <typename T>
-CPP_concept FloatingPoint = std::is_floating_point_v<T>;
-
 // Make a variadic type unique (std::tuple containing each type once)
 namespace detail {
 template <typename...>

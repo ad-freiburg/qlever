@@ -128,10 +128,11 @@ using ::ranges::unsigned_integral;
 using ::ranges::weakly_incrementable;
 
 template <typename T>
-CPP_requires(default_initializable, requires(const T& t)(T{}, ::new T));
+CPP_requires(default_initializable, requires(const T&)(T{}, ::new T));
 
 template <typename T>
-CPP_concept default_initializable = CPP_requires_ref(default_initializable, T);
+CPP_concept default_initializable =
+    constructible_from<T> && CPP_requires_ref(default_initializable, T);
 
 template <typename T>
 CPP_concept floating_point = std::is_floating_point_v<T>;
