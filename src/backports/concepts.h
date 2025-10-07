@@ -136,6 +136,9 @@ CPP_requires(default_initializable, requires(const T&)(T{}, ::new T));
 template <typename T>
 CPP_concept default_initializable = CPP_requires_ref(default_initializable, T);
 
+template <typename T>
+CPP_concept floating_point = std::is_floating_point_v<T>;
+
 #else
 using namespace std;
 #endif

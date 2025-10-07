@@ -273,9 +273,11 @@ class CompressedExternalIdTableWriter {
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
-template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&>
-                                    BlockTransformation = ad_utility::Noop>
-class CompressedExternalIdTableBase {
+CPP_class_template(size_t NumStaticCols,
+                   typename BlockTransformation = ad_utility::Noop)(requires(
+    ql::concepts::invocable<
+        BlockTransformation,
+        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
   using reference = IdTableStatic<NumStaticCols>::row_reference;
