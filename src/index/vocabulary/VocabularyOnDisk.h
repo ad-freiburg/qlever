@@ -91,9 +91,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   };
 
   // Helper function for implementing a random access iterator.
-  using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
+  static constexpr auto accessor = [](const auto& vocabulary, uint64_t index) {
     return vocabulary[index];
-  });
+  };
+  using Accessor = decltype(accessor);
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =
