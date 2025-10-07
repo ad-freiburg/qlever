@@ -66,6 +66,9 @@
 // `auto myLambda2 = CPP_lambda(someCapture)(typename F)(F arg)(requires
 // ranges::same_as<F, int>) {...}`
 //
+// For a templated class, which has constrains on the template parameters as
+// well as member functions that are defined externally, you can use the
+// following pattern:
 // Header file: `CPP_template(typename T)(requires Concept<T>) struct Foo {
 //   static int bar(); };`
 // CPP file: `CPP_template_out_def(typename T)(requires Concept<T>) int
