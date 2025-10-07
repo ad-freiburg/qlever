@@ -10,6 +10,13 @@
 #ifndef QLEVER_SRC_BACKPORTS_MEMORY_RESOURCE_H
 #define QLEVER_SRC_BACKPORTS_MEMORY_RESOURCE_H
 
+// This file defines the `ql::pmr` namespace as a drop-in replacement for
+// `std::pmr`. If `QLEVER_CPP_17` is defined, then the types from the
+// `boost::container::pmr` namespace are used instead. Note1: `std::pmr` is
+// technically part of C++17, but GCC 8.3 which we are targeting is not yet
+// supporting it. Note2: the backported version requires linking against
+// `Boost::container` for the `monotonic_buffer_resource`.
+
 #ifdef QLEVER_CPP_17
 #include <boost/container/pmr/memory_resource.hpp>
 #include <boost/container/pmr/monotonic_buffer_resource.hpp>

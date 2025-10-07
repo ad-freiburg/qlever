@@ -93,7 +93,7 @@ CPP_template(typename CharT, typename Traits, typename Other)(
                                                           suffixIn) noexcept {
   std::basic_string_view<CharT, Traits> suffix(suffixIn);
   return sv.size() >= suffix.size() &&
-         Traits::compare(sv.data() + sv.size() - suffix.size(), suffix.data(),
+         Traits::compare(sv.data() + (sv.size() - suffix.size()), suffix.data(),
                          suffix.size()) == 0;
 }
 

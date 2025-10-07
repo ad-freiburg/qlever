@@ -13,7 +13,9 @@
 #include <functional>
 
 namespace ql {
-// Backport of `ql::identity` that can be used in C++17.
+// Backport of `std::identity` that can be used in C++17.
+// See https://en.cppreference.com/w/cpp/utility/functional/identity.html for
+// details.
 struct identity {
   template <typename T>
   constexpr T&& operator()(T&& t) const noexcept {
