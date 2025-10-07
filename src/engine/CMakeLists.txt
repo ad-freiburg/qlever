@@ -16,8 +16,9 @@ add_library(engine
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp ExplicitIdTableOperation.cpp)
+        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp ExplicitIdTableOperation.cpp BinaryExport.cpp)
 
+#TODO<joka921> Probably the binary export is currently a C++20-only feature.
 qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the

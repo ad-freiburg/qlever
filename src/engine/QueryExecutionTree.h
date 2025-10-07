@@ -80,6 +80,10 @@ class QueryExecutionTree {
   struct VariableAndColumnIndex {
     std::string variable_;
     size_t columnIndex_;
+    AD_SERIALIZE_FRIEND_FUNCTION(VariableAndColumnIndex) {
+      serializer | arg.variable_;
+      serializer | arg.columnIndex_;
+    }
   };
 
   using ColumnIndicesAndTypes =

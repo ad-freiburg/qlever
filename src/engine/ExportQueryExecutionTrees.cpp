@@ -5,7 +5,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -16,6 +16,7 @@
 
 #include "backports/StartsWith.h"
 #include "backports/algorithm.h"
+#include "engine/BinaryExport.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -767,6 +768,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
+    std::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
          getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -1023,6 +1025,25 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 }
 
 // _____________________________________________________________________________
+template <>
+STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
+    ad_utility::MediaType::binaryQleverExport>(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  // TODO<joka921> fix this
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return qlever::binary_export::exportAsQLeverBinary(
+      qet, selectClause, limitAndOffset, std::move(cancellationHandle));
+#else
+  throw std::runtime_error{
+      "The special binary export is currently not supported in the reduced "
+      "feature mode for C++17"};
+#endif
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
@@ -1034,8 +1055,10 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
-                format == MediaType::qleverJson);
-  if constexpr (format == MediaType::octetStream) {
+                format == MediaType::qleverJson ||
+                format == MediaType::binaryQleverExport);
+  if constexpr (format == MediaType::octetStream ||
+                format == MediaType::binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
   } else if constexpr (format == MediaType::sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
@@ -1142,13 +1165,15 @@ ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
+      csv,       tsv,        octetStream, turtle,
+      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>{}(compute, mediaType);
+                                  sparqlJson, qleverJson, binaryQleverExport>{}(
+          compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 #else
   ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
