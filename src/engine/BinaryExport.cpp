@@ -300,6 +300,16 @@ Result importBinaryHttpResponse(bool requestLaziness,
   std::vector<std::string> prefixes;
   serializer >> prefixes;
 
+  ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
+  const auto& localPrefixes = qec.getIndex().encodedIriManager().prefixes_;
+  for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
+    auto prefixIt = ql::ranges::find(localPrefixes, prefix);
+    if (prefixIt != localPrefixes.end()) {
+      prefixMapping[index] = static_cast<uint8_t>(
+          ql::ranges::distance(localPrefixes.begin(), prefixIt));
+    }
+  }
+
   QueryExecutionTree::ColumnIndicesAndTypes columns;
   serializer >> columns;
   auto numColumns = columns.size();
@@ -330,7 +340,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
                        Datatype::Undefined);
 
   LocalVocab vocab;
-  auto toId = [&qec, &prefixes, &vocab](Id::T bits) mutable {
+  auto toId = [&qec, &prefixes, &vocab, &prefixMapping](Id::T bits) mutable {
     // TODO<RobinTF> check local vocab for id conversion. Also the strings are
     // transmitted after the ids, so we might need to search `result` for
     // changes.
@@ -343,6 +353,11 @@ Result importBinaryHttpResponse(bool requestLaziness,
       auto digitEncoding = id.getEncodedVal() & mask;
       // Get the index of the prefix.
       auto prefixIdx = id.getEncodedVal() >> EncodedIriManager::NumBitsEncoding;
+      if (prefixMapping.contains(prefixIdx)) {
+        return Id::makeFromEncodedVal(
+            digitEncoding | (static_cast<uint64_t>(prefixMapping[prefixIdx])
+                             << EncodedIriManager::NumBitsEncoding));
+      }
       std::string result;
       const auto& prefix = prefixes.at(prefixIdx);
       result.reserve(prefix.size() + EncodedIriManager::NumDigits + 1);
