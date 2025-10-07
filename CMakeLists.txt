@@ -125,10 +125,12 @@ FetchContent_Declare(
         range-v3
         #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
         GIT_REPOSITORY https://github.com/joka921/range-v3
+
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
+        GIT_TAG 9f17f553be486a0c1ae13a98e0e9958ce3f5d23d # branch fork-for-qlever
 )
+add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
@@ -459,7 +461,8 @@ add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
-add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp
+        src/backports/iterator.h)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
