@@ -454,7 +454,7 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   point number.
   For example: 1/(1/2) = 2
   */
-  if (std::floating_point<T> &&
+  if (ql::concepts::floating_point<T> &&
       static_cast<double>(memoryInBytes_) >
           static_cast<double>(detail::size_t_max) * static_cast<double>(c)) {
     throw std::overflow_error(

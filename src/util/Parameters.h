@@ -32,12 +32,12 @@ struct ParameterBase {
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
 CPP_concept ParameterFromStringType =
-    std::default_initializable<FunctionType> &&
+    ql::concepts::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
 CPP_concept ParameterToStringType =
-    std::default_initializable<FunctionType> &&
+    ql::concepts::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
 /// Abstraction for a parameter that stores a value of the given `Type`.

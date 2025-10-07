@@ -86,8 +86,8 @@ struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
       requires((sizeof...(Cases) == 0) ||
                ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>)
-          CPP_and std::equality_comparable_with<decltype(FirstCase),
-                                                decltype(FirstCase)>
+          CPP_and ql::concepts::equality_comparable_with<decltype(FirstCase),
+                                                         decltype(FirstCase)>
               CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
                   CPP_and(InvocableWithCase<FuncType, Cases,
                                             Args...>&&...)) constexpr auto

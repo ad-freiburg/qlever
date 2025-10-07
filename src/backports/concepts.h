@@ -113,6 +113,7 @@ using namespace ::concepts;
 using ::ranges::bidirectional_iterator;
 using ::ranges::constructible_from;
 using ::ranges::contiguous_iterator;
+using ::ranges::equality_comparable_with;
 using ::ranges::forward_iterator;
 using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
