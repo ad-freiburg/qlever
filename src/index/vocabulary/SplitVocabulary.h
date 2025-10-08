@@ -6,11 +6,12 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -47,9 +48,9 @@ class PolymorphicVocabulary;
 // vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
-requires SplitFunctionT<SplitFunction> &&
-         SplitFilenameFunctionT<SplitFilenameFunction,
-                                sizeof...(UnderlyingVocabularies)>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
+        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -295,7 +296,7 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 [[maybe_unused]] inline auto geoSplitFunc =
     [](std::string_view word) -> uint8_t {
-  return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
+  return ql::starts_with(word, "\"") && ql::ends_with(word, GEO_LITERAL_SUFFIX);
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is

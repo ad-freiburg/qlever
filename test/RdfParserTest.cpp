@@ -261,7 +261,7 @@ TEST(RdfParserTest, rdfLiteral) {
 
   auto testLiteral = [](const std::string& literal, const auto& predicate,
                         ad_utility::source_location loc =
-                            ad_utility::source_location::current()) {
+                            AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
 
     EXPECT_THAT((checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(literal))

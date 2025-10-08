@@ -92,7 +92,7 @@ class TaskQueue {
     finishImpl();
   }
 
-  void resetTimers() requires TrackTimes {
+  CPP_member auto resetTimers() -> CPP_ret(void)(requires TrackTimes) {
     pushTime_ = 0;
     popTime_ = 0;
   }
@@ -114,7 +114,8 @@ class TaskQueue {
   }
 
   // __________________________________________________________________________
-  std::string getTimeStatistics() const requires TrackTimes {
+  CPP_member auto getTimeStatistics() const
+      -> CPP_ret(std::string)(requires TrackTimes) {
     return "Time spent waiting in queue " + name_ + ": " +
            std::to_string(pushTime_) + "ms (push), " +
            std::to_string(popTime_) + "ms (pop)";

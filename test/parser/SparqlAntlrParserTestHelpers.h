@@ -140,7 +140,7 @@ inline std::ostream& operator<<(std::ostream& out,
 template <typename Result, typename Matcher>
 void expectCompleteParse(
     const Result& resultOfParseAndText, Matcher&& matcher,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
@@ -160,7 +160,7 @@ template <typename Result, typename Matcher>
 void expectIncompleteParse(
     const Result& resultOfParseAndText, const std::string& rest,
     Matcher&& matcher,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_EQ(resultOfParseAndText.remainingText_, rest);
@@ -1045,8 +1045,10 @@ auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
 }
 
 // Same as `matchPtrWithChildren` above, but the children are all variables.
-template <typename Expression>
-auto matchPtrWithVariables(const std::same_as<::Variable> auto&... children)
+CPP_template(typename Expression, typename... Children)(requires(
+    ql::concepts::same_as<
+        ::Variable,
+        Children>&&...)) auto matchPtrWithVariables(const Children&... children)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtrWithChildren<Expression>(
       variableExpressionMatcher(children)...);
@@ -1254,31 +1256,29 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
-  auto operator()(const std::string& input, const Value& value,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const Value& value,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, value, prefixMap_, l);
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, matcher, prefixMap_, l);
   }
 
-  auto operator()(const std::string& input, const Value& value,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const Value& value,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
@@ -1288,11 +1288,10 @@ struct ExpectCompleteParse {
     });
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ParsedQuery::DatasetClauses activeDatasetClauses,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      ParsedQuery::DatasetClauses activeDatasetClauses,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
@@ -1312,14 +1311,14 @@ struct ExpectParseFails {
   auto operator()(
       const std::string& input,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     return operator()(input, prefixMap_, messageMatcher, l);
   }
 
   auto operator()(
       const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
         parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),
