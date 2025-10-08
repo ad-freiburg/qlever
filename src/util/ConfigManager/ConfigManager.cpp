@@ -12,7 +12,6 @@
 #include <absl/strings/str_replace.h>
 #include <antlr4-runtime.h>
 
-#include <functional>
 #include <iostream>
 #include <ranges>
 #include <regex>
@@ -23,9 +22,10 @@
 #include <utility>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Algorithm.h"
@@ -114,14 +114,14 @@ std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
 
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
-    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
-        std::invocable<Visitor, ConfigManager&>) decltype(auto)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
+        ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) {
   return visitImpl(AD_FWD(vis), data_);
 }
 CPP_template_def(typename Visitor)(
-    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
-        std::invocable<Visitor, ConfigManager&>) decltype(auto)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
+        ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
   return visitImpl(AD_FWD(vis), data_);
 }
@@ -130,10 +130,10 @@ CPP_template_def(typename Visitor)(
 CPP_template_def(typename Visitor, typename PointerType)(
     requires ad_utility::SimilarTo<
         std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-        CPP_and_def std::invocable<
+        CPP_and_def ql::concepts::invocable<
             Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                         const ConfigOption&, ConfigOption&>>
-            CPP_and_def std::invocable<
+            CPP_and_def ql::concepts::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigManager&,
                                             ConfigManager&>>) decltype(auto)

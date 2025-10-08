@@ -6,7 +6,7 @@
 
 #include <boost/url.hpp>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -190,7 +190,7 @@ class SubstrImpl {
   // SPARQL standard. This means that -1.5 is rounded to -1.
   static constexpr auto round = [](const auto& value) -> int64_t {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (ad_utility::FloatingPoint<T>) {
+    if constexpr (ql::concepts::floating_point<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
       } else {
@@ -295,7 +295,7 @@ using StrStartsExpression = StrStartsExpressionImpl<Operation<
 // STRENDS
 [[maybe_unused]] auto strEndsImpl = [](std::string_view text,
                                        std::string_view pattern) {
-  return Id::makeFromBool(text.ends_with(pattern));
+  return Id::makeFromBool(ql::ends_with(text, pattern));
 };
 
 using StrEndsExpression =

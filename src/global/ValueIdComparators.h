@@ -532,7 +532,7 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
                                       const auto& bValue) -> ComparisonResult {
     using A = std::decay_t<decltype(aValue)>;
     using B = std::decay_t<decltype(bValue)>;
-    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+    if constexpr (ranges::invocable<Comparator, A, B>) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
       static_assert((!std::is_same_v<A, B>) ||

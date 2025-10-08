@@ -6,12 +6,11 @@
 #ifndef QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
-#include <concepts>
 #include <cstdint>
 #include <string>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
@@ -72,8 +71,8 @@ class TripleComponent {
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
   CPP_template(typename FirstArg, typename... Args)(
-      requires CPP_NOT(
-          std::same_as<ql::remove_cvref_t<FirstArg>, TripleComponent>) &&
+      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
+                                             TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
@@ -130,12 +129,12 @@ class TripleComponent {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(TripleComponent, _variant)
 
   /// Hash value for `TripleComponent` object.
-  /// Note: It is important to use `std::same_as` because otherwise this
-  /// overload would also be eligible for the contained types that are
+  /// Note: It is important to use `ql::concepts::same_as` because otherwise
+  /// this overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  CPP_template(typename H,
-               typename TC)(requires std::same_as<TC, TripleComponent>) friend H
+  CPP_template(typename H, typename TC)(
+      requires ql::concepts::same_as<TC, TripleComponent>) friend H
       AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }

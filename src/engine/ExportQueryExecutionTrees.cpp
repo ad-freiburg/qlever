@@ -14,7 +14,7 @@
 
 #include <ranges>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -417,7 +417,7 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
   AD_CORRECTNESS_CHECK(ql::starts_with(iriString, '<'));
-  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  AD_CORRECTNESS_CHECK(ql::ends_with(iriString, '>'));
   iriString[0] = '"';
   iriString[iriString.size() - 1] = '"';
   return iriString;
@@ -640,15 +640,15 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, false, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, true, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // This explicit instantiation is necessary because the `Variable` class
 // currently still uses it.
@@ -657,7 +657,7 @@ ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
-                                             std::identity&& escapeFunction);
+                                             ql::identity&& escapeFunction);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,

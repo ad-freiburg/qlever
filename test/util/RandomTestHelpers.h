@@ -8,9 +8,9 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <functional>
 #include <random>
 
+#include "backports/functional.h"
 #include "util/Random.h"
 
 // A simple pseudo random generator for instances of `ad_utility::RandomSeed`.

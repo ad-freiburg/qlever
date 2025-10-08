@@ -4,7 +4,7 @@
 
 #include "index/PrefixHeuristic.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
