@@ -426,9 +426,9 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   Iterator begin() {
     AD_CONTRACT_CHECK(!std::exchange(beginWasCalled_, true),
                       "Begin was called multiple times on an `input_range`");
-    return Iterator{std::ranges::begin(base_)};
+    return Iterator{ql::ranges::begin(base_)};
   }
-  Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
+  Sentinel end() { return Sentinel{ql::ranges::end(base_)}; }
 };
 
 // Deduction guides
