@@ -9,6 +9,7 @@
 
 #ifndef QLEVER_SRC_UTIL_VIEWS_TAKEUNTILINCLUSIVEVIEW_H
 #define QLEVER_SRC_UTIL_VIEWS_TAKEUNTILINCLUSIVEVIEW_H
+#include "backports/iterator.h"
 #include "util/Views.h"
 
 namespace ad_utility {
@@ -112,7 +113,7 @@ CPP_template(typename V, typename Pred)(
     void operator++(int) { ++(*this); }
 
     // TODO<joka921> Implement `ql::default_sentinel`
-    bool operator==(std::default_sentinel_t) const {
+    bool operator==(ql::default_sentinel_t) const {
       return done_ || current_ == end_;
     }
   };
@@ -126,7 +127,7 @@ CPP_template(typename V, typename Pred)(
     return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_), &pred_};
   }
 
-  auto end() { return std::default_sentinel; }
+  auto end() { return ql::default_sentinel; }
 };
 
 // Deduction guides.
