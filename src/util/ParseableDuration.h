@@ -117,7 +117,7 @@ class ParseableDuration {
       std::basic_ostream<CharT>& os,
       const ParseableDuration<DurationType>& duration) {
     using namespace std::chrono;
-    using period = DurationType::period;
+    using period = typename DurationType::period;
 
     os << duration.duration_.count();
 
