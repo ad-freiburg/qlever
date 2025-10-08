@@ -190,7 +190,7 @@ TEST(TakeUntilInclusiveViewTest, RangeAdaptorPipeability) {
   // Test simpler combination with transform
   std::vector<int> simple_data{1, 2, 3};
   auto result2 = simple_data |
-                 std::views::transform([](int x) { return x + 10; }) |
+                 ql::views::transform([](int x) { return x + 10; }) |
                  views::takeUntilInclusive([](int x) { return x == 12; });
 
   std::vector<int> vec2;
