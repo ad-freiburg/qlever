@@ -10,7 +10,7 @@
 #include <string>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"

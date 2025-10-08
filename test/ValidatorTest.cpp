@@ -7,13 +7,13 @@
 
 #include <gtest/gtest.h>
 
-#include <functional>
 #include <optional>
 #include <tuple>
 #include <unordered_set>
 
 #include "../test/util/GTestHelpers.h"
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/Validator.h"

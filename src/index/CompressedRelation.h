@@ -552,7 +552,7 @@ class CompressedRelationReader {
     //   - `firstFreeColIndex` is the column index up to which we expect
     //      constant values in `columns < firstFreeColIndex` over all blocks.
     static void checkBlockMetadataInvariant(
-        std::span<const CompressedBlockMetadata> blocks,
+        ql::span<const CompressedBlockMetadata> blocks,
         size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can

@@ -72,7 +72,7 @@ class ExportQueryExecutionTrees {
   // queries is completely performed inside this module.
   template <bool removeQuotesAndAngleBrackets = false,
             bool returnOnlyLiterals = false,
-            typename EscapeFunction = std::identity>
+            typename EscapeFunction = ql::identity>
   static std::optional<std::pair<std::string, const char*>> idToStringAndType(
       const Index& index, Id id, const LocalVocab& localVocab,
       EscapeFunction&& escapeFunction = EscapeFunction{});

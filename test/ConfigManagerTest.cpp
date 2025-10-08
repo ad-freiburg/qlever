@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <functional>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -21,7 +20,8 @@
 #include "./util/GTestHelpers.h"
 #include "./util/PrintConfigurationDocComparisonString.h"
 #include "./util/ValidatorHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "gtest/gtest.h"
 #include "util/Algorithm.h"
@@ -2444,7 +2444,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
     ConstConfigOptionProxy<bool> proxy(opt);
 
     // Dummy translator function needed for validator manager constructor.
-    auto translator{std::identity{}};
+    auto translator{ql::identity{}};
 
     // Dummy validator function needed for validator manager constructor.
     auto validator = [](const auto&) { return true; };
@@ -2569,7 +2569,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   ConstConfigOptionProxy<bool> notIncludedOptProxy(notIncludedOpt);
   ConfigManager notIncludedConfigManager{};
   ConfigOptionValidatorManager notIncludedValidator(
-      [](const auto&) { return true; }, "", "", std::identity{},
+      [](const auto&) { return true; }, "", "", ql::identity{},
       notIncludedOptProxy);
   ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedOpt).empty());
   ASSERT_TRUE(assignment.getEntriesUnderKey(notIncludedConfigManager).empty());

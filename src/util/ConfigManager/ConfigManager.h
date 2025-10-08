@@ -11,7 +11,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +19,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"

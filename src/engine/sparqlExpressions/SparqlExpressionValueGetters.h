@@ -10,7 +10,7 @@
 
 #include <re2/re2.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"

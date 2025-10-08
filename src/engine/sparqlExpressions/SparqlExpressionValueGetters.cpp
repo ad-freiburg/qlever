@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_format.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"

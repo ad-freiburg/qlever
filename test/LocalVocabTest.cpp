@@ -9,7 +9,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"

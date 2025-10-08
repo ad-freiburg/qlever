@@ -9,7 +9,7 @@
 #include <re2/re2.h>
 
 #include "NaryExpressionImpl.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"

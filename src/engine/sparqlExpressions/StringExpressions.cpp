@@ -6,7 +6,7 @@
 
 #include <boost/url.hpp>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -295,7 +295,7 @@ using StrStartsExpression = StrStartsExpressionImpl<Operation<
 // STRENDS
 [[maybe_unused]] auto strEndsImpl = [](std::string_view text,
                                        std::string_view pattern) {
-  return Id::makeFromBool(text.ends_with(pattern));
+  return Id::makeFromBool(ql::ends_with(text, pattern));
 };
 
 using StrEndsExpression =

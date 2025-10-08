@@ -5,9 +5,8 @@
 #ifndef QLEVER_UNIQUECLEANUP_H
 #define QLEVER_UNIQUECLEANUP_H
 
-#include <functional>
-
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility::unique_cleanup {

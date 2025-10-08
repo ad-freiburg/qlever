@@ -7,9 +7,8 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
-#include <memory_resource>
-
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/memory_resource.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -74,7 +73,7 @@ struct LocalVocabIndexAndSplitVal {
 // single phase at once as soon as we are finished with them.
 
 // Allocator type for the hash map
-using ItemAlloc = std::pmr::polymorphic_allocator<
+using ItemAlloc = ql::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
 
 // The actual hash map type.
@@ -90,14 +89,14 @@ using ItemVec =
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope.
 class MonotonicBuffer {
-  std::unique_ptr<std::pmr::monotonic_buffer_resource> buffer_ =
-      std::make_unique<std::pmr::monotonic_buffer_resource>();
-  std::unique_ptr<std::pmr::polymorphic_allocator<char>> charAllocator_ =
-      std::make_unique<std::pmr::polymorphic_allocator<char>>(buffer_.get());
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_ =
+      std::make_unique<ql::pmr::monotonic_buffer_resource>();
+  std::unique_ptr<ql::pmr::polymorphic_allocator<char>> charAllocator_ =
+      std::make_unique<ql::pmr::polymorphic_allocator<char>>(buffer_.get());
 
  public:
   // Access to the underlying allocator.
-  std::pmr::polymorphic_allocator<char>& charAllocator() {
+  ql::pmr::polymorphic_allocator<char>& charAllocator() {
     return *charAllocator_;
   }
   // Append a string to the buffer and return a `string_view` that points into
@@ -119,7 +118,7 @@ struct ItemMapAndBuffer {
   ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;
   // We have to delete the move-assignment as it would have the wrong semantics
   // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
-  // `std::pmr` types.
+  // `ql::pmr` types.
   ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
 };
 

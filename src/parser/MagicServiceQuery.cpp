@@ -7,7 +7,7 @@
 
 #include <string_view>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/NormalizedString.h"
 #include "parser/SparqlTriple.h"

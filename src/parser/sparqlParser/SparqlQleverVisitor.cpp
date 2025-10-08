@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -1917,15 +1917,15 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
 
   if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
     std::string name = object.toSparql();
-    if (!((ql::starts_with(name, '"') && name.ends_with('"')) ||
-          (ql::starts_with(name, '\'') && name.ends_with('\'')))) {
+    if (!((ql::starts_with(name, '"') && ql::ends_with(name, '"')) ||
+          (ql::starts_with(name, '\'') && ql::ends_with(name, '\'')))) {
       reportError(ctx,
                   "ql:contains-word has to be followed by a string in quotes");
     }
     for (std::string_view s : std::vector<std::string>(
              absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-      addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
-      if (!s.ends_with('*')) {
+      addVisibleVariable(var->getWordScoreVariable(s, ql::ends_with(s, '*')));
+      if (!ql::ends_with(s, '*')) {
         continue;
       }
       addVisibleVariable(var->getMatchingWordVariable(
@@ -1961,15 +1961,15 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
 
         if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
           string name = object.toSparql();
-          if (!((ql::starts_with(name, '"') && name.ends_with('"')) ||
-                (ql::starts_with(name, '\'') && name.ends_with('\'')))) {
+          if (!((ql::starts_with(name, '"') && ql::ends_with(name, '"')) ||
+                (ql::starts_with(name, '\'') && ql::ends_with(name, '\'')))) {
             reportError(
                 ctx,
                 "ql:contains-word has to be followed by a string in quotes");
           }
           for (std::string_view s : std::vector<std::string>(
                    absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-            if (!s.ends_with('*')) {
+            if (!ql::ends_with(s, '*')) {
               continue;
             }
             addVisibleVariable(var->getMatchingWordVariable(

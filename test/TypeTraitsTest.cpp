@@ -5,9 +5,8 @@
 
 #include <gtest/gtest.h>
 
-#include <functional>
-
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/TypeTraits.h"

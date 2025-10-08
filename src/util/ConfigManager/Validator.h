@@ -7,12 +7,12 @@
 #define QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H
 
 #include <atomic>
-#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
 
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/HashSet.h"

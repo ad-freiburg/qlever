@@ -377,8 +377,8 @@ class InputRangeFromGet
   Sentinel end() const { return {}; };
 
   using DetailStorage =
-      DetailsProvider<InputRangeFromGet<ValueType, DetailsType>,
-                      DetailsType>::DetailStorage;
+      typename DetailsProvider<InputRangeFromGet<ValueType, DetailsType>,
+                               DetailsType>::DetailStorage;
 
   // If the `Details` type is empty, we don't need it to occupy any space.
   [[no_unique_address]] DetailStorage details_{};
@@ -499,8 +499,8 @@ class InputRangeTypeErased
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 
   using DetailStorage =
-      DetailsProvider<InputRangeTypeErased<ValueType, DetailsType>,
-                      DetailsType>::DetailStorage;
+      typename DetailsProvider<InputRangeTypeErased<ValueType, DetailsType>,
+                               DetailsType>::DetailStorage;
 
   // Relays details to the implementation.
   DetailStorage& getDetails() { return impl_->getDetails(); }
