@@ -13,6 +13,7 @@
 #include <limits>
 
 #include "backports/functional.h"
+#include "backports/keywords.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -44,7 +45,7 @@ enum struct Datatype {
 };
 
 /// Convert the `Datatype` enum to the corresponding string
-constexpr std::string_view toString(Datatype type) {
+QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
       return "Undefined";
@@ -92,8 +93,12 @@ class ValueId {
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
+  /// TODO<joka921> This constant is currently only used in unit tests.
+  /// Find the exact value for CPP17 mode, and static assert it in C++20 mode.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP_17
   static constexpr double minPositiveDouble =
       absl::bit_cast<double>(1ull << numDatatypeBits);
+#endif
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();

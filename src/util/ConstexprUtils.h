@@ -195,6 +195,11 @@ constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename decltype(Array)::value_type,
                        std::get<indexes>(Array)...>{};
 }
+template <const auto& Array, size_t... indexes>
+constexpr auto toIntegerSequenceRefHelper(std::index_sequence<indexes...>) {
+  return ValueSequence<typename std::decay_t<decltype(Array)>::value_type,
+                       std::get<indexes>(Array)...>{};
+}
 }  // namespace detail
 
 // Convert a compile-time `std::array` to a `ValueSequence` that
@@ -205,6 +210,11 @@ constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
 template <auto Array>
 auto toIntegerSequence() {
   return detail::toIntegerSequenceHelper<Array>(
+      std::make_index_sequence<Array.size()>{});
+}
+template <const auto& Array>
+auto toIntegerSequenceRef() {
+  return detail::toIntegerSequenceRefHelper<Array>(
       std::make_index_sequence<Array.size()>{});
 }
 

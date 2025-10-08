@@ -17,10 +17,12 @@
 #ifdef QLEVER_CPP_17
 #define QL_CONSTEVAL constexpr
 #define QL_EXPLICIT(...)
+#define QL_CONSTEXPR
 
 #else
 #define QL_CONSTEVAL consteval
 #define QL_EXPLICIT(...) explicit(__VA_ARGS__)
+#define QL_CONSTEXPR constexpr
 #endif
 
 #endif  // QLEVER_SRC_BACKPORTS_KEYWORDS_H
