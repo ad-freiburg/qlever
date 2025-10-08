@@ -9,7 +9,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <bit>
 #include <cstdint>
 #include <limits>
 

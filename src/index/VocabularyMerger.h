@@ -194,7 +194,7 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
+  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE();
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
