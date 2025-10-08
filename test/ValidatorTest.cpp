@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
 #include <optional>
 #include <tuple>
 #include <unordered_set>
@@ -408,7 +407,8 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         QL_CONCEPT_OR_NOTHING(
+             std::same_as<ConstConfigOptionProxy<bool>>) auto... args) {
         return ConfigOptionValidatorManager(
             [errorMessage =
                  std::move(errorMessage)](const std::same_as<bool> auto... b)
@@ -427,9 +427,12 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         QL_CONCEPT_OR_NOTHING(
+             std::same_as<ConstConfigOptionProxy<bool>>) auto... args) {
         return ConfigOptionValidatorManager(
-            [](const std::same_as<bool> auto... b) { return (b && ...); },
+            [](const QL_CONCEPT_OR_NOTHING(std::same_as<bool>) auto... b) {
+              return (b && ...);
+            },
             std::move(errorMessage), std::move(descriptor), translationFunction,
             args...);
       });

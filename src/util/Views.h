@@ -208,8 +208,8 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and
-        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
+        ql::concepts::invocable<F&>) class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
@@ -396,7 +396,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
   class Sentinel {
    private:
-    std::ranges::sentinel_t<V> end_;
+    ql::ranges::sentinel_t<V> end_;
 
    public:
     Sentinel() = default;
@@ -504,8 +504,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(
-    requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
+                           Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 }  // namespace ad_utility

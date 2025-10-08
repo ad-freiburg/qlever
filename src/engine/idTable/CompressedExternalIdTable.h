@@ -273,9 +273,11 @@ class CompressedExternalIdTableWriter {
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
-template <size_t NumStaticCols, std::invocable<IdTableStatic<NumStaticCols>&>
-                                    BlockTransformation = ad_utility::Noop>
-class CompressedExternalIdTableBase {
+CPP_class_template(size_t NumStaticCols,
+                   typename BlockTransformation = ad_utility::Noop)(requires(
+    ql::concepts::invocable<
+        BlockTransformation,
+        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
  public:
   using value_type = IdTableStatic<NumStaticCols>::row_type;
   using reference = IdTableStatic<NumStaticCols>::row_reference;
@@ -610,10 +612,9 @@ class CompressedExternalIdTableSorter
   // Similar to `sortedView` (see above), but the elements are yielded in
   // blocks. The size of the blocks is `blocksize` if specified, otherwise it
   // will be automatically determined from the given memory limit.
-  template <size_t N = NumStaticCols>
-  requires(N == NumStaticCols || N == 0)
-  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
-      std::optional<size_t> blocksize = std::nullopt) {
+  CPP_template(size_t N = NumStaticCols)(requires(N == NumStaticCols || N == 0))
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
+          std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
@@ -725,10 +726,9 @@ class CompressedExternalIdTableSorter
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return an input range that yields the sorted elements.
   // This function may be called exactly once.
-  template <size_t N = NumStaticCols>
-  requires(N == NumStaticCols || N == 0)
-  ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
-      std::optional<size_t> blocksize = std::nullopt) {
+  CPP_template(size_t N = NumStaticCols)(requires(N == NumStaticCols || N == 0))
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
+          std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
       // There was only one block, return it. If a blocksize was explicitly
       // requested for the output, and the single block is larger than this

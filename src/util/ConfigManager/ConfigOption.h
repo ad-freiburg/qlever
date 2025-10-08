@@ -10,7 +10,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <any>
-#include <concepts>
 #include <optional>
 #include <string_view>
 #include <typeinfo>

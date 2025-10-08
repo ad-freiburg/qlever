@@ -9,7 +9,7 @@
 
 #include <optional>
 
-#include "backports/functional.h"
+#include "backports/concepts.h"
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -56,19 +56,21 @@ namespace detail {
 
 // Call the `lambda` when the correct compile-time `Int`s are given as a
 // `std::integer_sequence`.
-template <std::integral Int, Int... Is, typename F, typename... Args>
-auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
-                            Args&&... args) {
+CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
+    requires ql::concepts::integral<
+        Int>) auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>,
+                                          F&& lambda, Args&&... args) {
   return lambda.template operator()<Is...>(AD_FWD(args)...);
 };
 
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
-template <int maxValue, size_t NumValues, std::integral Int, typename F,
-          typename... Args>
-auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
-                           Args&&... args) {
+CPP_variadic_template(int maxValue, size_t NumValues, typename Int, typename F,
+                      typename... Args)(
+    requires(ql::concepts::integral<
+             Int>)) auto callLambdaForIntArray(std::array<Int, NumValues> array,
+                                               F&& lambda, Args&&... args) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
@@ -119,8 +121,10 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
 }
 
 // Overload for a single int.
-template <int maxValue, std::integral Int, typename F, typename... Args>
-auto callLambdaForIntArray(Int i, F&& lambda, Args&&... args) {
+CPP_variadic_template(int maxValue, typename Int, typename F,
+                      typename... Args)(requires(
+    ql::concepts::integral<Int>)) auto callLambdaForIntArray(Int i, F&& lambda,
+                                                             Args&&... args) {
   return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda),
                                          AD_FWD(args)...);
 }

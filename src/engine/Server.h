@@ -245,11 +245,11 @@ class Server {
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
-  template <std::invocable Function,
-            typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
-                                  Function function,
-                                  SharedCancellationHandle handle);
+  CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
+      requires ql::concepts::invocable<Function>)
+      Awaitable<T> computeInNewThread(
+          boost::asio::static_thread_pool& threadPool, Function function,
+          SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new

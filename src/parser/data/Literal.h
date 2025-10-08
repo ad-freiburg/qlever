@@ -30,7 +30,7 @@ class Literal {
 
  public:
   CPP_template_2(typename T)(
-      requires CPP_NOT(std::same_as<ql::remove_cvref_t<T>, Literal>)
+      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<T>, Literal>)
           CPP_and_2 ad_utility::Streamable<T>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 

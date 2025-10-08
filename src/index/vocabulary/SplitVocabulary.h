@@ -48,9 +48,9 @@ class PolymorphicVocabulary;
 // vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
           typename... UnderlyingVocabularies>
-requires SplitFunctionT<SplitFunction> &&
-         SplitFilenameFunctionT<SplitFilenameFunction,
-                                sizeof...(UnderlyingVocabularies)>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
+        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying

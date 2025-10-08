@@ -472,11 +472,12 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<ad_utility::GeometryInfo>
-GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
-    ValueId id, const EvaluationContext* context) {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter<
+        CPP_sfinae_args(RequestedInfo)>::
+        getPrecomputedGeometryInfo(ValueId id,
+                                   const EvaluationContext* context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
     // All geometry strings encountered during index build have a precomputed
@@ -487,10 +488,11 @@ GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
 }
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
-    ValueId id, const EvaluationContext* context) const {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+        RequestedInfo)>::operator()(ValueId id,
+                                    const EvaluationContext* context) const {
   using enum Datatype;
   switch (id.getDatatype()) {
     case EncodedVal:
@@ -524,11 +526,12 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
 };
 
 //______________________________________________________________________________
-template <typename RequestedInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-std::optional<RequestedInfo> GeometryInfoValueGetter<RequestedInfo>::operator()(
-    const LiteralOrIri& litOrIri,
-    [[maybe_unused]] const EvaluationContext* context) const {
+CPP_template_out_def(typename RequestedInfo)(
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+    std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
+        RequestedInfo)>::operator()(const LiteralOrIri& litOrIri,
+                                    [[maybe_unused]] const EvaluationContext*
+                                        context) const {
   // If we receive only a literal, we have no choice but to parse it and compute
   // the geometry info ad hoc.
   if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
