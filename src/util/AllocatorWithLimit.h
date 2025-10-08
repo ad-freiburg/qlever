@@ -8,9 +8,9 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <functional>
 #include <memory>
 
+#include "backports/functional.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 

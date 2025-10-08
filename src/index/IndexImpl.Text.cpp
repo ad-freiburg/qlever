@@ -13,6 +13,7 @@
 #include <tuple>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
@@ -140,7 +141,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   if (tbmds.empty()) {
-    idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
+    idTable.setNumColumns(ql::ends_with(term, PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
 
@@ -221,7 +222,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     const -> std::vector<TextBlockMetadataAndWordInfo> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
-  if (word.ends_with(PREFIX_CHAR)) {
+  if (ql::ends_with(word, PREFIX_CHAR)) {
     auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
     if (!idRangeOpt.has_value()) {
       AD_LOG_INFO << "Prefix: " << word << " not in vocabulary\n";

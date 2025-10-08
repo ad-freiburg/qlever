@@ -7,7 +7,7 @@
 
 #include "parser/NamedCachedResult.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 
 namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has

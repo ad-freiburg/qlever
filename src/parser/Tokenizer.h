@@ -9,7 +9,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CompilerWarnings.h"
 #include "util/Log.h"

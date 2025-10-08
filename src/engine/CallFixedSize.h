@@ -7,9 +7,9 @@
 #ifndef QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 #define QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 
-#include <functional>
 #include <optional>
 
+#include "backports/functional.h"
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"

@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"

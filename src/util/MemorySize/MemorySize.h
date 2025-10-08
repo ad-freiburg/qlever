@@ -12,12 +12,12 @@
 
 #include <cassert>
 #include <cstddef>
-#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <string>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"

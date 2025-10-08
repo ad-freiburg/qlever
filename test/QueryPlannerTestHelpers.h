@@ -12,7 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
@@ -163,7 +163,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(2 + word.ends_with('*'))),
+                  Eq(2 + ql::ends_with(word, '*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };

@@ -4,7 +4,7 @@
 
 #include "engine/SparqlProtocol.h"
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;

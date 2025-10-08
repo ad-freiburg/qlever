@@ -7,12 +7,12 @@
 #define QLEVER_SRC_BACKPORTS_ALGORITHM_H
 
 #include <algorithm>
-#include <functional>
 #include <range/v3/all.hpp>
 #include <utility>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/functional.h"
 
 // The following defines namespaces `ql::ranges` and `ql::views` that are almost
 // drop-in replacements for `ql::ranges` and `std::views`. In C++20 mode (when
