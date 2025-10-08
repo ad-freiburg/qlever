@@ -90,10 +90,13 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t size_;
   };
 
-  // Helper function for implementing a random access iterator.
-  using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
-    return vocabulary[index];
-  });
+  // The `Accessor` for the `IteratorForAccessOperator` class below.
+  struct Accessor {
+    template <typename Voc>
+    constexpr auto operator()(const Voc& vocabulary, uint64_t index) const {
+      return vocabulary[index];
+    }
+  };
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =

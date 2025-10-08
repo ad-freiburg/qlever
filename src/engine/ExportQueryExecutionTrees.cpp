@@ -16,6 +16,7 @@
 #include <ranges>
 #include <string_view>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/EncodedIriManager.h"
 #include "index/IndexImpl.h"
@@ -346,7 +347,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::
     // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
     // to unnecessary copies of `triple._object` in the `else` case because
     // the ternary always has to create a new prvalue.
-    if (triple.object_.starts_with('"')) {
+    if (ql::starts_with(triple.object_, '"')) {
       std::string objectAsValidRdfLiteral =
           RdfEscaping::validRDFLiteralFromNormalized(triple.object_);
       STREAMABLE_YIELD(objectAsValidRdfLiteral);
@@ -522,8 +523,8 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 // _____________________________________________________________________________
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
-  AD_CORRECTNESS_CHECK(iriString.starts_with('<'));
-  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  AD_CORRECTNESS_CHECK(ql::starts_with(iriString, '<'));
+  AD_CORRECTNESS_CHECK(ql::ends_with(iriString, '>'));
   iriString[0] = '"';
   iriString[iriString.size() - 1] = '"';
   return iriString;
@@ -587,11 +588,11 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
 std::optional<std::string> ExportQueryExecutionTrees::blankNodeIriToString(
     const ad_utility::triple_component::Iri& iri) {
   const auto& representation = iri.toStringRepresentation();
-  if (representation.starts_with(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
+  if (ql::starts_with(representation, QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
     std::string_view view = representation;
     view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
     view.remove_suffix(1);
-    AD_CORRECTNESS_CHECK(view.starts_with("_:"));
+    AD_CORRECTNESS_CHECK(ql::starts_with(view, "_:"));
     return std::string{view};
   }
   return std::nullopt;
@@ -746,15 +747,15 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, false, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, true, ql::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
-    std::identity&& escapeFunction);
+    ql::identity&& escapeFunction);
 
 // This explicit instantiation is necessary because the `Variable` class
 // currently still uses it.
@@ -763,7 +764,7 @@ ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
-                                             std::identity&& escapeFunction);
+                                             ql::identity&& escapeFunction);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
@@ -777,13 +778,13 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
   }
 
   // The string is an IRI or literal.
-  if (entitystr.starts_with('<')) {
+  if (ql::starts_with(entitystr, '<')) {
     // Strip the <> surrounding the iri.
     b["value"] = entitystr.substr(1, entitystr.size() - 2);
     // Even if they are technically IRIs, the format needs the type to be
     // "uri".
     b["type"] = "uri";
-  } else if (entitystr.starts_with("_:")) {
+  } else if (ql::starts_with(entitystr, "_:")) {
     b["value"] = entitystr.substr(2);
     b["type"] = "bnode";
   } else {
@@ -961,11 +962,11 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
   // datatypes.
   auto strToBinding = [&result, &append, &escape](std::string_view entitystr) {
     // The string is an IRI or literal.
-    if (entitystr.starts_with('<')) {
+    if (ql::starts_with(entitystr, '<')) {
       // Strip the <> surrounding the iri.
       append("<uri>"sv, escape(entitystr.substr(1, entitystr.size() - 2)),
              "</uri>"sv);
-    } else if (entitystr.starts_with("_:")) {
+    } else if (ql::starts_with(entitystr, "_:")) {
       append("<bnode>"sv, entitystr.substr(2), "</bnode>"sv);
     } else {
       size_t quotePos = entitystr.rfind('"');

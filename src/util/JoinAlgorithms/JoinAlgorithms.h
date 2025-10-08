@@ -31,14 +31,14 @@ namespace ad_utility {
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept UnaryIteratorFunction =
-    std::invocable<F, ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
 // two arguments of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 CPP_concept BinaryIteratorFunction =
-    std::invocable<F, ql::ranges::iterator_t<Range>,
-                   ql::ranges::iterator_t<Range>>;
+    ql::concepts::invocable<F, ql::ranges::iterator_t<Range>,
+                            ql::ranges::iterator_t<Range>>;
 
 // Helper type to indicate the different join modes.
 enum class JoinType { JOIN, OPTIONAL, MINUS };
@@ -486,7 +486,7 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT)(
     requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
         NotFoundActionT, IdTableView<0>>
-        CPP_and std::invocable<
+        CPP_and ql::concepts::invocable<
             CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
                                                              left,
                                                          const IdTableView<0>&
@@ -854,7 +854,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
   using ProjectedEl = LeftSide::ProjectedEl;
-  static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
+  static_assert(
+      ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
       !std::is_same_v<IsUndef, AlwaysFalse>;
 
@@ -1534,8 +1535,8 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
  * `flush`.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithoutUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
@@ -1553,8 +1554,8 @@ void zipperJoinForBlocksWithoutUndef(
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
 // a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename CompatibleRowAction, typename LeftProjection = std::identity,
-          typename RightProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = ql::identity,
+          typename RightProjection = ql::identity,
           JoinType joinType = JoinType::JOIN>
 void zipperJoinForBlocksWithPotentialUndef(
     LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,

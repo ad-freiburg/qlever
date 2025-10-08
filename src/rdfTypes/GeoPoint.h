@@ -21,7 +21,7 @@ struct CoordinateOutOfRangeException : public std::exception {
  public:
   explicit CoordinateOutOfRangeException(
       double value, bool isLat,
-      ad_utility::source_location s = ad_utility::source_location::current()) {
+      ad_utility::source_location s = AD_CURRENT_SOURCE_LOC()) {
     errorMessage_ =
         absl::StrCat(s.file_name(), ", line ", s.line(), ": The given value ",
                      value, " is out of range for ",
@@ -42,7 +42,7 @@ class GeoPoint {
   using T = uint64_t;
 
   CPP_template(typename H,
-               typename G)(requires std::same_as<G, GeoPoint>) friend H
+               typename G)(requires ql::concepts::same_as<G, GeoPoint>) friend H
       AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }

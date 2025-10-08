@@ -81,7 +81,7 @@ class VectorWithMemoryLimit
     return VectorWithMemoryLimit(*this);
   }
 };
-static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
@@ -283,7 +283,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (ranges::invocable<Function, Operands&&...>) {
+      if constexpr (ql::concepts::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();

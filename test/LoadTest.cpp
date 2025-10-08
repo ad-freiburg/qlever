@@ -47,7 +47,7 @@ class LoadTest : public ::testing::Test {
          std::string contentType = "text/turtle",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> SendRequestType {
+             AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     httpClientTestHelpers::RequestMatchers matchers{
         .method_ = testing::Eq(boost::beast::http::verb::get),
         .postData_ = testing::Eq(""),
@@ -85,10 +85,9 @@ TEST_F(LoadTest, computeResult) {
   auto testSilentBehavior = [this](parsedQuery::Load pq,
                                    SendRequestType sendFunc,
                                    ad_utility::source_location loc =
-                                       ad_utility::source_location::current()) {
-    auto impl = [this, &pq,
-                 &sendFunc](ad_utility::source_location loc =
-                                ad_utility::source_location::current()) {
+                                       AD_CURRENT_SOURCE_LOC()) {
+    auto impl = [this, &pq, &sendFunc](ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
@@ -113,8 +112,7 @@ TEST_F(LoadTest, computeResult) {
       [this, testSilentBehavior](
           parsedQuery::Load pq, SendRequestType sendFunc,
           const testing::Matcher<std::string>& expectedError,
-          ad_utility::source_location loc =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
@@ -125,8 +123,7 @@ TEST_F(LoadTest, computeResult) {
   auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
              const testing::Matcher<std::string>& expectedError,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
@@ -140,8 +137,7 @@ TEST_F(LoadTest, computeResult) {
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
 
         Load load{
