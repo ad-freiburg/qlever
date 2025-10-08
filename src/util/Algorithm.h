@@ -170,7 +170,8 @@ CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
     requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 
@@ -196,7 +197,8 @@ CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
     requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 
