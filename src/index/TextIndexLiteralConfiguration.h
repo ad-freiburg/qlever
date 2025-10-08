@@ -26,7 +26,7 @@ enum struct LiteralFilterType { AcceptMatching, DeclineMatching };
  *                                triple is only marked as 'add to text index'
  *                                if `predicateRegex_` doesn't match the
  *                                predicate.
- * @param addAllLiterals_ If set to true all literals of a triple are marked as
+ * @param addAllLiterals_ If set to true all object literals are marked as
  *                        'add to text index'.
  */
 struct TextIndexLiteralConfiguration {

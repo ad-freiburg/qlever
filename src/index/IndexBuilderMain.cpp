@@ -197,7 +197,8 @@ int main(int argc, char** argv) {
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W",
       po::bool_switch(&config.addWordsFromAllLiterals_),
-      "Consider all literals from the internal vocabulary as text records. Can "
+      "Consider all object literals from the internal vocabulary as text "
+      "records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
   add("text-index-regex,r", po::value(&config.tripleInTextIndexRegex_),
       "Regex which is used to match predicates. If the predicate matches and "
