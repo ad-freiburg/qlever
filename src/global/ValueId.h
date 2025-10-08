@@ -45,7 +45,7 @@ enum struct Datatype {
 };
 
 /// Convert the `Datatype` enum to the corresponding string
-QL_CONSTEXPR std::string_view toString(Datatype type) {
+inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
       return "Undefined";
