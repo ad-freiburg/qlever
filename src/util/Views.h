@@ -508,6 +508,7 @@ CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
                            Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
+
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView, RvalueView, and

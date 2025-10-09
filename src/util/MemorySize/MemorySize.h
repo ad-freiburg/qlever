@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
@@ -60,7 +61,8 @@ class MemorySize {
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
   // Default comparison operator.
-  constexpr auto operator<=>(const MemorySize&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(MemorySize,
+                                                        memoryInBytes_)
 
   // Hashing.
   template <typename H>
