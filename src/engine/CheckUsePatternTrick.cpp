@@ -4,8 +4,6 @@
 
 #include "./CheckUsePatternTrick.h"
 
-#include <ranges>
-
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"

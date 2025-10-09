@@ -12,7 +12,6 @@
 #include <mutex>
 #include <optional>
 #include <queue>
-#include <ranges>
 
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
