@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "util/Enums.h"
@@ -90,7 +91,7 @@ class Row {
 
   friend void swap(Row& a, Row& b) { std::swap(a.data_, b.data_); }
 
-  bool operator==(const Row& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
   CPP_template_2(typename = void)(requires(numStaticColumns != 0)) explicit

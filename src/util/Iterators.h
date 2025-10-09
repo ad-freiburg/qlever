@@ -9,6 +9,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
@@ -94,9 +95,11 @@ class IteratorForAccessOperator {
   IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
       default;
 
-  auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (index_ <=> rhs.index_);
+  auto compareThreeWay(const IteratorForAccessOperator& rhs) const {
+    return ql::compareThreeWay(index_, rhs.index_);
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
+
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }

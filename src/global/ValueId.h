@@ -14,6 +14,7 @@
 #include <limits>
 
 #include "backports/functional.h"
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -156,61 +157,53 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  constexpr auto operator<=>(const ValueId& other) const {
+  constexpr auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
     if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
-      return _bits <=> other._bits;
+      return ql::compareThreeWay(_bits, other._bits);
     }
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
+      return ql::compareThreeWay(*getLocalVocabIndex(),
+                                 *other.getLocalVocabIndex());
     }
 
-    using IdProxy = LocalVocabEntry::IdProxy;
-    auto compareVocabAndLocalVocab =
-        [](IdProxy vocabIndex,
-           ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
-      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
-      if (vocabIndex < lowerBound) {
-        return std::strong_ordering::less;
-      } else if (vocabIndex >= upperBound) {
-        return std::strong_ordering::greater;
-      } else {
-        return std::strong_ordering::equal;
-      }
-    };
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
     if ((type == VocabIndex || type == EncodedVal) &&
         otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(IdProxy::make(getBits()),
-                                       other.getLocalVocabIndex());
+      return compareVocabAndLocalVocab(
+          LocalVocabEntry::IdProxy::make(getBits()),
+          other.getLocalVocabIndex());
     } else if (type == LocalVocabIndex &&
                (otherType == VocabIndex || otherType == EncodedVal)) {
       auto inverseOrder = compareVocabAndLocalVocab(
-          IdProxy::make(other.getBits()), getLocalVocabIndex());
-      return 0 <=> inverseOrder;
+          LocalVocabEntry::IdProxy::make(other.getBits()),
+          getLocalVocabIndex());
+
+      return ql::compareThreeWay(0, inverseOrder);
     }
 
-    // One of the types is `LocalVocab`, and the other one is a non-string type
-    // like `Integer` or `Undefined. Then the comparison by bits automatically
-    // compares by the datatype.
-    return _bits <=> other._bits;
+    // One of the types is `LocalVocab`, and the other one is a non-string
+    // type like `Integer` or `Undefined. Then the comparison by bits
+    // automatically compares by the datatype.
+    return ql::compareThreeWay(_bits, other._bits);
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
 
   // When there are no local vocab entries, then comparison can only be done
   // on the underlying bits, which allows much better code generation (e.g.
   // vectorization). In particular, this method should for example be used
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
-    return _bits <=> other._bits;
+    return ql::compareThreeWay(_bits, other._bits);
   }
 
   // For some reason which I (joka921) don't understand, we still need
   // operator== although we already have operator <=>.
   constexpr bool operator==(const ValueId& other) const {
-    return (*this <=> other) == 0;
+    return ql::compareThreeWay(*this, other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
@@ -479,6 +472,19 @@ class ValueId {
   }
 
  private:
+  // Compares a vocabulary index with a local vocabulary index range.
+  static ql::strong_ordering compareVocabAndLocalVocab(
+      LocalVocabEntry::IdProxy vocabIndex, ::LocalVocabIndex localVocabIndex) {
+    auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
+    if (vocabIndex < lowerBound) {
+      return ql::strong_ordering::less;
+    } else if (vocabIndex >= upperBound) {
+      return ql::strong_ordering::greater;
+    } else {
+      return ql::strong_ordering::equal;
+    }
+  }
+
   // Private constructor that implicitly converts from the underlying
   // representation. Used in the implementation of the static factory methods
   // `Double()`, `Int()` etc.

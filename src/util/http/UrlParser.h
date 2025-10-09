@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
 #include "util/HashMap.h"
@@ -54,7 +55,7 @@ struct Query {
   std::string query_;
   std::vector<DatasetClause> datasetClauses_;
 
-  bool operator==(const Query& rhs) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Query, query_, datasetClauses_)
 };
 
 // A SPARQL 1.1 Update
@@ -62,20 +63,21 @@ struct Update {
   std::string update_;
   std::vector<DatasetClause> datasetClauses_;
 
-  bool operator==(const Update& rhs) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Update, update_, datasetClauses_)
 };
 
 // A Graph Store HTTP Protocol operation. We only store the graph on which the
 // operation acts. The actual operation is extracted later.
 struct GraphStoreOperation {
   GraphOrDefault graph_;
-  bool operator==(const GraphStoreOperation& rhs) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphStoreOperation, graph_)
 };
 
 // No operation. This can happen for QLever's custom operations (e.g.
 // `cache-stats`). These requests have no operation but are still valid.
 struct None {
-  bool operator==(const None& rhs) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(None)
 };
 
 using Operation = std::variant<Query, Update, GraphStoreOperation, None>;

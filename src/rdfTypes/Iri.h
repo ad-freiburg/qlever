@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility::triple_component {
@@ -37,7 +38,9 @@ class Iri {
       AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
-  bool operator==(const Iri&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Iri, iri_)
+
   static Iri fromStringRepresentation(std::string s);
 
   const std::string& toStringRepresentation() const;

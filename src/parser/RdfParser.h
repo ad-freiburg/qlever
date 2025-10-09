@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -44,7 +45,8 @@ struct TurtleTriple {
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
-  bool operator==(const TurtleTriple&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
+                                              predicate_, object_, graphIri_)
 };
 
 // A base class for all the different turtle and N-Quad parsers.

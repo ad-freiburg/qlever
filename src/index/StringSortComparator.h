@@ -21,6 +21,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/memory_resource.h"
+#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -70,7 +71,7 @@ class LocaleManager {
       return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
     }
 
-    auto operator<=>(const SortKeyImpl&) const = default;
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
 
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
