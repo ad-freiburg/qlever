@@ -9,8 +9,6 @@
 
 #include <absl/functional/bind_front.h>
 
-#include <ranges>
-
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/CryptographicHashUtils.h"

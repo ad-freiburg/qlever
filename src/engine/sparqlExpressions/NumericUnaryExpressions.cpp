@@ -4,8 +4,6 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <ranges>
-
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 namespace sparqlExpression {

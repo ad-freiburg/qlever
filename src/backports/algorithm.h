@@ -24,7 +24,7 @@
 // currently not aware of, because they only affect functions that we currently
 // don't use. For those, the following header can be expanded in the future.
 #ifndef QLEVER_CPP_17
-#include <ranges>
+
 #endif
 
 namespace ql {
