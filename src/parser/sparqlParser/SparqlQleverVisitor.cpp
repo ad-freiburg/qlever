@@ -208,7 +208,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
-  using enum ad_utility::BoundingCoordinate;
+  static constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X;
+  static constexpr auto MIN_Y = ad_utility::BoundingCoordinate::MIN_Y;
+  static constexpr auto MAX_X = ad_utility::BoundingCoordinate::MAX_X;
+  static constexpr auto MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
@@ -219,7 +222,15 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
       {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
-  using enum SpatialJoinType;
+  static constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS;
+  static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  static constexpr auto COVERS = SpatialJoinType::COVERS;
+  static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  static constexpr auto WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       // Geometric relation functions

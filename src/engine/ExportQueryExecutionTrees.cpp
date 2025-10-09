@@ -79,7 +79,16 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
   };
 
   // Return the result in the requested format.
-  using enum ad_utility::MediaType;
+  static constexpr auto textPlain = ad_utility::MediaType::textPlain;
+  static constexpr auto json = ad_utility::MediaType::json;
+  static constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson;
+  static constexpr auto sparqlXml = ad_utility::MediaType::sparqlXml;
+  static constexpr auto qleverJson = ad_utility::MediaType::qleverJson;
+  static constexpr auto tsv = ad_utility::MediaType::tsv;
+  static constexpr auto csv = ad_utility::MediaType::csv;
+  static constexpr auto turtle = ad_utility::MediaType::turtle;
+  static constexpr auto ntriples = ad_utility::MediaType::ntriples;
+  static constexpr auto octetStream = ad_utility::MediaType::octetStream;
   switch (mediaType) {
     case sparqlXml:
       STREAMABLE_YIELD(getXmlResult());
@@ -262,7 +271,9 @@ namespace {
 // `StringTriple`.
 auto evaluateTripleForConstruct =
     [](const auto& triple, const ConstructQueryExportContext& context) {
-      using enum PositionInTriple;
+      constexpr auto SUBJECT = PositionInTriple::SUBJECT;
+      constexpr auto PREDICATE = PositionInTriple::PREDICATE;
+      constexpr auto OBJECT = PositionInTriple::OBJECT;
       auto subject = triple[0].evaluate(context, SUBJECT);
       auto predicate = triple[1].evaluate(context, PREDICATE);
       auto object = triple[2].evaluate(context, OBJECT);
@@ -443,7 +454,19 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
 // _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case Undefined:
       return std::nullopt;
@@ -605,7 +628,19 @@ std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   auto datatype = id.getDatatype();
   if constexpr (onlyReturnLiterals) {
     if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
@@ -658,7 +693,19 @@ std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   auto datatype = id.getDatatype();
 
   switch (datatype) {
@@ -727,7 +774,19 @@ std::optional<ad_utility::triple_component::LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
                                             const LocalVocab& localVocab,
                                             bool skipEncodedValues) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   switch (id.getDatatype()) {
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
@@ -1255,7 +1314,16 @@ ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum MediaType;
+  static constexpr auto textPlain = ad_utility::MediaType::textPlain;
+  static constexpr auto json = ad_utility::MediaType::json;
+  static constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson;
+  static constexpr auto sparqlXml = ad_utility::MediaType::sparqlXml;
+  static constexpr auto qleverJson = ad_utility::MediaType::qleverJson;
+  static constexpr auto tsv = ad_utility::MediaType::tsv;
+  static constexpr auto csv = ad_utility::MediaType::csv;
+  static constexpr auto turtle = ad_utility::MediaType::turtle;
+  static constexpr auto ntriples = ad_utility::MediaType::ntriples;
+  static constexpr auto octetStream = ad_utility::MediaType::octetStream;
 
   static constexpr std::array supportedTypes{
       csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
