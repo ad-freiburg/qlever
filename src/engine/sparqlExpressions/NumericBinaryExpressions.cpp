@@ -8,9 +8,8 @@
 namespace sparqlExpression {
 namespace detail {
 // Multiplication.
-inline auto multiply = makeNumericExpression<std::multiplies<>>();
-NARY_EXPRESSION(MultiplyExpression, 2,
-                FV<decltype(multiply), NumericValueGetter>);
+using Multiply = MakeNumericExpression<std::multiplies<>>;
+NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -29,21 +28,20 @@ struct DivideImpl {
   }
 };
 
-inline auto divide1 = makeNumericExpression<DivideImpl, true>();
+using Divide1 = MakeNumericExpression<DivideImpl, true>;
 NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<decltype(divide1), NumericValueGetter>);
+                FV<Divide1, NumericValueGetter>);
 
-inline auto divide2 = makeNumericExpression<DivideImpl, false>();
+using Divide2 = MakeNumericExpression<DivideImpl, false>;
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<decltype(divide2), NumericValueGetter>);
+                FV<Divide2, NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = makeNumericExpression<std::plus<>>();
-NARY_EXPRESSION(AddExpression, 2, FV<decltype(add), NumericValueGetter>);
+using Add = MakeNumericExpression<std::plus<>>;
+NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-inline auto subtract = makeNumericExpression<std::minus<>>();
-NARY_EXPRESSION(SubtractExpression, 2,
-                FV<decltype(subtract), NumericValueGetter>);
+using Subtract = MakeNumericExpression<std::minus<>>;
+NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
@@ -52,8 +50,8 @@ struct PowImpl {
     return std::pow(base, exp);
   }
 };
-inline auto pow = makeNumericExpression<PowImpl>();
-NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
+using Pow = MakeNumericExpression<PowImpl>;
+NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________

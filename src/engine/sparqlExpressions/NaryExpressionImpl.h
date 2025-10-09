@@ -111,10 +111,10 @@ struct NumericIdWrapper {
 // and returns the same result, but the arguments and the return type are the
 // `NumericValue` variant.
 template <typename Function, bool NanOrInfToUndef = false>
-inline auto makeNumericExpression() {
-  return [](const auto&... args) {
-    CPP_assert(
-        (concepts::same_as<std::decay_t<decltype(args)>, NumericValue> && ...));
+struct MakeNumericExpression {
+  template <typename... Args>
+  Id operator()(const Args&... args) const {
+    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
     auto visitor = [](const auto&... t) {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -124,8 +124,8 @@ inline auto makeNumericExpression() {
       }
     };
     return std::visit(visitor, args...);
-  };
-}
+  }
+};
 
 // Two short aliases to make the instantiations more readable.
 template <typename... T>

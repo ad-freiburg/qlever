@@ -88,9 +88,8 @@ using UnaryNegateExpression = UnaryNegateExpressionImpl<
 
 // _____________________________________________________________________________
 // Unary Minus.
-inline auto unaryMinus = makeNumericExpression<std::negate<>>();
-NARY_EXPRESSION(UnaryMinusExpression, 1,
-                FV<decltype(unaryMinus), NumericValueGetter>);
+using UnaryMinus = MakeNumericExpression<std::negate<>>;
+NARY_EXPRESSION(UnaryMinusExpression, 1, FV<UnaryMinus, NumericValueGetter>);
 // Abs
 struct AbsImpl {
   template <typename T>
@@ -98,8 +97,8 @@ struct AbsImpl {
     return std::abs(num);
   }
 };
-inline const auto abs = makeNumericExpression<AbsImpl>();
-NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
+using Abs = MakeNumericExpression<AbsImpl>;
+NARY_EXPRESSION(AbsExpression, 1, FV<Abs, NumericValueGetter>);
 
 // Rounding.
 struct RoundImpl {
@@ -116,8 +115,8 @@ struct RoundImpl {
   }
 };
 
-inline const auto round = makeNumericExpression<RoundImpl>();
-NARY_EXPRESSION(RoundExpression, 1, FV<decltype(round), NumericValueGetter>);
+using Round = MakeNumericExpression<RoundImpl>;
+NARY_EXPRESSION(RoundExpression, 1, FV<Round, NumericValueGetter>);
 
 // Ceiling.
 struct CeilImpl {
@@ -130,8 +129,8 @@ struct CeilImpl {
     }
   }
 };
-inline const auto ceil = makeNumericExpression<CeilImpl>();
-NARY_EXPRESSION(CeilExpression, 1, FV<decltype(ceil), NumericValueGetter>);
+using Ceil = MakeNumericExpression<CeilImpl>;
+NARY_EXPRESSION(CeilExpression, 1, FV<Ceil, NumericValueGetter>);
 
 // Flooring.
 struct FloorImpl {
@@ -144,8 +143,8 @@ struct FloorImpl {
     }
   }
 };
-inline const auto floor = makeNumericExpression<FloorImpl>();
-using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
+using Floor = MakeNumericExpression<FloorImpl>;
+using FloorExpression = NARY<1, FV<Floor, NumericValueGetter>>;
 
 // Natural Logarithm.
 struct LogImpl {
@@ -154,8 +153,8 @@ struct LogImpl {
     return std::log(num);
   }
 };
-inline const auto log = makeNumericExpression<LogImpl>();
-using LogExpression = NARY<1, FV<decltype(log), NumericValueGetter>>;
+using Log = MakeNumericExpression<LogImpl>;
+using LogExpression = NARY<1, FV<Log, NumericValueGetter>>;
 
 // Exponentiation.
 struct ExpImpl {
@@ -164,8 +163,8 @@ struct ExpImpl {
     return std::exp(num);
   }
 };
-inline const auto exp = makeNumericExpression<ExpImpl>();
-using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
+using Exp = MakeNumericExpression<ExpImpl>;
+using ExpExpression = NARY<1, FV<Exp, NumericValueGetter>>;
 
 // Square root.
 struct SqrtImpl {
@@ -174,8 +173,8 @@ struct SqrtImpl {
     return std::sqrt(num);
   }
 };
-inline const auto sqrt = makeNumericExpression<SqrtImpl>();
-using SqrtExpression = NARY<1, FV<decltype(sqrt), NumericValueGetter>>;
+using Sqrt = MakeNumericExpression<SqrtImpl>;
+using SqrtExpression = NARY<1, FV<Sqrt, NumericValueGetter>>;
 
 // Sine.
 struct SinImpl {
@@ -184,8 +183,8 @@ struct SinImpl {
     return std::sin(num);
   }
 };
-inline const auto sin = makeNumericExpression<SinImpl>();
-using SinExpression = NARY<1, FV<decltype(sin), NumericValueGetter>>;
+using Sin = MakeNumericExpression<SinImpl>;
+using SinExpression = NARY<1, FV<Sin, NumericValueGetter>>;
 
 // Cosine.
 struct CosImpl {
@@ -194,8 +193,8 @@ struct CosImpl {
     return std::cos(num);
   }
 };
-inline const auto cos = makeNumericExpression<CosImpl>();
-using CosExpression = NARY<1, FV<decltype(cos), NumericValueGetter>>;
+using Cos = MakeNumericExpression<CosImpl>;
+using CosExpression = NARY<1, FV<Cos, NumericValueGetter>>;
 
 // Tangent.
 struct TanImpl {
@@ -204,8 +203,8 @@ struct TanImpl {
     return std::tan(num);
   }
 };
-inline const auto tan = makeNumericExpression<TanImpl>();
-using TanExpression = NARY<1, FV<decltype(tan), NumericValueGetter>>;
+using Tan = MakeNumericExpression<TanImpl>;
+using TanExpression = NARY<1, FV<Tan, NumericValueGetter>>;
 
 }  // namespace detail
 
