@@ -9,6 +9,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <boost/circular_buffer.hpp>
 #include <future>
 #include <ranges>
 
@@ -304,10 +305,33 @@ CPP_class_template(size_t NumStaticCols,
   size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
+  boost::circular_buffer<std::tuple<bool, bool, ad_utility::source_location>>
+      lastGetLocations_{10};
+
+  void waitForFuture(ad_utility::source_location location =
+                         ad_utility::source_location::current()) {
+    bool b = false;
+    if (compressAndWriteFuture_.valid()) {
+      b = true;
+      compressAndWriteFuture_.get();
+    }
+    lastGetLocations_.push_back({false, b, location});
+  }
+  void setFuture(std::future<void> future,
+                 ad_utility::source_location location =
+                     ad_utility::source_location::current()) {
+    bool b = compressAndWriteFuture_.valid();
+    lastGetLocations_.push_back({true, b, location});
+    compressAndWriteFuture_ = std::move(future);
+  }
 
   // Store whether this table has previously already been iterated over (in
   // which case this member becomes `false`).
   std::atomic<bool> isFirstIteration_ = true;
+  // std::atomic<size_t> transformAndPushWasCalled = 0;
+  std::string timeOfCreation = ad_utility::Log::getTimeStamp();
+  static inline size_t numInstances = 0;
+  size_t instanceNumber = absl::bit_cast<size_t>(this);
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -353,9 +377,7 @@ CPP_class_template(size_t NumStaticCols,
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
@@ -376,18 +398,21 @@ CPP_class_template(size_t NumStaticCols,
   // by the `Impl` via the `transformBlock` function.
   template <typename Transformation = ql::identity>
   void pushBlock(IdTableStatic<NumStaticCols> block) {
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     if (block.empty()) {
+      if (numBlocksPushed_ > 0) {
+        // BUGFIX: It's important to set the future, even if it does nothing
+        // (otherwise the assertion in `transformAndPushLastBlock` fails).
+        setFuture(std::async(std::launch::deferred, []() {}));
+      }
       return;
     }
     ++numBlocksPushed_;
-    compressAndWriteFuture_ = std::async(
+    setFuture(std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
           blockTransformation_(block);
           this->writer_.writeIdTable(std::move(block).toDynamic());
-        });
+        }));
   }
 
   // If there is less than one complete block (meaning that the number of calls
@@ -399,11 +424,27 @@ CPP_class_template(size_t NumStaticCols,
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
+
+    // AD_LOG_INFO
+    //     << "calling transformAndPushLastBlock for an external idTable with "
+    //     << this->size() << "elements that was created at "
+    //     << this->timeOfCreation << "and instance number " << instanceNumber
+    //     << std::endl;
+
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
-    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
-                         compressAndWriteFuture_.valid());
+    AD_CORRECTNESS_CHECK(
+        (numBlocksPushed_ == 0) != compressAndWriteFuture_.valid(), [this]() {
+          std::string s = absl::StrCat(
+              "numBlocksPushed: ", numBlocksPushed_,
+              ", futureIsValid: ", compressAndWriteFuture_.valid(),
+              "\nLast access locations ([isWrite, wasValidBefore, lineNumber]");
+          for (const auto& [isWrite, validBefore, loc] : lastGetLocations_) {
+            absl::StrAppend(&s, isWrite, " ", validBefore, " ", loc.line());
+          }
+          return s;
+        });
     // Optimization for inputs that are smaller than the blocksize, do not use
     // the external file, but simply sort and return the single block.
     if (numBlocksPushed_ == 0) {
@@ -414,9 +455,7 @@ CPP_class_template(size_t NumStaticCols,
     }
     pushBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     return true;
   }
 };
@@ -478,9 +517,7 @@ class CompressedExternalIdTable
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
-    if (this->compressAndWriteFuture_.valid()) {
-      this->compressAndWriteFuture_.get();
-    }
+    this->waitForFuture();
     return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
 };
@@ -617,6 +654,7 @@ class CompressedExternalIdTableSorter
           std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
     // Explanation for the second argument of `runStreamAsync`: One block is
