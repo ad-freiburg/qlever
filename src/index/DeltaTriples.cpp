@@ -392,27 +392,31 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 }
 
 namespace {
-
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
+    BlockMetadataRanges blockMetadataRanges,
     const LocatedTriplesSnapshot& snapshot,
     const ad_utility::HashMap<Id, Id>& localVocabMapping,
     const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    ql::span<const ColumnIndex> additionalColumns) {
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
-      std::move(scanSpec),
-      BlockMetadataRanges(
-          permutation.getAugmentedMetadataForPermutation(snapshot))};
-  auto fullScan = permutation.lazyScan(
-      scanSpecAndBlocks, std::nullopt, std::array{ADDITIONAL_COLUMN_GRAPH_ID},
-      cancellationHandle, snapshot, LimitOffsetClause{});
+      std::move(scanSpec), std::move(blockMetadataRanges)};
+  auto fullScan =
+      permutation.lazyScan(scanSpecAndBlocks, std::nullopt, additionalColumns,
+                           cancellationHandle, snapshot, LimitOffsetClause{});
+  auto keyOrder = Permutation::toKeyOrder(permutation.permutation());
+  std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
+                                         keyOrder.keys().end()};
+  while (columnIndices.size() < additionalColumns.size() + 3) {
+    columnIndices.emplace_back(columnIndices.size());
+  }
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(fullScan),
-          [&permutation, &localVocabMapping, &insertInfo](IdTable& idTable) {
-            auto keyOrder = Permutation::toKeyOrder(permutation.permutation());
-            std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
-                                                   keyOrder.keys().end()};
+          [columnIndices = std::move(columnIndices), &localVocabMapping,
+           &insertInfo](IdTable& idTable) {
+            AD_CORRECTNESS_CHECK(idTable.numColumns() == columnIndices.size());
             idTable.setColumnSubset(columnIndices);
             for (auto col : idTable.getColumns()) {
               ql::ranges::for_each(
@@ -436,6 +440,18 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
           }}};
 }
 
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
+    const Permutation& permutation, ScanSpecification scanSpec,
+    const LocatedTriplesSnapshot& snapshot,
+    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  return readIndexAndRemap(
+      permutation, std::move(scanSpec),
+      permutation.getAugmentedMetadataForPermutation(snapshot), snapshot,
+      localVocabMapping, insertInfo, cancellationHandle,
+      std::array{ADDITIONAL_COLUMN_GRAPH_ID});
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -500,10 +516,27 @@ void DeltaTriples::materializeToIndex() {
           index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
           scanSpec, *snapshot, localVocabMapping, insertInfo,
           cancellationHandle));
+
+  const auto& psoPermutation = index_.getPermutation(Permutation::Enum::PSO);
+  auto blockMetadataRanges =
+      psoPermutation.getAugmentedMetadataForPermutation(*snapshot);
+  size_t numColumns =
+      blockMetadataRanges.at(0).at(0).offsetsAndCompressedSize_.size();
+  std::vector<ColumnIndex> additionalColumns;
+  additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                          ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
+    if (additionalColumns.size() >= numColumns - 3) {
+      break;
+    }
+    additionalColumns.push_back(col);
+  }
+  AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
   newIndex.createPSOAndPOSImplPublic(
-      4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::PSO),
-                           scanSpec, *snapshot, localVocabMapping, insertInfo,
-                           cancellationHandle));
+      numColumns, readIndexAndRemap(psoPermutation, scanSpec,
+                                    std::move(blockMetadataRanges), *snapshot,
+                                    localVocabMapping, insertInfo,
+                                    cancellationHandle, additionalColumns));
   for (auto permutation : {Permutation::Enum::SPO, Permutation::Enum::OPS}) {
     newIndex.createPermutationPairPublic(
         4,
