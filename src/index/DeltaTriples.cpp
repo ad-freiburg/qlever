@@ -391,6 +391,53 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
       false);
 }
 
+namespace {
+
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
+    const Permutation& permutation, ScanSpecification scanSpec,
+    const LocatedTriplesSnapshot& snapshot,
+    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
+      std::move(scanSpec),
+      BlockMetadataRanges(
+          permutation.getAugmentedMetadataForPermutation(snapshot))};
+  auto fullScan = permutation.lazyScan(
+      scanSpecAndBlocks, std::nullopt, std::array{ADDITIONAL_COLUMN_GRAPH_ID},
+      cancellationHandle, snapshot, LimitOffsetClause{});
+  return ad_utility::InputRangeTypeErased{
+      ad_utility::CachingTransformInputRange{
+          std::move(fullScan),
+          [&permutation, &localVocabMapping, &insertInfo](IdTable& idTable) {
+            auto keyOrder = Permutation::toKeyOrder(permutation.permutation());
+            std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
+                                                   keyOrder.keys().end()};
+            idTable.setColumnSubset(columnIndices);
+            for (auto col : idTable.getColumns()) {
+              ql::ranges::for_each(
+                  col, [&localVocabMapping, &insertInfo](Id& id) {
+                    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+                      id = localVocabMapping.at(id);
+                    } else if (id.getDatatype() == Datatype::VocabIndex) {
+                      size_t offset = ql::ranges::distance(
+                          insertInfo.begin(),
+                          ql::ranges::upper_bound(
+                              insertInfo, id.getVocabIndex(), std::less{},
+                              [](const auto& tuple) {
+                                return std::get<0>(tuple);
+                              }));
+                      id = Id::makeFromVocabIndex(
+                          VocabIndex::make(id.getVocabIndex().get() + offset));
+                    }
+                  });
+            }
+            return IdTableStatic<0>{std::move(idTable)};
+          }}};
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
 void DeltaTriples::materializeToIndex() {
   auto& vocab = index_.getVocab();
@@ -455,46 +502,16 @@ void DeltaTriples::materializeToIndex() {
     if (static_cast<int>(permutation) % 2 != 0) {
       continue;
     }
-    Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
-        scanSpec, BlockMetadataRanges(
-                      newIndex.getPermutation(permutation)
-                          .getAugmentedMetadataForPermutation(*snapshot))};
-    auto fullScan =
-        index_.getPermutation(permutation)
-            .lazyScan(scanSpecAndBlocks, std::nullopt,
-                      std::array{ADDITIONAL_COLUMN_GRAPH_ID},
-                      cancellationHandle, *snapshot, LimitOffsetClause{});
     [[maybe_unused]] auto distinct = newIndex.createPermutationPairPublic(
         4,
-        ad_utility::InputRangeTypeErased{ad_utility::CachingTransformInputRange{
-            std::move(fullScan),
-            [permutation, &localVocabMapping, &insertInfo](IdTable& idTable) {
-              auto keyOrder = Permutation::toKeyOrder(permutation);
-              std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
-                                                     keyOrder.keys().end()};
-              idTable.setColumnSubset(columnIndices);
-              for (auto col : idTable.getColumns()) {
-                ql::ranges::for_each(col, [&localVocabMapping,
-                                           &insertInfo](Id& id) {
-                  if (id.getDatatype() == Datatype::LocalVocabIndex) {
-                    id = localVocabMapping.at(id);
-                  } else if (id.getDatatype() == Datatype::VocabIndex) {
-                    size_t offset = ql::ranges::distance(
-                        insertInfo.begin(),
-                        ql::ranges::upper_bound(insertInfo, id.getVocabIndex(),
-                                                std::less{},
-                                                [](const auto& tuple) {
-                                                  return std::get<0>(tuple);
-                                                }));
-                    id = Id::makeFromVocabIndex(
-                        VocabIndex::make(id.getVocabIndex().get() + offset));
-                  }
-                });
-              }
-              return IdTableStatic<0>{std::move(idTable)};
-            }}},
+        readIndexAndRemap(index_.getPermutation(permutation), scanSpec,
+                          *snapshot, localVocabMapping, insertInfo,
+                          cancellationHandle),
         newIndex.getPermutation(permutation),
         newIndex.getPermutation(
             static_cast<Permutation::Enum>(static_cast<int>(permutation) + 1)));
   }
+  newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
+      index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
+      scanSpec, *snapshot, localVocabMapping, insertInfo, cancellationHandle));
 }

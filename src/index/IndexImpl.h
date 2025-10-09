@@ -745,6 +745,9 @@ class IndexImpl {
   std::pair<size_t, size_t> createInternalPSOandPOS(
       InternalTriplePsoSorter&& internalTriplesPsoSorter);
 
+  std::pair<size_t, size_t> createInternalPSOandPOSFromRange(
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks);
+
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
   // for each call during one index build.

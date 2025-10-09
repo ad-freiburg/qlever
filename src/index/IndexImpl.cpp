@@ -288,10 +288,8 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
 
-  // TODO<joka921> As soon as `uniqueBlockView` is no longer a `generator` the
-  // explicit `BlocksOfTriples` constructor can be removed again.
-  auto internalTriplesUnique = BlocksOfTriples{ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>())};
+  auto internalTriplesUnique = ad_utility::uniqueBlockView(
+      internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
                       false);
   onDiskBase_ = std::move(onDiskBaseBackup);
@@ -305,6 +303,23 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
           .normal;
   configurationJson_ = std::move(configurationJsonBackup);
   return {numTriplesInternal, numPredicatesInternal};
+}
+
+// _____________________________________________________________________________
+namespace {
+struct SortedBlocksWrapper {
+  ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks_;
+  template <size_t N>
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks() {
+    static_assert(N == 0);
+    return std::move(sortedBlocks_);
+  }
+};
+}  // namespace
+// _____________________________________________________________________________
+std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOSFromRange(
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedBlocks) {
+  return createInternalPSOandPOS(SortedBlocksWrapper{std::move(sortedBlocks)});
 }
 
 // _____________________________________________________________________________
