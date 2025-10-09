@@ -896,11 +896,12 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // ________________________________________________________________________
-size_t IndexImpl::createPermutationPairPublic(
+void IndexImpl::createPermutationPairPublic(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
     const Permutation& p1, const Permutation& p2) {
-  return createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
+  [[maybe_unused]] auto value =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
 }
 
 // ________________________________________________________________________
@@ -1729,9 +1730,7 @@ CPP_template_def(typename... NextSorter)(requires(
     1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter)
-
-{
+                                            NextSorter&&... nextSorter) {
   size_t numTriplesNormal = 0;
   size_t numTriplesTotal = 0;
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal](
@@ -1753,7 +1752,13 @@ CPP_template_def(typename... NextSorter)(requires(
   if (doWriteConfiguration) {
     writeConfiguration();
   }
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createPSOAndPOSImplPublic(size_t numColumns,
+                                          BlocksOfTriples sortedTriples) {
+  createPSOAndPOSImpl(numColumns, std::move(sortedTriples), false);
+}
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
@@ -1875,4 +1880,13 @@ void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
+                                       const IndexImpl& other) {
+  setOnDiskBase(newName);
+  setKbName(other.getKbName());
+  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  configurationJson_ = other.configurationJson_;
 }

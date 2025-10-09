@@ -493,16 +493,19 @@ void DeltaTriples::materializeToIndex() {
   CancellationHandle cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
   IndexImpl newIndex{index_.allocator(), false};
-  newIndex.setOnDiskBase("tmp_index");
-  newIndex.setKbName(index_.getKbName());
-  newIndex.blocksizePermutationPerColumn() =
-      index_.blocksizePermutationPerColumn();
-  for (auto permutation : Permutation::ALL) {
-    // Only process half the permutations (the rest is done by the pairs).
-    if (static_cast<int>(permutation) % 2 != 0) {
-      continue;
-    }
-    [[maybe_unused]] auto distinct = newIndex.createPermutationPairPublic(
+  newIndex.loadConfigFromOldIndex("tmp_index", index_);
+
+  auto [numTriplesInternal, numPredicatesInternal] =
+      newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
+          index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
+          scanSpec, *snapshot, localVocabMapping, insertInfo,
+          cancellationHandle));
+  newIndex.createPSOAndPOSImplPublic(
+      4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::PSO),
+                           scanSpec, *snapshot, localVocabMapping, insertInfo,
+                           cancellationHandle));
+  for (auto permutation : {Permutation::Enum::SPO, Permutation::Enum::OPS}) {
+    newIndex.createPermutationPairPublic(
         4,
         readIndexAndRemap(index_.getPermutation(permutation), scanSpec,
                           *snapshot, localVocabMapping, insertInfo,
@@ -511,7 +514,6 @@ void DeltaTriples::materializeToIndex() {
         newIndex.getPermutation(
             static_cast<Permutation::Enum>(static_cast<int>(permutation) + 1)));
   }
-  newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
-      index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
-      scanSpec, *snapshot, localVocabMapping, insertInfo, cancellationHandle));
+  newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
+                                                numPredicatesInternal);
 }

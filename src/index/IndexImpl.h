@@ -566,7 +566,7 @@ class IndexImpl {
                             Callbacks&&... perTripleCallbacks);
 
  public:
-  [[nodiscard]] size_t createPermutationPairPublic(
+  void createPermutationPairPublic(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
       const Permutation& p1, const Permutation& p2);
@@ -732,6 +732,9 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+
+  void createPSOAndPOSImplPublic(size_t numColumns,
+                                 BlocksOfTriples sortedTriples);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
@@ -821,6 +824,9 @@ class IndexImpl {
 
   void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
                                              float b, float k);
+
+  void loadConfigFromOldIndex(const std::string& newName,
+                              const IndexImpl& other);
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
