@@ -10,7 +10,7 @@
 #include <string>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"

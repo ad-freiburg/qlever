@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"

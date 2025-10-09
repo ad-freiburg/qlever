@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 
 //______________________________________________________________________________
@@ -217,9 +218,12 @@ class DayTimeDuration {
   }
 
   // Comparison <=> on bits
-  [[nodiscard]] constexpr auto operator<=>(const DayTimeDuration& rhs) const {
-    return toBits() <=> rhs.toBits();
+  [[nodiscard]] constexpr auto compareThreeWay(
+      const DayTimeDuration& rhs) const {
+    return ql::compareThreeWay(toBits(), rhs.toBits());
   }
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
+      DayTimeDuration);
 
   //____________________________________________________________________________
   template <typename H>

@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <concepts>
 #include <string>
 #include <variant>
 
@@ -16,6 +15,7 @@
 #include "../benchmark/util/ResultTableColumnOperations.h"
 #include "../test/util/BenchmarkMeasurementContainerHelpers.h"
 #include "../test/util/GTestHelpers.h"
+#include "backports/algorithm.h"
 #include "gmock/gmock.h"
 #include "util/Exception.h"
 #include "util/Random.h"
@@ -29,9 +29,8 @@ constexpr size_t NUM_ROWS = 10;
 
 // Does `T` support addition?
 template <typename T>
-concept SupportsAddition = requires(T a, T b) {
-  { a + b } -> std::same_as<T>;
-};
+CPP_concept SupportsAddition =
+    ql::concepts::same_as<decltype(std::declval<T>() + std::declval<T>()), T>;
 
 /*
 @brief Create a table for testing purpose.
@@ -68,7 +67,7 @@ static void compareToColumn(
   // Compare every entry with the fitting comparison function.
   AD_CONTRACT_CHECK(expectedContent.size() == tableToCompareAgainst.numRows());
   for (size_t i = 0; i < expectedContent.size(); i++) {
-    if constexpr (std::floating_point<T>) {
+    if constexpr (ql::concepts::floating_point<T>) {
       ASSERT_FLOAT_EQ(expectedContent.at(i),
                       tableToCompareAgainst.getEntry<T>(
                           i, columnsToCompareAgainst.columnNum_));
@@ -431,8 +430,8 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
             typename std::decay_t<decltype(firstInputColumns)>::ColumnType;
         using SecondType =
             typename std::decay_t<decltype(secondInputColumns)>::ColumnType;
-        if constexpr (std::same_as<FirstType, float> &&
-                      std::same_as<SecondType, float>) {
+        if constexpr (ql::concepts::same_as<FirstType, float> &&
+                      ql::concepts::same_as<SecondType, float>) {
           calculateSpeedupOfColumn(table, columnToPutResultIn,
                                    firstInputColumns, secondInputColumns);
         } else {

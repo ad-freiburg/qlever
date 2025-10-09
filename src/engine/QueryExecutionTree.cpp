@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"

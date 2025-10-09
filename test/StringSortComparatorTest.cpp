@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;

@@ -7,7 +7,7 @@
 #include <absl/strings/ascii.h>
 #include <absl/strings/charconv.h>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 /*
@@ -69,7 +69,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
   template <typename N>
   auto getFromNumber(N number) const
       -> CPP_ret(Id)(requires(concepts::integral<N> ||
-                              ad_utility::FloatingPoint<N>)) {
+                              ql::concepts::floating_point<N>)) {
     auto resNumber = static_cast<T>(number);
     if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(resNumber);

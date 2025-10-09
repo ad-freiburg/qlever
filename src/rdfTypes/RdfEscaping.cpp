@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -175,13 +175,13 @@ static void literalUnescape(std::string_view input, std::string& res) {
 static void literalUnescapeWithQuotesRemoved(std::string_view input,
                                              std::string& res) {
   if (ql::starts_with(input, R"(""")") || input.starts_with(R"(''')")) {
-    AD_CONTRACT_CHECK(input.ends_with(input.substr(0, 3)));
+    AD_CONTRACT_CHECK(ql::ends_with(input, input.substr(0, 3)));
     input.remove_prefix(3);
     input.remove_suffix(3);
   } else {
     AD_CONTRACT_CHECK(ql::starts_with(input, "\"") ||
                       ql::starts_with(input, "'"));
-    AD_CONTRACT_CHECK(input.ends_with(input[0]));
+    AD_CONTRACT_CHECK(ql::ends_with(input, input[0]));
     input.remove_prefix(1);
     input.remove_suffix(1);
   }
@@ -232,7 +232,7 @@ static void unescapeIriWithoutBrackets(std::string_view input,
 
 // __________________________________________________________________________
 static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
-  AD_CONTRACT_CHECK(ql::starts_with(input, "<") && input.ends_with(">"));
+  AD_CONTRACT_CHECK(ql::starts_with(input, "<") && ql::ends_with(input, ">"));
   input.remove_prefix(1);
   input.remove_suffix(1);
   unescapeIriWithoutBrackets(input, res);
@@ -313,7 +313,7 @@ std::string escapeForXml(std::string input) {
 // __________________________________________________________________________
 std::string normalizedContentFromLiteralOrIri(std::string&& input) {
   if (ql::starts_with(input, '<')) {
-    AD_CORRECTNESS_CHECK(input.ends_with('>'));
+    AD_CORRECTNESS_CHECK(ql::ends_with(input, '>'));
     ql::shift_left(input.begin(), input.end(), 1);
     input.resize(input.size() - 2);
   } else if (ql::starts_with(input, '"')) {

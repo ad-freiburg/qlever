@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/TypedIndex.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
@@ -74,7 +74,7 @@ class NormalizedRDFString {
   // create a new `NormalizedRDFString`.
   explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {
     AD_CORRECTNESS_CHECK(data_.size() >= 2 && ql::starts_with(data_, '"') &&
-                         data_.ends_with('"'));
+                         ql::ends_with(data_, '"'));
   }
   friend NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 };

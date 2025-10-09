@@ -10,6 +10,8 @@
 #include <utility>
 #include <variant>
 
+#include "backports/three_way_comparison.h"
+
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
 // is not very clean and should be refactored.
@@ -79,7 +81,7 @@ class Variable {
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
 
-  bool operator==(const Variable&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Variable, _name)
 
   // The construction of PrefilterExpressions requires a defined < order.
   bool operator<(const Variable& other) const { return _name < other._name; };

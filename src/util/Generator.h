@@ -7,10 +7,10 @@
 
 #include <coroutine>
 #include <exception>
-#include <functional>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Exception.h"

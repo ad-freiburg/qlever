@@ -5,10 +5,10 @@
 #ifndef QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 #define QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 
-#include <functional>
 #include <memory>
 #include <vector>
 
+#include "backports/functional.h"
 #include "util/UniqueCleanup.h"
 #include "util/http/beast.h"
 

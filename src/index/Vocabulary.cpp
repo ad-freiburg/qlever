@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
@@ -190,7 +190,7 @@ void Vocabulary<S, C, I>::initializeInternalizedLangs(const StringRange& s) {
 template <typename S, typename C, typename I>
 std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
-  AD_CONTRACT_CHECK(word.ends_with(PREFIX_CHAR));
+  AD_CONTRACT_CHECK(ql::ends_with(word, PREFIX_CHAR));
   IdRange<I> range;
   if (word.size() == 1) {
     range = IdRange{I::make(0), I::make(size()).decremented()};

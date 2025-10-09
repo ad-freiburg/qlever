@@ -9,11 +9,11 @@
 #include <absl/strings/str_cat.h>
 
 #include <exception>
-#include <functional>
 #include <sstream>
 #include <string>
 
 #include "backports/concepts.h"
+#include "backports/functional.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
