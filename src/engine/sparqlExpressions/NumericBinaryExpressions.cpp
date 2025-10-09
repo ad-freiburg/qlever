@@ -22,15 +22,18 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // this behavior. The old behavior can be reinstated by a RuntimeParameter.
 // Note: The result of a division in SPARQL is always a decimal number, so there
 // is no integer division.
-[[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
-  return static_cast<double>(x) / static_cast<double>(y);
+struct DivideImpl {
+  template <typename T1, typename T2>
+  auto operator()(T1 x, T2 y) const {
+    return static_cast<double>(x) / static_cast<double>(y);
+  }
 };
 
-inline auto divide1 = makeNumericExpression<decltype(divideImpl), true>();
+inline auto divide1 = makeNumericExpression<DivideImpl, true>();
 NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
                 FV<decltype(divide1), NumericValueGetter>);
 
-inline auto divide2 = makeNumericExpression<decltype(divideImpl), false>();
+inline auto divide2 = makeNumericExpression<DivideImpl, false>();
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
                 FV<decltype(divide2), NumericValueGetter>);
 
@@ -44,35 +47,41 @@ NARY_EXPRESSION(SubtractExpression, 2,
 
 // _____________________________________________________________________________
 // Power.
-inline auto powImpl = [](double base, double exp) {
-  return std::pow(base, exp);
+struct PowImpl {
+  double operator()(double base, double exp) const {
+    return std::pow(base, exp);
+  }
 };
-inline auto pow = makeNumericExpression<decltype(powImpl)>();
+inline auto pow = makeNumericExpression<PowImpl>();
 NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________
-inline auto orLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True || b == True) {
-    return Id::makeFromBool(true);
+struct OrLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True || b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False && b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False && b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 // _____________________________________________________________________________
-inline auto andLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True && b == True) {
-    return Id::makeFromBool(true);
+struct AndLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True && b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False || b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False || b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 namespace constructPrefilterExpr {
@@ -346,12 +355,12 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 //______________________________________________________________________________
 using AndExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::AndExpression,
-    Operation<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<AndLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Intersection>>>;
 
 using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::OrExpression,
-    Operation<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<OrLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Union>>>;
 
 }  // namespace detail
