@@ -16,6 +16,7 @@
 #include <variant>
 
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -168,10 +169,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    bool operator==(const NoTimeZone&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone)
   };
   struct TimeZoneZ {
-    bool operator==(const TimeZoneZ&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
@@ -211,10 +212,10 @@ class Date {
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
   /// different time zone values (see the docstring of this class).
-  // TODO<joka921> consolidate this with the rewrite of these operators.
-  [[nodiscard]] /*constexpr*/ auto operator<=>(const Date& rhs) const {
-    return toBits() <=> rhs.toBits();
+  [[nodiscard]] auto compareThreeWay(const Date& rhs) const {
+    return ql::compareThreeWay(toBits(), rhs.toBits());
   }
+  [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Date);
 
   template <typename H>
   friend H AbslHashValue(H h, const Date& d) {

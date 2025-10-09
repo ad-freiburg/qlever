@@ -12,7 +12,6 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <concepts>
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
@@ -36,6 +35,7 @@
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 #include "../test/util/RandomTestHelpers.h"
+#include "backports/concepts.h"
 #include "backports/functional.h"
 #include "backports/keywords.h"
 #include "engine/Engine.h"
@@ -66,9 +66,11 @@ namespace ad_benchmark {
 @brief Return true, iff, the given value is unchanged, when casting to type
 `Target`
 */
-template <typename Target, typename Source>
-requires std::convertible_to<Source, Target>
-static constexpr bool isValuePreservingCast(const Source& source) {
+CPP_template(typename Target, typename Source)(
+    requires ql::concepts::convertible_to<
+        Source,
+        Target>) static constexpr bool isValuePreservingCast(const Source&
+                                                                 source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
 
@@ -88,10 +90,10 @@ CPP_template(typename Type)(requires ad_utility::Arithmetic<Type>)
 template <typename Type>
 void throwOverflowError(const std::string_view reason) {
   std::string typeName;
-  if constexpr (std::same_as<Type, double>) {
+  if constexpr (ql::concepts::same_as<Type, double>) {
     typeName = "double";
   } else {
-    AD_CORRECTNESS_CHECK((std::same_as<Type, size_t>));
+    AD_CORRECTNESS_CHECK((ql::concepts::same_as<Type, size_t>));
     typeName = "size_t";
   }
   throw std::runtime_error(absl::StrCat(
@@ -369,28 +371,28 @@ enum struct GeneratedTableColumn : unsigned long {
 /*
 Convert the given enum value into the underlying type.
 */
-template <typename Enum>
-requires std::is_enum_v<Enum> auto toUnderlying(const Enum& e) {
+CPP_template(typename Enum)(requires std::is_enum_v<Enum>) auto toUnderlying(
+    const Enum& e) {
   return static_cast<std::underlying_type_t<Enum>>(e);
 }
 
 // `T` must be an invocable object, which can be invoked with `const size_t&`
 // and returns an instance of `ReturnType`.
 template <typename T, typename ReturnType>
-concept growthFunction =
+CPP_concept growthFunction =
     ad_utility::RegularInvocableWithExactReturnType<T, ReturnType,
                                                     const size_t&>;
 
 // Is `T` of the given type, or a function, that takes `size_t` and return
 // the given type?
 template <typename T, typename Type>
-concept isTypeOrGrowthFunction =
-    std::same_as<T, Type> || growthFunction<T, Type>;
+CPP_concept isTypeOrGrowthFunction =
+    ql::concepts::same_as<T, Type> || growthFunction<T, Type>;
 
 // There must be exactly one growth function, that either returns a `size_t`, or
 // a `float`.
 template <typename... Ts>
-concept exactlyOneGrowthFunction =
+CPP_concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
 // Is something a growth function?
@@ -414,9 +416,12 @@ struct IsGrowthFunction {
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-template <std::convertible_to<double> T>
-static double calculateNextWholeExponent(const T& base,
-                                         const T& startingPoint) {
+CPP_template(typename T)(
+    requires ql::concepts::convertible_to<
+        T,
+        double>) static double calculateNextWholeExponent(const T& base,
+                                                          const T&
+                                                              startingPoint) {
   // This is a rather simple calculation: We calculate
   // $log_(base)(startingPoint)$ and round up.
   AD_CONTRACT_CHECK(isValuePreservingCast<double>(startingPoint));
@@ -429,8 +434,9 @@ static double calculateNextWholeExponent(const T& base,
 @brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
 always a natural number.
 */
-CPP_template(typename T)(requires ad_utility::Arithmetic<T> CPP_and
-                             std::convertible_to<T, double>) static std::
+CPP_template(typename T)(
+    requires ad_utility::Arithmetic<T> CPP_and
+        ql::concepts::convertible_to<T, double>) static std::
     vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
                                        T inclusiveUpperBound) {
   std::vector<T> elements{};
@@ -464,7 +470,7 @@ CPP_template(typename T)(requires ad_utility::Arithmetic<T> CPP_and
 CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
     T> generateNaturalNumberSequenceInterval(T inclusiveLowerBound,
                                              T inclusiveUpperBound) {
-  if constexpr (std::floating_point<T>) {
+  if constexpr (ql::concepts::floating_point<T>) {
     inclusiveLowerBound = std::ceil(inclusiveLowerBound);
     inclusiveUpperBound = std::floor(inclusiveUpperBound);
   }
@@ -1189,26 +1195,32 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   chance to be picked.) This adjusts the number of elements in the sample size
   to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
-  template <QL_CONCEPT_OR_TYPENAME(ad_utility::InvocableWithExactReturnType<
-                                   bool, float, size_t, size_t, size_t, size_t,
-                                   float, float>) StopFunction,
-            isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<float> T2,
-            isTypeOrGrowthFunction<size_t> T3,
-            isTypeOrGrowthFunction<size_t> T4,
-            isTypeOrGrowthFunction<size_t> T5,
-            isTypeOrGrowthFunction<float> T6 = float,
-            isTypeOrGrowthFunction<float> T7 = float>
-  requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
-  ResultTable& makeGrowingBenchmarkTable(
-      BenchmarkResults* results, const std::string& tableDescriptor,
-      std::string parameterName, StopFunction stopFunction, const T1& overlap,
-      const std::optional<size_t>& resultTableNumRows,
-      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-      const bool biggerTableSorted, const T2& ratioRows,
-      const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
-      const T5& biggerTableNumColumns,
-      const T6& smallerTableJoinColumnSampleSizeRatio,
-      const T7& biggerTableJoinColumnSampleSizeRatio) const {
+  // clang-format off
+  CPP_template(typename StopFunction, typename T1, typename T2, typename T3,
+               typename T4, typename T5, typename T6 = float,
+               typename T7 = float)
+      (requires (ad_utility::InvocableWithExactReturnType<
+          StopFunction, bool, float, size_t, size_t, size_t, size_t, float,
+          float>
+          && isTypeOrGrowthFunction<T1, float>
+          && isTypeOrGrowthFunction<T2, float>
+          && isTypeOrGrowthFunction<T3, size_t>
+          && isTypeOrGrowthFunction<T4, size_t>
+          && isTypeOrGrowthFunction<T5, size_t>
+          && isTypeOrGrowthFunction<T6, float>
+          && isTypeOrGrowthFunction<T7, float>
+          && exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>))
+      // clang-format on
+      ResultTable& makeGrowingBenchmarkTable(
+          BenchmarkResults* results, const std::string& tableDescriptor,
+          std::string parameterName, StopFunction stopFunction,
+          const T1& overlap, const std::optional<size_t>& resultTableNumRows,
+          ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+          const bool biggerTableSorted, const T2& ratioRows,
+          const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
+          const T5& biggerTableNumColumns,
+          const T6& smallerTableJoinColumnSampleSizeRatio,
+          const T7& biggerTableJoinColumnSampleSizeRatio) const {
     constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
@@ -1636,12 +1648,14 @@ argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
 
 @tparam ReturnType The return type of the created lambda function.
 */
-template <typename ReturnType>
-requires std::convertible_to<ReturnType, double> &&
-         std::convertible_to<double, ReturnType>
-auto createDefaultGrowthLambda(const ReturnType& base,
-                               const ReturnType& startingPoint,
-                               std::vector<ReturnType> prefixValues = {}) {
+// clang-format off
+CPP_template(typename ReturnType)(requires
+    ql::concepts::convertible_to<ReturnType, double>
+    CPP_and ql::concepts::convertible_to<double, ReturnType>)
+    // clang-format on
+    auto createDefaultGrowthLambda(const ReturnType& base,
+                                   const ReturnType& startingPoint,
+                                   std::vector<ReturnType> prefixValues = {}) {
   return [base, prefixValues = std::move(prefixValues),
           startingExponent{calculateNextWholeExponent(base, startingPoint)}](
              const size_t& rowIdx) {
@@ -2188,11 +2202,12 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   given benchmarking table row?
   @param biggerTableNumRows Number of rows in the bigger table.
   */
-  ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
-      BenchmarkResults* results, const std::string& tableDescriptor,
-      const bool smallerTableSorted, const bool biggerTableSorted,
-      const growthFunction<size_t> auto& smallerTableNumRows,
-      const size_t biggerTableNumRows) const {
+  CPP_template(typename Function)(requires(growthFunction<Function, size_t>))
+      ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
+          BenchmarkResults* results, const std::string& tableDescriptor,
+          const bool smallerTableSorted, const bool biggerTableSorted,
+          const Function& smallerTableNumRows,
+          const size_t biggerTableNumRows) const {
     // For creating a new random seed for every new row.
     RandomSeedGenerator seedGenerator{getConfigVariables().randomSeed()};
 

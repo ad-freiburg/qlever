@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
@@ -33,7 +34,8 @@ namespace ad_utility {
 
 // A concept, for when a type should be an integral, or a floating point.
 template <typename T>
-CPP_concept Arithmetic = (std::integral<T> || std::floating_point<T>);
+CPP_concept Arithmetic =
+    (ql::concepts::integral<T> || ql::concepts::floating_point<T>);
 
 /*
 An abstract class, that represents an amount of memory.
@@ -59,7 +61,8 @@ class MemorySize {
   constexpr MemorySize& operator=(MemorySize&&) = default;
 
   // Default comparison operator.
-  constexpr auto operator<=>(const MemorySize&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(MemorySize,
+                                                        memoryInBytes_)
 
   // Hashing.
   template <typename H>
@@ -72,7 +75,7 @@ class MemorySize {
   memory size saved internally. Always requires the exact memory size unit and
   size wanted.
   */
-  CPP_template(typename T)(requires std::integral<T>)  //
+  CPP_template(typename T)(requires ql::concepts::integral<T>)  //
       constexpr static MemorySize bytes(T numBytes);
   CPP_template(typename T)(requires Arithmetic<T>)  //
       constexpr static MemorySize kilobytes(T numKilobytes);
@@ -282,8 +285,8 @@ multiplied/divied with.
 return types will be automatically done, and can be ignored by `func`.
  */
 CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
-    std::invocable<Func, const double, const double> ||
-    std::invocable<Func, const size_t, const size_t>))               //
+    ql::concepts::invocable<Func, const double, const double> ||
+    ql::concepts::invocable<Func, const size_t, const size_t>))      //
     constexpr MemorySize magicImplForDivAndMul(const MemorySize& m,  //
                                                const T c, Func func) {
   // In order for the results to be as precise as possible, we cast to highest
@@ -298,7 +301,8 @@ CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
 }  // namespace detail
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires std::integral<T>) constexpr MemorySize
+CPP_template_def(typename T)(
+    requires ql::concepts::integral<T>) constexpr MemorySize
     MemorySize::bytes(T numBytes) {
   if constexpr (std::is_signed_v<T>) {
     // Doesn't make much sense to a negative amount of memory.
@@ -452,7 +456,7 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   point number.
   For example: 1/(1/2) = 2
   */
-  if (std::floating_point<T> &&
+  if (ql::concepts::floating_point<T> &&
       static_cast<double>(memoryInBytes_) >
           static_cast<double>(detail::size_t_max) * static_cast<double>(c)) {
     throw std::overflow_error(

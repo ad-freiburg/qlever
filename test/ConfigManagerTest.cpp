@@ -10,7 +10,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
 #include <tuple>
 #include <utility>
@@ -1233,11 +1232,14 @@ to `addValidatorToConfigManager`.
 */
 struct TestGeneratedValidatorsOfConfigManager {
   template <typename... Ts>
-  void operator()(size_t variantStart, size_t variantEnd, ConfigManager& m,
-                  const nlohmann::json& defaultValues,
-                  const std::same_as<
-                      nlohmann::json::json_pointer> auto&... configOptionPaths)
-      requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
+  auto operator()(
+      size_t variantStart, size_t variantEnd, ConfigManager& m,
+      const nlohmann::json& defaultValues,
+      const QL_CONCEPT_OR_NOTHING(
+          ql::concepts::same_as<
+              nlohmann::json::json_pointer>) auto&... configOptionPaths)
+      -> CPP_ret(void)(requires(sizeof...(Ts) ==
+                                sizeof...(configOptionPaths))) {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
     for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;

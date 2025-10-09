@@ -83,6 +83,28 @@
 #define CPP_member_def_sfinae \
   template <bool (&CPP_true_fn)(::concepts::detail::xNil)>
 
+#define CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_0(...)                                \
+  , bool CPP_true,                                                            \
+      std::enable_if_t<CPP_PP_CAT(CPP_TEMPLATE_SFINAE_AUX_3_, __VA_ARGS__) && \
+                           CPP_BOOL(CPP_true),                                \
+                       int>                                                   \
+              CPP_sfinae >
+
+#define CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_3_requires
+
+#define CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_WHICH_(FIRST, ...) \
+  CPP_PP_EVAL(CPP_PP_CHECK,                                \
+              CPP_PP_CAT(CPP_TEMPLATE_SFINAE_PROBE_CONCEPT_, FIRST))
+
+#define CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_(...)                       \
+  CPP_PP_CAT(CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_,                      \
+             CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
+  (__VA_ARGS__)
+
+#define CPP_template_out_def_sfinae(...) \
+  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN       \
+  template <__VA_ARGS__ CPP_TEMPLATE_OUT_DEF_SFINAE_AUX_
+
 #define CPP_LAMBDA_20(...) [__VA_ARGS__] CPP_LAMBDA_ARGS
 
 #define CPP_TEMPLATE_LAMBDA_20(...) [__VA_ARGS__] CPP_TEMPLATE_LAMBDA_ARGS

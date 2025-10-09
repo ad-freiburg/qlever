@@ -1178,10 +1178,11 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
 }
 
 // _____________________________________________________________________________
-template <std::invocable Function, typename T>
-Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
-                                        Function function,
-                                        SharedCancellationHandle handle) {
+CPP_template_def(typename Function,
+                 typename T)(requires ql::concepts::invocable<Function>)
+    Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
+                                            Function function,
+                                            SharedCancellationHandle handle) {
   // `interruptible` will set the shared state of this promise
   // with a function that can be used to cancel the timer.
   std::promise<std::function<void()>> cancelTimerPromise{};
