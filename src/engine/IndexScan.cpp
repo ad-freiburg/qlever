@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Algorithm.h"
 #include "util/Generator.h"
 #include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
@@ -713,7 +714,7 @@ IndexScan::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
   ad_utility::HashSet<Variable> newVariables;
   for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
-    if (variables.contains(var)) {
+    if (ad_utility::contains(variables, var)) {
       newVariables.insert(var);
     }
   }
