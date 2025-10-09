@@ -16,6 +16,26 @@ STL_FEATURE_CAPTURE_REGEX = re.compile(
     r"[‘'](\w+)[’']\s+is not a member of\s+[‘']?std[’']?",
     re.IGNORECASE
 )
+NO_MEMBER_NAMED_REGEX = re.compile(
+    r"no member named",
+    re.IGNORECASE
+)
+NOT_VALID_TEMPLATE_ARG_REGEX = re.compile(
+    r"not a valid template argument",
+    re.IGNORECASE
+)
+LAMBDA_REGEX = re.compile(
+    r"<lambda>\(\)",
+    re.IGNORECASE
+)
+EXPECTED_PRIMARY_EXPR_REGEX = re.compile(
+    r"expected primary-expression before",
+    re.IGNORECASE
+)
+USED_BUT_NEVER_DEFINED_REGEX = re.compile(
+    r"is used but never defined",
+    re.IGNORECASE
+)
 
 class ReportBuilder:
     """Builds a formatted report with optional grouping."""
@@ -73,10 +93,15 @@ def parse_gcc_log(log_path):
                     'column': int(col),
                     'message': message,
                     'language_specific': bool(LANG_SPECIFIC_REGEX.search(message)),
-                    'stl_specific': bool(STL_FEATURE_REGEX.search(message))
+                    'stl_specific': bool(STL_FEATURE_REGEX.search(message)),
+                    'no_member_named': bool(NO_MEMBER_NAMED_REGEX.search(message)),
+                    'not_valid_template_arg': bool(NOT_VALID_TEMPLATE_ARG_REGEX.search(message)),
+                    'lambda': bool(LAMBDA_REGEX.search(message)),
+                    'expected_primary_expr': bool(EXPECTED_PRIMARY_EXPR_REGEX.search(message)),
+                    'used_but_never_defined': bool(USED_BUT_NEVER_DEFINED_REGEX.search(message))
                 })
     # Remove duplicates
-    return { (e['filename'], e['line'], e['column'], e['message'], e['language_specific'], e['stl_specific']): e for e in errors }
+    return { (e['filename'], e['line'], e['column'], e['message'], e['language_specific'], e['stl_specific'], e['no_member_named'], e['not_valid_template_arg'], e['lambda'], e['expected_primary_expr'], e['used_but_never_defined']): e for e in errors }
 
 def generate_report(errors, grouped=False, annotate=False, details_in_group=False, test_mode=False, working_dir=""):
     """Generates a formatted error report."""
@@ -84,7 +109,12 @@ def generate_report(errors, grouped=False, annotate=False, details_in_group=Fals
 
     lang_specific_errors = [e for e in errors if e['language_specific']]
     stl_specific_errors = [e for e in errors if e['stl_specific']]
-    general_errors = [e for e in errors if not e['language_specific'] and not e['stl_specific']]
+    no_member_named_errors = [e for e in errors if e['no_member_named']]
+    not_valid_template_arg_errors = [e for e in errors if e['not_valid_template_arg']]
+    lambda_errors = [e for e in errors if e['lambda']]
+    expected_primary_expr_errors = [e for e in errors if e['expected_primary_expr']]
+    used_but_never_defined_errors = [e for e in errors if e['used_but_never_defined']]
+    general_errors = [e for e in errors if not e['language_specific'] and not e['stl_specific'] and not e['no_member_named'] and not e['not_valid_template_arg'] and not e['lambda'] and not e['expected_primary_expr'] and not e['used_but_never_defined']]
 
     missing_lang_features = sorted({
         f.lower()
@@ -153,6 +183,46 @@ def generate_report(errors, grouped=False, annotate=False, details_in_group=Fals
                 consistency_check = False
         builder.end_group()
 
+    # No member named errors
+    if no_member_named_errors:
+        builder.begin_group(f"'no member named' Errors: {len(no_member_named_errors)}", collapse=True)
+        if details_in_group:
+            for err in no_member_named_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+        builder.end_group(collapse=True)
+
+    # Not valid template argument errors
+    if not_valid_template_arg_errors:
+        builder.begin_group(f"'not a valid template argument' Errors: {len(not_valid_template_arg_errors)}", collapse=True)
+        if details_in_group:
+            for err in not_valid_template_arg_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+        builder.end_group(collapse=True)
+
+    # Lambda errors
+    if lambda_errors:
+        builder.begin_group(f"'<lambda>()' Errors: {len(lambda_errors)}", collapse=True)
+        if details_in_group:
+            for err in lambda_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+        builder.end_group(collapse=True)
+
+    # Expected primary-expression errors
+    if expected_primary_expr_errors:
+        builder.begin_group(f"'expected primary-expression before' Errors: {len(expected_primary_expr_errors)}", collapse=True)
+        if details_in_group:
+            for err in expected_primary_expr_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+        builder.end_group(collapse=True)
+
+    # Used but never defined errors
+    if used_but_never_defined_errors:
+        builder.begin_group(f"'is used but never defined' Errors: {len(used_but_never_defined_errors)}", collapse=True)
+        if details_in_group:
+            for err in used_but_never_defined_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+        builder.end_group(collapse=True)
+
     # General errors
     if general_errors:
         builder.begin_group(f"General Errors: {len(general_errors)}", collapse=True)
@@ -167,17 +237,42 @@ def generate_report(errors, grouped=False, annotate=False, details_in_group=Fals
             builder.begin_group("Language-Specific Errors Details", collapse=True)
             for err in lang_specific_errors:
                 builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
-            builder.end_group()
+            builder.end_group(collapse=True)
         if stl_specific_errors:
             builder.begin_group("STL-Specific Errors Details", collapse=True)
             for err in stl_specific_errors:
                 builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
-            builder.end_group()
+            builder.end_group(collapse=True)
+        if no_member_named_errors:
+            builder.begin_group("'no member named' Errors Details", collapse=True)
+            for err in no_member_named_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+            builder.end_group(collapse=True)
+        if not_valid_template_arg_errors:
+            builder.begin_group("'not a valid template argument' Errors Details", collapse=True)
+            for err in not_valid_template_arg_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+            builder.end_group(collapse=True)
+        if lambda_errors:
+            builder.begin_group("'<lambda>()' Errors Details", collapse=True)
+            for err in lambda_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+            builder.end_group(collapse=True)
+        if expected_primary_expr_errors:
+            builder.begin_group("'expected primary-expression before' Errors Details", collapse=True)
+            for err in expected_primary_expr_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+            builder.end_group(collapse=True)
+        if used_but_never_defined_errors:
+            builder.begin_group("'is used but never defined' Errors Details", collapse=True)
+            for err in used_but_never_defined_errors:
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
+            builder.end_group(collapse=True)
         if general_errors:
             builder.begin_group("General Errors Details", collapse=True)
             for err in general_errors:
                 builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
-            builder.end_group()
+            builder.end_group(collapse=True)
 
     builder.end_group()
     if test_mode:
