@@ -96,7 +96,7 @@ class ValueId {
   /// double <0 that will not be rounded to zero.
   /// TODO<joka921> This constant is currently only used in unit tests.
   /// Find the exact value for CPP17 mode, and static assert it in C++20 mode.
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP_17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static constexpr double minPositiveDouble =
       absl::bit_cast<double>(1ull << numDatatypeBits);
 #endif
