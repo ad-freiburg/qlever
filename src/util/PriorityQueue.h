@@ -106,7 +106,7 @@ class TreeBasedPQ {
    * @return  a handle to the inserted value that can be used to update the key
    */
   Handle insert(Score s, Value v) {
-    Handle handle{std::move(s), make_shared<Value>(std::move(v))};
+    Handle handle{std::move(s), std::make_shared<Value>(std::move(v))};
     mMap.insert(handle);
     return handle;
   }

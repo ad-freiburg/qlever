@@ -1291,8 +1291,8 @@ GroupByImpl::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  using B =
-      HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
+  using B = typename HashMapAggregationData<
+      NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
     size_t vectorIdx;
     // Special case for lazy consumer where the hashmap is not used
@@ -1744,7 +1744,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       auto currentBlockSize = evaluationContext.size();
 
       // Perform HashMap lookup once for all groups in current block
-      using U = HashMapAggregationData<
+      using U = typename HashMapAggregationData<
           NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());

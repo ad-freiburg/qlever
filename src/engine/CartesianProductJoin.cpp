@@ -68,21 +68,22 @@ std::string CartesianProductJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | ql::views::transform(&Operation::getResultWidth);
-  return std::reduce(view.begin(), view.end(), 0UL, std::plus{});
+  return std::accumulate(view.begin(), view.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | ql::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() +
-         std::reduce(childSizes.begin(), childSizes.end(), 0UL, std::plus{});
+  return getSizeEstimate() + std::accumulate(childSizes.begin(),
+                                             childSizes.end(), 0UL,
+                                             std::plus{});
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
   auto view = childView() | ql::views::transform(&Operation::getSizeEstimate);
-  return std::reduce(view.begin(), view.end(), 1UL, std::multiplies{});
+  return std::accumulate(view.begin(), view.end(), 1UL, std::multiplies{});
 }
 
 // ____________________________________________________________________________
@@ -205,8 +206,8 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
   // `Result`.
 
   auto sizesView = ql::views::transform(idTables, &IdTable::size);
-  auto totalResultSize =
-      std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
+  auto totalResultSize = std::accumulate(sizesView.begin(), sizesView.end(),
+                                         1UL, std::multiplies{});
 
   if (!ql::ranges::empty(idTables) && sizesView.back() != 0) {
     totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;

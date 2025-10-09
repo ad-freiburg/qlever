@@ -640,9 +640,10 @@ class BlockAndSubrange {
 
  public:
   // The reference type of the underlying container.
-  using reference = std::iterator_traits<typename Block::iterator>::reference;
+  using reference =
+      typename std::iterator_traits<typename Block::iterator>::reference;
   using const_reference =
-      std::iterator_traits<typename Block::const_iterator>::reference;
+      typename std::iterator_traits<typename Block::const_iterator>::reference;
 
   // Construct from a container object, where the initial subrange will
   // represent the whole container.
@@ -852,7 +853,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
-  using ProjectedEl = LeftSide::ProjectedEl;
+  using ProjectedEl = typename LeftSide::ProjectedEl;
   static_assert(
       ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =

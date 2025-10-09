@@ -281,6 +281,11 @@ class RowReferenceImpl {
       }
       return true;
     }
+    CPP_template(typename U)(requires(numStaticColumns ==
+                                      U::numStaticColumns)) bool
+    operator!=(const U& other) const {
+      return !(*this == other);
+    }
 
     // Convert from a `RowReference` to a `Row`.
     operator Row<T, numStaticColumns>() const {
@@ -408,6 +413,12 @@ class RowReference
                                       T::numStaticColumns)) bool
   operator==(const T& other) const {
     return base() == other;
+  }
+
+  CPP_template_2(typename T)(requires(numStaticColumns ==
+                                      T::numStaticColumns)) bool
+  operator!=(const T& other) const {
+    return !(base() == other);
   }
 
  public:

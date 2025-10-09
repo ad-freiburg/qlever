@@ -162,8 +162,9 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
         children_ | ql::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    return std::max(0us, totalTime_ - std::reduce(timesOfChildren.begin(),
-                                                  timesOfChildren.end(), 0us));
+    return std::max(0us,
+                    totalTime_ - std::accumulate(timesOfChildren.begin(),
+                                                 timesOfChildren.end(), 0us));
   }
 }
 

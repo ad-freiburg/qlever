@@ -207,6 +207,7 @@ class ValueId {
     return ql::compareThreeWay(_bits, other._bits);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(ValueId, _bits)
 
   // When there are no local vocab entries, then comparison can only be done
   // on the underlying bits, which allows much better code generation (e.g.
@@ -214,12 +215,6 @@ class ValueId {
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
     return ql::compareThreeWay(_bits, other._bits);
-  }
-
-  // For some reason which I (joka921) don't understand, we still need
-  // operator== although we already have operator <=>.
-  constexpr bool operator==(const ValueId& other) const {
-    return ql::compareThreeWay(*this, other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
