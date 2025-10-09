@@ -207,9 +207,9 @@ class ValuesForTesting : public Operation {
             return ql::ranges::any_of(table.getColumn(i),
                                       [](Id id) { return id.isUndefined(); });
           });
-      using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
-          i, containsUndef ? PossiblyUndefined : AlwaysDefined};
+          i, containsUndef ? ColumnIndexAndTypeInfo::PossiblyUndefined
+                           : ColumnIndexAndTypeInfo::AlwaysDefined};
     }
     return m;
   }

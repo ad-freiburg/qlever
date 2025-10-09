@@ -102,15 +102,14 @@ template <typename Function, typename ValueGetter>
 using AGG_EXP = AggregateExpression<
     Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
-// Helper function that for a given `NumericOperation` with numeric arguments
+// Helper struct that for a given `NumericOperation` with numeric arguments
 // and result (integer or floating points), returns the corresponding function
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
-inline auto makeNumericExpressionForAggregate() {
-  return [](const auto&... args)
-             -> CPP_ret(NumericValue)(
-                 requires(concepts::same_as<std::decay_t<decltype(args)>,
-                                            NumericValue>&&...)) {
+struct NumericExpressionForAggregate {
+  template <typename... Args>
+  auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
+      requires(concepts::same_as<std::decay_t<Args>, NumericValue>&&...)) {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -120,7 +119,12 @@ inline auto makeNumericExpressionForAggregate() {
       }
     };
     return std::visit(visitor, args...);
-  };
+  }
+};
+
+template <typename NumericOperation>
+inline auto makeNumericExpressionForAggregate() {
+  return NumericExpressionForAggregate<NumericOperation>{};
 }
 
 // Aggregate expression for COUNT.

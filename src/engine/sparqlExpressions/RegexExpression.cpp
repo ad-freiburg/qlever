@@ -235,9 +235,9 @@ ExpressionResult PrefixRegexExpression::evaluate(
       }
       checkCancellation(context);
     }
-    return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
-                       ad_utility::SetOfIntervals{},
-                       ad_utility::SetOfIntervals::Union{});
+    return std::accumulate(
+        resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
+        ad_utility::SetOfIntervals{}, ad_utility::SetOfIntervals::Union{});
   }
 
   // If the input is not sorted by the variable, we have to check each row

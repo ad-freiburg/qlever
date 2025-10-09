@@ -135,12 +135,17 @@ template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
-inline auto areAllSetOfIntervals = [](const auto&... t) constexpr {
-  return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
-                                       ad_utility::SetOfIntervals>);
+struct AreAllSetOfIntervals {
+  template <typename... Ts>
+  constexpr bool operator()(const Ts&... t) const {
+    return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
+                                         ad_utility::SetOfIntervals>);
+  }
 };
+
+inline constexpr AreAllSetOfIntervals areAllSetOfIntervals{};
 template <typename F>
-using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
+using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
 
 using ad_utility::SetOfIntervals;
 
