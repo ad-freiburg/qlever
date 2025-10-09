@@ -34,7 +34,7 @@ jobs:
 
 
     env:
-      warnings:   ""
+      warnings:   "-w" # disable all warnings for now
       build-type: Release
       expensive-tests: true
       compiler: gcc

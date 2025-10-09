@@ -190,6 +190,11 @@ class Date {
     (void)unusedBits_;
   }
 
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+  Date() = default;
+#endif
+
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.
   [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
@@ -331,5 +336,8 @@ class Date {
   // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
 };
+#ifdef QLEVER_CPP_17
+static_assert(std::is_default_constructible_v<Date>);
+#endif
 
 #endif  // QLEVER_DATE_H
