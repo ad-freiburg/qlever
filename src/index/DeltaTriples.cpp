@@ -452,6 +452,16 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       localVocabMapping, insertInfo, cancellationHandle,
       std::array{ADDITIONAL_COLUMN_GRAPH_ID});
 }
+
+size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
+  if (!blockMetadataRanges.empty()) {
+    const auto& first = blockMetadataRanges.at(0);
+    if (!first.empty()) {
+      return first[0].offsetsAndCompressedSize_.size();
+    }
+  }
+  return 4;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -520,8 +530,7 @@ void DeltaTriples::materializeToIndex() {
   const auto& psoPermutation = index_.getPermutation(Permutation::Enum::PSO);
   auto blockMetadataRanges =
       psoPermutation.getAugmentedMetadataForPermutation(*snapshot);
-  size_t numColumns =
-      blockMetadataRanges.at(0).at(0).offsetsAndCompressedSize_.size();
+  size_t numColumns = getNumColumns(blockMetadataRanges);
   std::vector<ColumnIndex> additionalColumns;
   additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
   for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
