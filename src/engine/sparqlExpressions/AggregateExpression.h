@@ -195,27 +195,27 @@ inline const auto compareIdsOrStrings =
 
 // Aggregate expression for MIN and MAX.
 template <valueIdComparators::Comparison comparison>
-inline const auto minMaxLambdaForAllTypes = CPP_template_lambda()(typename T)(
-    const T& a, const T& b,
-    const EvaluationContext* ctx)(requires SingleExpressionResult<T>) {
-  auto actualImpl = [ctx](const auto& x, const auto& y) {
-    return compareIdsOrStrings<comparison>(x, y, ctx);
-  };
-  if constexpr (ad_utility::isSimilar<T, Id>) {
-    return std::get<Id>(actualImpl(a, b));
-  } else {
-    // TODO<joka921> We should definitely move strings here.
-    return std::visit(actualImpl, a, b);
+struct MinMaxLambdaForAllTypes {
+  template <typename T>
+  auto operator()(const T& a, const T& b, const EvaluationContext* ctx) const
+      -> CPP_ret(T)(requires SingleExpressionResult<T>) {
+    auto actualImpl = [ctx](const auto& x, const auto& y) {
+      return compareIdsOrStrings<comparison>(x, y, ctx);
+    };
+    if constexpr (ad_utility::isSimilar<T, Id>) {
+      return std::get<Id>(actualImpl(a, b));
+    } else {
+      // TODO<joka921> We should definitely move strings here.
+      return std::visit(actualImpl, a, b);
+    }
   }
 };
-constexpr inline auto minLambdaForAllTypes =
-    minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
-constexpr inline auto maxLambdaForAllTypes =
-    minMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
-using MinExpressionBase =
-    AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;
-using MaxExpressionBase =
-    AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter>;
+using MinLambdaForAllTypes =
+    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
+using MaxLambdaForAllTypes =
+    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
+using MinExpressionBase = AGG_EXP<MinLambdaForAllTypes, ActualValueGetter>;
+using MaxExpressionBase = AGG_EXP<MaxLambdaForAllTypes, ActualValueGetter>;
 class MinExpression : public MinExpressionBase {
   using MinExpressionBase::MinExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }

@@ -146,7 +146,6 @@ struct AreAllSetOfIntervals {
 inline constexpr AreAllSetOfIntervals areAllSetOfIntervals{};
 template <typename F>
 using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
-
 using ad_utility::SetOfIntervals;
 
 // The types for the concrete MultiBinaryExpressions and UnaryExpressions.

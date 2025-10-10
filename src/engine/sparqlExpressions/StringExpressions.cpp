@@ -618,24 +618,29 @@ struct StrIriDtTag {
 using StrIriTagged = LiteralExpressionImpl<2, StrIriDtTag, IriValueGetter>;
 
 // HASH
-template <auto HashFunc>
+template <typename HashFunc>
 struct Hash {
   IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
     if (!input.has_value()) {
       return Id::makeUndefined();
     } else {
-      std::vector<unsigned char> hashed = HashFunc(input.value());
+      std::vector<unsigned char> hashed = HashFunc{}(input.value());
       auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
       return toLiteral(std::move(hexStr));
     }
   }
 };
 
-using MD5Expression = StringExpressionImpl<1, Hash<ad_utility::hashMd5>>;
-using SHA1Expression = StringExpressionImpl<1, Hash<ad_utility::hashSha1>>;
-using SHA256Expression = StringExpressionImpl<1, Hash<ad_utility::hashSha256>>;
-using SHA384Expression = StringExpressionImpl<1, Hash<ad_utility::hashSha384>>;
-using SHA512Expression = StringExpressionImpl<1, Hash<ad_utility::hashSha512>>;
+using MD5Expression =
+    StringExpressionImpl<1, Hash<decltype(ad_utility::hashMd5)>>;
+using SHA1Expression =
+    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha1)>>;
+using SHA256Expression =
+    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha256)>>;
+using SHA384Expression =
+    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha384)>>;
+using SHA512Expression =
+    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha512)>>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
