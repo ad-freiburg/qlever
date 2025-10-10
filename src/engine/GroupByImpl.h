@@ -638,7 +638,7 @@ class GroupByImpl : public Operation {
 // _____________________________________________________________________________
 namespace groupBy::detail {
 template <typename A>
-concept VectorOfAggregationData =
+CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 
