@@ -195,7 +195,7 @@ std::string ReplacementStringGetter::convertToReplacementString(
 }
 
 // ____________________________________________________________________________
-template <auto isSomethingFunction, auto prefix>
+template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
