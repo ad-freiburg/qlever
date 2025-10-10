@@ -7,8 +7,6 @@
 
 #include <absl/strings/str_join.h>
 
-#include <ranges>
-
 #include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/Log.h"
