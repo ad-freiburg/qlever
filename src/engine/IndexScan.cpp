@@ -380,12 +380,11 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
-  return cppcoro::fromInputRange(
-      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
-          ad_utility::CachingTransformInputRange<
-              ad_utility::OwningView<Permutation::IdTableGenerator>,
-              decltype(makeApplyColumnSubset()), LazyScanMetadata>{
-              std::move(lazyScanAllCols), makeApplyColumnSubset()}));
+  return ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
+      ad_utility::CachingTransformInputRange<
+          ad_utility::OwningView<Permutation::IdTableGenerator>,
+          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
+          std::move(lazyScanAllCols), makeApplyColumnSubset()});
 };
 
 // _____________________________________________________________________________
