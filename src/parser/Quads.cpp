@@ -53,7 +53,7 @@ updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
       [](size_t acc, const GraphBlock& block) {
-        return acc + get<ad_utility::sparql_types::Triples>(block).size();
+        return acc + std::get<ad_utility::sparql_types::Triples>(block).size();
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(

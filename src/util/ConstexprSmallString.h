@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
 #define QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
 
+#include <backports/algorithm.h>
+
 #include <array>
 #include <stdexcept>
 #include <string>
@@ -63,11 +65,11 @@ struct ConstexprSmallString {
   // TODO<C++20, joka921> implement operator<=> as soon as it works
   // on std::array.
   constexpr bool operator==(const ConstexprSmallString& rhs) const {
-    return _characters == rhs._characters;
+    return ql::ranges::equal(_characters, rhs._characters);
   }
 
   constexpr bool operator<(const ConstexprSmallString& rhs) const {
-    return _characters < rhs._characters;
+    return ql::ranges::lexicographical_compare(_characters, rhs._characters);
   }
 
   /// Implicit conversion to std::string_view

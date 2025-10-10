@@ -32,7 +32,7 @@ namespace ad_utility {
 // predicate has already been evaluated for the current element.
 CPP_template(typename V, typename Pred)(
     requires ql::ranges::input_range<V>&& ql::ranges::view<V>&&
-        std::is_object_v<Pred>&& std::indirect_unary_predicate<
+        std::is_object_v<Pred>&& ql::concepts::indirect_unary_predicate<
             const Pred, ql::ranges::iterator_t<V>>) class TakeUntilInclusiveView
     : public ql::ranges::view_interface<TakeUntilInclusiveView<V, Pred>> {
  private:

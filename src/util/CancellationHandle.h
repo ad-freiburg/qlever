@@ -41,7 +41,10 @@ enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
 /// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
-  using enum CancellationMode;
+  constexpr auto ENABLED = ad_utility::detail::CancellationMode::ENABLED;
+  constexpr auto NO_WATCH_DOG =
+      ad_utility::detail::CancellationMode::NO_WATCH_DOG;
+  constexpr auto DISABLED = ad_utility::detail::CancellationMode::DISABLED;
 #ifndef QUERY_CANCELLATION_MODE
   return ENABLED;
 #else
@@ -54,7 +57,13 @@ constexpr CancellationMode CANCELLATION_MODE = []() {
 /// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
-  using enum CancellationState;
+  constexpr auto NOT_CANCELLED = ad_utility::CancellationState::NOT_CANCELLED;
+  constexpr auto WAITING_FOR_CHECK =
+      ad_utility::CancellationState::WAITING_FOR_CHECK;
+  constexpr auto CHECK_WINDOW_MISSED =
+      ad_utility::CancellationState::CHECK_WINDOW_MISSED;
+  constexpr auto MANUAL = ad_utility::CancellationState::MANUAL;
+  constexpr auto TIMEOUT = ad_utility::CancellationState::TIMEOUT;
   static_assert(NOT_CANCELLED <= CHECK_WINDOW_MISSED);
   static_assert(WAITING_FOR_CHECK <= CHECK_WINDOW_MISSED);
   static_assert(MANUAL > CHECK_WINDOW_MISSED);
@@ -178,18 +187,18 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          AD_LOG_WARN << "No timeout check has been performed for at least "
-                      << ParseableDuration{duration_cast<DurationType>(
-                                               steady_clock::now() -
-                                               startTimeoutWindow_.load()) +
-                                           DESIRED_CANCELLATION_CHECK_INTERVAL}
-                      << ", should be at most "
-                      << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                      << ". Checked at " << trimFileName(location.file_name())
-                      << ":" << location.line()
-                      << detail::printAdditionalDetails(
-                             std::invoke(stageInvocable))
-                      << std::endl;
+          AD_LOG_WARN
+              << "No timeout check has been performed for at least "
+              << ParseableDuration{std::chrono::duration_cast<DurationType>(
+                                       steady_clock::now() -
+                                       startTimeoutWindow_.load()) +
+                                   DESIRED_CANCELLATION_CHECK_INTERVAL}
+              << ", should be at most "
+              << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+              << ". Checked at " << trimFileName(location.file_name()) << ":"
+              << location.line()
+              << detail::printAdditionalDetails(std::invoke(stageInvocable))
+              << std::endl;
         }
         break;
       }

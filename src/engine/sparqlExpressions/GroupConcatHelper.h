@@ -45,8 +45,9 @@ inline void pushLanguageTag(
 }
 
 // Combine a string and an optional language tag into a `LiteralOrIri` object.
-inline LiteralOrIri stringWithOptionalLangTagToLiteral(
-    const std::string& result, std::optional<std::string> langTag) {
+inline ad_utility::triple_component::LiteralOrIri
+stringWithOptionalLangTagToLiteral(const std::string& result,
+                                   std::optional<std::string> langTag) {
   return ad_utility::triple_component::LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(result),

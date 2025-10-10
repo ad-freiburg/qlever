@@ -1173,7 +1173,14 @@ GroupByImpl::findAggregates(sparqlExpression::SparqlExpression* expr) {
 // _____________________________________________________________________________
 std::optional<GroupByImpl::HashMapAggregateTypeWithData>
 GroupByImpl::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using enum HashMapAggregateType;
+  static constexpr auto AVG = GroupByImpl::HashMapAggregateType::AVG;
+  static constexpr auto COUNT = GroupByImpl::HashMapAggregateType::COUNT;
+  static constexpr auto MIN = GroupByImpl::HashMapAggregateType::MIN;
+  static constexpr auto MAX = GroupByImpl::HashMapAggregateType::MAX;
+  static constexpr auto SUM = GroupByImpl::HashMapAggregateType::SUM;
+  static constexpr auto GROUP_CONCAT =
+      GroupByImpl::HashMapAggregateType::GROUP_CONCAT;
+  static constexpr auto SAMPLE = GroupByImpl::HashMapAggregateType::SAMPLE;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
@@ -1284,8 +1291,8 @@ GroupByImpl::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  using B =
-      HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
+  using B = typename HashMapAggregationData<
+      NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
     size_t vectorIdx;
     // Special case for lazy consumer where the hashmap is not used
@@ -1737,7 +1744,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       auto currentBlockSize = evaluationContext.size();
 
       // Perform HashMap lookup once for all groups in current block
-      using U = HashMapAggregationData<
+      using U = typename HashMapAggregationData<
           NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());

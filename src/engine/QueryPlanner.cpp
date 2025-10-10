@@ -630,7 +630,12 @@ template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan) const {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
 
   if (triple.s_.isVariable()) {
     addIndexScan(POS);
@@ -646,7 +651,12 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
 
   // Replace the position of the `triple` that is specified by the
   // `rewritePosition` with a new variable, and add a filter, that checks the
@@ -698,7 +708,12 @@ template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
@@ -817,7 +832,12 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    using enum Permutation::Enum;
+    static constexpr auto PSO = Permutation::Enum::PSO;
+    static constexpr auto POS = Permutation::Enum::POS;
+    static constexpr auto SPO = Permutation::Enum::SPO;
+    static constexpr auto SOP = Permutation::Enum::SOP;
+    static constexpr auto OPS = Permutation::Enum::OPS;
+    static constexpr auto OSP = Permutation::Enum::OSP;
 
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));
@@ -945,7 +965,10 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
-        using enum PropertyPath::Modifier;
+        static constexpr auto SEQUENCE = PropertyPath::Modifier::SEQUENCE;
+        static constexpr auto ALTERNATIVE = PropertyPath::Modifier::ALTERNATIVE;
+        static constexpr auto INVERSE = PropertyPath::Modifier::INVERSE;
+        static constexpr auto NEGATED = PropertyPath::Modifier::NEGATED;
         switch (modifier) {
           case ALTERNATIVE:
             return seedFromAlternative(left, children, right);
@@ -2801,7 +2824,9 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
-  using enum SubtreePlan::Type;
+  static constexpr auto BASIC = QueryPlanner::SubtreePlan::Type::BASIC;
+  static constexpr auto OPTIONAL = QueryPlanner::SubtreePlan::Type::OPTIONAL;
+  static constexpr auto MINUS = QueryPlanner::SubtreePlan::Type::MINUS;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
       [this](const Variable& var) { return !boundVariables_.contains(var); });

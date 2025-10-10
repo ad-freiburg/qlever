@@ -70,7 +70,7 @@ class TimeTracer {
     if (activeTraces_.empty()) {
       throw std::runtime_error("The trace has ended.");
     }
-    activeTraces_.back().get().children_.emplace_back(name, timer_.msecs());
+    activeTraces_.back().get().children_.push_back({name, timer_.msecs()});
     activeTraces_.emplace_back(activeTraces_.back().get().children_.back());
   }
 

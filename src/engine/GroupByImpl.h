@@ -362,7 +362,14 @@ class GroupByImpl : public Operation {
         : numOfGroupedColumns_{numOfGroupedColumns},
           alloc_{alloc},
           map_{alloc} {
-      using enum HashMapAggregateType;
+      static constexpr auto AVG = GroupByImpl::HashMapAggregateType::AVG;
+      static constexpr auto COUNT = GroupByImpl::HashMapAggregateType::COUNT;
+      static constexpr auto MIN = GroupByImpl::HashMapAggregateType::MIN;
+      static constexpr auto MAX = GroupByImpl::HashMapAggregateType::MAX;
+      static constexpr auto SUM = GroupByImpl::HashMapAggregateType::SUM;
+      static constexpr auto GROUP_CONCAT =
+          GroupByImpl::HashMapAggregateType::GROUP_CONCAT;
+      static constexpr auto SAMPLE = GroupByImpl::HashMapAggregateType::SAMPLE;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;
@@ -631,7 +638,7 @@ class GroupByImpl : public Operation {
 // _____________________________________________________________________________
 namespace groupBy::detail {
 template <typename A>
-concept VectorOfAggregationData =
+CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 

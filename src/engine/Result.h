@@ -40,7 +40,7 @@ class Result {
 
   // The current implementation of (most of the) lazy results. Will be replaced
   // in the future to make QLever compatible with C++17 again.
-  using Generator = cppcoro::generator<IdTableVocabPair>;
+  // using Generator = cppcoro::generator<IdTableVocabPair>;
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
@@ -136,7 +136,7 @@ class Result {
   Result(std::shared_ptr<const IdTable> idTablePtr,
          std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
-  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+  // Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
 
   // Prevent accidental copying of a result table.

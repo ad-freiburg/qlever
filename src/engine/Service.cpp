@@ -23,6 +23,11 @@
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
+namespace {
+// CTRE regex patterns for C++17 compatibility
+constexpr ctll::fixed_string selectPatternRegex = "[ \t\r\n]*SELECT";
+}  // namespace
+
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
@@ -98,7 +103,7 @@ std::string Service::pushDownValues(std::string_view pattern,
   pattern.remove_prefix(index + 1);
   // If we have a single subquery in the service clause, wrap it inside curly
   // braces so it remains valid syntax alongside a VALUES clause.
-  if (ctre::starts_with<"[ \t\r\n]*SELECT">(pattern)) {
+  if (ctre::starts_with<selectPatternRegex>(pattern)) {
     return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
   }
   return absl::StrCat("{\n", values, "\n", pattern);
@@ -504,7 +509,19 @@ void Service::throwErrorWithContext(std::string_view msg,
 // ____________________________________________________________________________
 std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   const auto& optionalStringAndXsdType =
       ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {

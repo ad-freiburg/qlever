@@ -15,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 
 using namespace pathSearch;
@@ -370,12 +371,12 @@ PathsLimited PathSearch::findPaths(
 
     currentPath.push_back(edge);
 
-    if (targets.empty() || targets.contains(edgeEnd)) {
+    if (targets.empty() || ad_utility::contains(targets, edgeEnd)) {
       result.push_back(currentPath);
     }
 
     for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
-      if (!visited.contains(outgoingEdge.end_.getBits())) {
+      if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
         edgeStack.push_back(outgoingEdge);
       }
     }
