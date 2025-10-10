@@ -19,12 +19,14 @@
 #define QL_EXPLICIT(...)
 #define QL_CONSTEXPR
 #define QL_NODISCARD(Arg) [[nodiscard]]
+#define QL_MAYBE_UNUSED
 
 #else
 #define QL_CONSTEVAL consteval
 #define QL_EXPLICIT(...) explicit(__VA_ARGS__)
 #define QL_CONSTEXPR constexpr
-#define QL_NODISCARD(Arg) [[nodiscard]]
+#define QL_NODISCARD(Arg) [[nodiscard(Arg)]]
+#define QL_MAYBE_UNUSED [[maybe_unused]]
 #endif
 
 #endif  // QLEVER_SRC_BACKPORTS_KEYWORDS_H

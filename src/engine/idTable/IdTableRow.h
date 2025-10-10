@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
@@ -67,7 +68,7 @@ class Row {
   CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
-      [[maybe_unused]] size_t numCols)
+      QL_MAYBE_UNUSED size_t numCols)
       : Row() {}
 
   // Access the i-th element.
