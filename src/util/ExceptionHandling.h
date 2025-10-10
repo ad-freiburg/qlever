@@ -18,7 +18,7 @@
 namespace ad_utility {
 namespace detail {
 struct CallStdTerminate {
-  void operator()() const noexcept { std::terminate(); }
+  [[noreturn]] void operator()() const noexcept { std::terminate(); }
 };
 }  // namespace detail
 // Call `f()`. If this call throws, catch the exception and log it, but do not

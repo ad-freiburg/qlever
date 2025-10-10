@@ -29,7 +29,7 @@ struct ToLiteral {
             asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
   }
 };
-constexpr ToLiteral toLiteral{};
+static constexpr ToLiteral toLiteral{};
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
