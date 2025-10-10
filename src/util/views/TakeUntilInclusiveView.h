@@ -141,7 +141,7 @@ struct takeUntilInclusiveFn {
   CPP_template(typename R,
                typename Pred)(requires ql::ranges::viewable_range<R>) auto
   operator()(R&& r, Pred pred) const {
-    return TakeUntilInclusiveView{std::views::all(std::forward<R>(r)),
+    return TakeUntilInclusiveView{ad_utility::allView(std::forward<R>(r)),
                                   std::move(pred)};
   }
 

@@ -10,7 +10,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <future>
-#include <ranges>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
