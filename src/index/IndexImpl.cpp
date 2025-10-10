@@ -1079,6 +1079,9 @@ void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
 bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
+bool IndexImpl::usePatterns() const { return usePatterns_; }
+
+// _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 
 // ____________________________________________________________________________

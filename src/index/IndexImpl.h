@@ -431,6 +431,8 @@ class IndexImpl {
 
   bool& usePatterns();
 
+  bool usePatterns() const;
+
   bool& loadAllPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);

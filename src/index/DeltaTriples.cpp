@@ -14,6 +14,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <filesystem>
+
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
@@ -558,4 +560,9 @@ void DeltaTriples::materializeToIndex() {
   }
   newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
                                                 numPredicatesInternal);
+  if (index_.usePatterns()) {
+    std::filesystem::copy(index_.getOnDiskBase() + ".index.patterns",
+                          newIndex.getOnDiskBase() + ".index.patterns",
+                          std::filesystem::copy_options::overwrite_existing);
+  }
 }
