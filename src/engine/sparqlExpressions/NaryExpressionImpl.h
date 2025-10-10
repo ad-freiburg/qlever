@@ -109,10 +109,10 @@ struct NumericIdWrapper {
 // and returns the same result, but the arguments and the return type are the
 // `NumericValue` variant.
 template <typename Function, bool NanOrInfToUndef = false>
-inline auto makeNumericExpression() {
-  return [](const auto&... args) {
-    CPP_assert(
-        (concepts::same_as<std::decay_t<decltype(args)>, NumericValue> && ...));
+struct MakeNumericExpression {
+  template <typename... Args>
+  Id operator()(const Args&... args) const {
+    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
     auto visitor = [](const auto&... t) {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -122,8 +122,8 @@ inline auto makeNumericExpression() {
       }
     };
     return std::visit(visitor, args...);
-  };
-}
+  }
+};
 
 // Two short aliases to make the instantiations more readable.
 template <typename... T>
@@ -133,12 +133,15 @@ template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
-inline auto areAllSetOfIntervals = [](const auto&... t) constexpr {
-  return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
-                                       ad_utility::SetOfIntervals>);
+struct AreAllSetOfIntervals {
+  template <typename... Ts>
+  constexpr bool operator()(const Ts&... t) const {
+    return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
+                                         ad_utility::SetOfIntervals>);
+  }
 };
 template <typename F>
-using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
+using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
 
 using ad_utility::SetOfIntervals;
 

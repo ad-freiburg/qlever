@@ -17,8 +17,8 @@
 
 namespace ad_utility {
 namespace detail {
-[[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
-  std::terminate();
+struct CallStdTerminate {
+  [[noreturn]] void operator()() const noexcept { std::terminate(); }
 };
 }  // namespace detail
 // Call `f()`. If this call throws, catch the exception and log it, but do not
@@ -53,8 +53,7 @@ CPP_template(typename F)(
 // also is not easily recoverable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
-CPP_template(typename F,
-             typename TerminateAction = decltype(detail::callStdTerminate))(
+CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
     requires ql::concepts::invocable<ql::remove_cvref_t<F>> CPP_and
         std::is_nothrow_invocable_v<
             TerminateAction>) void terminateIfThrows(F&& f,

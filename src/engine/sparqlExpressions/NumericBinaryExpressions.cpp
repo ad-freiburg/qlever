@@ -8,9 +8,8 @@
 namespace sparqlExpression {
 namespace detail {
 // Multiplication.
-inline auto multiply = makeNumericExpression<std::multiplies<>>();
-NARY_EXPRESSION(MultiplyExpression, 2,
-                FV<decltype(multiply), NumericValueGetter>);
+using Multiply = MakeNumericExpression<std::multiplies<>>;
+NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -22,57 +21,65 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // this behavior. The old behavior can be reinstated by a RuntimeParameter.
 // Note: The result of a division in SPARQL is always a decimal number, so there
 // is no integer division.
-[[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
-  return static_cast<double>(x) / static_cast<double>(y);
+struct DivideImpl {
+  template <typename T1, typename T2>
+  auto operator()(T1 x, T2 y) const {
+    return static_cast<double>(x) / static_cast<double>(y);
+  }
 };
 
-inline auto divide1 = makeNumericExpression<decltype(divideImpl), true>();
+using Divide1 = MakeNumericExpression<DivideImpl, true>;
 NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<decltype(divide1), NumericValueGetter>);
+                FV<Divide1, NumericValueGetter>);
 
-inline auto divide2 = makeNumericExpression<decltype(divideImpl), false>();
+using Divide2 = MakeNumericExpression<DivideImpl, false>;
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<decltype(divide2), NumericValueGetter>);
+                FV<Divide2, NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.
-inline auto add = makeNumericExpression<std::plus<>>();
-NARY_EXPRESSION(AddExpression, 2, FV<decltype(add), NumericValueGetter>);
+using Add = MakeNumericExpression<std::plus<>>;
+NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
 
-inline auto subtract = makeNumericExpression<std::minus<>>();
-NARY_EXPRESSION(SubtractExpression, 2,
-                FV<decltype(subtract), NumericValueGetter>);
+using Subtract = MakeNumericExpression<std::minus<>>;
+NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
-inline auto powImpl = [](double base, double exp) {
-  return std::pow(base, exp);
+struct PowImpl {
+  double operator()(double base, double exp) const {
+    return std::pow(base, exp);
+  }
 };
-inline auto pow = makeNumericExpression<decltype(powImpl)>();
-NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
+using Pow = MakeNumericExpression<PowImpl>;
+NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________
-inline auto orLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True || b == True) {
-    return Id::makeFromBool(true);
+struct OrLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True || b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False && b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False && b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 // _____________________________________________________________________________
-inline auto andLambda = [](TernaryBool a, TernaryBool b) {
-  using enum TernaryBool;
-  if (a == True && b == True) {
-    return Id::makeFromBool(true);
+struct AndLambda {
+  Id operator()(TernaryBool a, TernaryBool b) const {
+    using enum TernaryBool;
+    if (a == True && b == True) {
+      return Id::makeFromBool(true);
+    }
+    if (a == False || b == False) {
+      return Id::makeFromBool(false);
+    }
+    return Id::makeUndefined();
   }
-  if (a == False || b == False) {
-    return Id::makeFromBool(false);
-  }
-  return Id::makeUndefined();
 };
 
 namespace constructPrefilterExpr {
@@ -346,12 +353,12 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 //______________________________________________________________________________
 using AndExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::AndExpression,
-    Operation<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<AndLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Intersection>>>;
 
 using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
     prefilterExpressions::OrExpression,
-    Operation<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
+    Operation<2, FV<OrLambda, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Union>>>;
 
 }  // namespace detail
