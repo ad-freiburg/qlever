@@ -226,8 +226,9 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   // copies), hence the explicit `clone`.
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
-  return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex)};
+  return SharedLocatedTriplesSnapshot{
+      std::make_shared<LocatedTriplesSnapshot>(LocatedTriplesSnapshot{
+          locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex})};
 }
 
 // ____________________________________________________________________________

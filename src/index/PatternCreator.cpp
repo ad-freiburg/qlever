@@ -21,7 +21,7 @@ void PatternCreator::processTriple(
     currentSubject_ = triple[0];
     currentPattern_.clear();
   }
-  tripleBuffer_.emplace_back(triple, ignoreTripleForPatterns);
+  tripleBuffer_.push_back({triple, ignoreTripleForPatterns});
   if (ignoreTripleForPatterns) {
     return;
   }

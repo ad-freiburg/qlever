@@ -44,7 +44,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
                 },
                 &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
-        out.emplace_back(blockIndex, triple, insertOrDelete);
+        out.push_back({blockIndex, triple, insertOrDelete});
       },
       [&cancellationHandle]() { cancellationHandle->throwIfCancelled(); });
 

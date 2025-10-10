@@ -145,8 +145,8 @@ class CompressedExternalIdTableWriter {
                     offset = file.tell();
                     file.write(compressed.data(), compressed.size());
                   });
-              blockMetadata.emplace_back(compressed.size(),
-                                         thisBlockSizeUncompressed, offset);
+              blockMetadata.push_back(
+                  {compressed.size(), thisBlockSizeUncompressed, offset});
             }
           }));
     }
