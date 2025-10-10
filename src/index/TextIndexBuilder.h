@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 #define QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H
 
@@ -22,10 +23,10 @@ class TextIndexBuilder : public IndexImpl {
           onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
     } else {
       textIndexIndices_ = std::nullopt;
-      LOG(INFO) << "Text index literal indices file wasn't found. If "
-                   "addWordsFromLiterals is set to true then the whole RDF "
-                   "Vocabulary is parsed for literals."
-                << std::endl;
+      AD_LOG_INFO << "Text index literal indices file wasn't found. If "
+                     "addWordsFromLiterals is set to true then the whole RDF "
+                     "Vocabulary is parsed for literals."
+                  << std::endl;
     }
   }
 
@@ -111,4 +112,5 @@ class TextIndexBuilder : public IndexImpl {
   void calculateBlockBoundaries();
 };
 
+#endif
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H

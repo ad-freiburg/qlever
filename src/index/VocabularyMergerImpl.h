@@ -65,10 +65,10 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  // Open and prepare all infiles and mmap output vectors.
+  // Open and prepare all infiles and file-based output vectors.
   auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
+        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
 
@@ -86,7 +86,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   for (std::size_t i : ad_utility::integerRange(numFiles)) {
     generators.push_back(makeWordRangeFromFile(i));
-    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
+    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -113,14 +113,14 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
                         &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
+        this->writeQueueWordsToIdMap(buffer, wordCallback, lessThan,
                                      progressBar);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(bufferSize_);
       // wait for the last batch
 
-      LOG(TIMING) << "A new batch of words is ready" << std::endl;
+      AD_LOG_TIMING << "A new batch of words is ready" << std::endl;
       // First wait for the last batch to finish, that way there will be no
       // race conditions.
       if (writeFuture.valid()) {
@@ -139,7 +139,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
     // This can still leave some QueueWords in the buffer.
-    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   // If last words have not been written yet, write them
   if (currentWord_.has_value()) {
@@ -153,7 +153,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     }
     doActualWrite(writeBuffer);
   }
-  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
   auto metaData = std::move(metaData_);
   // completely reset all the inner state
@@ -166,10 +166,10 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+    writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
                            C& wordCallback, const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
-  LOG(TIMING) << "Start writing a batch of merged words\n";
+  AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Used to retrieve the next word once the old `EqualWords` have been written
   // or there have not been `EqualWords` before.
@@ -205,9 +205,9 @@ CPP_template_def(typename C, typename L)(
       if (!lessThan(TripleComponentWithIndex{currentWord_.value().iriOrLiteral_,
                                              false, false, 0},
                     top.entry_)) {
-        LOG(WARN) << "Total vocabulary order violated for "
-                  << currentWord_->iriOrLiteral_ << " and "
-                  << top.iriOrLiteral() << std::endl;
+        AD_LOG_WARN << "Total vocabulary order violated for "
+                    << currentWord_->iriOrLiteral_ << " and "
+                    << top.iriOrLiteral() << std::endl;
       }
 
       // TODO<optimization> If we aim to further speed this up, we could
@@ -232,7 +232,7 @@ CPP_template_def(typename C, typename L)(
         }
       }
       if (progressBar.update()) {
-        LOG(INFO) << progressBar.getProgressString() << std::flush;
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
       }
       // Set new currentWord_ since old have been written
       currentWord_ = getNewCurrentWord(top);
@@ -269,7 +269,7 @@ CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   for (const auto& [id, value] : buffer) {
-    idVecs_[id].push_back(
+    idMaps_[id].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
   }
 }
@@ -313,8 +313,8 @@ inline void writeMappedIdsToExtVec(
       }
       auto iterator = map.find(curTriple[k].getVocabIndex().get());
       if (iterator == map.end()) {
-        LOG(ERROR) << "not found in partial local vocabulary: " << curTriple[k]
-                   << std::endl;
+        AD_LOG_ERROR << "not found in partial local vocabulary: "
+                     << curTriple[k] << std::endl;
         AD_FAIL();
       }
       mappedTriple[k] =
@@ -327,7 +327,7 @@ inline void writeMappedIdsToExtVec(
 // _________________________________________________________________________________________________________
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
-  LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
+  AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(1'000'000'000);
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
@@ -350,7 +350,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                               byteBuffer.data().size());
     serializer.close();
   }
-  LOG(DEBUG) << "Done writing partial vocabulary\n";
+  AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
 // __________________________________________________________________________________________________
@@ -404,9 +404,9 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 
 // _____________________________________________________________________
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const std::string& mmapFilename) {
+    const std::string& filename) {
   ad_utility::HashMap<Id, Id> res;
-  IdPairMMapVecView vec(mmapFilename);
+  auto vec = getIdMapFromFile(filename);
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;
   }

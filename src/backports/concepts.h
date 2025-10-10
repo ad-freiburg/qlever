@@ -66,6 +66,14 @@
 // `auto myLambda2 = CPP_lambda(someCapture)(typename F)(F arg)(requires
 // ranges::same_as<F, int>) {...}`
 //
+// For a templated class, which has constrains on the template parameters as
+// well as member functions that are defined externally, you can use the
+// following pattern:
+// Header file: `CPP_template(typename T)(requires Concept<T>) struct Foo {
+//   static int bar(); };`
+// CPP file: `CPP_template_out_def(typename T)(requires Concept<T>) int
+//   Foo<CPP_sfinae_args(T)>::bar() {...}`
+//
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
 
@@ -84,6 +92,8 @@
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
 #define CPP_class_template CPP_template_VARIADIC_CLASS_SFINAE
 #define CPP_member_def CPP_member_def_sfinae
+#define CPP_template_out_def CPP_template_out_def_sfinae
+#define CPP_sfinae_args(...) __VA_ARGS__, CPP_true, CPP_sfinae
 #define CPP_lambda CPP_lambda_sfinae
 #define CPP_template_lambda CPP_template_lambda_sfinae
 #define CPP_lambda_mut CPP_lambda_mut_sfinae
@@ -98,6 +108,8 @@
 #define CPP_variadic_template CPP_template
 #define CPP_class_template CPP_template
 #define CPP_member_def CPP_member
+#define CPP_template_out_def CPP_template_def
+#define CPP_sfinae_args(...) __VA_ARGS__
 #define CPP_lambda CPP_LAMBDA_20
 #define CPP_template_lambda CPP_TEMPLATE_LAMBDA_20
 #define CPP_lambda_mut CPP_lambda_mut_20
@@ -111,12 +123,33 @@ namespace ql::concepts {
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
 using ::ranges::bidirectional_iterator;
+using ::ranges::constructible_from;
 using ::ranges::contiguous_iterator;
+using ::ranges::derived_from;
+using ::ranges::equality_comparable_with;
 using ::ranges::forward_iterator;
+using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
+using ::ranges::integral;
+using ::ranges::invocable;
 using ::ranges::random_access_iterator;
+using ::ranges::regular_invocable;
+using ::ranges::same_as;
 using ::ranges::sentinel_for;
 using ::ranges::sized_sentinel_for;
+using ::ranges::unsigned_integral;
+using ::ranges::weakly_incrementable;
+
+template <typename T>
+CPP_requires(default_initializable, requires(const T&)(T{}, ::new T));
+
+template <typename T>
+CPP_concept default_initializable =
+    constructible_from<T> && CPP_requires_ref(default_initializable, T);
+
+template <typename T>
+CPP_concept floating_point = std::is_floating_point_v<T>;
+
 #else
 using namespace std;
 #endif

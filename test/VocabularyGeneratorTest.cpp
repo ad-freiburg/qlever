@@ -12,6 +12,7 @@
 #include <string>
 
 #include "./util/IdTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -25,8 +26,7 @@
 using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
-bool vocabTestCompare(const IdPairMMapVecView& a,
-                      const std::vector<std::pair<Id, Id>>& b) {
+bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
   if (a.size() != b.size()) {
     return false;
   }
@@ -70,8 +70,8 @@ class MergeVocabularyTest : public ::testing::Test {
   MergeVocabularyTest() {
     _basePath = std::string("vocabularyGeneratorTestFiles");
     // those names are required by mergeVocabulary
-    _path0 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(0));
-    _path1 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(1));
+    _path0 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
+    _path1 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
 
     // create random subdirectory in /tmp
     std::string tempPath = "";
@@ -197,9 +197,9 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
                                         const auto& word, bool isExternal,
                                         bool inTextIndex) -> uint64_t {
-      if (word.starts_with("\"") &&
-          word.ends_with(
-              "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
+      if (ql::starts_with(word, "\"") &&
+          ql::ends_with(
+              word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
         geoMergeResult.emplace_back(word, isExternal, inTextIndex);
         return (geoMergeResult.size() - 1) | (1ull << 59);
       } else {
@@ -224,9 +224,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
   // Check that vocabulary has the right form.
-  IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
+  IdMap mapping0 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
-  IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));
+  IdMap mapping1 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(1));
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
 

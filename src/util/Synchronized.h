@@ -8,7 +8,6 @@
 #define QLEVER_SYNCHRONIZED_H
 
 #include <atomic>
-#include <concepts>
 #include <condition_variable>
 #include <shared_mutex>
 
@@ -93,13 +92,13 @@ class Synchronized {
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
 
-  Synchronized() requires std::default_initializable<T> = default;
+  Synchronized() requires ql::concepts::default_initializable<T> = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
-  CPP_template(typename Arg, typename... Args)(
-      requires CPP_NOT(std::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
+  CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
+      ql::concepts::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
       QL_EXPLICIT(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
       : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 

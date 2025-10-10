@@ -16,6 +16,7 @@
 
 #include "backports/keywords.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -116,7 +117,7 @@ class ParseableDuration {
       std::basic_ostream<CharT>& os,
       const ParseableDuration<DurationType>& duration) {
     using namespace std::chrono;
-    using period = DurationType::period;
+    using period = typename DurationType::period;
 
     os << duration.duration_.count();
 

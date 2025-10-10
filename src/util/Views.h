@@ -137,8 +137,9 @@ InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
 
     std::optional<BlockType> get() override {
       if (iter_ == ql::ranges::end(nonEmptyView_)) {
-        LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
-        LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
+        AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
+                    << '\n';
+        AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
         return std::nullopt;
       }
 
@@ -207,8 +208,8 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and
-        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
+        ql::concepts::invocable<F&>) class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
@@ -395,7 +396,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
   class Sentinel {
    private:
-    std::ranges::sentinel_t<V> end_;
+    ql::ranges::sentinel_t<V> end_;
 
    public:
     Sentinel() = default;
@@ -425,9 +426,9 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   Iterator begin() {
     AD_CONTRACT_CHECK(!std::exchange(beginWasCalled_, true),
                       "Begin was called multiple times on an `input_range`");
-    return Iterator{std::ranges::begin(base_)};
+    return Iterator{ql::ranges::begin(base_)};
   }
-  Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
+  Sentinel end() { return Sentinel{ql::ranges::end(base_)}; }
 };
 
 // Deduction guides
@@ -503,8 +504,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(
-    requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
+                           Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 }  // namespace ad_utility

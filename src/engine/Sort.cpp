@@ -53,7 +53,7 @@ std::string Sort::getDescriptor() const {
 // _____________________________________________________________________________
 Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
-  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Getting sub-result for Sort result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
@@ -61,7 +61,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
 
-  LOG(DEBUG) << "Sort result computation..." << endl;
+  AD_LOG_DEBUG << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
   runtimeInfo().addDetail("time-cloning", t.msecs());
@@ -71,7 +71,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
 
-  LOG(DEBUG) << "Sort result computation done." << endl;
+  AD_LOG_DEBUG << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 

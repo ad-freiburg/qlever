@@ -13,6 +13,7 @@
 #include <tuple>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
@@ -27,8 +28,8 @@ void IndexImpl::addTextFromOnDiskIndex() {
 
   // Initialize the text index.
   std::string textIndexFileName = onDiskBase_ + ".text.index";
-  LOG(INFO) << "Reading metadata from file " << textIndexFileName << " ..."
-            << std::endl;
+  AD_LOG_INFO << "Reading metadata from file " << textIndexFileName << " ..."
+              << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
   AD_CONTRACT_CHECK(textIndexFile_.isOpen());
   off_t metaFrom;
@@ -38,7 +39,8 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer.setSerializationPosition(metaFrom);
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
-  LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
+  AD_LOG_INFO << "Registered text index: " << textMeta_.statistics()
+              << std::endl;
   // Read the Ids of all Literals that have been added to the text index.
   std::ifstream checkTextIndexIndicesFile(onDiskBase_ + TEXT_INDEX_LITERAL_IDS);
   if (checkTextIndexIndicesFile.good()) {
@@ -46,9 +48,10 @@ void IndexImpl::addTextFromOnDiskIndex() {
         onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
   } else {
     textIndexIndices_ = std::nullopt;
-    LOG(INFO) << "Text index literal indices file wasn't found. This can lead "
-                 "to some text records being empty in query results."
-              << std::endl;
+    AD_LOG_INFO
+        << "Text index literal indices file wasn't found. This can lead "
+           "to some text records being empty in query results."
+        << std::endl;
   }
 
   // Initialize the text records file aka docsDB. NOTE: The search also works
@@ -60,11 +63,11 @@ void IndexImpl::addTextFromOnDiskIndex() {
   if (f.good()) {
     f.close();
     docsDB_.init(std::string(onDiskBase_ + ".text.docsDB"));
-    LOG(INFO) << "Registered text records: #records = " << docsDB_._size
-              << std::endl;
+    AD_LOG_INFO << "Registered text records: #records = " << docsDB_._size
+                << std::endl;
   } else {
-    LOG(DEBUG) << "No file \"" << docsDbFileName
-               << "\" with additional text records" << std::endl;
+    AD_LOG_DEBUG << "No file \"" << docsDbFileName
+                 << "\" with additional text records" << std::endl;
     f.close();
   }
 }
@@ -147,19 +150,19 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 IdTable IndexImpl::getWordPostingsForTerm(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
+  AD_LOG_DEBUG << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   if (tbmds.empty()) {
-    idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
+    idTable.setNumColumns(ql::ends_with(term, PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
 
   IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
                                          allocator, TextScanMode::WordScan);
 
-  LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << result.getColumn(0).size() << '\n';
+  AD_LOG_DEBUG << "Word postings for term: " << term
+               << ": cids: " << result.getColumn(0).size() << '\n';
   return result;
 }
 
@@ -232,17 +235,17 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     const -> std::vector<TextBlockMetadataAndWordInfo> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
-  if (word.ends_with(PREFIX_CHAR)) {
+  if (ql::ends_with(word, PREFIX_CHAR)) {
     auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
     if (!idRangeOpt.has_value()) {
-      LOG(INFO) << "Prefix: " << word << " not in vocabulary\n";
+      AD_LOG_INFO << "Prefix: " << word << " not in vocabulary\n";
       return {};
     }
     idRange = idRangeOpt.value();
   } else {
     WordVocabIndex idx;
     if (!textVocab_.getId(word, &idx)) {
-      LOG(INFO) << "Term: " << word << " not in vocabulary\n";
+      AD_LOG_INFO << "Term: " << word << " not in vocabulary\n";
       return {};
     }
     idRange = IdRange{idx, idx};

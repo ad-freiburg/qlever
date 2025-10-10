@@ -330,7 +330,7 @@ class CompressedRelationWriter {
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
@@ -468,7 +468,7 @@ class CompressedRelationReader {
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
   struct FilterDuplicatesAndGraphs {
-    ScanSpecification::Graphs desiredGraphs_;
+    ScanSpecification::GraphFilter graphFilter_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
     // Filter `block` such that it contains only the specified graphs and no
@@ -485,6 +485,10 @@ class CompressedRelationReader {
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
    private:
+    // Return a lambda that returns true if `desiredGraphs_` allows the given
+    // `graph` and it is not the default graph.
+    auto isGraphAllowedLambda() const;
+
     // Return true iff all triples from the block belong to the
     // `desiredGraphs_`, and if this fact can be determined by looking at the
     // metadata alone.
@@ -548,7 +552,7 @@ class CompressedRelationReader {
     //   - `firstFreeColIndex` is the column index up to which we expect
     //      constant values in `columns < firstFreeColIndex` over all blocks.
     static void checkBlockMetadataInvariant(
-        std::span<const CompressedBlockMetadata> blocks,
+        ql::span<const CompressedBlockMetadata> blocks,
         size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
@@ -608,7 +612,14 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
+  // TODO: other modules are using this so, it was left untouched, should be
+  // removed when they migrate to ranges
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+
+  // TODO: rename to IdTableGenerator when other modules will migrate to non
+  // coro
+  using IdTableGeneratorInputRange =
+      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
  private:
   // The allocator used to allocate intermediate buffers.
@@ -687,12 +698,13 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  CompressedRelationReader::IdTableGenerator lazyScan(
-      ScanSpecification scanSpec,
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
+      const ScanSpecification& scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      ColumnIndices additionalColumns,
+      const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
@@ -823,7 +835,7 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
   template <typename T>
-  IdTableGenerator asyncParallelBlockGenerator(
+  IdTableGeneratorInputRange asyncParallelBlockGenerator(
       T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
       LimitOffsetClause& limitOffset) const;

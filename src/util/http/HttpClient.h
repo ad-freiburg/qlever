@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #ifndef QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
 #define QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
 
@@ -122,4 +123,5 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain");
 
+#endif
 #endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

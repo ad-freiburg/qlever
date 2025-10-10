@@ -10,18 +10,19 @@
 static void logWordNotFound(const std::string& word,
                             size_t& wordNotFoundErrorMsgCount) {
   if (wordNotFoundErrorMsgCount < 20) {
-    LOG(WARN) << "The following word was found in the docsfile but not in "
-                 "the wordsfile: "
-              << word << '\n';
+    AD_LOG_WARN << "The following word was found in the docsfile but not in "
+                   "the wordsfile: "
+                << word << '\n';
     ++wordNotFoundErrorMsgCount;
     if (wordNotFoundErrorMsgCount == 1) {
-      LOG(WARN) << "Note that this might be intentional if for example stop "
-                   "words from the documents where omitted in the wordsfile to "
-                   "make the text index more efficient and effective. \n";
+      AD_LOG_WARN
+          << "Note that this might be intentional if for example stop "
+             "words from the documents where omitted in the wordsfile to "
+             "make the text index more efficient and effective. \n";
     } else if (wordNotFoundErrorMsgCount == 20) {
-      LOG(WARN) << "There are more words not in the KB during score "
-                   "calculation..."
-                << " suppressing further warnings...\n";
+      AD_LOG_WARN << "There are more words not in the KB during score "
+                     "calculation..."
+                  << " suppressing further warnings...\n";
     }
   } else {
     wordNotFoundErrorMsgCount++;
@@ -58,7 +59,7 @@ void ScoreData::calculateScoreData(const std::string& docsFileName,
     return;
   }
   if (wordsNotFoundFromDocuments > 0) {
-    LOG(WARN)
+    AD_LOG_WARN
         << "Number of words not found in vocabulary during score calculation: "
         << wordsNotFoundFromDocuments << std::endl;
   }
@@ -114,8 +115,8 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   // Retrieve inner map
   auto it = invertedIndex_.find(wordIndex);
   if (it == invertedIndex_.end()) {
-    LOG(DEBUG) << "Didn't find word in Inverted Scoring Index. WordId: "
-               << wordIndex << std::endl;
+    AD_LOG_DEBUG << "Didn't find word in Inverted Scoring Index. WordId: "
+                 << wordIndex << std::endl;
     return 0;
   }
   calculateAVDL();
@@ -147,8 +148,9 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   }
   auto ret1 = innerMap.find(docId);
   if (ret1 == innerMap.end()) {
-    LOG(DEBUG) << "The calculated docId doesn't exist in the inner Map. docId: "
-               << docId << std::endl;
+    AD_LOG_DEBUG
+        << "The calculated docId doesn't exist in the inner Map. docId: "
+        << docId << std::endl;
     return 0;
   }
   TermFrequency tf = ret1->second;

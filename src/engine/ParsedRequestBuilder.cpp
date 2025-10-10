@@ -4,7 +4,9 @@
 
 #include "ParsedRequestBuilder.h"
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
+#include "util/Algorithm.h"
 
 using namespace ad_utility::url_parser::sparqlOperation;
 
@@ -176,7 +178,7 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
   if (request.find(http::field::authorization) != request.end()) {
     std::string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
-    if (!authorization.starts_with(prefix)) {
+    if (!ql::starts_with(authorization, prefix)) {
       throw std::runtime_error(absl::StrCat(
           "Authorization header doesn't start with \"", prefix, "\"."));
     }

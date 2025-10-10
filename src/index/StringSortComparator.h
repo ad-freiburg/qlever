@@ -17,9 +17,10 @@
 
 #include <cstring>
 #include <memory>
-#include <memory_resource>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/memory_resource.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -74,7 +75,7 @@ class LocaleManager {
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
     bool starts_with(const SortKeyImpl& rhs) const noexcept {
-      return get().starts_with(rhs.get());
+      return ql::starts_with(get(), rhs.get());
     }
 
     /// Return the number of bytes in the `SortKey`
@@ -670,7 +671,7 @@ class TripleComponentComparator {
   [[nodiscard]] SplitValNonOwningWithSortKey
   extractAndTransformComparableNonOwning(
       std::string_view a, const Level level, bool isExternal, bool inTextIndex,
-      std::pmr::polymorphic_allocator<char>* allocator) const {
+      ql::pmr::polymorphic_allocator<char>* allocator) const {
     return extractComparable<SplitValNonOwningWithSortKey>(
         a, level, isExternal, inTextIndex, allocator);
   }
@@ -777,11 +778,11 @@ class TripleComponentComparator {
   [[nodiscard]] SplitValType extractComparable(
       std::string_view a, [[maybe_unused]] const Level level, bool isExternal,
       bool inTextIndex,
-      std::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
+      ql::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (res.starts_with('"')) {
+    if (ql::starts_with(res, '"')) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks
@@ -817,7 +818,7 @@ class TripleComponentComparator {
             ad_utility::isInstantiation<decltype(s), std::basic_string_view>);
         using Char = typename decltype(s)::value_type;
         auto alloc =
-            std::pmr::polymorphic_allocator<Char>(allocator->resource());
+            ql::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
         ql::ranges::copy(s, ptr);
         return {ptr, ptr + s.size()};

@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/QueryExecutionTree.h"
 
@@ -11,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
@@ -60,17 +63,17 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;
       // Remove the question mark from the variable name if requested.
-      if (!includeQuestionMark && varString.starts_with('?')) {
+      if (!includeQuestionMark && ql::starts_with(varString, '?')) {
         varString = varString.substr(1);
       }
       exportColumns.push_back(
           VariableAndColumnIndex{std::move(varString), columnIndex});
     } else {
       exportColumns.emplace_back(std::nullopt);
-      LOG(WARN) << "The variable \"" << varString
-                << "\" was found in the original query, but not in the "
-                   "execution tree. This is likely a bug"
-                << std::endl;
+      AD_LOG_WARN << "The variable \"" << varString
+                  << "\" was found in the original query, but not in the "
+                     "execution tree. This is likely a bug"
+                  << std::endl;
     }
   }
   return exportColumns;
@@ -81,7 +84,8 @@ size_t QueryExecutionTree::getCostEstimate() {
   // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
   // to `true`, we set the cost estimate to zero.
   if (cachedResult_ &&
-      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
+      getRuntimeParameter<
+          &RuntimeParameters::zeroCostEstimateForCachedSubtree_>()) {
     return 0;
   }
 
@@ -115,7 +119,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
 
   // Note: Variables that have been stripped are still semantically part of the
   // query, and thus can be prefiltered.
-  std::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
+  ql::erase_if(prefilterPairs, [&varToColMap, this](const auto& pair) {
     return !varToColMap.contains(pair.second) &&
            !strippedVariables_.contains(pair.second);
   });

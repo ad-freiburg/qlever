@@ -62,7 +62,7 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 
   auto runTestForBlockSize = [](ad_utility::MemorySize memoryToUse,
                                 ad_utility::source_location l =
-                                    source_location::current()) {
+                                    AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
     ad_utility::CompressedExternalIdTableWriter writer{
@@ -97,7 +97,7 @@ template <size_t NumStaticColumns>
 void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
                             ad_utility::MemorySize memoryToUse,
                             bool mergeMultipleTimes,
-                            source_location l = source_location::current()) {
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
@@ -163,7 +163,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
 template <size_t NumStaticColumns>
 void testExternalSorter(size_t numDynamicColumns, size_t numRows,
                         ad_utility::MemorySize memoryToUse,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
                                            memoryToUse, true, l);
   testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,

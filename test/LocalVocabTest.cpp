@@ -9,6 +9,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
@@ -215,13 +216,12 @@ TEST(LocalVocab, propagation) {
   auto checkLocalVocab =
       [&](Operation& operation,
           const std::vector<std::string>& expectedWordsAsStrings,
-          ad_utility::source_location loc =
-              ad_utility::source_location::current()) -> void {
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
     TestWords expectedWords;
     auto toLitOrIri = [](const auto& word) {
       using namespace ad_utility::triple_component;
-      if (word.starts_with('<')) {
+      if (ql::starts_with(word, '<')) {
         return LiteralOrIri::iriref(word);
       } else {
         return LiteralOrIri::literalWithoutQuotes(word);

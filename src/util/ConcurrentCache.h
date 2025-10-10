@@ -4,7 +4,6 @@
 
 #ifndef QLEVER_CONCURRENTCACHE_H
 #define QLEVER_CONCURRENTCACHE_H
-#include <concepts>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -415,7 +414,7 @@ class ConcurrentCache {
       }
     }  // release the lock, it is not required while we are computing
     if (mustCompute) {
-      LOG(TRACE) << "Not in the cache, need to compute result" << std::endl;
+      AD_LOG_TRACE << "Not in the cache, need to compute result" << std::endl;
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());

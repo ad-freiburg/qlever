@@ -4,11 +4,13 @@
 
 #include "engine/TextIndexScanForWord.h"
 
+#include "backports/StartsWithAndEndsWith.h"
+
 // _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(
     QueryExecutionContext* qec, TextIndexScanForWordConfiguration config)
     : Operation(qec), config_(std::move(config)) {
-  config_.isPrefix_ = config_.word_.ends_with('*');
+  config_.isPrefix_ = ql::ends_with(config_.word_, '*');
   setVariableToColumnMap();
 }
 
@@ -19,7 +21,7 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
     : Operation(qec),
       config_(TextIndexScanForWordConfiguration{std::move(textRecordVar),
                                                 std::move(word)}) {
-  config_.isPrefix_ = config_.word_.ends_with('*');
+  config_.isPrefix_ = ql::ends_with(config_.word_, '*');
   config_.scoreVar_ = config_.varToBindText_.getWordScoreVariable(
       config_.word_, config_.isPrefix_);
   setVariableToColumnMap();

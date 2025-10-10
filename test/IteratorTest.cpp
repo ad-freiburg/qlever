@@ -10,6 +10,7 @@
 #include <string>
 
 #include "backports/algorithm.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Iterators.h"
 
@@ -328,8 +329,10 @@ TEST(Iterator, InputRangeTypeErasedWithDetails) {
 
   // Test external details (pointer-based) scenario
   TestDetails externalDetails{"external", 456};
+  DISABLE_FREE_NONHEAP_WARNINGS
   InputRangeTypeErasedWithDetails<int, TestDetails> rangeWithExternalDetails{
       values, &externalDetails};
+  GCC_REENABLE_WARNINGS
 
   // Test that external details are accessible (const access)
   const auto& constRangeRef = rangeWithExternalDetails;
