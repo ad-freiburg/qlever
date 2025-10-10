@@ -108,6 +108,8 @@ inline auto resultGenerator(S&& input, size_t targetSize,
                             Transformation transformation = {}) {
   auto gen =
       resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
+  return ad_utility::InputRangeTypeErased{std::move(gen)};
+  /*
   // Without type erasure, compiling the `sparqlExpressions` module takes a lot
   // of time and memory. In the future we can evaluate the performance of
   // deactivating the type erasure for certain expressions + datatypes (e.g.
@@ -115,6 +117,10 @@ inline auto resultGenerator(S&& input, size_t targetSize,
   static constexpr auto Cat = ::ranges::category::input;
   using V = ql::ranges::range_value_t<decltype(gen)>;
 
+  return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
+                            Cat>{std::move(gen)};
+                            */
+  /*
   if constexpr (std::is_trivially_copyable_v<V>) {
     auto chunked = ::ranges::views::chunk(std::move(gen), 10000);
     auto toVector = [](const auto& chunk) {
@@ -126,9 +132,8 @@ inline auto resultGenerator(S&& input, size_t targetSize,
                std::move(chunked) | ql::views::transform(toVector)}} |
            ql::views::join;
   } else {
-    return ::ranges::any_view<ql::ranges::range_reference_t<decltype(gen)>,
-                              Cat>{std::move(gen)};
   }
+  */
 }
 
 /// Return a generator that yields `numItems` many items for the various

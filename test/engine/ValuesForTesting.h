@@ -94,10 +94,14 @@ class ValuesForTesting : public Operation {
         clones.push_back(idTable.clone());
       }
       auto generator = [](auto idTables,
-                          LocalVocab localVocab) -> Result::Generator {
+                          LocalVocab localVocab) -> Result::LazyResult {
+        /* TODO<joka921> only a dummy implementation */
+        return Result::LazyResult{};
+        /*
         for (IdTable& idTable : idTables) {
           co_yield {std::move(idTable), localVocab.clone()};
         }
+        */
       }(std::move(clones), localVocab_.clone());
       return {std::move(generator), resultSortedOn()};
     }
