@@ -24,8 +24,8 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
-  BATCH_SIZE_VOCABULARY_MERGE = 2;
+  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
+  BATCH_SIZE_VOCABULARY_MERGE() = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
@@ -154,7 +154,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "\"zz\"@en . <zz> <label> <zz> .";
   }
 
-  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
+  BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
     f << c.turtleInput.value();

@@ -108,7 +108,9 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
     case Comparison::GT:
       return Comparison::LT;
   }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   AD_FAIL();
+#endif
 }
 
 // Return the ID range `[begin, end)` in which the entries of the vocabulary

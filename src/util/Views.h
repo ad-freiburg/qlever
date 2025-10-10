@@ -250,7 +250,11 @@ CPP_template(typename V, typename F)(
 
     void operator++(int) { ++(*this); }
 
-    bool operator==(ql::ranges::sentinel_t<V> s) const { return current_ == s; }
+    using Sent = ranges::sentinel_t<V>;
+    bool operator==(Sent s) const { return current_ == s; }
+    bool operator!=(Sent s) const { return current_ != s; }
+    friend bool operator==(Sent s, Iterator i) { return i == s; }
+    friend bool operator!=(Sent s, Iterator i) { return i != s; }
   };
 
  public:

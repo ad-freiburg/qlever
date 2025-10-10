@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Algorithm.h"
 #include "util/Generator.h"
 #include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
@@ -277,7 +278,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesSnapshot());
-  return {lower == upper, std::midpoint(lower, upper)};
+  // NOTE: Starting from C++20 we could use `std::midpoint` here
+  return {lower == upper, lower + (upper - lower) / 2};
 }
 
 // _____________________________________________________________________________
@@ -713,7 +715,7 @@ IndexScan::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
   ad_utility::HashSet<Variable> newVariables;
   for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
-    if (variables.contains(var)) {
+    if (ad_utility::contains(variables, var)) {
       newVariables.insert(var);
     }
   }

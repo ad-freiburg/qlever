@@ -9,13 +9,14 @@
 #include "global/RuntimeParameters.h"
 
 #include "backports/algorithm.h"
+#include "util/Algorithm.h"
 
 // _____________________________________________________________________________
 RuntimeParameters::RuntimeParameters() {
   // Here all of the newly defined parameters have to be added.
 
   auto add = [this](auto& parameter) {
-    AD_CONTRACT_CHECK(!runtimeMap_.contains(parameter.name()));
+    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, parameter.name()));
     runtimeMap_[parameter.name()] = &parameter;
   };
 
@@ -72,7 +73,7 @@ RuntimeParameters::toMap() const {
 // _____________________________________________________________________________
 void RuntimeParameters::setFromString(const std::string& name,
                                       const std::string& value) {
-  if (!runtimeMap_.contains(name)) {
+  if (!ad_utility::contains(runtimeMap_, name)) {
     throw std::runtime_error{"No parameter with name " + std::string{name} +
                              " exists"};
   }
