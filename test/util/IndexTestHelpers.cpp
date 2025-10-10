@@ -182,6 +182,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.setTextIndexLiteralFilter(
+        {c.literalRegex.value_or(""),
+         c.literalRegexIsWhitelist ? LiteralFilterType::AcceptMatching
+                                   : LiteralFilterType::DeclineMatching,
+         !c.literalRegex.has_value() && c.addWordsFromLiterals});
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
@@ -200,6 +205,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+      if (c.removeTextIndexIndicesFile && c.addWordsFromLiterals) {
+        remove((indexBasename + TEXT_INDEX_LITERAL_IDS).c_str());
+      }
+
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should

@@ -1,6 +1,7 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2023-2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+//  Author: Felix Meisen <fesemeisen@outlook.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -26,9 +27,15 @@ using qlever::TextScoringMetric;
 namespace {
 
 std::string kg =
-    "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
-    "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
-    ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
+    "<a> <p> \"he failed the test\" . <a> <P> \"testing can help\" . <a> <p2> "
+    "\"some other sentence\" . <b> <p3> \"the test on friday was really hard\" "
+    ". <b> <p> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
+
+std::string kg2 =
+    "<a> <p> \"he failed the test\" . <a> <P> \"he failed the test\" . <a> "
+    "<p2> "
+    "\"some other sentence\" . <b> <p3> \"the test on friday was really hard\" "
+    ". <b> <p> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 std::string wordsFileContent =
     createWordsFileLineAsString("astronomer", false, 1, 1) +
@@ -142,14 +149,34 @@ struct TextResult {
 // `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
 // scores can be specified.
 auto getQecWithTextIndex(
-    std::optional<TextScoringMetric> textScoring = std::nullopt) {
+    std::optional<TextScoringMetric> textScoring = std::nullopt,
+    bool removeTextIndexIndicesFile = false) {
   using namespace ad_utility::testing;
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
+  config.removeTextIndexIndicesFile = removeTextIndexIndicesFile;
   if (textScoring.has_value()) {
     config.scoringMetric = textScoring;
   }
+  return getQec(std::move(config));
+}
+
+// Does the same as above but without the external files and only the literals
+// of the kb
+auto getQecWithLiteralTextIndex(
+    std::optional<std::string> regexFilter = std::nullopt,
+    bool regexIsWhitelist = true, size_t kbIndex = 0) {
+  using namespace ad_utility::testing;
+  TestIndexConfig config;
+  if (kbIndex == 0) {
+    config = TestIndexConfig(kg);
+  } else if (kbIndex == 1) {
+    config = TestIndexConfig(kg2);
+  }
+  config.createTextIndex = true;
+  config.literalRegex = regexFilter;
+  config.literalRegexIsWhitelist = regexIsWhitelist;
   return getQec(std::move(config));
 }
 
@@ -291,6 +318,72 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ(bm25Word1Doc7, tr3.getScore(7));
 }
 
+TEST(TextIndexScanForWord, NoLiteralIndicesFile) {
+  auto qec = getQecWithTextIndex(std::nullopt, true);
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
+  TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
+
+  // Test if size calculations are right
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
+  s2.getExternallyVisibleVariableColumns();
+
+  // Test if all columns are there and correct
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?text2"}, {0, AlwaysDefined}},
+      {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
+      {Variable{"?ql_score_prefix_text2_test"}, {2, AlwaysDefined}}};
+  EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+
+  // Tests if the correct texts are retrieved from a mix of non literal and
+  // literal texts. Literals shouldn't be empty since the textIndexIndices_
+  // file should have been built by TextIndexBuilder.
+  TextResult tr{qec, result};
+  ASSERT_EQ(withSecond("tester"), tr.getRow(0));
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"), tr.getRow(1));
+  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+            tr.getRow(2));
+  ASSERT_EQ(
+      h::combineToString("\"the test on friday was really hard\"", "test"),
+      tr.getRow(3));
+
+  // Tests if the correct texts are retrieved from the non literal texts
+  TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
+  result = t1.computeResultOnlyForTesting();
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(0));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(0));
+  ASSERT_EQ(TextRecordIndex::make(1), tr.getId(1));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(1));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(2));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(2));
+  ASSERT_EQ(TextRecordIndex::make(2), tr.getId(3));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(3));
+  ASSERT_EQ(TextRecordIndex::make(3), tr.getId(4));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(4));
+  ASSERT_EQ(TextRecordIndex::make(4), tr.getId(5));
+  ASSERT_EQ(firstDocText, tr.getTextRecord(5));
+  ASSERT_EQ(TextRecordIndex::make(5), tr.getId(6));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(6));
+  ASSERT_EQ(TextRecordIndex::make(6), tr.getId(7));
+  ASSERT_EQ(secondDocText, tr.getTextRecord(7));
+
+  // Tests if correct words are deducted from prefix
+  ASSERT_EQ("astronomer", tr.getWord(0));
+  ASSERT_EQ("astronomy", tr.getWord(1));
+  ASSERT_EQ("astronomer", tr.getWord(2));
+  ASSERT_EQ("astronomy", tr.getWord(3));
+  ASSERT_EQ("astronomy", tr.getWord(4));
+  ASSERT_EQ("astronomy", tr.getWord(5));
+  ASSERT_EQ("astronomer", tr.getWord(6));
+  ASSERT_EQ("astronomer", tr.getWord(7));
+}
+
 TEST(TextIndexScanForWord, WordScanShortPrefix) {
   auto qec = getQecWithTextIndex();
 
@@ -421,6 +514,137 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ(secondDocText, tr3.getTextRecord(0));
+}
+
+TEST(TextindexScanForWord, LiteralFiltering) {
+  // Match only `<p>`
+  std::string regex1{"^<p>$"};
+  // Match occurrences of `p`
+  std::string regex2{"p"};
+  // Match occurrences of lowercase and uppercase `p`
+  std::string regex3{"(?i)p"};
+  // Error Regex Test
+  std::string regex4{"(abc"};
+  // Match only `<P>`
+  std::string regex5{"^<P>$"};
+
+  // Add every literal test
+  auto qec = getQecWithLiteralTextIndex();
+  TextIndexScanForWord s1{qec, Variable{"?t"}, "test*"};
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 3);
+
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"",
+            h::getTextRecordFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getTextRecordFromResultTable(qec, result, 2));
+
+  TextIndexScanForWord s2{qec, Variable{"?t"}, "sentence"};
+  result = s2.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"some other sentence\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+
+  // Whitelist only `<p>`
+  qec = getQecWithLiteralTextIndex(regex1);
+  TextIndexScanForWord s3{qec, Variable{"?t"}, "test*"};
+
+  result = s3.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+
+  // Blacklist only `<p>`
+  qec = getQecWithLiteralTextIndex(regex1, false);
+  TextIndexScanForWord s4{qec, Variable{"?t"}, "test*"};
+
+  result = s4.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 2);
+
+  ASSERT_EQ("\"testing can help\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getTextRecordFromResultTable(qec, result, 1));
+
+  TextIndexScanForWord s5{qec, Variable{"?t"}, "sentence"};
+  result = s5.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"some other sentence\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+
+  // Partial match for lowercase `p`
+  qec = getQecWithLiteralTextIndex(regex2);
+  TextIndexScanForWord s6{qec, Variable{"?t"}, "test*"};
+
+  result = s6.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 2);
+
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getTextRecordFromResultTable(qec, result, 1));
+
+  TextIndexScanForWord s7{qec, Variable{"?t"}, "sentence"};
+  result = s7.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"some other sentence\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+
+  // Partial match for case insensitive `p`
+  qec = getQecWithLiteralTextIndex(regex3);
+  TextIndexScanForWord s8{qec, Variable{"?t"}, "test*"};
+
+  result = s8.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 3);
+
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"",
+            h::getTextRecordFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getTextRecordFromResultTable(qec, result, 2));
+
+  TextIndexScanForWord s9{qec, Variable{"?t"}, "sentence"};
+  result = s9.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"some other sentence\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
+
+  // Check error Regex
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      getQecWithLiteralTextIndex(regex4),
+      ::testing::HasSubstr(
+          R"(The regex supposed to filter predicates for which the objects are stored in the text index was "(abc". This is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
+      std::runtime_error);
+
+  // Check if a literal appears with one predicate in text index and one not it
+  // is added
+  qec = getQecWithLiteralTextIndex(regex5, true, 1);
+  TextIndexScanForWord s10{qec, Variable{"?t"}, "test*"};
+
+  result = s10.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ("\"he failed the test\"",
+            h::getTextRecordFromResultTable(qec, result, 0));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {

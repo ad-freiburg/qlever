@@ -117,6 +117,7 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
         -F ttl \
         -f "$INPUT.nt" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        -W \
         || bail "Building Index failed"
     echo "Adding text index"
     ./IndexBuilderMain -A -i "$INDEX" \

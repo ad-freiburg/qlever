@@ -40,6 +40,19 @@ void IndexImpl::addTextFromOnDiskIndex() {
   textIndexFile_ = std::move(serializer).file();
   AD_LOG_INFO << "Registered text index: " << textMeta_.statistics()
               << std::endl;
+  // Read the Ids of all Literals that have been added to the text index.
+  std::ifstream checkTextIndexIndicesFile(onDiskBase_ + TEXT_INDEX_LITERAL_IDS);
+  if (checkTextIndexIndicesFile.good()) {
+    textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+        onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::ReuseTag{});
+  } else {
+    textIndexIndices_ = std::nullopt;
+    AD_LOG_INFO
+        << "Text index literal indices file wasn't found. This can lead "
+           "to some text records being empty in query results."
+        << std::endl;
+  }
+
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or

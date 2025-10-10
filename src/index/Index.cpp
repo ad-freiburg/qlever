@@ -146,6 +146,12 @@ void Index::setKbName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
+void Index::setTextIndexLiteralFilter(
+    const TextIndexLiteralConfiguration& config) {
+  return pimpl_->setTextIndexLiteralFilter(config);
+}
+
+// ____________________________________________________________________________
 void Index::setTextName(const std::string& name) {
   return pimpl_->setTextName(name);
 }

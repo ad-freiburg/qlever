@@ -79,9 +79,8 @@ TEST(LibQlever, buildIndexAndRunQuery) {
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery), notPinned);
     AD_EXPECT_THROW_WITH_MESSAGE(engine.query(serviceQuery2), notPinned);
   }
-
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  c.addWordsFromLiterals_ = true;
+  c.addWordsFromAllLiterals_ = true;
 
   // Note: Currently the `addWordsFromLiterals` feature is broken, but
   // @flixtastic has a fix for this.

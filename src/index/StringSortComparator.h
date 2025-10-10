@@ -562,11 +562,12 @@ class TripleComponentComparator {
   struct SplitValBase {
     SplitValBase() = default;
     SplitValBase(char fst, InnerString trans, LanguageTag l, bool externalized,
-                 FullString fullInputForTotalComparison)
+                 bool inTextIndex, FullString fullInputForTotalComparison)
         : firstOriginalChar_(fst),
           transformedVal_(std::move(trans)),
           langtag_(std::move(l)),
           isExternalized_{externalized},
+          inTextIndex_{inTextIndex},
           fullInput_{std::move(fullInputForTotalComparison)} {}
 
     /// The first char of the original value, used to distinguish between
@@ -577,6 +578,7 @@ class TripleComponentComparator {
     LanguageTag langtag_;          /// The language tag, possibly empty.
     bool isExternalized_ = false;  /// Does this word belong to the externalized
                                    /// vocabulary.
+    bool inTextIndex_ = false;     /// Does this word belong to the text Index.
     FullString fullInput_;
   };
 
@@ -644,8 +646,8 @@ class TripleComponentComparator {
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
-    auto splitA = extractComparable<SplitValNonOwning>(a, level, false);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level, false);
+    auto splitA = extractComparable<SplitValNonOwning>(a, level, false, false);
+    auto splitB = extractComparable<SplitValNonOwning>(b, level, false, false);
     // We have to have a total ordering of unique elements in the vocabulary,
     // so if they compare equal according to the locale, use strcmp
     auto cmp = compare(splitA, splitB, level);
@@ -657,8 +659,9 @@ class TripleComponentComparator {
    * value according to the held locale
    */
   [[nodiscard]] SplitVal extractAndTransformComparable(
-      std::string_view a, const Level level, bool isExternal = false) const {
-    return extractComparable<SplitVal>(a, level, isExternal);
+      std::string_view a, const Level level, bool isExternal = false,
+      bool inTextIndex = false) const {
+    return extractComparable<SplitVal>(a, level, isExternal, inTextIndex);
   }
 
   // Similar to `extractAndTransformComparable` but returns a `SplitVal` that
@@ -668,10 +671,10 @@ class TripleComponentComparator {
   // index building.
   [[nodiscard]] SplitValNonOwningWithSortKey
   extractAndTransformComparableNonOwning(
-      std::string_view a, const Level level, bool isExternal,
+      std::string_view a, const Level level, bool isExternal, bool inTextIndex,
       ql::pmr::polymorphic_allocator<char>* allocator) const {
-    return extractComparable<SplitValNonOwningWithSortKey>(a, level, isExternal,
-                                                           allocator);
+    return extractComparable<SplitValNonOwningWithSortKey>(
+        a, level, isExternal, inTextIndex, allocator);
   }
 
   /**
@@ -775,6 +778,7 @@ class TripleComponentComparator {
   template <class SplitValType>
   [[nodiscard]] SplitValType extractComparable(
       std::string_view a, [[maybe_unused]] const Level level, bool isExternal,
+      bool inTextIndex,
       ql::pmr::polymorphic_allocator<char>* allocator = nullptr) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
@@ -797,10 +801,14 @@ class TripleComponentComparator {
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string(langtag),
-              isExternal, std::string{a}};
+      return {first,
+              _locManager.getSortKey(res, level),
+              std::string(langtag),
+              isExternal,
+              inTextIndex,
+              std::string{a}};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {first, res, langtag, isExternal, a};
+      return {first, res, langtag, isExternal, inTextIndex, a};
     } else if constexpr (std::is_same_v<SplitValType,
                                         SplitValNonOwningWithSortKey>) {
       // For the non-owning sort key we allocate all the strings using the
@@ -822,7 +830,7 @@ class TripleComponentComparator {
             add(LocaleManager::U8StringView{begin, sz})};
       };
       _locManager.getSortKey(res, level, writeSortKey);
-      return {first, sortKey, add(langtag), isExternal, add(a)};
+      return {first, sortKey, add(langtag), isExternal, inTextIndex, add(a)};
     } else {
       static_assert(ad_utility::alwaysFalse<SplitValType>);
     }
