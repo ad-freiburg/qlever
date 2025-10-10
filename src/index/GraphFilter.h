@@ -42,9 +42,9 @@ class GraphFilter {
   FilterType filter_;
 
  public:
-  GraphFilter(const GraphFilter&) noexcept = default;
+  GraphFilter(const GraphFilter&) = default;
   GraphFilter(GraphFilter&&) noexcept = default;
-  GraphFilter& operator=(const GraphFilter&) noexcept = default;
+  GraphFilter& operator=(const GraphFilter&) = default;
   GraphFilter& operator=(GraphFilter&&) noexcept = default;
 
   // Keep all graphs.

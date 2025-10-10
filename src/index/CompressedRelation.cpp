@@ -1256,8 +1256,9 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
 // _____________________________________________________________________________
 size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
     const BlockMetadataRanges& blockMetadata) {
-  return std::transform_reduce(blockMetadata.begin(), blockMetadata.end(), 0ULL,
-                               std::plus{}, ql::ranges::size);
+  return ::ranges::accumulate(blockMetadata, 0ULL, [](auto acc, auto& block) {
+    return acc + ql::ranges::size(block);
+  });
 };
 
 // _____________________________________________________________________________

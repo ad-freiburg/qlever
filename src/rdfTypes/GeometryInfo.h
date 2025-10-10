@@ -123,6 +123,10 @@ class GeometryInfo {
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  GeometryInfo() = default;
+#endif
 
   GeometryInfo(const GeometryInfo& other) = default;
 

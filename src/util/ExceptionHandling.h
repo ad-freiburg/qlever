@@ -147,7 +147,7 @@ class ThrowInDestructorIfSafe {
       potentiallyThrow("Exception not inheriting from `std::exception`");
     }
   }
-  ~ThrowInDestructorIfSafe() noexcept(false) = default;
+  ~ThrowInDestructorIfSafe() = default;
 };
 }  // namespace ad_utility
 
