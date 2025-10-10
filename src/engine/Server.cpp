@@ -431,6 +431,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       json[nlohmann::json(key)] = std::move(value);
     }
     response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
+    index_.deltaTriplesManager().modify<void>(
+        [](DeltaTriples& deltaTriples) { deltaTriples.materializeToIndex(); },
+        false);
+    response = createOkResponse("Done writing", request, MediaType::textPlain);
   }
 
   // Ping with or without message.

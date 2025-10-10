@@ -14,6 +14,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <filesystem>
+
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
@@ -389,4 +391,178 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
         deltaTriples.readFromDisk();
       },
       false);
+}
+
+namespace {
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
+    const Permutation& permutation, ScanSpecification scanSpec,
+    BlockMetadataRanges blockMetadataRanges,
+    const LocatedTriplesSnapshot& snapshot,
+    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    ql::span<const ColumnIndex> additionalColumns) {
+  Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
+      std::move(scanSpec), std::move(blockMetadataRanges)};
+  auto fullScan =
+      permutation.lazyScan(scanSpecAndBlocks, std::nullopt, additionalColumns,
+                           cancellationHandle, snapshot, LimitOffsetClause{});
+  auto keyOrder = Permutation::toKeyOrder(permutation.permutation());
+  std::vector<ColumnIndex> columnIndices{keyOrder.keys().begin(),
+                                         keyOrder.keys().end()};
+  while (columnIndices.size() < additionalColumns.size() + 3) {
+    columnIndices.emplace_back(columnIndices.size());
+  }
+  return ad_utility::InputRangeTypeErased{
+      ad_utility::CachingTransformInputRange{
+          std::move(fullScan),
+          [columnIndices = std::move(columnIndices), &localVocabMapping,
+           &insertInfo](IdTable& idTable) {
+            AD_CORRECTNESS_CHECK(idTable.numColumns() == columnIndices.size());
+            idTable.setColumnSubset(columnIndices);
+            for (auto col : idTable.getColumns()) {
+              ql::ranges::for_each(
+                  col, [&localVocabMapping, &insertInfo](Id& id) {
+                    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+                      id = localVocabMapping.at(id);
+                    } else if (id.getDatatype() == Datatype::VocabIndex) {
+                      size_t offset = ql::ranges::distance(
+                          insertInfo.begin(),
+                          ql::ranges::upper_bound(
+                              insertInfo, id.getVocabIndex(), std::less{},
+                              [](const auto& tuple) {
+                                return std::get<0>(tuple);
+                              }));
+                      id = Id::makeFromVocabIndex(
+                          VocabIndex::make(id.getVocabIndex().get() + offset));
+                    }
+                  });
+            }
+            return IdTableStatic<0>{std::move(idTable)};
+          }}};
+}
+
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
+    const Permutation& permutation, ScanSpecification scanSpec,
+    const LocatedTriplesSnapshot& snapshot,
+    const ad_utility::HashMap<Id, Id>& localVocabMapping,
+    const std::vector<std::tuple<VocabIndex, std::string_view, Id>>& insertInfo,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  return readIndexAndRemap(
+      permutation, std::move(scanSpec),
+      permutation.getAugmentedMetadataForPermutation(snapshot), snapshot,
+      localVocabMapping, insertInfo, cancellationHandle,
+      std::array{ADDITIONAL_COLUMN_GRAPH_ID});
+}
+
+size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
+  if (!blockMetadataRanges.empty()) {
+    const auto& first = blockMetadataRanges.at(0);
+    if (!first.empty()) {
+      return first[0].offsetsAndCompressedSize_.size();
+    }
+  }
+  return 4;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+void DeltaTriples::materializeToIndex() {
+  auto& vocab = index_.getVocab();
+
+  size_t newWordCount = 0;
+  std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
+  insertInfo.reserve(localVocab_.size());
+
+  ad_utility::HashMap<Id, Id> localVocabMapping;
+
+  for (const LocalVocabEntry& entry :
+       const_cast<const LocalVocab&>(localVocab_).primaryWordSet()) {
+    const auto& [lower, upper] = entry.positionInVocab();
+    AD_CORRECTNESS_CHECK(lower == upper);
+    Id id = Id::fromBits(upper.get());
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
+    insertInfo.emplace_back(id.getVocabIndex(),
+                            entry.asLiteralOrIri().toStringRepresentation(),
+                            Id::makeFromLocalVocabIndex(&entry));
+  }
+  ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
+    return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
+           std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
+  });
+
+  auto vocabWriter = vocab.makeWordWriterPtr("tmp_index.vocabulary");
+  for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
+    auto actualIndex = VocabIndex::make(vocabIndex);
+    while (insertInfo.size() > newWordCount &&
+           std::get<VocabIndex>(insertInfo.at(newWordCount)) == actualIndex) {
+      AD_CORRECTNESS_CHECK(std::get<Id>(insertInfo.at(newWordCount)) <
+                           Id::makeFromVocabIndex(actualIndex));
+      auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
+      auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+      localVocabMapping.emplace(
+          std::get<Id>(insertInfo.at(newWordCount)),
+          Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+      newWordCount++;
+    }
+    auto word = vocab[actualIndex];
+    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    AD_CORRECTNESS_CHECK(newIndex == vocabIndex + newWordCount);
+  }
+
+  for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
+    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    localVocabMapping.emplace(
+        id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+  }
+
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  auto snapshot = getSnapshot();
+  CancellationHandle cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  IndexImpl newIndex{index_.allocator(), false};
+  newIndex.loadConfigFromOldIndex("tmp_index", index_);
+
+  auto [numTriplesInternal, numPredicatesInternal] =
+      newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
+          index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
+          scanSpec, *snapshot, localVocabMapping, insertInfo,
+          cancellationHandle));
+
+  const auto& psoPermutation = index_.getPermutation(Permutation::Enum::PSO);
+  auto blockMetadataRanges =
+      psoPermutation.getAugmentedMetadataForPermutation(*snapshot);
+  size_t numColumns = getNumColumns(blockMetadataRanges);
+  std::vector<ColumnIndex> additionalColumns;
+  additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  for (ColumnIndex col : {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                          ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}) {
+    if (additionalColumns.size() >= numColumns - 3) {
+      break;
+    }
+    additionalColumns.push_back(col);
+  }
+  AD_CORRECTNESS_CHECK(additionalColumns.size() == numColumns - 3);
+  newIndex.createPSOAndPOSImplPublic(
+      numColumns, readIndexAndRemap(psoPermutation, scanSpec,
+                                    std::move(blockMetadataRanges), *snapshot,
+                                    localVocabMapping, insertInfo,
+                                    cancellationHandle, additionalColumns));
+  for (auto permutation : {Permutation::Enum::SPO, Permutation::Enum::OPS}) {
+    newIndex.createPermutationPairPublic(
+        4,
+        readIndexAndRemap(index_.getPermutation(permutation), scanSpec,
+                          *snapshot, localVocabMapping, insertInfo,
+                          cancellationHandle),
+        newIndex.getPermutation(permutation),
+        newIndex.getPermutation(
+            static_cast<Permutation::Enum>(static_cast<int>(permutation) + 1)));
+  }
+  newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
+                                                numPredicatesInternal);
+  if (index_.usePatterns()) {
+    std::filesystem::copy(index_.getOnDiskBase() + ".index.patterns",
+                          newIndex.getOnDiskBase() + ".index.patterns",
+                          std::filesystem::copy_options::overwrite_existing);
+  }
 }
