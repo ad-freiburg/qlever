@@ -10,6 +10,13 @@
 
 #include "global/Constants.h"
 
+namespace {
+// CTRE regex pattern for C++17 compatibility (namespace scope)
+constexpr ctll::fixed_string dayTimePattern =
+    "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
+    "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
+}  // namespace
+
 //______________________________________________________________________________
 std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
   std::string str = isPositive() ? "P" : "-P";
@@ -61,10 +68,6 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
 //______________________________________________________________________________
 DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
     std::string_view dayTimeDurationStr) {
-  static constexpr ctll::fixed_string dayTimePattern =
-      "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
-      "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
-
   // Try to match the given pattern with the provided string. If the matching
   // procedure fails, raise DurationParseException (for Turtle Parser).
   auto match = ctre::match<dayTimePattern>(dayTimeDurationStr);

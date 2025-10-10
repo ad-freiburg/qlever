@@ -17,6 +17,22 @@ constexpr static ctll::fixed_string timeRegex{
 constexpr static ctll::fixed_string timeZoneRegex{
     R"((?<tzZ>Z)|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
 
+namespace detail {
+// Combined regex patterns for different date/time formats (namespace scope for
+// C++17)
+constexpr static ctll::fixed_string dateTimeRegex =
+    dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string dateOnlyRegex =
+    dateRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string gYearRegex = "(?<year>-?\\d{4,})";
+constexpr static ctll::fixed_string gYearRegexWithTz =
+    gYearRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string gYearMonthRegex =
+    "(?<year>-?\\d{4,})-(?<month>\\d{2})";
+constexpr static ctll::fixed_string gYearMonthRegexWithTz =
+    gYearMonthRegex + grp(timeZoneRegex) + "?";
+}  // namespace detail
+
 // _____________________________________________________________________________
 std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
     const {
@@ -134,9 +150,7 @@ static DateYearOrDuration makeDateOrLargeYear(std::string_view fullInput,
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration>
 DateYearOrDuration::parseXsdDatetimeGetOptDate(std::string_view dateString) {
-  constexpr static ctll::fixed_string dateTime =
-      dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::dateTimeRegex>(dateString);
   if (!match) {
     return std::nullopt;
   }
@@ -163,9 +177,7 @@ DateYearOrDuration DateYearOrDuration::parseXsdDatetime(
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration> DateYearOrDuration::parseXsdDateGetOptDate(
     std::string_view dateString) {
-  constexpr static ctll::fixed_string dateTime =
-      dateRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::dateOnlyRegex>(dateString);
   if (!match) {
     return std::nullopt;
   }
@@ -188,10 +200,7 @@ DateYearOrDuration DateYearOrDuration::parseXsdDate(
 
 // _____________________________________________________________________________
 DateYearOrDuration DateYearOrDuration::parseGYear(std::string_view dateString) {
-  constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4,})";
-  constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::gYearRegexWithTz>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
@@ -204,11 +213,7 @@ DateYearOrDuration DateYearOrDuration::parseGYear(std::string_view dateString) {
 // _____________________________________________________________________________
 DateYearOrDuration DateYearOrDuration::parseGYearMonth(
     std::string_view dateString) {
-  constexpr static ctll::fixed_string yearRegex =
-      "(?<year>-?\\d{4,})-(?<month>\\d{2})";
-  constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::gYearMonthRegexWithTz>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYearMonth`.")};

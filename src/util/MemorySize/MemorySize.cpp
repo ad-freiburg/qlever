@@ -18,6 +18,12 @@
 
 #include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
+
+namespace {
+// CTRE regex pattern for C++17 compatibility (namespace scope)
+constexpr ctll::fixed_string memorySizeRegex =
+    "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
+}  // namespace
 #include "util/ConstexprUtils.h"
 
 namespace ad_utility {
@@ -67,9 +73,7 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  constexpr ctll::fixed_string regex =
-      "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
-  if (auto matcher = ctre::match<regex>(str)) {
+  if (auto matcher = ctre::match<memorySizeRegex>(str)) {
     auto amountString = matcher.get<"amount">().to_view();
     // Even though CTRE supports to_number() with double values, this relies on
     // `std::from_chars` which is currently not supported by the standard
