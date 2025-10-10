@@ -278,7 +278,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesSnapshot());
-  return {lower == upper, std::midpoint(lower, upper)};
+  // NOTE: Starting from C++20 we could use `std::midpoint` here
+  return {lower == upper, lower + (upper - lower) / 2};
 }
 
 // _____________________________________________________________________________
