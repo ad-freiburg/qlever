@@ -195,7 +195,7 @@ TransitivePathBase::decideDirection() {
 }
 
 // _____________________________________________________________________________
-Result::Generator TransitivePathBase::fillTableWithHull(
+Result::LazyResult TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce, size_t inputWidth) const {
   return ad_utility::callFixedSizeVi(
@@ -208,57 +208,85 @@ Result::Generator TransitivePathBase::fillTableWithHull(
 
 // _____________________________________________________________________________
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-Result::Generator TransitivePathBase::fillTableWithHullImpl(
+Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  ad_utility::Timer timer{ad_utility::Timer::Stopped};
-  size_t outputRow = 0;
-  IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-  LocalVocab mergedVocab{};
-  for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
-    timer.cont();
-    // As an optimization nodes without any linked nodes should not get yielded
-    // in the first place.
-    AD_CONTRACT_CHECK(!linkedNodes.empty());
-    if (!yieldOnce) {
-      table.reserve(linkedNodes.size());
-    }
+  auto copyColumnsFor = [this, startSideCol = startSideCol,
+                         targetSideCol = targetSideCol](
+                            const NodeWithTargets& nodeWithTargets,
+                            IdTableStatic<OUTPUT_WIDTH>& table,
+                            size_t& outputRow) {
+    const auto& [node, graph, targets, _, idTable, inputRow] = nodeWithTargets;
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
     if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
-    for (Id linkedNode : linkedNodes) {
+    for (Id linkedNode : targets) {
       table.emplace_back();
       table(outputRow, startSideCol) = node;
       table(outputRow, targetSideCol) = linkedNode;
-
       if (inputView.has_value()) {
-        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow);
+        this->copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                     inputRow, outputRow);
       }
-      if (graphVariable_.has_value()) {
+      if (this->graphVariable_.has_value()) {
         table(outputRow, table.numColumns() - 1) = graph;
       }
-
       outputRow++;
     }
+  };
 
-    if (yieldOnce) {
-      mergedVocab.mergeWith(localVocab);
-    } else {
-      timer.stop();
-      runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-      co_yield {std::move(table).toDynamic(), std::move(localVocab)};
-      table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
-      outputRow = 0;
-    }
-    timer.stop();
-  }
-  if (yieldOnce) {
-    timer.start();
-    runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-    co_yield {std::move(table).toDynamic(), std::move(mergedVocab)};
-  }
+  auto makeResult = [this](IdTableStatic<OUTPUT_WIDTH>&& table,
+                           LocalVocab&& localVocab,
+                           ad_utility::timer::chr::milliseconds time)
+      -> std::optional<Result::IdTableVocabPair> {
+    runtimeInfo().addDetail("IdTable fill time", time);
+    return Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                    std::move(localVocab)};
+  };
+
+  auto hullIt = hull.begin();
+  return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
+      [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+       hull = std::move(hull), hullIt = std::move(hullIt),
+       yieldOnce = yieldOnce, copyColumnsFor = std::move(copyColumnsFor),
+       makeResult = std::move(makeResult),
+       mergedVocab = LocalVocab{}]() mutable {
+        size_t outputRow = 0;
+        IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
+        while (hullIt != hull.end()) {
+          timer.cont();
+          // As an optimization nodes without any linked nodes should not get
+          // yielded in the first place.
+          AD_CONTRACT_CHECK(!hullIt->targets_.empty());
+          if (!yieldOnce) {
+            table.reserve(hullIt->targets_.size());
+          }
+          copyColumnsFor(*hullIt, table, outputRow);
+
+          timer.stop();
+          if (yieldOnce) {
+            mergedVocab.mergeWith(hullIt->localVocab_);
+            ++hullIt;
+            continue;
+          }
+
+          auto result = makeResult(
+              std::move(table), std::move(hullIt->localVocab_), timer.msecs());
+          ++hullIt;
+          return result;
+        }
+
+        if (yieldOnce) {
+          timer.start();
+          // make sure we dont yield another value after this
+          yieldOnce = false;
+          return makeResult(std::move(table), std::move(mergedVocab),
+                            timer.msecs());
+        } else {
+          return std::optional<Result::IdTableVocabPair>();
+        }
+      })};
 }
 
 // _____________________________________________________________________________
