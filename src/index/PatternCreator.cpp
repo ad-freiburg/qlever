@@ -4,6 +4,8 @@
 
 #include "index/PatternCreator.h"
 
+#include <iomanip>
+
 #include "global/SpecialIds.h"
 
 using PatternId = Pattern::PatternId;

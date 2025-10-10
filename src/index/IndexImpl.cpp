@@ -156,7 +156,7 @@ static auto fixBlockAfterPatternJoin(T block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
-  static constexpr auto permutation =
+  static QL_CONSTEXPR auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(

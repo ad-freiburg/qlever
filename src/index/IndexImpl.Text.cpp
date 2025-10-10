@@ -110,7 +110,7 @@ IdTable IndexImpl::mergeTextBlockResults(
     return std::move(toSort).toDynamic<>();
   }
   // Filter duplicates
-  auto [newEnd, _] = std::ranges::unique(toSort);
+  auto newEnd = ::ranges::unique(toSort);
   toSort.erase(newEnd, toSort.end());
   return std::move(toSort).toDynamic<>();
 }
