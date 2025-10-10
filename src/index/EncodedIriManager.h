@@ -14,6 +14,11 @@
 #include "util/Log.h"
 #include "util/json.h"
 
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+}  // namespace detail
+
 // This class allows the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
 // example, <http://example.org/12345> with digit sequence `12345` and
@@ -146,7 +151,8 @@ class EncodedIriManagerImpl {
     }
 
     // Extract the substring with the digits, and check that it is not too long.
-    const auto& numString = match.template get<"digits">().to_view();
+    const auto& numString =
+        match.template get<detail::digitsCaptureGroup>().to_view();
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }

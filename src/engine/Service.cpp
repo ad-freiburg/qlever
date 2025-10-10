@@ -23,6 +23,11 @@
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
+namespace {
+// CTRE regex patterns for C++17 compatibility
+constexpr ctll::fixed_string selectPatternRegex = "[ \t\r\n]*SELECT";
+}  // namespace
+
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
@@ -98,7 +103,7 @@ std::string Service::pushDownValues(std::string_view pattern,
   pattern.remove_prefix(index + 1);
   // If we have a single subquery in the service clause, wrap it inside curly
   // braces so it remains valid syntax alongside a VALUES clause.
-  if (ctre::starts_with<"[ \t\r\n]*SELECT">(pattern)) {
+  if (ctre::starts_with<selectPatternRegex>(pattern)) {
     return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
   }
   return absl::StrCat("{\n", values, "\n", pattern);

@@ -17,6 +17,34 @@ constexpr static ctll::fixed_string timeRegex{
 constexpr static ctll::fixed_string timeZoneRegex{
     R"((?<tzZ>Z)|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
 
+namespace detail {
+// Combined regex patterns for different date/time formats (namespace scope for
+// C++17)
+constexpr static ctll::fixed_string dateTimeRegex =
+    dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string dateOnlyRegex =
+    dateRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string gYearRegex = "(?<year>-?\\d{4,})";
+constexpr static ctll::fixed_string gYearRegexWithTz =
+    gYearRegex + grp(timeZoneRegex) + "?";
+constexpr static ctll::fixed_string gYearMonthRegex =
+    "(?<year>-?\\d{4,})-(?<month>\\d{2})";
+constexpr static ctll::fixed_string gYearMonthRegexWithTz =
+    gYearMonthRegex + grp(timeZoneRegex) + "?";
+
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string yearGroup = "year";
+constexpr ctll::fixed_string monthGroup = "month";
+constexpr ctll::fixed_string dayGroup = "day";
+constexpr ctll::fixed_string hourGroup = "hour";
+constexpr ctll::fixed_string minuteGroup = "minute";
+constexpr ctll::fixed_string secondGroup = "second";
+constexpr ctll::fixed_string tzZGroup = "tzZ";
+constexpr ctll::fixed_string tzSignGroup = "tzSign";
+constexpr ctll::fixed_string tzHoursGroup = "tzHours";
+constexpr ctll::fixed_string tzMinutesGroup = "tzMinutes";
+}  // namespace detail
+
 // _____________________________________________________________________________
 std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
     const {
@@ -54,16 +82,16 @@ std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
 // _____________________________________________________________________________
 template <typename T>
 static Date::TimeZone parseTimeZone(const T& match) {
-  if (match.template get<"tzZ">() == "Z") {
+  if (match.template get<detail::tzZGroup>() == "Z") {
     return Date::TimeZoneZ{};
-  } else if (!match.template get<"tzHours">()) {
+  } else if (!match.template get<detail::tzHoursGroup>()) {
     return Date::NoTimeZone{};
   }
-  int tz = match.template get<"tzHours">().to_number();
-  if (match.template get<"tzSign">() == "-") {
+  int tz = match.template get<detail::tzHoursGroup>().to_number();
+  if (match.template get<detail::tzSignGroup>() == "-") {
     tz *= -1;
   }
-  if (match.template get<"tzMinutes">() != "00") {
+  if (match.template get<detail::tzMinutesGroup>() != "00") {
     AD_LOG_DEBUG << "Qlever supports only full hours as timezones, timezone"
                  << match.template get<0>() << "will be rounded down to " << tz
                  << ":00" << std::endl;
@@ -134,18 +162,16 @@ static DateYearOrDuration makeDateOrLargeYear(std::string_view fullInput,
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration>
 DateYearOrDuration::parseXsdDatetimeGetOptDate(std::string_view dateString) {
-  constexpr static ctll::fixed_string dateTime =
-      dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::dateTimeRegex>(dateString);
   if (!match) {
     return std::nullopt;
   }
-  int64_t year = match.template get<"year">().to_number<int64_t>();
-  int month = match.template get<"month">().to_number();
-  int day = match.template get<"day">().to_number();
-  int hour = match.template get<"hour">().to_number();
-  int minute = match.template get<"minute">().to_number();
-  double second = std::strtod(match.get<"second">().data(), nullptr);
+  int64_t year = match.template get<detail::yearGroup>().to_number<int64_t>();
+  int month = match.template get<detail::monthGroup>().to_number();
+  int day = match.template get<detail::dayGroup>().to_number();
+  int hour = match.template get<detail::hourGroup>().to_number();
+  int minute = match.template get<detail::minuteGroup>().to_number();
+  double second = std::strtod(match.get<detail::secondGroup>().data(), nullptr);
   return makeDateOrLargeYear(dateString, year, month, day, hour, minute, second,
                              parseTimeZone(match));
 }
@@ -163,15 +189,13 @@ DateYearOrDuration DateYearOrDuration::parseXsdDatetime(
 // _____________________________________________________________________________
 std::optional<DateYearOrDuration> DateYearOrDuration::parseXsdDateGetOptDate(
     std::string_view dateString) {
-  constexpr static ctll::fixed_string dateTime =
-      dateRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::dateOnlyRegex>(dateString);
   if (!match) {
     return std::nullopt;
   }
-  int64_t year = match.template get<"year">().to_number<int64_t>();
-  int month = match.template get<"month">().to_number();
-  int day = match.template get<"day">().to_number();
+  int64_t year = match.template get<detail::yearGroup>().to_number<int64_t>();
+  int month = match.template get<detail::monthGroup>().to_number();
+  int day = match.template get<detail::dayGroup>().to_number();
   return makeDateOrLargeYear(dateString, year, month, day, -1, 0, 0.0,
                              parseTimeZone(match));
 }
@@ -188,15 +212,12 @@ DateYearOrDuration DateYearOrDuration::parseXsdDate(
 
 // _____________________________________________________________________________
 DateYearOrDuration DateYearOrDuration::parseGYear(std::string_view dateString) {
-  constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4,})";
-  constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::gYearRegexWithTz>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
-  int64_t year = match.template get<"year">().to_number<int64_t>();
+  int64_t year = match.template get<detail::yearGroup>().to_number<int64_t>();
   return makeDateOrLargeYear(dateString, year, 0, 0, -1, 0, 0.0,
                              parseTimeZone(match));
 }
@@ -204,17 +225,13 @@ DateYearOrDuration DateYearOrDuration::parseGYear(std::string_view dateString) {
 // _____________________________________________________________________________
 DateYearOrDuration DateYearOrDuration::parseGYearMonth(
     std::string_view dateString) {
-  constexpr static ctll::fixed_string yearRegex =
-      "(?<year>-?\\d{4,})-(?<month>\\d{2})";
-  constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timeZoneRegex) + "?";
-  auto match = ctre::match<dateTime>(dateString);
+  auto match = ctre::match<detail::gYearMonthRegexWithTz>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYearMonth`.")};
   }
-  int64_t year = match.template get<"year">().to_number<int64_t>();
-  int month = match.template get<"month">().to_number();
+  int64_t year = match.template get<detail::yearGroup>().to_number<int64_t>();
+  int month = match.template get<detail::monthGroup>().to_number();
   return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
                              parseTimeZone(match));
 }

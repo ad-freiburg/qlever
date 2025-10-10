@@ -22,6 +22,12 @@
 
 namespace ad_utility {
 
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string durationPatternRegex =
+    R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)";
+}  // namespace detail
+
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
 template <typename DT>
@@ -84,7 +90,7 @@ class ParseableDuration {
     using namespace std::chrono;
     using ad_utility::use_type_identity::ti;
 
-    if (auto m = ctre::match<R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)">(arg)) {
+    if (auto m = ctre::match<detail::durationPatternRegex>(arg)) {
       auto unit = m.template get<2>().to_view();
 
       auto toDuration = [&m](auto t) {

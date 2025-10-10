@@ -14,6 +14,12 @@
 #include "util/StringUtils.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string digitCaptureGroup = "digit";
+}  // namespace detail
+
 // _____________________________________________________________________________
 template <const char floatingPointSignifier>
 std::string insertThousandSeparator(const std::string_view str,
@@ -84,7 +90,8 @@ std::string insertThousandSeparator(const std::string_view str,
         The digit sequence, that must be transformed. Note: The string view
         iterators point to entries in the `str` string.
         */
-        const std::string_view& digitSequence{match.template get<"digit">()};
+        const std::string_view& digitSequence{
+            match.template get<detail::digitCaptureGroup>()};
 
         // Insert the transformed digit sequence, and the string between it
         // and the `parseIterator`, into the stream.

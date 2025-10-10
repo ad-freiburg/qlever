@@ -12,6 +12,12 @@
 
 namespace parsedQuery {
 
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string distCaptureGroup = "dist";
+constexpr ctll::fixed_string resultsCaptureGroup = "results";
+}  // namespace detail
+
 // ____________________________________________________________________________
 void SpatialQuery::addParameter(const SparqlTriple& triple) {
   auto simpleTriple = triple.getSimple();
@@ -256,11 +262,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
 
   // Check if one of the regexes matches
   if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     AD_CORRECTNESS_CHECK(maxDist_.has_value());
   } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
-    maxResults_ = matchToInt(match.get<"results">());
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
   } else {
