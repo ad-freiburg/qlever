@@ -46,6 +46,7 @@
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
@@ -234,9 +235,9 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
-    } else if (geoUnaryFuncs.contains(functionName)) {
+    } else if (ad_utility::contains(geoUnaryFuncs, functionName)) {
       return createUnary(geoUnaryFuncs.at(functionName));
-    } else if (geoBinaryFuncs.contains(functionName)) {
+    } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {
       return createBinary(geoBinaryFuncs.at(functionName));
     }
   }
@@ -248,7 +249,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
   };
   if (checkPrefix(MATH_PREFIX)) {
-    if (mathFuncs.contains(functionName)) {
+    if (ad_utility::contains(mathFuncs, functionName)) {
       return createUnary(mathFuncs.at(functionName));
     } else if (functionName == "pow") {
       return createBinary(&makePowExpression);
@@ -268,7 +269,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"dateTime", &makeConvertToDateTimeExpression},
       {"date", &makeConvertToDateExpression},
   };
-  if (checkPrefix(XSD_PREFIX) && convertFuncs.contains(functionName)) {
+  if (checkPrefix(XSD_PREFIX) &&
+      ad_utility::contains(convertFuncs, functionName)) {
     return createUnary(convertFuncs.at(functionName));
   }
 

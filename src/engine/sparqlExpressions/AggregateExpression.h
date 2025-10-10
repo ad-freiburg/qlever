@@ -131,10 +131,13 @@ inline auto makeNumericExpressionForAggregate() {
 //
 // NOTE: For this expression, we have to override `getVariableForCount` for the
 // pattern trick.
-inline auto count = [](const auto& a, const auto& b) -> int64_t {
-  return a + b;
+struct Count {
+  template <typename T1, typename T2>
+  int64_t operator()(const T1& a, const T2& b) const {
+    return a + b;
+  }
 };
-using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
+using CountExpressionBase = AGG_EXP<Count, IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -159,16 +162,17 @@ class SumExpression : public AGG_EXP<decltype(addForSum), NumericValueGetter> {
 };
 
 // Aggregate expression for AVG.
-inline auto avgFinalOperation = [](const NumericValue& aggregation,
-                                   size_t numElements) {
-  return makeNumericExpressionForAggregate<std::divides<>>()(
-      aggregation, NumericValue{static_cast<double>(numElements)});
+struct AvgFinalOperation {
+  NumericValue operator()(const NumericValue& aggregation,
+                          size_t numElements) const {
+    return makeNumericExpressionForAggregate<std::divides<>>()(
+        aggregation, NumericValue{static_cast<double>(numElements)});
+  }
 };
 using AvgOperation =
     Operation<2,
               FunctionAndValueGetters<decltype(addForSum), NumericValueGetter>>;
-using AvgExpressionBase =
-    AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+using AvgExpressionBase = AggregateExpression<AvgOperation, AvgFinalOperation>;
 class AvgExpression : public AvgExpressionBase {
   using AvgExpressionBase::AvgExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
