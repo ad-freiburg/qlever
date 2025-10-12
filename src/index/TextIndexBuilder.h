@@ -74,8 +74,7 @@ class TextIndexBuilder : public IndexImpl {
   // whole literal treated as entity and the following lines are the single
   // words of the literals.
   cppcoro::generator<WordsFileLine> literalToWordsFileLines(
-      std::string text, TextRecordIndex& contextId,
-      const LocaleManager& localeManager) const;
+      std::string text, TextRecordIndex& contextId) const;
 
   void processEntityCaseDuringInvertedListProcessing(
       const WordsFileLine& line,

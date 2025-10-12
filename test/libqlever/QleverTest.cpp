@@ -180,4 +180,19 @@ TEST(IndexBuilderConfig, validate) {
   c.wordsfile_ = "";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified docsfile"));
+
+  c = IndexBuilderConfig{};
+  c.addWordsFromAllLiterals_ = true;
+  c.tripleInTextIndexRegex_ = "oops";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(),
+      HasSubstr("Either choose to add all literals or choose a regex"));
+
+  c = IndexBuilderConfig{};
+  c.onlyAddTextIndex_ = true;
+  c.wordsfile_ = "blibb";
+  c.docsfile_ = "blabb";
+  c.tripleInTextIndexRegex_ = "oops";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("RDF and text index not only the text index"));
 }
