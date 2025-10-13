@@ -84,6 +84,18 @@ struct GeometryType {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
+// Represents the area of the WKT geometry in square meters on the earth's
+// surface.
+struct MetricArea {
+ private:
+  double area_;
+
+ public:
+  MetricArea(double area);
+
+  double area() const { return area_; };
+};
+
 // Forward declaration for concept
 class GeometryInfo;
 
@@ -91,11 +103,11 @@ class GeometryInfo;
 // allowed to be requested.
 template <typename T>
 CPP_concept RequestedInfoT =
-    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
+    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType, MetricArea>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 4;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -109,10 +121,12 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  // uint32_t numGeometries_ = 1;
+  // double metricLength_ = 0.0;
+  // double metricArea_ = 0.0; <--
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
-  //   double metricSize_ = 0;
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
@@ -150,6 +164,12 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
+
+  // Extract the metric area.
+  // MetricArea getMetricArea() const;
+
+  // Parse an arbitrary WKT literal and compute only the metric area.
+  // static std::optional<MetricArea> getMetricArea(std::string_view wkt);
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(

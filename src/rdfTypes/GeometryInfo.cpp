@@ -124,6 +124,11 @@ std::string BoundingBox::asWkt() const {
 }
 
 // ____________________________________________________________________________
+MetricArea::MetricArea(double area) : area_{area} {
+  AD_CORRECTNESS_CHECK(area >= 0, "Metric area must be positive");
+}
+
+// ____________________________________________________________________________
 template <BoundingCoordinate RequestedCoordinate>
 double BoundingBox::getBoundingCoordinate() const {
   using enum BoundingCoordinate;
@@ -173,6 +178,7 @@ template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
 template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
 template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
+// template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
@@ -200,5 +206,8 @@ template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
 template std::optional<GeometryType>
 GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
+// template std::optional<MetricArea>
+// GeometryInfo::getRequestedInfo<MetricArea>(
+//     std::string_view wkt);
 
 }  // namespace ad_utility
