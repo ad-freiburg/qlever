@@ -429,9 +429,9 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     }
   };
   for (const auto& triple : triples) {
-    auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPredicate, triple.at(1));
-    auto object = std::visit(toTripleComponent, triple.at(2));
+    auto subject = triple.at(0).visit(toTripleComponent);
+    auto predicate = triple.at(1).visit(toPredicate);
+    auto object = triple.at(2).visit(toTripleComponent);
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
   }
