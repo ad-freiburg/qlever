@@ -125,8 +125,8 @@ void Quads::forAllVariables(absl::FunctionRef<void(const Variable&)> f) {
   };
   auto visitGraphBlock = [&visitTriple, &f](const GraphBlock& block) {
     const auto& [graph, triples] = block;
-    if (holds_alternative<Variable>(graph)) {
-      f(get<Variable>(graph));
+    if (std::holds_alternative<Variable>(graph)) {
+      f(std::get<Variable>(graph));
     }
     ql::ranges::for_each(triples, visitTriple);
   };
