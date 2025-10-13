@@ -78,6 +78,21 @@ CPP_template(typename Sent)(
     return it.base() != sent.base();
   }
 
+  // Compare with a compatible iterator (typically obtained via
+  // `std::make_move_iterator`.
+  CPP_template_2(typename It)(
+      requires ql::concepts::sentinel_for<Sent, It>) friend bool
+  operator==(move_sentinel sent, const std::move_iterator<It> it) {
+    return it.base() == sent.base();
+  }
+
+  // Operator != (details same as for `operator==` above).
+  CPP_template_2(typename It)(
+      requires ql::concepts::sentinel_for<Sent, It>) friend bool
+  operator!=(move_sentinel sent, const std::move_iterator<It> it) {
+    return it.base() != sent.base();
+  }
+
  private:
   [[no_unique_address]] Sent sent_;
 };
