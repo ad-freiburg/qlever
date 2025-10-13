@@ -1154,7 +1154,7 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   auto registerIfVariable = [this](const auto& variant) {
-    if (holds_alternative<Variable>(variant)) {
+    if (std::holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
