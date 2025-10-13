@@ -52,9 +52,11 @@ void TextIndexBuilder::buildTextIndexFile(
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
                 bAndKParamForTextScoring_};
 
-  // Build the Mmap vector containing `VocabIndex`es of all relevant literals
-  // if it hasn't been build during RDF index building and option to add
-  // literals was set
+  // Build the Mmap vector containing `VocabIndex`es of all literals that should
+  // be added to the text index if it hasn't been build during RDF index
+  // building and option to add literals was set. This will add all object
+  // literals of the RDF triples to the text index. This is currently used in
+  // the e2e tests when building the RDF and text index separately.
   if (!textIndexIndices_.has_value() && addWordsFromLiterals) {
     textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
         onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::CreateTag{});
