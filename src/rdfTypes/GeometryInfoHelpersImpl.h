@@ -268,10 +268,6 @@ inline double computeMetricAreaMultiPolygon(
   return computeMetricAreaS2Polygon(unionPolygon);
 };
 
-inline double computeMetricAreaAnyGeom(const AnyGeometry<CoordType>&) {
-  return 0;  // TODO
-}
-
 // Extract all (potentially nested) polygons from a geometry collection. This is
 // used to calculate area as points and lines have no area and are therefore
 // neutral to the area of a collection.
@@ -317,7 +313,7 @@ inline double computeMetricArea(const ParsedWkt& geometry) {
         } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
           return computeMetricAreaMultiPolygon(geom);
         } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-          return 0.0;  // TODO
+          return computeMetricAreaCollection(geom);
         } else {
           // Check that there are no further geometry types
           static_assert(alwaysFalse<T>);
