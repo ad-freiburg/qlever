@@ -34,7 +34,7 @@ jobs:
 
 
     env:
-      warnings:   "-w" # disable all warnings for now
+      warnings:   "-w -ftemplate-backtrace-limit=0" # disable all warnings for now
       build-type: Release
       expensive-tests: true
       compiler: gcc
