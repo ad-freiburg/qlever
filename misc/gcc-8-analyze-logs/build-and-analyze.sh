@@ -9,7 +9,7 @@ echo "=== Configuring CMake with GCC8 and C++17 settings ==="
 cmake -B /qlever/build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE=/qlever/toolchains/gcc8.cmake \
-    -DADDITIONAL_COMPILER_FLAGS="" \
+    -DADDITIONAL_COMPILER_FLAGS="-w" \
     -DUSE_PARALLEL=true \
     -DRUN_EXPENSIVE_TESTS=true \
     -DENABLE_EXPENSIVE_CHECKS=true \
