@@ -181,6 +181,15 @@ auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
+// Helper structure that holds information about batch merging.
+struct BatchInfo {
+  size_t batchIndex_;           // Which meta-batch (0, 1, 2, ...)
+  size_t originalFileIndex_;    // Original file index in the full set
+
+  BatchInfo(size_t batchIndex, size_t originalFileIndex)
+      : batchIndex_(batchIndex), originalFileIndex_(originalFileIndex) {}
+};
+
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
 // `mergeVocabulary` function is a friend.
@@ -251,6 +260,18 @@ class VocabularyMerger {
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
+  // Write queue words for two-stage merging (writes to batch ID maps instead of
+  // final ID maps).
+  // clang-format off
+    CPP_template(typename C, typename L)(
+      requires WordCallback<C> CPP_and ranges::predicate<
+          L, TripleComponentWithIndex, TripleComponentWithIndex>)
+      // clang-format on
+      void writeQueueWordsToIdMapTwoStage(
+          const std::vector<QueueWord>& buffer, C& wordCallback,
+          const L& lessThan, ad_utility::ProgressBar& progressBar,
+          std::vector<IdMapWriter>& batchToGlobalIdMaps);
+
   // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
@@ -264,6 +285,20 @@ class VocabularyMerger {
   // globalId>>`.
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
+
+  // Merge a batch of partial vocabulary files into a single batch file.
+  // Returns the number of words in the merged batch.
+  template <typename W>
+  size_t mergeSingleBatch(const std::string& basename, size_t batchIndex,
+                          size_t startFile, size_t endFile, W comparator,
+                          ad_utility::MemorySize memoryToUse);
+
+  // Perform two-stage merge when the number of files exceeds the limit.
+  template <typename W, typename C>
+  auto mergeTwoStage(const std::string& basename, size_t numFiles, W comparator,
+                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+      -> CPP_ret(VocabularyMetaData)(
+          requires WordComparator<W>&& WordCallback<C>);
 };
 
 // ____________________________________________________________________________

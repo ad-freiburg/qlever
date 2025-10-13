@@ -56,6 +56,11 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
+// Intermediate files created during two-stage vocabulary merging
+constexpr inline std::string_view BATCH_VOCAB_WORDS_INFIX =
+    ".batch-vocab.words.tmp.";
+constexpr inline std::string_view BATCH_VOCAB_INTERNAL_IDMAP_INFIX =
+    ".batch-vocab.internal-idmap.tmp.";
 
 // ________________________________________________________________
 constexpr inline std::string_view TMP_BASENAME_COMPRESSION =
@@ -63,6 +68,12 @@ constexpr inline std::string_view TMP_BASENAME_COMPRESSION =
 
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
+
+// The maximum number of input files that can be merged simultaneously without
+// hitting OS file descriptor limits. When the number of partial vocabulary
+// files exceeds this limit, the merging is done in two stages: first merging
+// batches of files, then merging the batch results.
+constexpr inline size_t MAX_NUM_FILES_FOR_DIRECT_MERGE = 2000;
 
 // _________________________________________________________________
 // The degree of parallelism that is used for the index building step, where the
