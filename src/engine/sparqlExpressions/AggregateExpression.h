@@ -19,7 +19,13 @@ namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
 // `AggregateExpression` if there is nothing to be done on the final result.
-inline auto identity = [](auto&& result, size_t) { return AD_FWD(result); };
+struct Identity {
+  template <typename T>
+  decltype(auto) operator()(T&& result, size_t) const {
+    return AD_FWD(result);
+  }
+};
+inline constexpr Identity identity{};
 
 namespace detail {
 

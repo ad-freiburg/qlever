@@ -234,10 +234,13 @@ class VocabularyMerger {
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
 
-  constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
-    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q.entry_.iriOrLiteral().size());
+  struct SizeOfQueueWord {
+    ad_utility::MemorySize operator()(const QueueWord& q) const {
+      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                           q.entry_.iriOrLiteral().size());
+    }
   };
+  constexpr static SizeOfQueueWord sizeOfQueueWord{};
 
   // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
