@@ -25,8 +25,8 @@ static constexpr auto valueAdder = []() {
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };
-  return ad_utility::OverloadCallOperator(numericValueAdder,
-                                          nonNumericValueAdder);
+  return ad_utility::OverloadCallOperator{numericValueAdder,
+                                          nonNumericValueAdder};
 }();
 
 // Data to perform the AVG aggregation using the HashMap optimization.
