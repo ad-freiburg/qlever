@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
+#include "util/InputRangeUtils.h"
 
 // _____________________________________________________________________________
 TransitivePathBase::TransitivePathBase(
@@ -236,54 +237,63 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
 
   auto makeResult = [this](IdTableStatic<OUTPUT_WIDTH>&& table,
                            LocalVocab&& localVocab,
-                           ad_utility::timer::chr::milliseconds time)
-      -> std::optional<Result::IdTableVocabPair> {
+                           ad_utility::timer::chr::milliseconds time) {
     runtimeInfo().addDetail("IdTable fill time", time);
     return Result::IdTableVocabPair{std::move(table).toDynamic(),
                                     std::move(localVocab)};
   };
 
-  auto hullIt = hull.begin();
+  // Unified generator that handles both yieldOnce and streaming modes
   return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
-      [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
-       hull = std::move(hull), hullIt = std::move(hullIt),
-       yieldOnce = yieldOnce, copyColumnsFor = std::move(copyColumnsFor),
+      [this, hull = std::move(hull), yieldOnce,
+       copyColumnsFor = std::move(copyColumnsFor),
        makeResult = std::move(makeResult),
-       mergedVocab = LocalVocab{}]() mutable {
-        size_t outputRow = 0;
-        IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-        while (hullIt != hull.end()) {
+       hullIt = std::optional<decltype(hull.begin())>{},
+       table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()},
+       vocab = LocalVocab{}, outputRow = size_t{0},
+       timer = ad_utility::Timer{ad_utility::Timer::Started}]() mutable
+      -> std::optional<Result::IdTableVocabPair> {
+        // Initialize iterator on first call
+        if (!hullIt.has_value()) {
+          hullIt = hull.begin();
+        }
+
+        // Process elements
+        while (hullIt.value() != hull.end()) {
           timer.cont();
-          // As an optimization nodes without any linked nodes should not get
-          // yielded in the first place.
-          AD_CONTRACT_CHECK(!hullIt->targets_.empty());
-          if (!yieldOnce) {
-            table.reserve(hullIt->targets_.size());
-          }
-          copyColumnsFor(*hullIt, table, outputRow);
+          auto& nodeWithTargets = *hullIt.value();
+          AD_CONTRACT_CHECK(!nodeWithTargets.targets_.empty());
 
-          timer.stop();
           if (yieldOnce) {
-            mergedVocab.mergeWith(hullIt->localVocab_);
-            ++hullIt;
-            continue;
+            // Accumulation mode: collect into shared table
+            copyColumnsFor(nodeWithTargets, table, outputRow);
+            vocab.mergeWith(nodeWithTargets.localVocab_);
+            timer.stop();
+            ++hullIt.value();
+            continue;  // Keep accumulating
+          } else {
+            // Streaming mode: yield individual result
+            IdTableStatic<OUTPUT_WIDTH> individualTable{getResultWidth(),
+                                                        allocator()};
+            size_t individualOutputRow = 0;
+            individualTable.reserve(nodeWithTargets.targets_.size());
+            copyColumnsFor(nodeWithTargets, individualTable,
+                           individualOutputRow);
+            timer.stop();
+            ++hullIt.value();
+            return makeResult(std::move(individualTable),
+                              std::move(nodeWithTargets.localVocab_),
+                              timer.msecs());
           }
-
-          auto result = makeResult(
-              std::move(table), std::move(hullIt->localVocab_), timer.msecs());
-          ++hullIt;
-          return result;
         }
 
+        // After iteration completes
         if (yieldOnce) {
-          timer.start();
-          // make sure we dont yield another value after this
-          yieldOnce = false;
-          return makeResult(std::move(table), std::move(mergedVocab),
-                            timer.msecs());
-        } else {
-          return std::optional<Result::IdTableVocabPair>();
+          // Return the accumulated result (only once)
+          return makeResult(std::move(table), std::move(vocab), timer.msecs());
         }
+
+        return std::nullopt;  // End of iteration
       })};
 }
 
