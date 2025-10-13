@@ -204,7 +204,7 @@ constexpr double EARTH_RADIUS_METERS = 6'371'000.0;
 constexpr double STERADIAN_TO_M2 = EARTH_RADIUS_METERS * EARTH_RADIUS_METERS;
 
 // Helper to convert a libspatialjoin `Ring` to an `S2Loop`
-inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<double>& ring) {
+inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
   std::vector<S2Point> points;
   for (const auto& latlon : ring) {
     S2LatLng s2latlng = S2LatLng::FromDegrees(latlon.getY(), latlon.getX());
@@ -222,7 +222,7 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<double>& ring) {
 }
 
 // Compute the area of a polygon in square meters on earth using s2
-inline double computePolygonWithHolesArea(const DPolygon& polygon) {
+inline double computeMetricAreaPolygon(const Polygon<CoordType>& polygon) {
   std::vector<std::unique_ptr<S2Loop>> loops;
 
   // Outer boundary
@@ -236,6 +236,42 @@ inline double computePolygonWithHolesArea(const DPolygon& polygon) {
   S2Polygon s2polygon;
   s2polygon.InitNested(std::move(loops));
   return s2polygon.GetArea() * STERADIAN_TO_M2;
+}
+
+// TODO for geometry collection: `S2Polygon:InitToUnion`
+
+inline double computeMetricAreaMultiPolygon(
+    const MultiPolygon<CoordType>& polygons) {
+  return 0;  // TODO
+};
+
+inline double computeMetricAreaAnyGeom(const AnyGeometry<CoordType>& geom) {
+  return 0;  // TODO
+}
+
+inline double computeMetricAreaCollection() {
+  return 0;  // TODO
+}
+
+inline double computeMetricArea(const ParsedWkt& geometry) {
+  return std::visit(
+      [](const auto& geom) -> double {
+        using T = std::decay_t<decltype(geom)>;
+        if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
+                                Line<CoordType>, MultiLine<CoordType>>) {
+          return 0.0;
+        } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
+          return computeMetricAreaPolygon(geom);
+        } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
+          return computeMetricAreaMultiPolygon(geom);
+        } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+          return 0.0;  // TODO
+        } else {
+          // Check that there are no further geometry types
+          static_assert(alwaysFalse<T>);
+        }
+      },
+      geometry);
 }
 
 }  // namespace ad_utility::detail
