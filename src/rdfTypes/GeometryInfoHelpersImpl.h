@@ -221,8 +221,7 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
   return loop;
 }
 
-// Compute the area of a polygon in square meters on earth using s2
-inline double computeMetricAreaPolygon(const Polygon<CoordType>& polygon) {
+inline S2Polygon makeS2Polygon(const Polygon<CoordType>& polygon) {
   std::vector<std::unique_ptr<S2Loop>> loops;
 
   // Outer boundary
@@ -235,24 +234,77 @@ inline double computeMetricAreaPolygon(const Polygon<CoordType>& polygon) {
 
   S2Polygon s2polygon;
   s2polygon.InitNested(std::move(loops));
-  return s2polygon.GetArea() * STERADIAN_TO_M2;
+  return s2polygon;
 }
 
-// TODO for geometry collection: `S2Polygon:InitToUnion`
+inline double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
+  return polygon.GetArea() * STERADIAN_TO_M2;
+}
 
+// Compute the area of a polygon in square meters on earth using s2
+inline double computeMetricAreaPolygon(const Polygon<CoordType>& polygon) {
+  return computeMetricAreaS2Polygon(makeS2Polygon(polygon));
+}
+
+// Compute the area of a multipolygon in square meters on earth using s2
 inline double computeMetricAreaMultiPolygon(
     const MultiPolygon<CoordType>& polygons) {
-  return 0;  // TODO
+  // Empty multipolygon has empty area
+  if (polygons.empty()) {
+    return 0.0;
+  }
+  // Multipolygon with one member has exactly area of this member
+  if (polygons.size() == 1) {
+    return computeMetricAreaPolygon(polygons.at(0));
+  }
+  // For a multipolygon with multiple members, we need to compute the union of
+  // the polygons to determine their area.
+  // TODO<ullingerc>: the number of steps could be reduced by building the union
+  // in pairs (like divide-and-conquer) or using `S2Builder`
+  auto unionPolygon = makeS2Polygon(polygons.at(0));
+  for (size_t i = 1; i < polygons.size(); ++i) {
+    unionPolygon.InitToUnion(unionPolygon, makeS2Polygon(polygons.at(i)));
+  }
+  return computeMetricAreaS2Polygon(unionPolygon);
 };
 
-inline double computeMetricAreaAnyGeom(const AnyGeometry<CoordType>& geom) {
+inline double computeMetricAreaAnyGeom(const AnyGeometry<CoordType>&) {
   return 0;  // TODO
 }
 
-inline double computeMetricAreaCollection() {
-  return 0;  // TODO
+// Extract all (potentially nested) polygons from a geometry collection. This is
+// used to calculate area as points and lines have no area and are therefore
+// neutral to the area of a collection.
+inline MultiPolygon<CoordType> collectionToMultiPolygon(
+    const Collection<CoordType>& collection) {
+  MultiPolygon<CoordType> polygons;
+  for (const auto& anyGeom : collection) {
+    if (anyGeom.getType() == 2) {
+      // Member is single polygon
+      polygons.push_back(anyGeom.getPolygon());
+    } else if (anyGeom.getType() == 4) {
+      // Member is multipolygon
+      for (const auto& polygon : anyGeom.getMultiPolygon()) {
+        polygons.push_back(polygon);
+      }
+    } else if (anyGeom.getType() == 5) {
+      // Member is a nested collection
+      for (const auto& polygon :
+           collectionToMultiPolygon(anyGeom.getCollection())) {
+        polygons.push_back(polygon);
+      }
+    }
+  }
+  return polygons;
 }
 
+// Compute the area in square meters of a geometry collection on earth using s2
+inline double computeMetricAreaCollection(
+    const Collection<CoordType>& collection) {
+  return computeMetricAreaMultiPolygon(collectionToMultiPolygon(collection));
+}
+
+// Compute the area in square meters of a geometry on earth using s2
 inline double computeMetricArea(const ParsedWkt& geometry) {
   return std::visit(
       [](const auto& geom) -> double {
