@@ -395,6 +395,8 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
     DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
     friend bool operator==(const Iterator& it, const Sentinel& s);
     friend bool operator!=(const Iterator& it, const Sentinel& s);
+    friend bool operator==(const Sentinel& s, const Iterator& it);
+    friend bool operator!=(const Sentinel& s, const Iterator& it);
     GCC_REENABLE_WARNINGS
   };
 
@@ -412,6 +414,13 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
     friend bool operator!=(const Iterator& it, const Sentinel& s) {
       return !(it == s);
+    }
+
+    friend bool operator==(const Sentinel& s, const Iterator& it) {
+      return it == s;
+    }
+    friend bool operator!=(const Sentinel& s, const Iterator& it) {
+      return it != s;
     }
   };
 
