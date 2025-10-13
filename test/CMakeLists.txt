@@ -263,6 +263,8 @@ addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
+addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
+
 addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
@@ -474,3 +476,5 @@ addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
 addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
+
+addLinkAndDiscoverTestNoLibs(SourceLocationTest)

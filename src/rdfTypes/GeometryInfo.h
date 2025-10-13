@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -80,7 +81,7 @@ struct GeometryType {
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
 
-  constexpr bool operator==(const GeometryType& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
 // Forward declaration for concept
@@ -151,13 +152,14 @@ class GeometryInfo {
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
 
   // Extract the requested information from this object.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo> RequestedInfo getRequestedInfo() const;
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) RequestedInfo
+      getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo>
-  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) static std::
+      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // For the disk serialization we require that a `GeometryInfo` is trivially

@@ -48,7 +48,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
-CPP_template(typename T, typename Transformation = std::identity)(
+CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<Transformation, T>)
     cppcoro::generator<const std::decay_t<std::invoke_result_t<
@@ -61,7 +61,7 @@ CPP_template(typename T, typename Transformation = std::identity)(
   }
 }
 
-CPP_template(typename T, typename Transformation = std::identity)(
+CPP_template(typename T, typename Transformation = ql::identity)(
     requires ql::ranges::input_range<
         T>) auto resultGenerator(T&& vector, size_t numItems,
                                  Transformation transformation = {}) {
@@ -70,7 +70,7 @@ CPP_template(typename T, typename Transformation = std::identity)(
          ql::views::transform(std::move(transformation));
 }
 
-template <typename Transformation = std::identity>
+template <typename Transformation = ql::identity>
 inline cppcoro::generator<
     const std::decay_t<std::invoke_result_t<Transformation, Id>>>
 resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
@@ -95,7 +95,7 @@ resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
 
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
-CPP_template(typename Input, typename Transformation = std::identity)(
+CPP_template(typename Input, typename Transformation = ql::identity)(
     requires SingleExpressionResult<
         Input>) auto makeGenerator(Input&& input, size_t numItems,
                                    const EvaluationContext* context,

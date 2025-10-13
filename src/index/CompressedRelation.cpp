@@ -1981,19 +1981,20 @@ auto createErrorMessage = [](const auto& b1, const auto& b2,
 // _____________________________________________________________________________
 // Check if the provided `Range` holds less than two `CompressedBlockMetadata`
 // values.
-template <typename Range>
-requires ql::ranges::input_range<Range>
-static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<
+        Range>) static bool checkBlockRangeSizeLessThanTwo(const Range&
+                                                               blockMetadataRange) {
   auto begin = ql::ranges::begin(blockMetadataRange);
   auto end = ql::ranges::end(blockMetadataRange);
   return begin == end || ql::ranges::next(begin) == end;
 };
 
 // _____________________________________________________________________________
-template <typename Range>
-requires ql::ranges::input_range<Range>
-static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
-    const Range& blockMetadataRange) {
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<
+        Range>) static void checkBlockMetadataInvariantOrderAndUniquenessImpl(const Range&
+                                                                                  blockMetadataRange) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
   }
@@ -2019,9 +2020,7 @@ static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
 }
 
 // ____________________________________________________________________________
-template <typename Range>
-requires ql::ranges::input_range<Range>
-static void checkBlockMetadataInvariantBlockConsistencyImpl(
+CPP_template(typename Range)(requires ql::ranges::input_range<Range>) static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
@@ -2072,15 +2071,15 @@ CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
   // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be
   // accessible as a span.
   AD_CONTRACT_CHECK(blockMetadata_.size() == 1);
-  // `std::span` object requires contiguous range.
+  // `ql::span` object requires contiguous range.
   static_assert(ql::ranges::contiguous_range<BlockMetadataRange>);
   const auto& blockMetadataRange = blockMetadata_.front();
-  return std::span(blockMetadataRange.begin(), blockMetadataRange.end());
+  return ql::span(blockMetadataRange.begin(), blockMetadataRange.end());
 }
 
 // _____________________________________________________________________________
 void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
-    std::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
+    ql::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);
   checkBlockMetadataInvariantBlockConsistencyImpl(blocks, firstFreeColIndex);
 }

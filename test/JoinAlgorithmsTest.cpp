@@ -68,14 +68,14 @@ using ad_utility::source_location;
 // more test cases automatically.
 template <bool DoOptionalJoin = false>
 void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   JoinResult result;
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
-    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, std::identity{},
-                                    std::identity{},
+    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, ql::identity{},
+                                    ql::identity{},
                                     ad_utility::OptionalJoinTag{});
   } else {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
@@ -104,7 +104,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
 }
 void testOptionalJoin(const NestedBlock& a, const NestedBlock& b,
                       JoinResult expected,
-                      source_location l = source_location::current()) {
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   testJoin<true>(a, b, std::move(expected), l);
 }
 }  // namespace
@@ -346,7 +346,7 @@ struct RowAdderWithUndef {
 void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
                               const std::vector<std::vector<FakeId>>& b,
                               std::vector<std::array<FakeId, 2>> expected,
-                              source_location l = source_location::current()) {
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   using namespace std::placeholders;
   using namespace std::ranges;
   auto trace = generateLocationTrace(l);
@@ -553,8 +553,7 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   RowAdderWithUndef adder{};
   std::vector<std::vector<FakeId>> dummyBlocks{};
   auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
-  auto joinSide =
-      ad_utility::detail::makeJoinSide(dummyBlocks, std::identity{});
+  auto joinSide = ad_utility::detail::makeJoinSide(dummyBlocks, ql::identity{});
   ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
                                                adder};
   EXPECT_FALSE(impl.isUndefined_("Something"));

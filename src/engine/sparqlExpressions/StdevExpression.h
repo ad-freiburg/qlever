@@ -6,10 +6,10 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
 
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <variant>
 
+#include "backports/functional.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"

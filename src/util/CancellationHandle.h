@@ -222,12 +222,11 @@ class CancellationHandle {
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
   CPP_template(typename Func = decltype(detail::printNothing))(
-      requires ad_utility::InvocableWithConvertibleReturnType<Func,
-                                                              std::string_view>)
-      AD_ALWAYS_INLINE void throwIfCancelled(
-          [[maybe_unused]] ad_utility::source_location location =
-              ad_utility::source_location::current(),
-          const Func& stageInvocable = detail::printNothing) {
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          Func, std::string_view>) AD_ALWAYS_INLINE
+      void throwIfCancelled([[maybe_unused]] ad_utility::source_location
+                                location = AD_CURRENT_SOURCE_LOC(),
+                            const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
@@ -248,9 +247,8 @@ class CancellationHandle {
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
   /// values. If the watchdog is enabled, this will please it and print
   /// a warning with the filename and line of the caller.
-  AD_ALWAYS_INLINE bool isCancelled(
-      [[maybe_unused]] ad_utility::source_location location =
-          ad_utility::source_location::current()) {
+  AD_ALWAYS_INLINE bool isCancelled([[maybe_unused]] ad_utility::source_location
+                                        location = AD_CURRENT_SOURCE_LOC()) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       bool isCancelled = detail::isCancelled(state);

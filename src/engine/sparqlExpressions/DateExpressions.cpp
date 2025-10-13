@@ -114,9 +114,9 @@ NARY_EXPRESSION(SecondsExpression, 1,
 //______________________________________________________________________________
 // `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
 // provided as a `SparqlExpression*` object.
-template <typename NaryOperation>
-requires(isOperation<NaryOperation>)
-class YearExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_class_template(typename NaryOperation)(
+    requires(isOperation<NaryOperation>)) class YearExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   bool isYearExpression() const override { return true; }

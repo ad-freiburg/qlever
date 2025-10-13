@@ -80,6 +80,17 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
+# Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
+# of `std::ranges` and the `std::enable_if_t` based expansion of the concept
+# macros from `range-v3`.
+option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)" OFF)
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+else ()
+    add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
+endif ()
+
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
@@ -130,7 +141,6 @@ FetchContent_Declare(
         GIT_TAG 5ae161451ec1baaac352d7567298d3ac143bccae # branch fork-for-qlever
 )
 
-add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 
 #################################
 # libspatialjoin
@@ -138,7 +148,7 @@ add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+        GIT_TAG 7f5c9007090cd1b902ad1873beb064820caebf39
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
@@ -195,7 +205,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -212,9 +222,9 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -231,14 +241,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
-# Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
-# of `std::ranges` and the `std::enable_if_t` based expansion of the concept
-# macros from `range-v3`.
-set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER})
-    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
-    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
-endif ()
 
 set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
 if (${VOCAB_UNCOMPRESSED_IN_MEMORY})

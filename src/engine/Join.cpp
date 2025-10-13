@@ -8,10 +8,10 @@
 
 #include "engine/Join.h"
 
-#include <functional>
 #include <sstream>
 #include <vector>
 
+#include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"

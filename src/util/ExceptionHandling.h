@@ -7,7 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <concepts>
 #include <exception>
 #include <iostream>
 
@@ -18,8 +17,8 @@
 
 namespace ad_utility {
 namespace detail {
-[[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
-  std::terminate();
+struct CallStdTerminate {
+  [[noreturn]] void operator()() const noexcept { std::terminate(); }
 };
 }  // namespace detail
 // Call `f()`. If this call throws, catch the exception and log it, but do not
@@ -27,7 +26,7 @@ namespace detail {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires std::invocable<ql::remove_cvref_t<
+    requires ql::concepts::invocable<ql::remove_cvref_t<
         F>>) void ignoreExceptionIfThrows(F&& f,
                                           std::string_view additionalNote =
                                               "") noexcept {
@@ -54,18 +53,15 @@ CPP_template(typename F)(
 // also is not easily recoverable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
-CPP_template(typename F,
-             typename TerminateAction = decltype(detail::callStdTerminate))(
-    requires std::invocable<ql::remove_cvref_t<F>> CPP_and
+CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>> CPP_and
         std::is_nothrow_invocable_v<
             TerminateAction>) void terminateIfThrows(F&& f,
                                                      std::string_view message,
                                                      TerminateAction
                                                          terminateAction = {},
-                                                     ad_utility::source_location
-                                                         l = ad_utility::
-                                                             source_location::
-                                                                 current()) noexcept {
+                                                     ad_utility::source_location l =
+                                                         AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(
@@ -118,9 +114,9 @@ class ThrowInDestructorIfSafe {
   int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
 
  public:
-  CPP_template(typename FuncType,
-               typename... Args)(requires std::invocable<FuncType> CPP_and(
-      ...&& std::convertible_to<Args, std::string_view>)) void
+  CPP_template(typename FuncType, typename... Args)(
+      requires ql::concepts::invocable<FuncType> CPP_and(
+          ...&& ql::concepts::convertible_to<Args, std::string_view>)) void
   operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";

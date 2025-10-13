@@ -4,14 +4,13 @@
 
 #include "PathSearch.h"
 
-#include <functional>
 #include <optional>
-#include <ranges>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "backports/iterator.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
