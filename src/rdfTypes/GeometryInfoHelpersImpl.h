@@ -5,11 +5,20 @@
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 
+#include <s2/s2latlng.h>
+#include <s2/s2loop.h>
+#include <s2/s2point.h>
+#include <s2/s2polygon.h>
+// TODO link s2?
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
 #include <array>
+#include <iostream>
+#include <memory>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -189,6 +198,45 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
+
+// TODO
+constexpr double EARTH_RADIUS_METERS = 6'371'000.0;
+constexpr double STERADIAN_TO_M2 = EARTH_RADIUS_METERS * EARTH_RADIUS_METERS;
+
+// Helper to convert a libspatialjoin `Ring` to an `S2Loop`
+inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<double>& ring) {
+  std::vector<S2Point> points;
+  for (const auto& latlon : ring) {
+    S2LatLng s2latlng = S2LatLng::FromDegrees(latlon.getY(), latlon.getX());
+    points.push_back(s2latlng.ToPoint());
+  }
+
+  // Ensure loop is closed
+  if (points.front() != points.back()) {
+    points.push_back(points.front());
+  }
+
+  auto loop = std::make_unique<S2Loop>(points);
+  loop->Normalize();  // Makes outer rings CCW and inner rings CW automatically
+  return loop;
+}
+
+// Compute the area of a polygon in square meters on earth using s2
+inline double computePolygonWithHolesArea(const DPolygon& polygon) {
+  std::vector<std::unique_ptr<S2Loop>> loops;
+
+  // Outer boundary
+  loops.push_back(makeS2Loop(polygon.getOuter()));
+
+  // Holes
+  for (const auto& hole : polygon.getInners()) {
+    loops.push_back(makeS2Loop(hole));
+  }
+
+  S2Polygon s2polygon;
+  s2polygon.InitNested(std::move(loops));
+  return s2polygon.GetArea() * STERADIAN_TO_M2;
+}
 
 }  // namespace ad_utility::detail
 
