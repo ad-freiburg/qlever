@@ -1,0 +1,65 @@
+# Dockerfile for building QLever with GCC8 for C++17 compatibility testing
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install basic build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    wget \
+    git \
+    pkg-config \
+    python3 \
+    python3-yaml \
+    python3-icu \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CMake 3.27
+RUN wget https://cmake.org/files/v3.27/cmake-3.27.0-linux-x86_64.tar.gz && \
+    tar -xzvf cmake-3.27.0-linux-x86_64.tar.gz && \
+    mv cmake-3.27.0-linux-x86_64 /opt/cmake && \
+    rm cmake-3.27.0-linux-x86_64.tar.gz
+ENV PATH="/opt/cmake/bin:$PATH"
+
+# Install third-party libraries
+RUN apt-get update && apt-get install -y \
+    libicu-dev \
+    tzdata \
+    libzstd-dev \
+    libjemalloc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install boost from PPA
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:mhier/libboost-latest && \
+    apt-get update && \
+    apt-get install -y \
+    libboost1.81-all-dev \
+    libboost-url1.81-dev \
+    libboost-container1.81-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GCC8 from Ubuntu packages
+RUN cd /tmp && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.edge.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8-base_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/cpp-8_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libmpx2_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/main/i/isl/libisl22_0.22.1-1_amd64.deb && \
+    apt-get install -y ./libisl22_0.22.1-1_amd64.deb ./libmpx2_8.4.0-3ubuntu2_amd64.deb ./cpp-8_8.4.0-3ubuntu2_amd64.deb ./libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb ./gcc-8-base_8.4.0-3ubuntu2_amd64.deb ./gcc-8_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/g++-8_8.4.0-3ubuntu2_amd64.deb && \
+    apt-get install -y ./libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb ./g++-8_8.4.0-3ubuntu2_amd64.deb && \
+    rm -rf /tmp/*.deb
+
+# Install mold linker
+RUN apt-get update && apt-get install -y mold && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /qlever
+
+# Default command (can be overridden)
+CMD ["/bin/bash"]
