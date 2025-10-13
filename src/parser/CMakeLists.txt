@@ -32,4 +32,5 @@ add_library(parser
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 util engine index rdfTypes)
 
 add_library(onlySpatialQuery SpatialQuery.cpp)
+qlever_target_link_libraries(onlySpatialQuery re2::re2)
 
