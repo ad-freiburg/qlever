@@ -11,6 +11,7 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/functional/bind_front.h>
 
+#include "backports/functional.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -103,7 +104,7 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
 
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
-template <typename S, typename Transformation = std::identity>
+template <typename S, typename Transformation = ql::identity>
 inline auto resultGenerator(S&& input, size_t targetSize,
                             Transformation transformation = {}) {
   auto gen =
