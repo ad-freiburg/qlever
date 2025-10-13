@@ -26,7 +26,6 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
-#include "util/InputRangeUtils.h"
 
 // _____________________________________________________________________________
 TransitivePathBase::TransitivePathBase(
