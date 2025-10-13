@@ -11,6 +11,7 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/functional/bind_front.h>
 
+#include "backports/functional.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -69,17 +70,23 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 }
 
 template <typename Transformation = ql::identity>
-inline cppcoro::generator<
-    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
-resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
-                Transformation transformation = {}) {
-  size_t i = 0;
-  const auto trueTransformed = transformation(Id::makeFromBool(true));
-  const auto falseTransformed = transformation(Id::makeFromBool(false));
-  for (const auto& [begin, end] : set._intervals) {
-    while (i < begin) {
-      co_yield falseTransformed;
-      ++i;
+inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
+                                size_t targetSize,
+                                Transformation transformation = {}) {
+  struct Bounds {
+    size_t num_;
+    bool value_;
+  };
+  absl::InlinedVector<Bounds, 10> bounds;
+  bounds.reserve(set._intervals.size() * 2 + 1);
+  size_t last = 0;
+  for (const auto& [lower, upper] : set._intervals) {
+    AD_CONTRACT_CHECK(upper <= targetSize);
+    if (lower != last) {
+      bounds.push_back(Bounds{lower - last, false});
+    }
+    if (lower != upper) {
+      bounds.push_back(Bounds{upper - lower, true});
     }
     last = upper;
   }
@@ -97,7 +104,7 @@ resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
 
 // The actual `resultGenerator` that uses type erasure (if not specified
 // otherwise) to the `resultGeneratorImpl` to keep the compile times reasonable.
-template <typename S, typename Transformation = std::identity>
+template <typename S, typename Transformation = ql::identity>
 inline auto resultGenerator(S&& input, size_t targetSize,
                             Transformation transformation = {}) {
   auto gen =
