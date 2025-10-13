@@ -11,7 +11,7 @@ IMAGE_TAG="latest"
 echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
 echo "This may take several minutes..."
 
-docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" -f "${SCRIPT_DIR}/Dockerfile.gcc8" "${REPO_ROOT}"
+DOCKER_BUILDKIT=0 docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" -f "${SCRIPT_DIR}/Dockerfile.gcc8" "${REPO_ROOT}"
 
 echo ""
 echo "Docker image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
