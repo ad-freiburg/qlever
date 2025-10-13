@@ -55,7 +55,7 @@ CPP_template(typename InputRange, typename AggregatorT,
 // the elements that are yielded by the created `generator`.
 template <typename T, typename F>
 cppcoro::generator<T> generatorFromActionWithCallback(F functionWithCallback)
-    requires std::invocable<F, std::function<void(T)>> {
+    requires ql::concepts::invocable<F, std::function<void(T)>> {
   std::mutex mutex;
   std::condition_variable cv;
 

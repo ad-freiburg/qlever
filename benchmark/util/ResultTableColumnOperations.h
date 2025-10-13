@@ -28,14 +28,17 @@ CPP_template(typename Type)(
   const size_t columnNum_;
 };
 
-template <typename ColumnReturnType, typename... ColumnInputTypes>
-requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
-    ResultTable* const table,
-    QL_CONCEPT_OR_NOTHING(
-        ad_utility::InvocableWithSimilarReturnType<
-            ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
-    const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
-    const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
+// clang-format off
+CPP_variadic_template(typename ColumnReturnType, typename... ColumnInputTypes)
+  (requires(sizeof...(ColumnInputTypes) > 0))
+    // clang-format on
+    void generateColumnWithColumnInput(
+        ResultTable* const table,
+        QL_CONCEPT_OR_NOTHING(
+            ad_utility::InvocableWithSimilarReturnType<
+                ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
+        const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
+        const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
   // Using a column more than once is the sign of an error.
   std::array<size_t, sizeof...(ColumnInputTypes)> allColumnNums{
       {inputColumns.columnNum_...}};
@@ -55,12 +58,16 @@ requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
 /*
 @brief Vector addition with `ResultTable` columns.
 */
-template <typename ColumnReturnType,
-          std::same_as<ColumnNumWithType<ColumnReturnType>>... ColumnInputTypes>
-requires(sizeof...(ColumnInputTypes) > 1) void sumUpColumns(
-    ResultTable* const table,
-    const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
-    const ColumnInputTypes&... columnsToSumUp) {
+// clang-format off
+CPP_variadic_template(typename ColumnReturnType,
+          typename... ColumnInputTypes)
+          (requires((ql::concepts::same_as<ColumnInputTypes, ColumnNumWithType<ColumnReturnType>> && ...)
+            && sizeof...(ColumnInputTypes) > 1))
+    // clang-format on
+    void sumUpColumns(
+        ResultTable* const table,
+        const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
+        const ColumnInputTypes&... columnsToSumUp) {
   // We can simply pass this to `generateColumnWithColumnInput`.
   generateColumnWithColumnInput(
       table,

@@ -7,13 +7,13 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
-#include <functional>
 #include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "backports/functional.h"
 #include "global/Constants.h"
 #include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
@@ -118,7 +118,7 @@ TEST(StringUtils, listToString) {
                         multiValueVector, " -> ");
 
   /*
-  `ql::ranges::views` can cause dangling pointers, if a `std::identity` is
+  `ql::ranges::views` can cause dangling pointers, if a `ql::identity` is
   called with one, that returns r-values.
   */
   /*
@@ -130,7 +130,7 @@ TEST(StringUtils, listToString) {
       multiValueVector, [](const int& num) -> int { return num + 10; });
   doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  auto identityView = ql::views::transform(multiValueVector, std::identity{});
+  auto identityView = ql::views::transform(multiValueVector, ql::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
   // Test, that uses an actual `ql::ranges::input_range`. That is, a range who

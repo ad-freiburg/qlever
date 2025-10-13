@@ -8,7 +8,6 @@
 #define QLEVER_SRC_UTIL_CACHE_H
 
 #include <cassert>
-#include <concepts>
 #include <limits>
 #include <memory>
 #include <utility>

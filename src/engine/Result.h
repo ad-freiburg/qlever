@@ -8,7 +8,6 @@
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <ranges>
 #include <variant>
 #include <vector>
 
@@ -225,9 +224,9 @@ class Result {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and
-          std::convertible_to<ql::ranges::range_value_t<R>,
-                              const Result&>) static SharedLocalVocabWrapper
+      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
+          convertible_to<ql::ranges::range_value_t<R>,
+                         const Result&>) static SharedLocalVocabWrapper
       getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {

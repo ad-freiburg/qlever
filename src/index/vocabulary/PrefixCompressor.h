@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"

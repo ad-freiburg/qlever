@@ -139,7 +139,7 @@ struct CheckConfigOptionConversion {
 };
 
 TEST(ConfigOptionProxy, ConversionToConfigOption) {
-  // A function variant of `std::identity`, where you can give the type.
+  // A function variant of `ql::identity`, where you can give the type.
   auto identity = [](auto t) -> decltype(t) { return t; };
 
   doForTypeInConfigOptionValueType(

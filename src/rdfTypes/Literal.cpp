@@ -7,7 +7,7 @@
 #include <utility>
 #include <variant>
 
-#include "backports/StartsWith.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"

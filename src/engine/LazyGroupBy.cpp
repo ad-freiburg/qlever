@@ -20,8 +20,8 @@ LazyGroupBy::LazyGroupBy(
         [&aggregateInfo](auto& arg) {
           using T = std::decay_t<decltype(arg)>;
           static_assert(VectorOfAggregationData<T>);
-          if constexpr (std::same_as<typename T::value_type,
-                                     GroupConcatAggregationData>) {
+          if constexpr (ql::concepts::same_as<typename T::value_type,
+                                              GroupConcatAggregationData>) {
             arg.emplace_back(aggregateInfo.aggregateType_.separator_.value());
           } else {
             arg.emplace_back();

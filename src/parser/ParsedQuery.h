@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
@@ -38,7 +39,7 @@ class SparqlPrefix {
 
   [[nodiscard]] std::string asString() const;
 
-  bool operator==(const SparqlPrefix&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlPrefix, _prefix, _uri)
 };
 
 // Forward declaration

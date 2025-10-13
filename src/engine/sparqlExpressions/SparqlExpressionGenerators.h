@@ -49,7 +49,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
-CPP_template(typename T, typename Transformation = std::identity)(
+CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<
             Transformation,
@@ -59,7 +59,7 @@ CPP_template(typename T, typename Transformation = std::identity)(
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 
-CPP_template(typename T, typename Transformation = std::identity)(
+CPP_template(typename T, typename Transformation = ql::identity)(
     requires ql::ranges::input_range<
         T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
                                      Transformation transformation = {}) {
@@ -68,24 +68,18 @@ CPP_template(typename T, typename Transformation = std::identity)(
          ql::views::transform(std::move(transformation));
 }
 
-template <typename Transformation = std::identity>
-inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
-                                size_t targetSize,
-                                Transformation transformation = {}) {
-  struct Bounds {
-    size_t num_;
-    bool value_;
-  };
-  absl::InlinedVector<Bounds, 10> bounds;
-  bounds.reserve(set._intervals.size() * 2 + 1);
-  size_t last = 0;
-  for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize);
-    if (lower != last) {
-      bounds.push_back(Bounds{lower - last, false});
-    }
-    if (lower != upper) {
-      bounds.push_back(Bounds{upper - lower, true});
+template <typename Transformation = ql::identity>
+inline cppcoro::generator<
+    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
+                Transformation transformation = {}) {
+  size_t i = 0;
+  const auto trueTransformed = transformation(Id::makeFromBool(true));
+  const auto falseTransformed = transformation(Id::makeFromBool(false));
+  for (const auto& [begin, end] : set._intervals) {
+    while (i < begin) {
+      co_yield falseTransformed;
+      ++i;
     }
     last = upper;
   }
@@ -133,7 +127,7 @@ inline auto resultGenerator(S&& input, size_t targetSize,
 
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
-CPP_template(typename Input, typename Transformation = std::identity)(
+CPP_template(typename Input, typename Transformation = ql::identity)(
     requires SingleExpressionResult<
         Input>) auto makeGenerator(Input&& input, size_t numItems,
                                    const EvaluationContext* context,

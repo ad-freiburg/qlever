@@ -67,7 +67,7 @@ runs:
 
     - name: Install boost from PPA
       if: inputs.install-third-party-libraries == 'true'
-      run: sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.81-all-dev libboost-url1.81-dev
+      run: sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.81-all-dev libboost-url1.81-dev libboost-container1.81-dev
       shell: bash
 
     - name: Install Python packages for E2E tests
