@@ -286,6 +286,27 @@ class VocabularyMerger {
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 
+  // Helper: Create comparator functions from a word comparator.
+  template <typename W>
+  static auto makeComparators(W comparator);
+
+  // Helper: Create a generator that reads words from a partial vocabulary file.
+  static auto makePartialVocabGenerator(const std::string& basename,
+                                        size_t fileIndex);
+
+  // Helper: Create a generator that reads words from a batch vocabulary file.
+  static auto makeBatchVocabGenerator(const std::string& basename,
+                                      size_t batchIndex);
+
+  // Helper: Process a queue word and update metadata/mappings.
+  // Returns true if this is a new unique word.
+  template <typename C, typename L>
+  bool processQueueWord(const QueueWord& word, C& wordCallback,
+                        const L& lessThan, ad_utility::ProgressBar& progressBar)
+      requires WordCallback<C> &&
+               ranges::predicate<L, TripleComponentWithIndex,
+                                 TripleComponentWithIndex>;
+
   // Merge a batch of partial vocabulary files into a single batch file.
   // Returns the number of words in the merged batch.
   template <typename W>

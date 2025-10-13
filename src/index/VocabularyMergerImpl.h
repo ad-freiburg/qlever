@@ -65,38 +65,16 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return mergeTwoStage(basename, numFiles, std::move(comparator),
                          wordCallback, memoryToUse);
   }
-  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal.
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
-  };
-  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
-                                      const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
-  };
 
-  // Open and prepare all infiles and file-based output vectors.
-  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
-    uint64_t numWords;
-    infile >> numWords;
+  // Create comparators
+  auto [lessThan, lessThanForQueue] = makeComparators(comparator);
 
-    return ad_utility::CachingTransformInputRange{
-        ad_utility::integerRange(numWords),
-        [fileIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
-          TripleComponentWithIndex val;
-          infile >> val;
-          return QueueWord{std::move(val), fileIndex};
-        }};
-  };
-  std::vector<decltype(makeWordRangeFromFile(0))> generators;
+  // Create input generators for all partial vocabulary files
+  std::vector<decltype(makePartialVocabGenerator(basename, 0))> generators;
   generators.reserve(numFiles);
 
   for (std::size_t i : ad_utility::integerRange(numFiles)) {
-    generators.push_back(makeWordRangeFromFile(i));
+    generators.push_back(makePartialVocabGenerator(basename, i));
     idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
 
@@ -177,39 +155,10 @@ CPP_template_def(typename C, typename L)(
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
-    if (!lastTripleComponent_.has_value() ||
-        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
-      }
-      lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
+    // Process the word and update metadata
+    processQueueWord(top, wordCallback, lessThan, progressBar);
 
-      // TODO<optimization> If we aim to further speed this up, we could
-      // order all the write requests to _outfile _externalOutfile and all the
-      // idVecs to have a more useful external access pattern.
-
-      // Write the new word to the vocabulary.
-      auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
-        nextWord.index_ = metaData_.getNextBlankNodeIndex();
-      } else {
-        nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
-      }
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it.
-      bool& external = lastTripleComponent_.value().isExternal();
-      external = external || top.isExternal();
-    }
+    // Get the current word (which has been updated by processQueueWord)
     const auto& word = lastTripleComponent_.value();
     Id targetId =
         word.isBlankNode()
@@ -249,6 +198,109 @@ inline void VocabularyMerger::doActualWrite(
   }
 }
 
+// ____________________________________________________________________________
+// Helper: Create comparator functions from a word comparator.
+template <typename W>
+auto VocabularyMerger::makeComparators(W comparator) {
+  // Comparator for TripleComponentWithIndex
+  auto lessThan = [comp = std::move(comparator)](
+                      const TripleComponentWithIndex& t1,
+                      const TripleComponentWithIndex& t2) {
+    return comp(t1.iriOrLiteral_, t2.iriOrLiteral_);
+  };
+
+  // Comparator for QueueWord
+  auto lessThanForQueue = [lessThan](const QueueWord& p1,
+                                     const QueueWord& p2) {
+    return lessThan(p1.entry_, p2.entry_);
+  };
+
+  return std::make_pair(std::move(lessThan), std::move(lessThanForQueue));
+}
+
+// ____________________________________________________________________________
+// Helper: Create a generator that reads words from a partial vocabulary file.
+inline auto VocabularyMerger::makePartialVocabGenerator(
+    const std::string& basename, size_t fileIndex) {
+  ad_utility::serialization::FileReadSerializer infile{
+      absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
+  uint64_t numWords;
+  infile >> numWords;
+
+  return ad_utility::CachingTransformInputRange{
+      ad_utility::integerRange(numWords),
+      [fileIndex, infile{std::move(infile)}](
+          [[maybe_unused]] const std::size_t i) mutable {
+        TripleComponentWithIndex val;
+        infile >> val;
+        return QueueWord{std::move(val), fileIndex};
+      }};
+}
+
+// ____________________________________________________________________________
+// Helper: Create a generator that reads words from a batch vocabulary file.
+inline auto VocabularyMerger::makeBatchVocabGenerator(
+    const std::string& basename, size_t batchIndex) {
+  ad_utility::serialization::FileReadSerializer infile{
+      absl::StrCat(basename, BATCH_VOCAB_WORDS_INFIX, batchIndex)};
+  uint64_t numWords;
+  infile >> numWords;
+
+  return ad_utility::CachingTransformInputRange{
+      ad_utility::integerRange(numWords),
+      [batchIndex, infile{std::move(infile)}](
+          [[maybe_unused]] const std::size_t i) mutable {
+        TripleComponentWithIndex val;
+        infile >> val;
+        return QueueWord{std::move(val), batchIndex};
+      }};
+}
+
+// ____________________________________________________________________________
+// Helper: Process a queue word and update metadata/mappings.
+// Returns true if this is a new unique word.
+template <typename C, typename L>
+bool VocabularyMerger::processQueueWord(
+    const QueueWord& word, C& wordCallback, const L& lessThan,
+    ad_utility::ProgressBar& progressBar)
+    requires WordCallback<C> &&
+             ranges::predicate<L, TripleComponentWithIndex,
+                               TripleComponentWithIndex> {
+  bool isNewWord =
+      !lastTripleComponent_.has_value() ||
+      word.iriOrLiteral() != lastTripleComponent_->iriOrLiteral();
+
+  if (isNewWord) {
+    if (lastTripleComponent_.has_value() &&
+        !lessThan(*lastTripleComponent_, word.entry_)) {
+      AD_LOG_WARN << "Vocabulary order violated for "
+                  << lastTripleComponent_->iriOrLiteral() << " and "
+                  << word.iriOrLiteral() << std::endl;
+    }
+    lastTripleComponent_ = TripleComponentWithIndex{
+        word.iriOrLiteral(), word.isExternal(), metaData_.numWordsTotal()};
+
+    // Write the new word to the vocabulary.
+    auto& nextWord = lastTripleComponent_.value();
+    if (nextWord.isBlankNode()) {
+      nextWord.index_ = metaData_.getNextBlankNodeIndex();
+    } else {
+      nextWord.index_ =
+          wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+      metaData_.addWord(word.iriOrLiteral(), nextWord.index_);
+    }
+    if (progressBar.update()) {
+      AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+    }
+  } else {
+    // If a word appears with different values for `isExternal`, externalize it.
+    bool& external = lastTripleComponent_->isExternal();
+    external = external || word.isExternal();
+  }
+
+  return isNewWord;
+}
+
 // ________________________________________________________________________________
 // Write queue words for two-stage merging. This is similar to
 // writeQueueWordsToIdMap but writes to batch-to-global ID maps instead of
@@ -264,36 +316,10 @@ CPP_template_def(typename C, typename L)(
   AD_LOG_TIMING << "Start writing a batch of merged words (two-stage)\n";
 
   for (auto& top : buffer) {
-    if (!lastTripleComponent_.has_value() ||
-        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
-      }
-      lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
+    // Process the word and update metadata
+    processQueueWord(top, wordCallback, lessThan, progressBar);
 
-      // Write the new word to the vocabulary.
-      auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
-        nextWord.index_ = metaData_.getNextBlankNodeIndex();
-      } else {
-        nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
-      }
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it.
-      bool& external = lastTripleComponent_.value().isExternal();
-      external = external || top.isExternal();
-    }
-
+    // Get the current word (which has been updated by processQueueWord)
     const auto& word = lastTripleComponent_.value();
     Id targetId =
         word.isBlankNode()
@@ -457,36 +483,14 @@ size_t VocabularyMerger::mergeSingleBatch(const std::string& basename,
   AD_LOG_INFO << "Merging batch " << batchIndex << " (files " << startFile
               << " to " << endFile << ")" << std::endl;
 
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
-  };
-  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
-                                      const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
-  };
+  // Create comparators
+  auto [lessThan, lessThanForQueue] = makeComparators(comparator);
 
   // Create input generators for this batch
-  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
-    uint64_t numWords;
-    infile >> numWords;
-
-    return ad_utility::CachingTransformInputRange{
-        ad_utility::integerRange(numWords),
-        [fileIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
-          TripleComponentWithIndex val;
-          infile >> val;
-          return QueueWord{std::move(val), fileIndex};
-        }};
-  };
-
-  std::vector<decltype(makeWordRangeFromFile(0))> generators;
+  std::vector<decltype(makePartialVocabGenerator(basename, 0))> generators;
   generators.reserve(endFile - startFile);
   for (size_t i = startFile; i < endFile; ++i) {
-    generators.push_back(makeWordRangeFromFile(i));
+    generators.push_back(makePartialVocabGenerator(basename, i));
   }
 
   // Open output file for merged batch vocabulary
@@ -595,36 +599,14 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
   AD_LOG_INFO << "Stage 2: Merging " << numBatches
               << " batch files into final vocabulary" << std::endl;
 
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
-  };
-  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
-                                      const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
-  };
+  // Create comparators
+  auto [lessThan, lessThanForQueue] = makeComparators(comparator);
 
   // Create generators for batch files
-  auto makeWordRangeFromBatchFile = [&basename](size_t batchIndex) {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, BATCH_VOCAB_WORDS_INFIX, batchIndex)};
-    uint64_t numWords;
-    infile >> numWords;
-
-    return ad_utility::CachingTransformInputRange{
-        ad_utility::integerRange(numWords),
-        [batchIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
-          TripleComponentWithIndex val;
-          infile >> val;
-          return QueueWord{std::move(val), batchIndex};
-        }};
-  };
-
-  std::vector<decltype(makeWordRangeFromBatchFile(0))> batchGenerators;
+  std::vector<decltype(makeBatchVocabGenerator(basename, 0))> batchGenerators;
   batchGenerators.reserve(numBatches);
   for (size_t i = 0; i < numBatches; ++i) {
-    batchGenerators.push_back(makeWordRangeFromBatchFile(i));
+    batchGenerators.push_back(makeBatchVocabGenerator(basename, i));
   }
 
   // Create ID map writers for batch-local ID -> global ID
