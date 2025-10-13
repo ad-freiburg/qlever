@@ -20,14 +20,16 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral =
-    [](std::string_view normalizedContent,
-       const std::optional<std::variant<Iri, std::string>>& descriptor =
-           std::nullopt) {
-      return LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
-    };
+struct ToLiteral {
+  LiteralOrIri operator()(std::string_view normalizedContent,
+                          const std::optional<std::variant<Iri, std::string>>&
+                              descriptor = std::nullopt) const {
+    return LiteralOrIri{
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+  }
+};
+static constexpr ToLiteral toLiteral{};
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -75,15 +77,16 @@ static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
 }
 
 // String functions.
-[[maybe_unused]] auto strImpl =
-    [](std::optional<std::string> s) -> IdOrLiteralOrIri {
-  if (s.has_value()) {
-    return IdOrLiteralOrIri{toLiteral(s.value())};
-  } else {
-    return Id::makeUndefined();
+struct StrImpl {
+  IdOrLiteralOrIri operator()(std::optional<std::string> s) const {
+    if (s.has_value()) {
+      return IdOrLiteralOrIri{toLiteral(s.value())};
+    } else {
+      return Id::makeUndefined();
+    }
   }
 };
-NARY_EXPRESSION(StrExpressionImpl, 1, FV<decltype(strImpl), StringValueGetter>);
+NARY_EXPRESSION(StrExpressionImpl, 1, FV<StrImpl, StringValueGetter>);
 
 class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
@@ -133,30 +136,32 @@ const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
   return baseIriOrUri.getIri();
 }
 
-[[maybe_unused]] auto applyBaseIfPresent =
-    [](IdOrLiteralOrIri iri, const IdOrLiteralOrIri& base) -> IdOrLiteralOrIri {
-  if (std::holds_alternative<Id>(iri)) {
-    AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
-    return iri;
+struct ApplyBaseIfPresent {
+  IdOrLiteralOrIri operator()(IdOrLiteralOrIri iri,
+                              const IdOrLiteralOrIri& base) const {
+    if (std::holds_alternative<Id>(iri)) {
+      AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
+      return iri;
+    }
+    const auto& baseIri = extractIri(base);
+    if (baseIri.empty()) {
+      return iri;
+    }
+    // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
+    return LiteralOrIri{Iri::fromIrirefConsiderBase(
+        extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
+        baseIri.getBaseIri(true))};
   }
-  const auto& baseIri = extractIri(base);
-  if (baseIri.empty()) {
-    return iri;
-  }
-  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
-  return LiteralOrIri{Iri::fromIrirefConsiderBase(
-      extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
-      baseIri.getBaseIri(true))};
 };
-using IriOrUriExpression =
-    NARY<2, FV<decltype(applyBaseIfPresent), IriOrUriValueGetter>>;
+using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
 
 // STRLEN
-[[maybe_unused]] auto strlen = [](std::string_view s) {
-  return Id::makeFromInt(utf8Length(s));
+struct Strlen {
+  Id operator()(std::string_view s) const {
+    return Id::makeFromInt(utf8Length(s));
+  }
 };
-using StrlenExpression =
-    StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
+using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<Strlen>>;
 
 // UCase and LCase
 template <auto toLowerOrToUpper>
@@ -252,9 +257,10 @@ using SubstrExpression =
                           NumericValueGetter>;
 
 // STRSTARTS
-[[maybe_unused]] auto strStartsImpl = [](std::string_view text,
-                                         std::string_view pattern) -> Id {
-  return Id::makeFromBool(ql::starts_with(text, pattern));
+struct StrStartsImpl {
+  Id operator()(std::string_view text, std::string_view pattern) const {
+    return Id::makeFromBool(ql::starts_with(text, pattern));
+  }
 };
 
 namespace {
@@ -289,124 +295,127 @@ CPP_template(typename NaryOperation)(
 
 }  // namespace
 
-using StrStartsExpression = StrStartsExpressionImpl<Operation<
-    2, FV<LiftStringFunction<decltype(strStartsImpl)>, StringValueGetter>>>;
+using StrStartsExpression = StrStartsExpressionImpl<
+    Operation<2, FV<LiftStringFunction<StrStartsImpl>, StringValueGetter>>>;
 
 // STRENDS
-[[maybe_unused]] auto strEndsImpl = [](std::string_view text,
-                                       std::string_view pattern) {
-  return Id::makeFromBool(ql::ends_with(text, pattern));
+struct StrEndsImpl {
+  Id operator()(std::string_view text, std::string_view pattern) const {
+    return Id::makeFromBool(ql::ends_with(text, pattern));
+  }
 };
 
 using StrEndsExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strEndsImpl)>,
-                         StringValueGetter>;
+    StringExpressionImpl<2, LiftStringFunction<StrEndsImpl>, StringValueGetter>;
 
 // STRCONTAINS
-[[maybe_unused]] auto containsImpl = [](std::string_view text,
-                                        std::string_view pattern) {
-  return Id::makeFromBool(text.find(pattern) != std::string::npos);
+struct ContainsImpl {
+  Id operator()(std::string_view text, std::string_view pattern) const {
+    return Id::makeFromBool(text.find(pattern) != std::string::npos);
+  }
 };
 
 using ContainsExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(containsImpl)>,
+    StringExpressionImpl<2, LiftStringFunction<ContainsImpl>,
                          StringValueGetter>;
 
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
-[[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::optional<ad_utility::triple_component::Literal> optLiteral,
-       std::optional<ad_utility::triple_component::Literal> optPattern)
-    -> IdOrLiteralOrIri {
-  if (!optPattern.has_value() || !optLiteral.has_value()) {
-    return Id::makeUndefined();
-  }
-  auto& literal = optLiteral.value();
-  const auto& patternLit = optPattern.value();
-  // Check if arguments are compatible with their language tags.
-  if (patternLit.hasLanguageTag() &&
-      (!literal.hasLanguageTag() ||
-       literal.getLanguageTag() != patternLit.getLanguageTag())) {
-    return Id::makeUndefined();
-  }
-  const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
-  //  Required by the SPARQL standard.
-  if (pattern.empty()) {
-    if (isStrAfter) {
-      return LiteralOrIri(std::move(literal));
-    } else {
-      literal.setSubstr(0, 0);
-      return LiteralOrIri(std::move(literal));
+struct StrAfterOrBeforeImpl {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> optLiteral,
+      std::optional<ad_utility::triple_component::Literal> optPattern) const {
+    if (!optPattern.has_value() || !optLiteral.has_value()) {
+      return Id::makeUndefined();
     }
+    auto& literal = optLiteral.value();
+    const auto& patternLit = optPattern.value();
+    // Check if arguments are compatible with their language tags.
+    if (patternLit.hasLanguageTag() &&
+        (!literal.hasLanguageTag() ||
+         literal.getLanguageTag() != patternLit.getLanguageTag())) {
+      return Id::makeUndefined();
+    }
+    const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
+    //  Required by the SPARQL standard.
+    if (pattern.empty()) {
+      if (isStrAfter) {
+        return LiteralOrIri(std::move(literal));
+      } else {
+        literal.setSubstr(0, 0);
+        return LiteralOrIri(std::move(literal));
+      }
+    }
+    auto literalContent = literal.getContent();
+    auto pos = asStringViewUnsafe(literalContent).find(pattern);
+    if (pos >= literalContent.size()) {
+      return toLiteral("");
+    }
+    if constexpr (isStrAfter) {
+      literal.setSubstr(pos + pattern.size(),
+                        literalContent.size() - pos - pattern.size());
+    } else {
+      // STRBEFORE
+      literal.setSubstr(0, pos);
+    }
+    return LiteralOrIri(std::move(literal));
   }
-  auto literalContent = literal.getContent();
-  auto pos = asStringViewUnsafe(literalContent).find(pattern);
-  if (pos >= literalContent.size()) {
-    return toLiteral("");
-  }
-  if constexpr (isStrAfter) {
-    literal.setSubstr(pos + pattern.size(),
-                      literalContent.size() - pos - pattern.size());
-  } else {
-    // STRBEFORE
-    literal.setSubstr(0, pos);
-  }
-  return LiteralOrIri(std::move(literal));
 };
 
-auto strAfter = strAfterOrBeforeImpl<true>;
 using StrAfterExpression =
-    LiteralExpressionImpl<2, decltype(strAfter),
+    LiteralExpressionImpl<2, StrAfterOrBeforeImpl<true>,
                           LiteralValueGetterWithoutStrFunction>;
 
-auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    LiteralExpressionImpl<2, decltype(strBefore),
+    LiteralExpressionImpl<2, StrAfterOrBeforeImpl<false>,
                           LiteralValueGetterWithoutStrFunction>;
 
-[[maybe_unused]] auto mergeFlagsIntoRegex =
-    [](std::optional<std::string> regex,
-       const std::optional<std::string>& flags) -> IdOrLiteralOrIri {
-  if (!flags.has_value() || !regex.has_value()) {
-    return Id::makeUndefined();
-  }
-  auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
-  if (firstInvalidFlag != std::string::npos) {
-    return Id::makeUndefined();
-  }
+struct MergeFlagsIntoRegex {
+  IdOrLiteralOrIri operator()(std::optional<std::string> regex,
+                              const std::optional<std::string>& flags) const {
+    if (!flags.has_value() || !regex.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
+    if (firstInvalidFlag != std::string::npos) {
+      return Id::makeUndefined();
+    }
 
-  // In Google RE2 the flags are directly part of the regex.
-  std::string result =
-      flags.value().empty()
-          ? std::move(regex.value())
-          : absl::StrCat("(?", flags.value(), ":", regex.value() + ")");
-  return toLiteral(std::move(result));
+    // In Google RE2 the flags are directly part of the regex.
+    std::string result =
+        flags.value().empty()
+            ? std::move(regex.value())
+            : absl::StrCat("(?", flags.value(), ":", regex.value() + ")");
+    return toLiteral(std::move(result));
+  }
 };
 
 using MergeRegexPatternAndFlagsExpression =
-    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
+    StringExpressionImpl<2, MergeFlagsIntoRegex, LiteralFromIdGetter>;
 
-[[maybe_unused]] auto replaceImpl =
-    [](std::optional<ad_utility::triple_component::Literal> s,
-       const std::shared_ptr<RE2>& pattern,
-       const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!s.has_value() || !pattern || !replacement.has_value()) {
-    return Id::makeUndefined();
+struct ReplaceImpl {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> s,
+      const std::shared_ptr<RE2>& pattern,
+      const std::optional<std::string>& replacement) const {
+    if (!s.has_value() || !pattern || !replacement.has_value()) {
+      return Id::makeUndefined();
+    }
+    std::string in(asStringViewUnsafe(s.value().getContent()));
+    const auto& pat = *pattern;
+    // Check for invalid regexes.
+    if (!pat.ok()) {
+      return Id::makeUndefined();
+    }
+    const auto& repl = replacement.value();
+    RE2::GlobalReplace(&in, pat, repl);
+    s.value().replaceContent(in);
+    return LiteralOrIri(std::move(s.value()));
   }
-  std::string in(asStringViewUnsafe(s.value().getContent()));
-  const auto& pat = *pattern;
-  // Check for invalid regexes.
-  if (!pat.ok()) {
-    return Id::makeUndefined();
-  }
-  const auto& repl = replacement.value();
-  RE2::GlobalReplace(&in, pat, repl);
-  s.value().replaceContent(in);
-  return LiteralOrIri(std::move(s.value()));
 };
 
 using ReplaceExpression =
-    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+    LiteralExpressionImpl<3, ReplaceImpl, RegexValueGetter,
                           ReplacementStringGetter>;
 
 // CONCAT
@@ -544,67 +553,70 @@ class ConcatExpression : public detail::VariadicExpression {
 };
 
 // ENCODE_FOR_URI
-[[maybe_unused]] auto encodeForUriImpl =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    std::string_view value{input.value()};
+struct EncodeForUriImpl {
+  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
+    if (!input.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      std::string_view value{input.value()};
 
-    return toLiteral(boost::urls::encode(value, boost::urls::unreserved_chars));
+      return toLiteral(
+          boost::urls::encode(value, boost::urls::unreserved_chars));
+    }
   }
 };
-using EncodeForUriExpression =
-    StringExpressionImpl<1, decltype(encodeForUriImpl)>;
+using EncodeForUriExpression = StringExpressionImpl<1, EncodeForUriImpl>;
 
 // LANGMATCHES
-[[maybe_unused]] inline auto langMatching =
-    [](std::optional<std::string> languageTag,
-       std::optional<std::string> languageRange) {
-      if (!languageTag.has_value() || !languageRange.has_value()) {
-        return Id::makeUndefined();
-      } else {
-        return Id::makeFromBool(ad_utility::isLanguageMatch(
-            languageTag.value(), languageRange.value()));
-      }
-    };
+struct LangMatching {
+  Id operator()(std::optional<std::string> languageTag,
+                std::optional<std::string> languageRange) const {
+    if (!languageTag.has_value() || !languageRange.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return Id::makeFromBool(ad_utility::isLanguageMatch(
+          languageTag.value(), languageRange.value()));
+    }
+  }
+};
 
-using LangMatches =
-    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+using LangMatches = StringExpressionImpl<2, LangMatching, StringValueGetter>;
 
 // STRING WITH LANGUAGE TAG
-[[maybe_unused]] inline auto strLangTag =
-    [](std::optional<ad_utility::triple_component::Literal> literal,
-       std::optional<std::string> langTag) -> IdOrLiteralOrIri {
-  if (!literal.has_value() || !langTag.has_value() ||
-      !literal.value().isPlain()) {
-    return Id::makeUndefined();
-  } else if (!ad_utility::strIsLangTag(langTag.value())) {
-    return Id::makeUndefined();
-  } else {
-    literal.value().addLanguageTag(std::move(langTag.value()));
-    return LiteralOrIri{std::move(literal.value())};
+struct StrLangTag {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> literal,
+      std::optional<std::string> langTag) const {
+    if (!literal.has_value() || !langTag.has_value() ||
+        !literal.value().isPlain()) {
+      return Id::makeUndefined();
+    } else if (!ad_utility::strIsLangTag(langTag.value())) {
+      return Id::makeUndefined();
+    } else {
+      literal.value().addLanguageTag(std::move(langTag.value()));
+      return LiteralOrIri{std::move(literal.value())};
+    }
   }
 };
 
-using StrLangTagged =
-    LiteralExpressionImpl<2, decltype(strLangTag), StringValueGetter>;
+using StrLangTagged = LiteralExpressionImpl<2, StrLangTag, StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
-[[maybe_unused]] inline auto strIriDtTag =
-    [](std::optional<ad_utility::triple_component::Literal> literal,
-       OptIri inputIri) -> IdOrLiteralOrIri {
-  if (!literal.has_value() || !inputIri.has_value() ||
-      !literal.value().isPlain()) {
-    return Id::makeUndefined();
-  } else {
-    literal.value().addDatatype(inputIri.value());
-    return LiteralOrIri{std::move(literal.value())};
+struct StrIriDtTag {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> literal,
+      OptIri inputIri) const {
+    if (!literal.has_value() || !inputIri.has_value() ||
+        !literal.value().isPlain()) {
+      return Id::makeUndefined();
+    } else {
+      literal.value().addDatatype(inputIri.value());
+      return LiteralOrIri{std::move(literal.value())};
+    }
   }
 };
 
-using StrIriTagged =
-    LiteralExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+using StrIriTagged = LiteralExpressionImpl<2, StrIriDtTag, IriValueGetter>;
 
 // HASH
 template <auto HashFunc>

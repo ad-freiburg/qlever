@@ -11,17 +11,19 @@ namespace detail {
 
 // _____________________________________________________________________________
 // Unary negation.
-inline auto unaryNegate = [](TernaryBool a) {
-  using enum TernaryBool;
-  switch (a) {
-    case True:
-      return Id::makeFromBool(false);
-    case False:
-      return Id::makeFromBool(true);
-    case Undef:
-      return Id::makeUndefined();
+struct UnaryNegate {
+  Id operator()(TernaryBool a) const {
+    using enum TernaryBool;
+    switch (a) {
+      case True:
+        return Id::makeFromBool(false);
+      case False:
+        return Id::makeFromBool(true);
+      case Undef:
+        return Id::makeUndefined();
+    }
+    AD_FAIL();
   }
-  AD_FAIL();
 };
 
 CPP_template(typename NaryOperation)(
@@ -79,88 +81,128 @@ CPP_template(typename NaryOperation)(
 };
 
 using UnaryNegateExpression = UnaryNegateExpressionImpl<
-    Operation<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
+    Operation<1, FV<UnaryNegate, EffectiveBooleanValueGetter>,
               SET<SetOfIntervals::Complement>>>;
 
 // _____________________________________________________________________________
 // Unary Minus.
-inline auto unaryMinus = makeNumericExpression<std::negate<>>();
-NARY_EXPRESSION(UnaryMinusExpression, 1,
-                FV<decltype(unaryMinus), NumericValueGetter>);
+using UnaryMinus = MakeNumericExpression<std::negate<>>;
+NARY_EXPRESSION(UnaryMinusExpression, 1, FV<UnaryMinus, NumericValueGetter>);
 // Abs
-inline const auto absImpl = [](auto num) { return std::abs(num); };
-inline const auto abs = makeNumericExpression<decltype(absImpl)>();
-NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
+struct AbsImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::abs(num);
+  }
+};
+using Abs = MakeNumericExpression<AbsImpl>;
+NARY_EXPRESSION(AbsExpression, 1, FV<Abs, NumericValueGetter>);
 
 // Rounding.
-inline const auto roundImpl = [](auto num) {
-  using T = decltype(num);
-  if constexpr (ql::concepts::floating_point<T>) {
-    auto res = std::round(num);
-    // In SPARQL, negative numbers are rounded towards zero if they lie exactly
-    // between two integers.
-    return (num < 0 && std::abs(res - num) == 0.5) ? res + 1 : res;
-  } else {
-    return num;
+struct RoundImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    if constexpr (ql::concepts::floating_point<T>) {
+      auto res = std::round(num);
+      // In SPARQL, negative numbers are rounded towards zero if they lie
+      // exactly between two integers.
+      return (num < 0 && std::abs(res - num) == 0.5) ? res + 1 : res;
+    } else {
+      return num;
+    }
   }
 };
 
-inline const auto round = makeNumericExpression<decltype(roundImpl)>();
-NARY_EXPRESSION(RoundExpression, 1, FV<decltype(round), NumericValueGetter>);
+using Round = MakeNumericExpression<RoundImpl>;
+NARY_EXPRESSION(RoundExpression, 1, FV<Round, NumericValueGetter>);
 
 // Ceiling.
-inline const auto ceilImpl = [](auto num) {
-  using T = decltype(num);
-  if constexpr (ql::concepts::floating_point<T>) {
-    return std::ceil(num);
-  } else {
-    return num;
+struct CeilImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    if constexpr (ql::concepts::floating_point<T>) {
+      return std::ceil(num);
+    } else {
+      return num;
+    }
   }
 };
-inline const auto ceil = makeNumericExpression<decltype(ceilImpl)>();
-NARY_EXPRESSION(CeilExpression, 1, FV<decltype(ceil), NumericValueGetter>);
+using Ceil = MakeNumericExpression<CeilImpl>;
+NARY_EXPRESSION(CeilExpression, 1, FV<Ceil, NumericValueGetter>);
 
 // Flooring.
-inline const auto floorImpl = [](auto num) {
-  using T = decltype(num);
-  if constexpr (ql::concepts::floating_point<T>) {
-    return std::floor(num);
-  } else {
-    return num;
+struct FloorImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    if constexpr (ql::concepts::floating_point<T>) {
+      return std::floor(num);
+    } else {
+      return num;
+    }
   }
 };
-inline const auto floor = makeNumericExpression<decltype(floorImpl)>();
-using FloorExpression = NARY<1, FV<decltype(floor), NumericValueGetter>>;
+using Floor = MakeNumericExpression<FloorImpl>;
+using FloorExpression = NARY<1, FV<Floor, NumericValueGetter>>;
 
 // Natural Logarithm.
-inline const auto logImpl = [](auto num) { return std::log(num); };
-inline const auto log = makeNumericExpression<decltype(logImpl)>();
-using LogExpression = NARY<1, FV<decltype(log), NumericValueGetter>>;
+struct LogImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::log(num);
+  }
+};
+using Log = MakeNumericExpression<LogImpl>;
+using LogExpression = NARY<1, FV<Log, NumericValueGetter>>;
 
 // Exponentiation.
-inline const auto expImpl = [](auto num) { return std::exp(num); };
-inline const auto exp = makeNumericExpression<decltype(expImpl)>();
-using ExpExpression = NARY<1, FV<decltype(exp), NumericValueGetter>>;
+struct ExpImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::exp(num);
+  }
+};
+using Exp = MakeNumericExpression<ExpImpl>;
+using ExpExpression = NARY<1, FV<Exp, NumericValueGetter>>;
 
 // Square root.
-inline const auto sqrtImpl = [](auto num) { return std::sqrt(num); };
-inline const auto sqrt = makeNumericExpression<decltype(sqrtImpl)>();
-using SqrtExpression = NARY<1, FV<decltype(sqrt), NumericValueGetter>>;
+struct SqrtImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::sqrt(num);
+  }
+};
+using Sqrt = MakeNumericExpression<SqrtImpl>;
+using SqrtExpression = NARY<1, FV<Sqrt, NumericValueGetter>>;
 
 // Sine.
-inline const auto sinImpl = [](auto num) { return std::sin(num); };
-inline const auto sin = makeNumericExpression<decltype(sinImpl)>();
-using SinExpression = NARY<1, FV<decltype(sin), NumericValueGetter>>;
+struct SinImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::sin(num);
+  }
+};
+using Sin = MakeNumericExpression<SinImpl>;
+using SinExpression = NARY<1, FV<Sin, NumericValueGetter>>;
 
 // Cosine.
-inline const auto cosImpl = [](auto num) { return std::cos(num); };
-inline const auto cos = makeNumericExpression<decltype(cosImpl)>();
-using CosExpression = NARY<1, FV<decltype(cos), NumericValueGetter>>;
+struct CosImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::cos(num);
+  }
+};
+using Cos = MakeNumericExpression<CosImpl>;
+using CosExpression = NARY<1, FV<Cos, NumericValueGetter>>;
 
 // Tangent.
-inline const auto tanImpl = [](auto num) { return std::tan(num); };
-inline const auto tan = makeNumericExpression<decltype(tanImpl)>();
-using TanExpression = NARY<1, FV<decltype(tan), NumericValueGetter>>;
+struct TanImpl {
+  template <typename T>
+  auto operator()(T num) const {
+    return std::tan(num);
+  }
+};
+using Tan = MakeNumericExpression<TanImpl>;
+using TanExpression = NARY<1, FV<Tan, NumericValueGetter>>;
 
 }  // namespace detail
 
