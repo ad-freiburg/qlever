@@ -625,11 +625,14 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    Result::LazyResult generator = CALL_FIXED_SIZE(
-        (std::array{inWidth, outWidth}), &GroupByImpl::computeResultLazily,
-        this, std::move(subresult), std::move(aggregates),
-        std::move(metadataForUnsequentialData).value().aggregateAliases_,
-        std::move(groupByCols), !requestLaziness);
+    Result::LazyResult generator = ad_utility::callFixedSizeVi(
+        (std::array{inWidth, outWidth}),
+        [&, self = this](auto inWidth, auto outWidth) {
+          return self->computeResultLazily<inWidth, outWidth>(
+              std::move(subresult), std::move(aggregates),
+              std::move(metadataForUnsequentialData).value().aggregateAliases_,
+              std::move(groupByCols), !requestLaziness);
+        });
 
     return requestLaziness
                ? Result{std::move(generator), resultSortedOn()}
@@ -644,9 +647,12 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
   auto localVocab = subresult->getCopyOfLocalVocab();
 
-  IdTable idTable = CALL_FIXED_SIZE(
-      (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
-      subresult->idTable(), groupByCols, aggregates, &localVocab);
+  IdTable idTable = ad_utility::callFixedSizeVi(
+      (std::array{inWidth, outWidth}),
+      [&, self = this](auto inWidth, auto outWidth) {
+        return self->doGroupBy<inWidth, outWidth>(
+            subresult->idTable(), groupByCols, aggregates, &localVocab);
+      });
 
   AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
