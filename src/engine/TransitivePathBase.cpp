@@ -236,55 +236,83 @@ Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
 
   auto makeResult = [this](IdTableStatic<OUTPUT_WIDTH>&& table,
                            LocalVocab&& localVocab,
-                           ad_utility::timer::chr::milliseconds time)
-      -> std::optional<Result::IdTableVocabPair> {
+                           ad_utility::timer::chr::milliseconds time) {
     runtimeInfo().addDetail("IdTable fill time", time);
     return Result::IdTableVocabPair{std::move(table).toDynamic(),
                                     std::move(localVocab)};
   };
 
-  auto hullIt = hull.begin();
-  return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
-      [this, timer = ad_utility::Timer{ad_utility::Timer::Stopped},
-       hull = std::move(hull), hullIt = std::move(hullIt),
-       yieldOnce = yieldOnce, copyColumnsFor = std::move(copyColumnsFor),
-       makeResult = std::move(makeResult),
-       mergedVocab = LocalVocab{}]() mutable {
-        size_t outputRow = 0;
-        IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-        while (hullIt != hull.end()) {
-          timer.cont();
-          // As an optimization nodes without any linked nodes should not get
-          // yielded in the first place.
-          AD_CONTRACT_CHECK(!hullIt->targets_.empty());
-          if (!yieldOnce) {
-            table.reserve(hullIt->targets_.size());
+  // Shared state for accumulation mode
+  IdTableStatic<OUTPUT_WIDTH> accumulatedTable{getResultWidth(), allocator()};
+  LocalVocab accumulatedVocab{};
+  size_t accumulatedOutputRow = 0;
+
+  // Transformer that processes one node at a time
+  auto transformer = [this, &accumulatedTable, &accumulatedVocab,
+                      &accumulatedOutputRow, yieldOnce,
+                      timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+                      copyColumnsFor = std::move(copyColumnsFor),
+                      makeResult = std::move(makeResult)](
+                         const NodeWithTargets& nodeWithTargets) mutable {
+    timer.cont();
+    AD_CONTRACT_CHECK(!nodeWithTargets.targets_.empty());
+
+    if (yieldOnce) {
+      // Accumulate into shared table
+      copyColumnsFor(nodeWithTargets, accumulatedTable, accumulatedOutputRow);
+      accumulatedVocab.mergeWith(nodeWithTargets.localVocab_);
+      timer.stop();
+      return std::optional<Result::IdTableVocabPair>{};
+    } else {
+      // Create and return individual result
+      IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
+      size_t outputRow = 0;
+      table.reserve(nodeWithTargets.targets_.size());
+      copyColumnsFor(nodeWithTargets, table, outputRow);
+      timer.stop();
+      return makeResult(std::move(table),
+                        LocalVocab{std::move(nodeWithTargets.localVocab_)},
+                        timer.msecs());
+    }
+  };
+
+  auto transform = hull | std::views::transform(transformer);
+
+  if (yieldOnce) {
+    // Accumulate all results and return once
+    return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
+        [transform = std::move(transform),
+         timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+         makeResult = std::move(makeResult),
+         accumulatedTable = std::move(accumulatedTable),
+         accumulatedVocab = std::move(accumulatedVocab),
+         done = false]() mutable -> std::optional<Result::IdTableVocabPair> {
+          if (done) {
+            return std::nullopt;
           }
-          copyColumnsFor(*hullIt, table, outputRow);
 
-          timer.stop();
-          if (yieldOnce) {
-            mergedVocab.mergeWith(hullIt->localVocab_);
-            ++hullIt;
-            continue;
-          }
-
-          auto result = makeResult(
-              std::move(table), std::move(hullIt->localVocab_), timer.msecs());
-          ++hullIt;
-          return result;
-        }
-
-        if (yieldOnce) {
           timer.start();
-          // make sure we dont yield another value after this
-          yieldOnce = false;
-          return makeResult(std::move(table), std::move(mergedVocab),
-                            timer.msecs());
-        } else {
-          return std::optional<Result::IdTableVocabPair>();
-        }
-      })};
+          for ([[maybe_unused]] auto&& dummy : transform) {
+          }
+          timer.stop();
+
+          done = true;
+          return makeResult(std::move(accumulatedTable),
+                            std::move(accumulatedVocab), timer.msecs());
+        })};
+  } else {
+    // Yield individual results one at a time
+    return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
+        [transform = std::move(transform), it = transform.begin(),
+         end = transform.end()]() mutable {
+          if (it == end) {
+            return std::nullopt;
+          }
+          auto result = std::move(*it);
+          ++it;
+          return result;
+        })};
+  }
 }
 
 // _____________________________________________________________________________
