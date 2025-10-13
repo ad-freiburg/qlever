@@ -43,8 +43,7 @@ struct BoundingBox {
   GeoPoint upperRight_;
 
  public:
-  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
-      : lowerLeft_{lowerLeft}, upperRight_{upperRight} {};
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight);
 
   GeoPoint lowerLeft() const { return lowerLeft_; }
   GeoPoint upperRight() const { return upperRight_; }
@@ -76,7 +75,7 @@ struct GeometryType {
   uint8_t type_;
 
  public:
-  explicit GeometryType(uint8_t type) : type_{type} {};
+  explicit GeometryType(uint8_t type);
 
   uint8_t type() const { return type_; };
 
