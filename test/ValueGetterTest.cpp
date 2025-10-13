@@ -170,7 +170,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"POLYGON(2 4, 4 4, 4 "
       "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}, {0}});
+      ad_utility::GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}, {667238}});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                                 std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
