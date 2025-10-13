@@ -25,8 +25,10 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace {
 
@@ -1422,29 +1424,51 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkMaxX(boundingCoordInputs, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
   checkMaxY(boundingCoordInputs, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
 
-  // auto checkLength = std::bind_front(testNaryExpression,
-  // &makeLengthExpression); auto checkMetricLength =
-  // testUnaryExpression<&makeMetricLengthExpression>; const auto kilometer =
-  // lit("http://qudt.org/vocab/unit/KiloM",
-  //                            "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
-  // const IdOrLiteralOrIriVec lengthInputs{
-  //     U,
-  //     D(5),
-  //     v,
-  //     geoLit("LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)"),
-  //     geoLit("POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
-  //            "47.995562, 7.8412948 47.9977308))"),
-  //     geoLit("GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
-  //            "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
-  //            "47.995562))"),
-  //     lit("BLABLIBLU()")};
-  // checkLength(Ids{U, U, D(0.0), D(0.446856), D(1.93946), D(1.34423), U},
-  //             lengthInputs,
-  //             IdOrLiteralOrIriVec{kilometer, kilometer, kilometer, kilometer,
-  //                                 kilometer, kilometer, kilometer});
-  // checkMetricLength(lengthInputs,
-  //                   Ids{U, U, D(0.0), D(446.856), D(1939.46), D(1344.23),
-  //                   U});
+  // Since our helpers test doubles for (near) equality and precise lengths
+  // depend on the method of calculation, which is not what is tested here, we
+  // derive the expected values using the helper.
+  auto expectedLength = [](std::string_view literal) -> double {
+    auto len = ad_utility::GeometryInfo::getMetricLength(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!len.has_value()) {
+      return -1;
+    }
+    return len.value().length();
+  };
+
+  auto checkLength = std::bind_front(testNaryExpression, &makeLengthExpression);
+  auto checkMetricLength = testUnaryExpression<&makeMetricLengthExpression>;
+  const auto kilometer = lit("http://qudt.org/vocab/unit/KiloM",
+                             "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  static constexpr std::string_view line =
+      "LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)";
+  const auto expLine = expectedLength(line);
+  static constexpr std::string_view polygon =
+      "POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+      "47.995562, 7.8412948 47.9977308))";
+  const auto expPolygon = expectedLength(polygon);
+  static constexpr std::string_view collection =
+      "GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
+      "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
+      "47.995562))";
+  const auto expCollection = expectedLength(collection);
+
+  const IdOrLiteralOrIriVec lengthInputs{U,
+                                         D(5),
+                                         v,
+                                         geoLit(line),
+                                         geoLit(polygon),
+                                         geoLit(collection),
+                                         lit("BLABLIBLU()")};
+  checkLength(Ids{U, U, D(0.0), D(expLine / 1000), D(expPolygon / 1000),
+                  D(expCollection / 1000), U},
+              lengthInputs,
+              IdOrLiteralOrIriVec{kilometer, kilometer, kilometer, kilometer,
+                                  kilometer, kilometer, kilometer});
+  checkMetricLength(lengthInputs, Ids{U, U, D(0.0), D(expLine), D(expPolygon),
+                                      D(expCollection), U});
 }
 
 // ________________________________________________________________________________________
