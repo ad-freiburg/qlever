@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
@@ -38,7 +39,8 @@ class PropertyPath {
     std::vector<PropertyPath> children_;
     Modifier modifier_;
 
-    bool operator==(const ModifiedPath&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ModifiedPath, children_,
+                                                modifier_)
 
     void writeToStream(std::ostream& out) const;
   };
@@ -116,7 +118,7 @@ class PropertyPath {
   // before the negation.
   static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
-  bool operator==(const PropertyPath& other) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PropertyPath, path_)
 
   // Serialize this object into an output stream.
   void writeToStream(std::ostream& out) const;

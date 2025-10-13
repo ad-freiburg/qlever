@@ -7,7 +7,6 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
-#include <type_traits>
 #include <typeindex>
 #include <utility>
 
@@ -18,6 +17,7 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "backports/type_traits.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -37,6 +37,13 @@ PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
+
+const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+}
+
+using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -68,7 +75,8 @@ TEST(SparqlParser, Prefix) {
 
   {
     static ad_utility::BlankNodeManager blankNodeManager;
-    ParserAndVisitor p{&blankNodeManager, "PREFIX wd: <www.wikidata.org/>"};
+    ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
+                       "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -91,13 +99,13 @@ TEST(SparqlExpressionParser, First) {
   string s = "(5 * 5 ) bimbam";
   // This is an example on how to access a certain parsed substring.
   /*
-  LOG(INFO) << context->getText() << std::endl;
-  LOG(INFO) << p.parser_.getTokenStream()
+  AD_LOG_INFO << context->getText() << std::endl;
+  AD_LOG_INFO << p.parser_.getTokenStream()
                    ->getTokenSource()
                    ->getInputStream()
                    ->toString()
             << std::endl;
-  LOG(INFO) << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
+  AD_LOG_INFO << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
    */
   auto resultofParse = parse<&Parser::expression>(s);
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);
@@ -957,7 +965,7 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ GRAPH ?g { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          Variable("?g"),
+          std::pair{Variable("?g"), GVB::NAMED},
           m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}))));
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
@@ -990,12 +998,13 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}));
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
 
   // A matcher that matches the query `SELECT * { ?a <bar> ?foo}`, where the
   // FROM and FROM NAMED clauses can still be specified via arguments.
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
+  auto selectABarFooMatcher = [](std::optional<m::Graphs> defaultGraphs =
+                                     std::nullopt,
+                                 std::optional<m::Graphs> namedGraphs =
+                                     std::nullopt) {
     return m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
@@ -1192,12 +1201,16 @@ TEST(SparqlParser, ConstructQuery) {
 
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
-               ad_utility::Exception);
-  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
-                   {{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
-               ad_utility::Exception);
+  static ad_utility::BlankNodeManager blankNodeManager;
+  SparqlQleverVisitor visitor{
+      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
+
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
+      ad_utility::Exception);
+  EXPECT_THROW(
+      visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
+      ad_utility::Exception);
 }
 
 // Test that ASK queries are parsed as they should.
@@ -1209,28 +1222,29 @@ TEST(SparqlParser, AskQuery) {
   auto expectAskQueryFails = ExpectParseFails<&Parser::askQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}));
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  using Graphs = m::Graphs;
 
   // A matcher that matches the query `ASK { ?a <bar> ?foo}`, where the
   // FROM parts of the query can be specified via `defaultGraphs` and
   // the FROM NAMED parts can be specified via `namedGraphs`.
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
+  auto selectABarFooMatcher = [](std::optional<Graphs> defaultGraphs =
+                                     std::nullopt,
+                                 std::optional<Graphs> namedGraphs =
+                                     std::nullopt) {
     return m::AskQuery(
         m::GraphPattern(m::Triples({{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
-        defaultGraphs, namedGraphs);
+        std::move(defaultGraphs), std::move(namedGraphs));
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
   // ASK query with both a FROM and a FROM NAMED clause.
   Graphs defaultGraphs;
-  defaultGraphs.emplace();
-  defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
+  defaultGraphs.insert(TripleComponent::Iri::fromIriref("<x>"));
   Graphs namedGraphs;
-  namedGraphs.emplace();
-  namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
-  expectAskQuery("ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
-                 selectABarFooMatcher(defaultGraphs, namedGraphs));
+  namedGraphs.insert(TripleComponent::Iri::fromIriref("<y>"));
+  expectAskQuery(
+      "ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
+      selectABarFooMatcher(std::move(defaultGraphs), std::move(namedGraphs)));
 
   // ASK whether there are any triples at all.
   expectAskQuery("ASK { ?x ?y ?z }", m::AskQuery(DummyGraphPatternMatcher));
@@ -1376,17 +1390,16 @@ TEST(SparqlParser, Query) {
     // NOTE: The clauses are relevant *both* for the retrieval of the resources
     // to describe (the `Id`s matching `?y`), as well as for computing the
     // triples for each of these resources.
-    using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-    Graphs expectedDefaultGraphs;
-    Graphs expectedNamedGraphs;
-    expectedDefaultGraphs.emplace({Iri("<default-graph>")});
-    expectedNamedGraphs.emplace({Iri("<named-graph>")});
+    using Graphs = m::Graphs;
+    Graphs expectedDefaultGraphs{Iri("<default-graph>")};
+    Graphs expectedNamedGraphs{Iri("<named-graph>")};
     parsedQuery::DatasetClauses expectedClauses{expectedDefaultGraphs,
                                                 expectedNamedGraphs};
     expectQuery(
         "DESCRIBE <x> ?y <z> FROM <default-graph> FROM NAMED <named-graph>",
         m::DescribeQuery(m::Describe(xyz, expectedClauses, ::testing::_),
-                         expectedDefaultGraphs, expectedNamedGraphs));
+                         std::move(expectedDefaultGraphs),
+                         std::move(expectedNamedGraphs)));
   }
 
   // Test the various places where warnings are added in a query.
@@ -1400,16 +1413,15 @@ TEST(SparqlParser, Query) {
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
   // Now test the same queries with exceptions instead of warnings.
-  RuntimeParameters().set<"throw-on-unbound-variables">(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::throwOnUnboundVariables_>(
+          true);
   expectQueryFails("SELECT ?x {} GROUP BY ?x",
                    contains("?x was used by GROUP BY"));
   expectQueryFails("SELECT * { BIND (?a as ?b) }",
                    contains("?a was used in the expression of a BIND clause"));
   expectQueryFails("SELECT * { } ORDER BY ?s",
                    contains("?s was used by ORDER BY"));
-
-  // Revert this (global) setting to its original value.
-  RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 
 // _____________________________________________________________________________
@@ -1418,9 +1430,9 @@ TEST(SparqlParser, Exists) {
 
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
   // FROM and FROM NAMED clauses can be specified as arguments.
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   auto selectABarFooMatcher =
-      [](Graphs defaultGraphs = std::nullopt, Graphs namedGraphs = std::nullopt,
+      [](std::optional<m::Graphs> defaultGraphs = std::nullopt,
+         std::optional<m::Graphs> namedGraphs = std::nullopt,
          const std::optional<std::vector<std::string>>& variables =
              std::nullopt) {
         auto selectMatcher = variables.has_value()
@@ -1430,7 +1442,7 @@ TEST(SparqlParser, Exists) {
         return m::SelectQuery(selectMatcher,
                               m::GraphPattern(m::Triples(
                                   {{Var{"?a"}, iri("<bar>"), Var{"?foo"}}})),
-                              defaultGraphs, namedGraphs);
+                              std::move(defaultGraphs), std::move(namedGraphs));
       };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
@@ -1438,8 +1450,8 @@ TEST(SparqlParser, Exists) {
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
                     m::NotExists(selectABarFooMatcher()));
 
-  Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
-  Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};
+  m::Graphs defaultGraphs{iri("<blubb>")};
+  m::Graphs namedGraphs{iri("<blabb>")};
 
   // Now run the same tests, but with non-empty dataset clauses, that have to be
   // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
@@ -1535,6 +1547,29 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
+// _____________________________________________________________________________
+TEST(SparqlParser, GraphClauseIncludesDefaultGraph) {
+  // This test tests if the runtime parameter allows to toggle this behaviour.
+  auto expectGraphClause =
+      ExpectCompleteParse<&Parser::graphGraphPattern>{defaultPrefixMap};
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::NAMED,
+          ::testing::_));
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+  expectGraphClause(
+      "GRAPH ?g { ?s ?p ?o }",
+      m::GroupGraphPatternWithGraph(
+          Variable{"?g"},
+          parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL,
+          ::testing::_));
+}
+
+// _____________________________________________________________________________
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
@@ -1597,8 +1632,9 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
@@ -1639,7 +1675,7 @@ TEST(SparqlParser, Datasets) {
   };
   auto noGraph = std::monostate{};
   auto noGraphs = m::Graphs{};
-  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<g>")}};
+  m::Graphs datasets{Iri("<g>")};
   // Only checks `_filters` on the GraphPattern. We are not concerned with the
   // `_graphPatterns` here.
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
@@ -1671,4 +1707,61 @@ TEST(SparqlParser, Datasets) {
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
                                      filterGraphPattern)),
           datasets, noGraphs));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, EncodedIriManagerUsage) {
+  using namespace sparqlParserTestHelpers;
+
+  // Create a parse function that uses an `EncodedIriManager`.
+  auto encodedIriManager = std::make_shared<EncodedIriManager>(
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
+
+  auto parseWithEncoding = [&](const std::string& input) {
+    static ad_utility::BlankNodeManager blankNodeManager;
+    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
+        .parseTypesafe(&SparqlAutomaticParser::query);
+  };
+
+  auto encoded123 = TripleComponent{
+      encodedIriManager->encode("<http://example.org/123>").value()};
+  auto unencoded456 = PropertyPath::fromIri(
+      TripleComponent::Iri::fromIriref("<http://example.org/456>"));
+  auto encoded789 = TripleComponent{
+      encodedIriManager->encode("<http://test.com/id/789>").value()};
+
+  // Test that IRIs in SPARQL queries get encoded when they match prefixes. Note
+  // that we currently only encode the subjects and predicates of triples
+  // directly in the parser, as encoding predicates would require massive
+  // changes to the `PropertyPath` and therefore the `QueryPlanner` class.
+  {
+    auto result = parseWithEncoding(
+        "SELECT ?x WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }");
+    EXPECT_THAT(
+        result.resultOfParse_,
+        m::SelectQuery(m::VariablesSelect({"?x"}),
+                       m::GraphPattern(m::OrderedTriples(
+                           {{{encoded123, unencoded456, encoded789}}}))));
+  }
+
+  {
+    // CONSTRUCT WHERE syntax uses the same pattern for both template and WHERE
+    // clause. Test that the encoding also works properly in these cases.
+    std::string constructWhereQuery =
+        "CONSTRUCT WHERE { <http://example.org/123> <http://example.org/456> "
+        "<http://test.com/id/789> }";
+
+    auto result = parseWithEncoding(constructWhereQuery);
+    EXPECT_TRUE(result.remainingText_.empty())
+        << "CONSTRUCT WHERE query should parse completely";
+
+    EXPECT_THAT(
+        result.resultOfParse_,
+        m::ConstructQuery(
+            {{Iri{"<http://example.org/123>"}, Iri{"<http://example.org/456>"},
+              Iri{"<http://test.com/id/789>"}}},
+            m::GraphPattern(m::OrderedTriples(
+                {{{encoded123, unencoded456, encoded789}}}))));
+  }
 }

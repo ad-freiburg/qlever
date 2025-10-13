@@ -132,7 +132,8 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to
       // unconditionally copy.
-      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab);
+      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab,
+                                            getIndex().encodedIriManager());
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -141,9 +142,9 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
     rowIdx++;
   }
   AD_CORRECTNESS_CHECK(rowIdx == parsedValues_._values.size());
-  LOG(INFO) << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
-  LOG(INFO) << "Number of entries in local vocabulary per column: "
-            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
+  AD_LOG_INFO << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
+  AD_LOG_INFO << "Number of entries in local vocabulary per column: "
+              << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
 }
 

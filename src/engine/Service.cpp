@@ -3,11 +3,13 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -31,7 +33,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  if (RuntimeParameters().get<"cache-service-results">()) {
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
     return absl::StrCat(
         "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
@@ -133,7 +135,7 @@ Result Service::computeResult(bool requestLaziness) {
 // ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
-  if (RuntimeParameters().get<"syntax-test-mode">()) {
+  if (getRuntimeParameter<&RuntimeParameters::syntaxTestMode_>()) {
     return makeNeutralElementResultForSilentFail();
   }
   ad_utility::httpUtils::Url serviceUrl{
@@ -148,12 +150,12 @@ Result Service::computeResultImpl(bool requestLaziness) {
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
                    variablesForSelectClause, " ", getGraphPattern());
-  LOG(INFO) << "Sending SERVICE query to remote endpoint "
-            << "(protocol: " << serviceUrl.protocolAsString()
-            << ", host: " << serviceUrl.host()
-            << ", port: " << serviceUrl.port()
-            << ", target: " << serviceUrl.target() << ")" << std::endl
-            << serviceQuery << std::endl;
+  AD_LOG_INFO << "Sending SERVICE query to remote endpoint "
+              << "(protocol: " << serviceUrl.protocolAsString()
+              << ", host: " << serviceUrl.host()
+              << ", port: " << serviceUrl.port()
+              << ", target: " << serviceUrl.target() << ")" << std::endl
+              << serviceQuery << std::endl;
 
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
@@ -171,8 +173,8 @@ Result Service::computeResultImpl(bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ad_utility::utf8ToLower(response.contentType_)
-           .starts_with("application/sparql-results+json")) {
+  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
+                       "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
@@ -223,7 +225,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab,
+                                        getIndex().encodedIriManager());
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -402,11 +405,17 @@ TripleComponent Service::bindingToTripleComponent(
       getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
-  if (type == "literal") {
+  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
+  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
+  // Virtuoso until the summer of 2025. It is therefore still produced by
+  // some SPARQL endpoints, and we therefore support parsing it.
+  if (type == "literal" || type == "typed-literal") {
     if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     binding["datatype"].get<std::string_view>()));
+          value,
+          TripleComponent::Iri::fromIrirefWithoutBrackets(
+              binding["datatype"].get<std::string_view>()),
+          getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
@@ -518,7 +527,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
-      } else if (value.starts_with('<')) {
+      } else if (ql::starts_with(value, '<')) {
         return value;
       } else {
         return RdfEscaping::validRDFLiteralFromNormalized(value);
@@ -551,7 +560,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // - or exactly one of the operations is a Service. If we could estimate
   // the result size of a Service, the Service with the smaller result could
   // be used as a sibling here.
-  if (RuntimeParameters().get<"cache-service-results">() ||
+  if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>() ||
       (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;
@@ -584,8 +593,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                              : ComputationMode::FULLY_MATERIALIZED);
 
   if (siblingResult->isFullyMaterialized()) {
-    bool resultIsSmall = siblingResult->idTable().size() <=
-                         RuntimeParameters().get<"service-max-value-rows">();
+    bool resultIsSmall =
+        siblingResult->idTable().size() <=
+        getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
@@ -607,7 +617,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // is exceeded
   auto generator = moveToCachingInputRange(siblingResult->idTables());
   const size_t maxValueRows =
-      RuntimeParameters().get<"service-max-value-rows">();
+      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
   while (auto pairOpt = generator.get()) {
     auto& pair = pairOpt.value();
     rows += pair.idTable_.size();
@@ -662,3 +672,5 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
   service->cacheBreaker_ = cacheBreaker_;
   return service;
 }
+
+#endif

@@ -7,7 +7,7 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function(linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -24,7 +24,7 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
@@ -34,7 +34,7 @@ endfunction()
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-            TRUE)
+            TRUE LABELS "${basename}")
 endfunction()
 
 if (SINGLE_TEST_BINARY)
@@ -123,6 +123,7 @@ add_subdirectory(index)
 add_subdirectory(backports)
 add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
+add_subdirectory(libqlever)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -243,6 +244,8 @@ addLinkAndDiscoverTest(StreamableBodyTest http)
 
 addLinkAndDiscoverTest(StreamableGeneratorTest)
 
+addLinkAndDiscoverTestNoLibs(StringBatcherTest)
+
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
@@ -259,6 +262,8 @@ addLinkAndDiscoverTest(VocabularyTest index)
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
+
+addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
@@ -446,7 +451,7 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(UrlParserTest)
 
-addLinkAndDiscoverTest(ServerTest engine)
+addLinkAndDiscoverTest(ServerTest engine server)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
@@ -469,3 +474,7 @@ addLinkAndDiscoverTest(GeometryInfoTest util)
 addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTestSerial(HttpErrorTest engine)
+
+addLinkAndDiscoverTest(TimeTracerTest)
+
+addLinkAndDiscoverTestNoLibs(SourceLocationTest)

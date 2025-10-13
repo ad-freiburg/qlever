@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -22,13 +23,14 @@ namespace ad_utility {
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
  private:
+ private:
   GeoPoint centroid_;
 
  public:
-  Centroid(GeoPoint centroid) : centroid_{centroid} {};
+  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {};
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
 
-  GeoPoint centroid() const { return centroid_; }
+  GeoPoint centroid() const { return centroid_; };
 };
 
 // The individual coordinates describing the bounding box.
@@ -42,7 +44,8 @@ struct BoundingBox {
   GeoPoint upperRight_;
 
  public:
-  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight);
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
+      : lowerLeft_{lowerLeft}, upperRight_{upperRight} {};
 
   GeoPoint lowerLeft() const { return lowerLeft_; }
   GeoPoint upperRight() const { return upperRight_; }
@@ -74,12 +77,14 @@ struct GeometryType {
   uint8_t type_;
 
  public:
-  GeometryType(uint8_t type);
+  explicit GeometryType(uint8_t type) : type_{type} {};
 
-  uint8_t type() const { return type_; }
+  uint8_t type() const { return type_; };
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
 // Represents the length of the geometry in meters.
@@ -169,13 +174,14 @@ class GeometryInfo {
       const std::string_view& wkt);
 
   // Extract the requested information from this object.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo> RequestedInfo getRequestedInfo() const;
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) RequestedInfo
+      getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo>
-  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) static std::
+      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // For the disk serialization we require that a `GeometryInfo` is trivially

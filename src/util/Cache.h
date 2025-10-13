@@ -8,12 +8,11 @@
 #define QLEVER_SRC_UTIL_CACHE_H
 
 #include <cassert>
-#include <concepts>
 #include <limits>
 #include <memory>
-#include <type_traits>
 #include <utility>
 
+#include "backports/type_traits.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/PriorityQueue.h"
@@ -277,7 +276,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second.value().value());
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }

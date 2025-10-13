@@ -71,6 +71,13 @@ class SparqlQleverVisitor {
   // UPDATE requests.
   ad_utility::BlankNodeManager* blankNodeManager_;
 
+  // Needed to efficiently encode common IRIs directly into the ID.
+  const EncodedIriManager* encodedIriManager_;
+
+  // Convert a GraphTerm to TripleComponent with IRI encoding support
+  TripleComponent graphTermToTripleComponentWithEncoding(
+      const GraphTerm& graphTerm) const;
+
   size_t _blankNodeCounter = 0;
   // Counter that increments for every variable generated using
   // `getNewInternalVariable` to ensure distinctness.
@@ -149,11 +156,13 @@ class SparqlQleverVisitor {
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      ad_utility::BlankNodeManager* bnodeManager, PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager,
+      const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : blankNodeManager_{bnodeManager},
+        encodedIriManager_{encodedIriManager},
         prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
@@ -315,6 +324,8 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::ServiceGraphPatternContext* ctx);
 
+  // Visitor functions for special builtin features that are triggered via
+  // `SERVICE` requests with "magic" IRIs.
   parsedQuery::GraphPatternOperation visitPathQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
@@ -323,6 +334,19 @@ class SparqlQleverVisitor {
 
   parsedQuery::GraphPatternOperation visitTextSearchQuery(
       Parser::ServiceGraphPatternContext* ctx);
+
+  GraphPatternOperation visitNamedCachedResult(
+      const TripleComponent::Iri& target,
+      Parser::ServiceGraphPatternContext* ctx);
+
+  // Parse the body of a `MagicServiceQuery`, in particular call
+  // `addBasicGraphPattern` and `addGraph` for the contents of the body, and
+  // throw an exception if an unsupported element is encountered. This function
+  // implements common functionality of `visitNamedCachedResult`,
+  // `visitTextQuery`, ... above.
+  void parseBodyOfMagicServiceQuery(parsedQuery::MagicServiceQuery& target,
+                                    Parser::ServiceGraphPatternContext* ctx,
+                                    std::string_view operationName);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
@@ -673,8 +697,8 @@ class SparqlQleverVisitor {
   // stays semantically the same, but for blank nodes, this step converts them
   // into internal variables so they are interpreted correctly by the query
   // planner.
-  static parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples);
+  parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from
@@ -685,7 +709,6 @@ class SparqlQleverVisitor {
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
-  ParsedQuery makeClear(SparqlTripleSimpleWithGraph::Graph graph);
 
   // Construct a `ParsedQuery` that adds all triples from the source graph to
   // the target graph equivalent to `INSERT { GRAPH target { ?s ?p ?o } } WHERE

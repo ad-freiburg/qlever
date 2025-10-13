@@ -14,7 +14,10 @@
 #include <ctre-unicode.hpp>
 #include <iostream>
 
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -35,24 +38,27 @@ class ParseableDuration {
  public:
   ParseableDuration() = default;
   // Implicit conversion is on purpose!
-  explicit(false) ParseableDuration(DurationType duration)
-      : duration_{duration} {}
-  explicit(false) operator DurationType() const { return duration_; }
+  QL_EXPLICIT(false)
+  ParseableDuration(DurationType duration) : duration_{duration} {}
+  QL_EXPLICIT(false) operator DurationType() const { return duration_; }
 
   // TODO default this implementation (and remove explicit equality) once libc++
   // supports it.
-  auto operator<=>(const ParseableDuration& other) const noexcept {
-    return duration_.count() <=> other.duration_.count();
+  auto compareThreeWay(const ParseableDuration& other) const noexcept {
+    return ql::compareThreeWay(duration_.count(), other.duration_.count());
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(ParseableDuration)
 
   template <typename Other>
-  auto operator<=>(const ParseableDuration<Other>& other) const noexcept {
+  auto compareThreeWay(const ParseableDuration<Other>& other) const noexcept {
     using CommonType = std::common_type_t<DurationType, Other>;
-    return CommonType{duration_}.count() <=>
-           CommonType{other.duration_}.count();
+    return ql::compareThreeWay(CommonType{duration_}.count(),
+                               CommonType{other.duration_}.count());
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_TEMPLATE(template <typename Other>,
+                                                    ParseableDuration<Other>)
 
-  bool operator==(const ParseableDuration&) const noexcept = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(ParseableDuration, duration_)
 
   // ___________________________________________________________________________
   template <typename CharT>
@@ -115,7 +121,7 @@ class ParseableDuration {
       std::basic_ostream<CharT>& os,
       const ParseableDuration<DurationType>& duration) {
     using namespace std::chrono;
-    using period = DurationType::period;
+    using period = typename DurationType::period;
 
     os << duration.duration_.count();
 

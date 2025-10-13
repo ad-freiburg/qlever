@@ -25,6 +25,11 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
+constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
+  static EncodedIriManager encodedIriManager_;
+  return &encodedIriManager_;
+};
+
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -37,7 +42,7 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
                   IndexScan& fullScan,
                   const std::vector<IndexPair>& expectedRows,
                   const LimitOffsetClause& limitOffset = {},
-                  source_location l = source_location::current()) {
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
@@ -98,7 +103,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
     ad_utility::MemorySize blocksizePermutations = 16_B,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
   // blocks.
@@ -129,7 +134,7 @@ void testLazyScanForJoinOfTwoScans(
 void testLazyScanThrows(const std::string& kg,
                         const SparqlTripleSimple& tripleLeft,
                         const SparqlTripleSimple& tripleRight,
-                        source_location l = source_location::current()) {
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
@@ -144,13 +149,15 @@ void testLazyScanForJoinWithColumn(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     std::vector<TripleComponent> columnEntries,
     const std::vector<IndexPair>& expectedRows,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -162,13 +169,15 @@ void testLazyScanForJoinWithColumn(
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTripleSimple& scanTriple,
     const std::vector<TripleComponent>& columnEntries,
-    source_location l = source_location::current()) {
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(
+        entry.toValueId(qec->getIndex().getVocab(), *encodedIriManager())
+            .value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -195,7 +204,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
        const std::vector<ValueId>& expectedIdsOnFilterColumn,
        bool prefilterCanBeSet,
        std::optional<IndexScan::PrefilterVariablePair> pr2 = std::nullopt,
-       source_location l = source_location::current()) {
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr1.second;
@@ -456,19 +465,35 @@ TEST(IndexScan, namedGraphs) {
   ad_utility::HashSet<TripleComponent> graphs{
       TripleComponent::Iri::fromIriref("<graph1>"),
       TripleComponent::Iri::fromIriref("<graph2>")};
-  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  auto scan = IndexScan{qec, Permutation::PSO, triple,
+                        IndexScan::Graphs::Whitelist(graphs)};
   using namespace testing;
-  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
+  // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
-              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
-  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+              AnyOf(HasSubstr("GRAPHS: Whitelist <graph1> <graph2>"),
+                    HasSubstr("GRAPHS: Whitelist <graph2> <graph1>")));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Whitelist(graphs)));
 
   auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
-  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
-  EXPECT_THAT(scanNoGraphs.getCacheKey(),
-              Not(HasSubstr("Filtered by Graphs:")));
-  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
-              Eq(std::nullopt));
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), IndexScan::Graphs::All());
+  EXPECT_THAT(scanNoGraphs.getCacheKey(), HasSubstr("GRAPHS: ALL"));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::All()));
+
+  TripleComponent defaultGraph{iri(DEFAULT_GRAPH_IRI)};
+
+  auto scanNamedGraphs = IndexScan{qec, Permutation::PSO, triple,
+                                   IndexScan::Graphs::Blacklist(defaultGraph)};
+  EXPECT_EQ(scanNamedGraphs.graphsToFilter(),
+            IndexScan::Graphs::Blacklist(defaultGraph));
+  EXPECT_THAT(scanNamedGraphs.getCacheKey(),
+              HasSubstr("GRAPHS: Blacklist "
+                        "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+                        "default-graph>"));
+  EXPECT_THAT(scanNamedGraphs.getScanSpecificationTc().graphFilter(),
+              Eq(IndexScan::Graphs::Blacklist(defaultGraph)));
 }
 
 TEST(IndexScan, getResultSizeOfScan) {
@@ -600,7 +625,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
                                         size_t numCols,
                                         source_location l =
-                                            source_location::current()) {
+                                            AD_CURRENT_SOURCE_LOC()) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
@@ -835,7 +860,8 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex().getVocab()).value();
+    return tc.toValueId(qec_->getIndex().getVocab(), *encodedIriManager())
+        .value();
   }
 
   // Create an id table with a single column from a vector of
@@ -870,11 +896,11 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return IndexScan{qec_, Permutation::PSO, xpy};
   }
 
-  // Consume generator `first` first and store it in a vector, then do the same
+  // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeSequentially(Result::Generator first, Result::Generator second) {
+  consumeSequentially(Result::LazyResult first, Result::LazyResult second) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 
@@ -887,22 +913,21 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
     return {std::move(firstResult), std::move(secondResult)};
   }
 
-  // Consume the generators and store the results in vectors using the
+  // Consume the ranges and store the results in vectors using the
   // parameterized strategy.
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
-  consumeGenerators(
-      std::pair<Result::Generator, Result::Generator> generatorPair) {
+  consumeRanges(std::pair<Result::LazyResult, Result::LazyResult> rangePair) {
     std::vector<Result::IdTableVocabPair> joinSideResults;
     std::vector<Result::IdTableVocabPair> scanResults;
 
     bool rightFirst = GetParam();
     if (rightFirst) {
       std::tie(scanResults, joinSideResults) = consumeSequentially(
-          std::move(generatorPair.second), std::move(generatorPair.first));
+          std::move(rangePair.second), std::move(rangePair.first));
     } else {
       std::tie(joinSideResults, scanResults) = consumeSequentially(
-          std::move(generatorPair.first), std::move(generatorPair.second));
+          std::move(rangePair.first), std::move(rangePair.second));
     }
     return {std::move(joinSideResults), std::move(scanResults)};
   }
@@ -926,8 +951,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     co_yield p3;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -970,8 +995,8 @@ TEST_P(IndexScanWithLazyJoin,
     co_yield p2;
   };
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -1004,7 +1029,7 @@ TEST_P(IndexScanWithLazyJoin,
   };
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
@@ -1028,7 +1053,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
                    P{makeIdTable({iri("<c>")}), LocalVocab{}}};
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -1060,7 +1085,7 @@ TEST_P(IndexScanWithLazyJoin,
 
   size_t counter = 0;
 
-  auto [joinSideResults, scanResults] = consumeGenerators(
+  auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{ad_utility::CachingTransformInputRange{
                                std::move(pairs),
                                [&counter, &indexG](auto& pair) mutable {
@@ -1102,8 +1127,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
     co_yield p7;
   };
 
-  auto [_, scanResults] = consumeGenerators(
-      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
+  auto [_, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1134,7 +1159,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1165,7 +1190,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1177,7 +1202,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
   auto makeJoinSide = []() -> Result::Generator { co_return; };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1330,7 +1355,7 @@ TEST(IndexScanTest, StripColumns) {
                                  const std::vector<Variable>& varsToKeep,
                                  const std::vector<ColumnIndex>& sortedOn,
                                  ad_utility::source_location l =
-                                     ad_utility::source_location::current()) {
+                                     AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     IdTable baseResult =
         baseScan.computeResultOnlyForTesting(false).idTable().clone();
@@ -1485,8 +1510,7 @@ TEST(IndexScanTest, StripColumns) {
                                    IndexScan& baseScanDifferentVars) {
     return [&](const std::vector<Variable>& varsToKeep,
                const std::vector<ColumnIndex>& sortedOn,
-               ad_utility::source_location l =
-                   ad_utility::source_location::current()) {
+               ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
       return testStrippedColumns(baseScan, baseScanDifferentVars, varsToKeep,
                                  sortedOn, l);
     };

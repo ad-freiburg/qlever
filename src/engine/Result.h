@@ -8,7 +8,6 @@
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <ranges>
 #include <variant>
 #include <vector>
 
@@ -27,6 +26,8 @@
 // evaluated.
 class Result {
  public:
+  using IdTablePtr = std::shared_ptr<const IdTable>;
+
   struct IdTableVocabPair {
     IdTable idTable_;
     LocalVocab localVocab_;
@@ -65,8 +66,14 @@ class Result {
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
+  // If this `Result` is fully materialized, then the result can either be
+  // stored as a plain `IdTable` or as a `shared_ptr<const IdTable>`. The former
+  // is useful when the result is still being constructed (because it is
+  // mutable), the latter is useful when the result is read from a cache (e.g.
+  // the named query cache), because the shared ownership doesn't require a copy
+  // of the result.
   struct IdTableSharedLocalVocabPair {
-    IdTable idTable_;
+    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -126,6 +133,8 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  Result(std::shared_ptr<const IdTable> idTablePtr,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
@@ -169,8 +178,8 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
+  // Const access to the underlying `IdTable`. Throw if this result is not fully
+  // materialized.
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
@@ -215,9 +224,9 @@ class Result {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and
-          std::convertible_to<ql::ranges::range_value_t<R>,
-                              const Result&>) static SharedLocalVocabWrapper
+      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
+          convertible_to<ql::ranges::range_value_t<R>,
+                         const Result&>) static SharedLocalVocabWrapper
       getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {

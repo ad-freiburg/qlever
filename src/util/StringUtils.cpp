@@ -10,6 +10,7 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
@@ -60,7 +61,7 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
   if (languageRange.empty() || languageTag.empty()) {
     return false;
   } else {
-    if (languageRange.ends_with("*")) {
+    if (ql::ends_with(languageRange, "*")) {
       languageRange.pop_back();
     }
     ql::ranges::transform(languageTag, std::begin(languageTag),

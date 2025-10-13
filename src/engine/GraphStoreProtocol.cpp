@@ -4,7 +4,6 @@
 
 #include "engine/GraphStoreProtocol.h"
 
-#include "parser/SparqlParser.h"
 #include "parser/Tokenizer.h"
 #include "util/http/beast.h"
 
@@ -37,7 +36,13 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
   switch (contentType) {
     case ad_utility::MediaType::turtle:
     case ad_utility::MediaType::ntriples: {
-      auto parser = Re2Parser();
+      // TODO<joka921> We could pass in the actual manager here,
+      // then the resulting triples could (possibly) be already much
+      // smaller. This will be done in a future version where we pass the state
+      // of the underlying index more consistently to all parsing and update
+      // functions.
+      EncodedIriManager encodedIriManager;
+      auto parser = Re2Parser(&encodedIriManager);
       parser.setInputStream(body);
       return parser.parseAndReturnAllTriples();
     }
@@ -79,7 +84,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
 }
 
 // ____________________________________________________________________________
-ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
+ParsedQuery GraphStoreProtocol::transformGet(
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
   // Construct the parsed query from its short equivalent SPARQL Update
   // string. This is easier and also provides e.g. the `_originalString` field.
   auto getQuery = [&graph]() -> std::string {
@@ -91,5 +97,22 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
       return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
     }
   };
-  return SparqlParser::parseQuery(getQuery());
+  return SparqlParser::parseQuery(encodedIriManager, getQuery());
+}
+
+// ____________________________________________________________________________
+ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
+                                                const Index& index) {
+  // Construct the parsed update from its short equivalent SPARQL Update string.
+  // This is easier and also provides e.g. the `_originalString` field.
+  auto getUpdate = [&graph]() -> std::string {
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      return absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
+    } else {
+      return "DROP DEFAULT";
+    }
+  };
+  return ad_utility::getSingleElement(SparqlParser::parseUpdate(
+      index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
 }
