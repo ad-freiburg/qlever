@@ -23,7 +23,6 @@ namespace ad_utility {
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
  private:
- private:
   GeoPoint centroid_;
 
  public:

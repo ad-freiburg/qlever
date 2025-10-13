@@ -93,6 +93,12 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
   return UnitOfMeasurement::UNKNOWN;
 }
 
+// ____________________________________________________________________________
+bool isLengthUnit(UnitOfMeasurement unit) {
+  using enum UnitOfMeasurement;
+  return unit == METERS || unit == KILOMETERS || unit == MILES;
+}
+
 }  // namespace detail
 
 }  // namespace ad_utility

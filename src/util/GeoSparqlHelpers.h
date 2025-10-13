@@ -51,6 +51,9 @@ double kilometerToUnit(double kilometers,
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit);
 
+// Returns `true` iff `unit` is a unit for measuring length / distance.
+bool isLengthUnit(UnitOfMeasurement unit);
+
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
 
