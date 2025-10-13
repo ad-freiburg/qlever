@@ -5,7 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
+#include "gmock/gmock.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -45,6 +47,10 @@ constexpr std::string_view litInvalidNumCoords =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+constexpr std::string_view litShortRealWorldLine =
+    "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
@@ -233,12 +239,22 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
 
-  // TODO computeMetricLength
+  EXPECT_EQ(computeMetricLength(parsed1).length(), 0);
+  auto parseRes2 = parseWkt(litShortRealWorldLine);
+  EXPECT_EQ(parseRes2.first, 2);
+  ASSERT_TRUE(parseRes2.second.has_value());
+  auto parsed2 = parseRes2.second.value();
+  EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, MetricLength) {
-  // TODO
+  MetricLength m1{5};
+  EXPECT_EQ(m1.length(), 5);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      MetricLength{-500},
+      ::testing::HasSubstr("Metric length must be positive"));
 }
 
 // ____________________________________________________________________________
