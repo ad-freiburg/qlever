@@ -211,13 +211,20 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
     points.push_back(s2latlng.ToPoint());
   }
 
-  // Ensure loop is closed
-  if (points.front() != points.back()) {
-    points.push_back(points.front());
+  // Ensure that there are no zero-length edges (that is edges with twice the
+  // same point), as this will lead to an exception from `S2Loop`.
+  std::vector<S2Point> cleaned;
+  for (size_t i = 0; i < points.size(); ++i) {
+    if (i == 0 || points.at(i) != points.at(i - 1)) {
+      cleaned.push_back(points.at(i));
+    }
+  }
+  if (cleaned.front() == cleaned.back()) {
+    cleaned.pop_back();
   }
 
-  auto loop = std::make_unique<S2Loop>(points);
-  loop->Normalize();  // Makes outer rings CCW and inner rings CW automatically
+  auto loop = std::make_unique<S2Loop>(cleaned);
+  loop->Normalize();
   return loop;
 }
 

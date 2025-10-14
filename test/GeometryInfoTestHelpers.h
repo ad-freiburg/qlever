@@ -142,6 +142,60 @@ inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
           webMercProjFunc(b.getUpperRight())};
 }
 
+// ____________________________________________________________________________
+template <typename T>
+inline T getGeometryOfTypeOrThrow(
+    const std::string_view wkt, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  using namespace ad_utility::detail;
+  auto l = generateLocationTrace(sourceLocation);
+  auto parseRes = parseWkt(wkt);
+  if (!parseRes.second.has_value()) {
+    throw std::runtime_error("Could not parse wkt literal");
+  }
+  return std::visit(
+      [](const auto& parsed) -> T {
+        using V = std::decay_t<decltype(parsed)>;
+        if constexpr (std::is_same_v<V, T>) {
+          return parsed;
+        } else {
+          throw std::runtime_error("Wrong geometry type of parse result");
+        }
+      },
+      parseRes.second.value());
+}
+
+// ____________________________________________________________________________
+inline void testPolygonArea(const std::string_view polygonWkt,
+                            double expectedArea,
+                            Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  using namespace ad_utility::detail;
+  auto l = generateLocationTrace(sourceLocation);
+  const auto parsed = getGeometryOfTypeOrThrow<Polygon<CoordType>>(polygonWkt);
+
+  // One percent deviation from expected area is ok
+  const double allowedError = 0.01 * expectedArea;
+
+  EXPECT_NEAR(computeMetricAreaPolygon(parsed), expectedArea, allowedError);
+  EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
+};
+
+// ____________________________________________________________________________
+inline void testMultiPolygonArea(const std::string_view multiPolygonWkt,
+                                 double expectedArea,
+                                 Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  using namespace ad_utility::detail;
+  auto l = generateLocationTrace(sourceLocation);
+  const auto parsed =
+      getGeometryOfTypeOrThrow<MultiPolygon<CoordType>>(multiPolygonWkt);
+
+  // One percent deviation from expected area is ok
+  const double allowedError = 0.01 * expectedArea;
+
+  EXPECT_NEAR(computeMetricAreaMultiPolygon(parsed), expectedArea,
+              allowedError);
+  EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
+};
+
 };  // namespace geoInfoTestHelpers
 
 #endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H

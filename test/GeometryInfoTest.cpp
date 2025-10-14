@@ -4,8 +4,11 @@
 
 #include <gmock/gmock.h>
 
+#include <stdexcept>
+
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -46,6 +49,67 @@ constexpr std::string_view litInvalidNumCoords =
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+// University building 101 in Freiburg: ca. 1611 square-meters (osmway:33903391)
+constexpr std::string_view litSmallRealWorldPolygon1 =
+    "\"POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+    "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+    "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+    "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygon1 = 1611.0;
+
+// University building 106 in Freiburg: ca. 491 square-meters (osmway:33903567)
+constexpr std::string_view litSmallRealWorldPolygon2 =
+    "\"POLYGON((7.8333378 48.0146547,7.8334932 48.0144793,7.833657 "
+    "48.0145439,7.8336726 48.01455,7.8336875 48.0145564,7.8337433 "
+    "48.0145785,7.8335879 48.0147539,7.8335143 48.0147242,7.8333378 "
+    "48.0146547))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygon2 = 491.0;
+
+// The outer boundary of this polygon is a triangle between Freiburg Central
+// Railway Station, Freiburg University Library and Freiburg Cathedral, ca.
+// 117122 square-meters. It has a hole consisting of a smaller triangle ca.
+// 15103 square-meters. Therefore the area is 117122 - 15103 = 102019 sq.-m.
+constexpr std::string_view litSmallRealWorldPolygonWithHole =
+    "\"POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918  47.995562, "
+    "7.8412948 47.9977308),(7.847796 47.995486, 7.844982 47.995615, 7.8447057 "
+    "47.9969221))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygonWithHole = 102019.0;
+
+// This example multipolygon uses the same coordinates as the one with a hole
+// above. Therefore the union of them is just the first polygon with size ca.
+// 117122 square meters.
+constexpr std::string_view litRealWorldMultiPolygonFullyContained =
+    "\"MULTIPOLYGON(((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+    "47.995562, 7.8412948 47.9977308)),((7.847796 47.995486, 7.844982 "
+    "47.995615, 7.8447057 47.9969221)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonFullyContained = 117122.0;
+
+// This multipolygon contains two non-intersecting polygons (university
+// buildings 101 and 106 in Freiburg), thus its size is the sum of the member
+// polygons, that is ca. 1611 + 491 = 2102 square meters.
+constexpr std::string_view litRealWorldMultiPolygonNonIntersecting =
+    "\"MULTIPOLYGON(((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+    "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+    "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+    "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612)),((7.8333378 "
+    "48.0146547,7.8334932 48.0144793,7.833657 48.0145439,7.8336726 "
+    "48.01455,7.8336875 48.0145564,7.8337433 48.0145785,7.8335879 "
+    "48.0147539,7.8335143 48.0147242,7.8333378 48.0146547)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonNonIntersecting = 2102.0;
+
+// Two polygons which intersect each other. Their sizes are ca. 117122 and 18962
+// square meters, so their union must be smaller than the sum of these (which
+// would be 136084 square meters): it is ca. 119319 square meters.
+constexpr std::string_view litRealWorldMultiPolygonIntersecting =
+    "\"MULTIPOLYGON(((7.847796 47.995486, 7.844982 47.995615,  7.844529 "
+    "47.995205, 7.844933 47.994211)),((7.8412948 47.9977308, 7.8450491 "
+    "47.9946, 7.852918 47.995562, 7.8412948 47.9977308)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonIntersecting = 119319.0;
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -225,6 +289,63 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+
+  EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
+  EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
+  testPolygonArea(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
+  testPolygonArea(litSmallRealWorldPolygon2, areaSmallRealWorldPolygon2);
+  testPolygonArea(litSmallRealWorldPolygonWithHole,
+                  areaSmallRealWorldPolygonWithHole);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
+  testMultiPolygonArea(litRealWorldMultiPolygonFullyContained,
+                       areaRealWorldMultiPolygonFullyContained);
+  testMultiPolygonArea(litRealWorldMultiPolygonNonIntersecting,
+                       areaRealWorldMultiPolygonNonIntersecting);
+  testMultiPolygonArea(litRealWorldMultiPolygonIntersecting,
+                       areaRealWorldMultiPolygonIntersecting);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
+  using namespace ad_utility::detail;
+
+  // Join polygons and a line (no area) to a geometry collection literals
+  auto poly1 = removeDatatype(litSmallRealWorldPolygon1);
+  auto poly2 = removeDatatype(litSmallRealWorldPolygon2);
+  auto line = removeDatatype(litLineString);
+  auto collection =
+      absl::StrCat("\"GEOMETRYCOLLECTION(", poly1, ", ", line, ", ", poly2,
+                   ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  const double expectedCollection =
+      areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
+
+  // Parse the collection
+  auto parseResCollection = parseWkt(collection);
+  ASSERT_TRUE(parseResCollection.second.has_value());
+  EXPECT_EQ(parseResCollection.first, 7);
+
+  // Test area function on collection
+  std::visit(
+      [&](const auto& parsed) {
+        using T = std::decay_t<decltype(parsed)>;
+        if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+          EXPECT_EQ(collectionToMultiPolygon(parsed).size(), 2);
+          EXPECT_NEAR(computeMetricAreaCollection(parsed), expectedCollection,
+                      10.0);
+        } else {
+          throw std::runtime_error("Wrong parse result");
+        }
+      },
+      parseResCollection.second.value());
+  EXPECT_NEAR(computeMetricArea(parseResCollection.second.value()),
+              expectedCollection, 10.0);
 }
 
 // ____________________________________________________________________________
