@@ -185,8 +185,8 @@ auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
 
 // Helper structure that holds information about batch merging.
 struct BatchInfo {
-  size_t batchIndex_;           // Which meta-batch (0, 1, 2, ...)
-  size_t originalFileIndex_;    // Original file index in the full set
+  size_t batchIndex_;         // Which meta-batch (0, 1, 2, ...)
+  size_t originalFileIndex_;  // Original file index in the full set
 
   BatchInfo(size_t batchIndex, size_t originalFileIndex)
       : batchIndex_(batchIndex), originalFileIndex_(originalFileIndex) {}
@@ -211,7 +211,8 @@ class VocabularyMerger {
   template <typename W, typename C>
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
                               W comparator, C& wordCallback,
-                              ad_utility::MemorySize memoryToUse)
+                              ad_utility::MemorySize memoryToUse,
+                              size_t maxFilesPerBatch)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -306,9 +307,8 @@ class VocabularyMerger {
   template <typename C, typename L>
   bool processQueueWord(const QueueWord& word, C& wordCallback,
                         const L& lessThan, ad_utility::ProgressBar& progressBar)
-      requires WordCallback<C> &&
-               ranges::predicate<L, TripleComponentWithIndex,
-                                 TripleComponentWithIndex>;
+      requires WordCallback<C> && ranges::predicate<L, TripleComponentWithIndex,
+                                                    TripleComponentWithIndex>;
 
   // Helper: Compute the target ID for the last processed triple component.
   Id getTargetIdForLastComponent() const;
