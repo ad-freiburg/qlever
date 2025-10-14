@@ -1,6 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -64,7 +66,10 @@ TEST(AtomicFlagTest, TestWithoutModifying) {
 }
 
 // _____________________________________________________________________________
-// Memory ordering tests
+// Memory ordering tests.
+// Note: These currently don't do much. Proper stress tests for the memory order
+// behavior are difficult to write, especially on Intel/AMD where the hardware
+// memory model is very strong by default.
 TEST(AtomicFlagTest, MemoryOrderingRelaxed) {
   ql::backports::atomic_flag flag;
 
