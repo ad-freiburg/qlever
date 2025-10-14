@@ -116,6 +116,13 @@ CPP_template(typename V, typename Pred)(
     bool operator==(ql::default_sentinel_t) const {
       return done_ || current_ == end_;
     }
+    bool operator!=(ql::default_sentinel_t) const { return !(*this == end_); }
+    friend bool operator==(ql::default_sentinel_t sent, const Iterator& it) {
+      return it == sent;
+    }
+    friend bool operator!=(ql::default_sentinel_t sent, const Iterator& it) {
+      return it != sent;
+    }
   };
 
  public:
