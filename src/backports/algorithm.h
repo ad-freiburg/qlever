@@ -1,16 +1,18 @@
 //  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_BACKPORTS_ALGORITHM_H
 #define QLEVER_SRC_BACKPORTS_ALGORITHM_H
 
 #include <algorithm>
-#include <functional>
 #include <range/v3/all.hpp>
 #include <utility>
+#include <vector>
 
 #include "backports/concepts.h"
+#include "backports/functional.h"
 
 // The following defines namespaces `ql::ranges` and `ql::views` that are almost
 // drop-in replacements for `ql::ranges` and `std::views`. In C++20 mode (when
@@ -22,11 +24,10 @@
 // currently not aware of, because they only affect functions that we currently
 // don't use. For those, the following header can be expanded in the future.
 #ifndef QLEVER_CPP_17
-#include <ranges>
+
 #endif
 
 namespace ql {
-
 namespace ranges {
 #ifdef QLEVER_CPP_17
 using namespace ::ranges;
@@ -47,6 +48,36 @@ using namespace ::ranges::views;
 using namespace std::views;
 #endif
 }  // namespace views
+
+// Backported versions of `std::erase(_if)`
+namespace backports {
+template <class T, class Alloc, class U>
+constexpr typename std::vector<T, Alloc>::size_type erase(
+    std::vector<T, Alloc>& c, const U& value) {
+  auto it = std::remove(c.begin(), c.end(), value);
+  auto r = c.end() - it;
+  c.erase(it, c.end());
+  return r;
+}
+
+template <class T, class Alloc, class Pred>
+constexpr typename std::vector<T, Alloc>::size_type erase_if(
+    std::vector<T, Alloc>& c, Pred pred) {
+  auto it = std::remove_if(c.begin(), c.end(), pred);
+  auto r = c.end() - it;
+  c.erase(it, c.end());
+  return r;
+}
+}  // namespace backports
+
+#ifdef QLEVER_CPP_17
+using backports::erase;
+using backports::erase_if;
+
+#else
+using std::erase;
+using std::erase_if;
+#endif
 
 }  // namespace ql
 

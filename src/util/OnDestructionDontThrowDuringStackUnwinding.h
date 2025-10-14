@@ -72,7 +72,7 @@ class OnDestructionCreator {
 // return object in a container because all of its constructors are either
 // private or deleted. This is disabled deliberately as it might lead to program
 // termination (for `std::vector`) or to uncalled destructors.
-CPP_template(typename F)(requires std::invocable<F>)
+CPP_template(typename F)(requires ql::concepts::invocable<F>)
     [[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<
         F> makeOnDestructionDontThrowDuringStackUnwinding(F f) {
   static_assert(

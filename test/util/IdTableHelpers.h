@@ -6,7 +6,6 @@
 #define QLEVER_TEST_UTIL_IDTABLEHELPERS_H
 
 #include <algorithm>
-#include <concepts>
 #include <cstdio>
 #include <fstream>
 #include <ranges>
@@ -100,9 +99,9 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // matcher also deals with `IdTable` not being copyable, which requires a
 // workaround for GMock/GTest.
 struct MatchesIdTable {
-  template <typename... Ts>
-  requires(std::constructible_from<IdTable, Ts && ...>)
-  auto operator()(Ts&&... ts) const {
+  CPP_template(typename... Ts)(
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>)) auto
+  operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 
@@ -135,7 +134,7 @@ void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
-    ad_utility::source_location l = ad_utility::source_location::current());
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC());
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during

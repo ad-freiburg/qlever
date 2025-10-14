@@ -10,6 +10,7 @@
 
 #include <vector>
 
+#include "backports/keywords.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
@@ -48,12 +49,11 @@ class VectorWithMemoryLimit
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
       requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<
-              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
+          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
+                                 Base>)
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<
-                  Base, Args&&...>) explicit(sizeof...(Args) == 1)
-      VectorWithMemoryLimit(Args&&... args)
+              CPP_and concepts::constructible_from<Base, Args&&...>)
+      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
       : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
@@ -81,7 +81,7 @@ class VectorWithMemoryLimit
     return VectorWithMemoryLimit(*this);
   }
 };
-static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
@@ -283,7 +283,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (ranges::invocable<Function, Operands&&...>) {
+      if constexpr (ql::concepts::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();

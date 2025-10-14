@@ -140,7 +140,7 @@ inline std::ostream& operator<<(std::ostream& out,
 template <typename Result, typename Matcher>
 void expectCompleteParse(
     const Result& resultOfParseAndText, Matcher&& matcher,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
@@ -160,7 +160,7 @@ template <typename Result, typename Matcher>
 void expectIncompleteParse(
     const Result& resultOfParseAndText, const std::string& rest,
     Matcher&& matcher,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_EQ(resultOfParseAndText.remainingText_, rest);
@@ -794,26 +794,23 @@ inline auto OptionalGraphPattern = [](std::vector<std::string>&& filters,
 inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
-namespace detail {
-inline auto GroupGraphPattern = [](std::vector<std::string>&& filters,
-                                   const auto&... childMatchers)
+inline auto GroupGraphPattern = [](const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...));
+  return Group(detail::GraphPattern(false, {}, childMatchers...));
 };
 
-inline auto GroupGraphPatternWithGraph =
-    [](std::vector<std::string>&& filters,
-       p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
-    -> Matcher<const p::GraphPatternOperation&> {
-  return Group(detail::GraphPattern(false, filters, childMatchers...), graph);
-};
-
-}  // namespace detail
-
-inline auto GroupGraphPattern =
-    MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
-inline auto GroupGraphPatternWithGraph =
-    MatcherWithDefaultFilters<detail::GroupGraphPatternWithGraph>{};
+inline auto GroupGraphPatternWithGraph = ad_utility::OverloadCallOperator{
+    [](p::GroupGraphPattern::GraphSpec graph, const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...), graph);
+    },
+    [](::Variable graphVariable,
+       p::GroupGraphPattern::GraphVariableBehaviour graphVariableBehaviour,
+       const auto&... childMatchers)
+        -> Matcher<const p::GraphPatternOperation&> {
+      return Group(detail::GraphPattern(false, {}, childMatchers...),
+                   std::pair{std::move(graphVariable), graphVariableBehaviour});
+    }};
 
 namespace detail {
 inline auto MinusGraphPattern = [](std::vector<std::string>&& filters,
@@ -839,9 +836,8 @@ inline auto SubSelect =
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    ScanSpecificationAsTripleComponent::Graphs activeDefaultGraphs =
-        std::nullopt,
-    ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
+    parsedQuery::DatasetClauses::Graphs activeDefaultGraphs = std::nullopt,
+    parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
@@ -852,8 +848,8 @@ inline auto datasetClausesMatcher(
 inline auto SelectQuery =
     [](const Matcher<const p::SelectClause&>& selectMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher,
-       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
-       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const ::ParsedQuery&> {
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
@@ -892,8 +888,8 @@ inline auto GroupKeys = GroupByVariables;
 // Matcher for an ASK query.
 inline auto AskQuery =
     [](const Matcher<const p::GraphPattern&>& graphPatternMatcher,
-       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
-       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const ::ParsedQuery&> {
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
@@ -907,8 +903,8 @@ inline auto AskQuery =
 inline auto ConstructQuery(
     const std::vector<std::array<GraphTerm, 3>>& elems,
     const Matcher<const p::GraphPattern&>& m,
-    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
-    ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
+    parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+    parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery&> {
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
   return testing::AllOf(
@@ -923,10 +919,8 @@ inline auto ConstructQuery(
 // A matcher for a `DescribeQuery`
 inline auto DescribeQuery(
     const Matcher<const p::GraphPattern&>& describeMatcher,
-    const ScanSpecificationAsTripleComponent::Graphs& defaultGraphs =
-        std::nullopt,
-    const ScanSpecificationAsTripleComponent::Graphs& namedGraphs =
-        std::nullopt) {
+    const parsedQuery::DatasetClauses::Graphs& defaultGraphs = std::nullopt,
+    const parsedQuery::DatasetClauses::Graphs& namedGraphs = std::nullopt) {
   using Var = ::Variable;
   return ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}},
                         describeMatcher, defaultGraphs, namedGraphs);
@@ -1051,8 +1045,10 @@ auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
 }
 
 // Same as `matchPtrWithChildren` above, but the children are all variables.
-template <typename Expression>
-auto matchPtrWithVariables(const std::same_as<::Variable> auto&... children)
+CPP_template(typename Expression, typename... Children)(requires(
+    ql::concepts::same_as<
+        ::Variable,
+        Children>&&...)) auto matchPtrWithVariables(const Children&... children)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtrWithChildren<Expression>(
       variableExpressionMatcher(children)...);
@@ -1151,8 +1147,8 @@ inline auto Filters = [](const auto&... filterMatchers)
 // Matcher for `FILTER EXISTS` filters.
 inline auto ExistsFilter =
     [](const Matcher<const parsedQuery::GraphPattern&>& m,
-       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
-       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+       parsedQuery::DatasetClauses::Graphs defaultGraphs = std::nullopt,
+       parsedQuery::DatasetClauses::Graphs namedGraphs =
            std::nullopt) -> Matcher<const SparqlFilter&> {
   return AD_FIELD(SparqlFilter, expression_,
                   AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getPimpl,
@@ -1162,30 +1158,39 @@ inline auto ExistsFilter =
 
 // A helper matcher for a graph pattern that targets all triples in `graph`.
 inline auto SelectAllPattern =
-    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
-       std::optional<std::string>&& filter =
-           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
+    [](parsedQuery::GroupGraphPattern::GraphSpec graph)
+    -> Matcher<const parsedQuery::GraphPattern&> {
   return GraphPattern(
-      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
+      false, std::vector<std::string>{},
       Group(GraphPattern(Triples(
                 {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
             std::move(graph)));
 };
 
 // Matcher for a `ParsedQuery` with a clear of `graph`.
-inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
-                       std::optional<std::string>&& filter = std::nullopt) {
-  // The `GraphSpec` type is the same variant as
-  // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
-  return UpdateClause(
-      GraphUpdate(
-          {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
-          {}),
-      SelectAllPattern(graph, AD_FWD(filter)));
-};
+inline auto Clear = ad_utility::OverloadCallOperator{
+    [](const ad_utility::triple_component::Iri& graph) {
+      return UpdateClause(GraphUpdate({{{::Variable("?s")},
+                                        {::Variable("?p")},
+                                        {::Variable("?o")},
+                                        graph}},
+                                      {}),
+                          SelectAllPattern(graph));
+    },
+    [](const ::Variable& graph,
+       parsedQuery::GroupGraphPattern::GraphVariableBehaviour
+           graphVariableBehaviour) {
+      return UpdateClause(
+          GraphUpdate({{{::Variable("?s")},
+                        {::Variable("?p")},
+                        {::Variable("?o")},
+                        graph}},
+                      {}),
+          SelectAllPattern(std::pair{graph, graphVariableBehaviour}));
+    }};
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
-inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
+inline auto AddAll = [](const ad_utility::triple_component::Iri& from,
                         const SparqlTripleSimpleWithGraph::Graph& to) {
   return UpdateClause(GraphUpdate({}, {SparqlTripleSimpleWithGraph(
                                           ::Variable("?s"), ::Variable("?p"),
@@ -1251,31 +1256,29 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
-  auto operator()(const std::string& input, const Value& value,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const Value& value,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, value, prefixMap_, l);
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, matcher, prefixMap_, l);
   }
 
-  auto operator()(const std::string& input, const Value& value,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const Value& value,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
@@ -1285,11 +1288,10 @@ struct ExpectCompleteParse {
     });
   }
 
-  auto operator()(const std::string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ParsedQuery::DatasetClauses activeDatasetClauses,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
+  auto operator()(
+      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      ParsedQuery::DatasetClauses activeDatasetClauses,
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
@@ -1309,14 +1311,14 @@ struct ExpectParseFails {
   auto operator()(
       const std::string& input,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     return operator()(input, prefixMap_, messageMatcher, l);
   }
 
   auto operator()(
       const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
+      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
         parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),

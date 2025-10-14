@@ -12,8 +12,7 @@ namespace ad_utility::websocket {
 QueryToSocketDistributor::QueryToSocketDistributor(
     net::io_context& ioContext, const std::function<void(bool)>& cleanupCall)
     : strand_{net::make_strand(ioContext)},
-      infiniteTimer_{strand_, static_cast<net::deadline_timer::time_type>(
-                                  boost::posix_time::pos_infin)},
+      infiniteTimer_{strand_, net::steady_timer::time_point::max()},
       cleanupCall_{
           cleanupCall,
           [](const auto& cleanupCall) { std::invoke(cleanupCall, false); }},
@@ -36,7 +35,7 @@ net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
 
 void QueryToSocketDistributor::wakeUpWaitingListeners() {
   // Setting the time anew automatically cancels waiting operations
-  infiniteTimer_.expires_at(boost::posix_time::pos_infin);
+  infiniteTimer_.expires_at(net::steady_timer::time_point::max());
 }
 
 // _____________________________________________________________________________
