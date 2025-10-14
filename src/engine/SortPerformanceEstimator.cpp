@@ -120,8 +120,10 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumberOfElementsToSort) {
+#ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
+#endif
 
   AD_LOG_INFO << "Sorting random result tables to estimate the sorting "
                  "performance of this machine ..."
