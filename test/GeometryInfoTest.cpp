@@ -353,6 +353,15 @@ TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, MetricArea) {
+  MetricArea a1{500};
+  EXPECT_EQ(a1.area(), 500);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      MetricArea{-1}, ::testing::HasSubstr("Metric area must be positive"));
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
   checkInvalidLiteral(litInvalidType);
   checkInvalidLiteral(litInvalidBrackets, true);
