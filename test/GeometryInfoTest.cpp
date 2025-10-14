@@ -110,6 +110,7 @@ constexpr std::string_view litRealWorldMultiPolygonIntersecting =
     "47.9946, 7.852918 47.995562, 7.8412948 47.9977308)))\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const double areaRealWorldMultiPolygonIntersecting = 119319.0;
+const size_t numRealWorldMultiPolygonIntersecting = 2;
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -310,42 +311,45 @@ TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
                        areaRealWorldMultiPolygonNonIntersecting);
   testMultiPolygonArea(litRealWorldMultiPolygonIntersecting,
                        areaRealWorldMultiPolygonIntersecting);
+  // TODO Multipolygon with 0 members, 1 member
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
   using namespace ad_utility::detail;
 
-  // Join polygons and a line (no area) to a geometry collection literals
-  auto poly1 = removeDatatype(litSmallRealWorldPolygon1);
-  auto poly2 = removeDatatype(litSmallRealWorldPolygon2);
-  auto line = removeDatatype(litLineString);
-  auto collection =
-      absl::StrCat("\"GEOMETRYCOLLECTION(", poly1, ", ", line, ", ", poly2,
-                   ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  const double expectedCollection =
+  // Join two polygons and a line (no area) to a geometry collection literal
+  auto collection1 = absl::StrCat(
+      "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ", ",
+      removeDatatype(litLineString), ", ",
+      removeDatatype(litSmallRealWorldPolygon2), ")");
+  const double expectedCollection1 =
       areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
+  testCollectionArea(addDatatype(collection1), 2, expectedCollection1);
 
-  // Parse the collection
-  auto parseResCollection = parseWkt(collection);
-  ASSERT_TRUE(parseResCollection.second.has_value());
-  EXPECT_EQ(parseResCollection.first, 7);
+  // Collection with only one member (polygon)
+  auto collection2 = absl::StrCat(
+      "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ")");
+  testCollectionArea(addDatatype(collection2), 1, areaSmallRealWorldPolygon1);
 
-  // Test area function on collection
-  std::visit(
-      [&](const auto& parsed) {
-        using T = std::decay_t<decltype(parsed)>;
-        if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-          EXPECT_EQ(collectionToMultiPolygon(parsed).size(), 2);
-          EXPECT_NEAR(computeMetricAreaCollection(parsed), expectedCollection,
-                      10.0);
-        } else {
-          throw std::runtime_error("Wrong parse result");
-        }
-      },
-      parseResCollection.second.value());
-  EXPECT_NEAR(computeMetricArea(parseResCollection.second.value()),
-              expectedCollection, 10.0);
+  // Collection with only one member (non-polygon)
+  auto collection3 =
+      absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
+  testCollectionArea(addDatatype(collection3), 0, 0);
+
+  // Collection containing a multipolygon
+  auto collection4 =
+      absl::StrCat("GEOMETRYCOLLECTION(",
+                   removeDatatype(litRealWorldMultiPolygonIntersecting), ")");
+  testCollectionArea(addDatatype(collection4),
+                     numRealWorldMultiPolygonIntersecting,
+                     areaRealWorldMultiPolygonIntersecting);
+
+  // Collection containing a nested collection
+  auto collection5 = absl::StrCat("GEOMETRYCOLLECTION(", collection4, ")");
+  testCollectionArea(addDatatype(collection5),
+                     numRealWorldMultiPolygonIntersecting,
+                     areaRealWorldMultiPolygonIntersecting);
 }
 
 // ____________________________________________________________________________
