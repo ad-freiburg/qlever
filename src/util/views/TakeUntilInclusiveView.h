@@ -37,7 +37,7 @@ CPP_template(typename V, typename Pred)(
     : public ql::ranges::view_interface<TakeUntilInclusiveView<V, Pred>> {
  private:
   V base_;
-  Pred pred_;
+  ::ranges::semiregular_box_t<Pred> pred_;
 
   class Iterator {
    public:
@@ -112,11 +112,12 @@ CPP_template(typename V, typename Pred)(
 
     void operator++(int) { ++(*this); }
 
-    // TODO<joka921> Implement `ql::default_sentinel`
     bool operator==(ql::default_sentinel_t) const {
       return done_ || current_ == end_;
     }
-    bool operator!=(ql::default_sentinel_t) const { return !(*this == end_); }
+    bool operator!=(ql::default_sentinel_t sent) const {
+      return !(*this == sent);
+    }
     friend bool operator==(ql::default_sentinel_t sent, const Iterator& it) {
       return it == sent;
     }
@@ -131,7 +132,8 @@ CPP_template(typename V, typename Pred)(
       : base_(std::move(base)), pred_(std::move(pred)) {}
 
   auto begin() {
-    return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_), &pred_};
+    return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_),
+                    &pred_.get()};
   }
 
   auto end() { return ql::default_sentinel; }
