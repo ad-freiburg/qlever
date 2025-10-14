@@ -123,8 +123,8 @@ struct SumAggregationData {
     auto nonNumericValueAdder = [this](sparqlExpression::detail::NotNumeric) {
       error_ = true;
     };
-    auto sumValueAdder = ad_utility::OverloadCallOperator(
-        doubleValueAdder, intValueAdder, nonNumericValueAdder);
+    auto sumValueAdder = ad_utility::OverloadCallOperator{
+        doubleValueAdder, intValueAdder, nonNumericValueAdder};
 
     std::visit(sumValueAdder, val);
   };
