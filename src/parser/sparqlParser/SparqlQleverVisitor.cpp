@@ -1995,7 +1995,7 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
                                     PathObjectPairs predicateObjectPairs,
                                     TripleVec additionalTriples) {
     for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
-      triples.emplace_back(subject, std::move(predicate), std::move(object));
+      triples.push_back({subject, std::move(predicate), std::move(object)});
     }
     ql::ranges::copy(additionalTriples, std::back_inserter(triples));
     for (const auto& triple : triples) {
@@ -2068,7 +2068,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     }
   };
   for (auto& triple : objectList.second) {
-    triples.emplace_back(triple[0], toVarOrPath(triple[1]), triple[2]);
+    triples.push_back({triple[0], toVarOrPath(triple[1]), triple[2]});
   }
   return {std::move(predicateObjectPairs), std::move(triples)};
 }
@@ -2252,7 +2252,7 @@ SubjectOrObjectAndPathTriples Visitor::visit(
   auto subject = getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
-    triples.emplace_back(subject, std::move(predicate), std::move(object));
+    triples.push_back({subject, std::move(predicate), std::move(object)});
   }
   return {std::move(subject), triples};
 }
@@ -2972,7 +2972,7 @@ template <typename Ctx>
 std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
   try {
     if (parseAsInt) {
-      return std::stoll(ctx->getText());
+      return static_cast<int64_t>(std::stoll(ctx->getText()));
     } else {
       return std::stod(ctx->getText());
     }
