@@ -601,7 +601,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
-        memoryLimitIndexBuilding());
+        memoryLimitIndexBuilding(), maxFilesPerBatch_);
     wordCallback.finish();
     return mergedVocabMeta;
   }();

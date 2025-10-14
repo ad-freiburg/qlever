@@ -539,7 +539,7 @@ size_t VocabularyMerger::mergeSingleBatch(const std::string& basename,
                                           size_t endFile, W comparator,
                                           ad_utility::MemorySize memoryToUse) {
   AD_LOG_INFO << "Merging batch " << batchIndex << " (files " << startFile
-              << " to " << endFile << ")" << std::endl;
+              << " to " << (endFile - 1) << ")" << std::endl;
 
   // Create comparators
   auto [lessThan, lessThanForQueue] = makeComparators(comparator);

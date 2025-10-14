@@ -250,6 +250,10 @@ int main(int argc, char** argv) {
       "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
+  add("max-files-per-batch", po::value(&config.maxFilesPerBatch_),
+      "Maximum number of partial vocabulary files to merge simultaneously. "
+      "If the number of partial files exceeds this limit, two-stage merging "
+      "is used to avoid hitting OS file descriptor limits. Default: 2000.");
 
   // Process command line arguments.
   po::variables_map optionsMap;

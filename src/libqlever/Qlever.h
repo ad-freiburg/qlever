@@ -18,6 +18,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "util/AllocatorWithLimit.h"
@@ -97,6 +98,12 @@ struct IndexBuilderConfig : CommonConfig {
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
+
+  // Maximum number of partial vocabulary files to merge simultaneously during
+  // vocabulary merging. If the number of partial files exceeds this limit,
+  // two-stage merging is used to avoid hitting OS file descriptor limits.
+  // The default value (2000) works well for most systems.
+  size_t maxFilesPerBatch_ = MAX_NUM_FILES_FOR_DIRECT_MERGE;
 
   // A list of IRI prefixes (without angle brackets). IRIs that start with one
   // of these prefixes, followed by a sequence of a bounded number of digits
