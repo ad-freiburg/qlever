@@ -5,7 +5,6 @@
 #include "PathSearch.h"
 
 #include <optional>
-#include <ranges>
 #include <unordered_map>
 #include <variant>
 #include <vector>

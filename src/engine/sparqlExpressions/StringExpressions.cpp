@@ -20,14 +20,16 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral =
-    [](std::string_view normalizedContent,
-       const std::optional<std::variant<Iri, std::string>>& descriptor =
-           std::nullopt) {
-      return LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
-    };
+struct ToLiteral {
+  LiteralOrIri operator()(std::string_view normalizedContent,
+                          const std::optional<std::variant<Iri, std::string>>&
+                              descriptor = std::nullopt) const {
+    return LiteralOrIri{
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+  }
+};
+static constexpr ToLiteral toLiteral{};
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of

@@ -8,7 +8,6 @@
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <ranges>
 #include <variant>
 #include <vector>
 

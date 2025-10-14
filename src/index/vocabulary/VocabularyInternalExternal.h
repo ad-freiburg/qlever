@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
-#include <ranges>
 #include <string>
 #include <string_view>
 

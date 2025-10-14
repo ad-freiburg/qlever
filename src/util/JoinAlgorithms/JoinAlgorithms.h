@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
-#include <ranges>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
