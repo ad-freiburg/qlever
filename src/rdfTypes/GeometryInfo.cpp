@@ -129,6 +129,22 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
+MetricArea GeometryInfo::getMetricArea() const { return {metricArea_}; }
+
+// ____________________________________________________________________________
+std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
+  auto [type, parsed] = detail::parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  try {
+    return detail::computeMetricArea(parsed.value());
+  } catch (std::exception) {  // TODO<ullingerc>
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
