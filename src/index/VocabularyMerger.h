@@ -190,7 +190,44 @@ class VocabularyMerger {
 
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
-  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  /**
+   * @brief Struct to manage duplicate occurrences of words during merging of
+   *        partial vocabularies.
+   * @detail This struct is needed for the correct semantics of isExternal.
+   *         If multiple occurrences of the same iriOrLiteral appear, they are
+   *         flattened to one vocab entry. If those occurrences have different
+   *         values for isExternal the logic is as follows:
+   *         For isExternal: If one of the occurrences has this set to true,
+   *         this should be set to true later on after merging.
+   *
+   *         This struct is used to collect all multiple occurrences of
+   *         iriOrLiterals and once all are collected, the writing happens. The
+   *         reason the collection works is the QueueWords being sorted.
+   */
+  struct EqualWords {
+    std::string iriOrLiteral_;
+    bool isExternal_;
+    // The targetId_ the Id the words are mapped to by vocabulary. This is the
+    // same for equal words since they are later written as one.
+    Id targetId_;
+    // partialVocabAndPartialFileIds
+    struct PartialIds {
+      size_t fileId_;
+      size_t localIndex_;
+    };
+    std::vector<PartialIds> partialIds_;
+
+    EqualWords(std::string iriOrLiteral, bool isExternal,
+               size_t fileId, size_t localIndex)
+        : iriOrLiteral_(std::move(iriOrLiteral)),
+          isExternal_(isExternal),
+          partialIds_({{fileId, localIndex}}) {
+      targetId_ = Id::makeUndefined();
+    }
+
+    bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
+  };
+  std::optional<EqualWords> currentWord_ = std::nullopt;
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
@@ -224,7 +261,7 @@ class VocabularyMerger {
                                       // information if it will be externalized
     size_t partialFileId_;  // from which partial vocabulary did this word come
 
-    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
+    bool isExternal() const { return entry_.isExternal(); }
     [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
 
     [[nodiscard]] const std::string& iriOrLiteral() const {
@@ -251,11 +288,21 @@ class VocabularyMerger {
                                   C& wordCallback, const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
+  // This function has to be called for a word once all of its occurrences in
+  // the different partial vocabularies have been processed by the queue. It
+  // gets the index and target index for EqualWords. This target index has to be
+  // set only once for EqualWords. The function isn't const since `metaData_` is
+  // modified.
+  CPP_template(typename C)(
+      requires WordCallback<C>) void writeAndGetEqualWordIds(EqualWords&
+                                                                 equalWords,
+                                                             C& wordCallback);
+
   // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
-    lastTripleComponent_ = std::nullopt;
+    currentWord_ = std::nullopt;
     idMaps_.clear();
   }
 
