@@ -275,6 +275,208 @@ TEST_F(MergeVocabularyTest, mergeVocabularyTwoStage) {
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
 
+// Test fixture for comprehensive two-stage merge testing with multiple files
+class MergeVocabularyMultiFileTest : public ::testing::Test {
+ protected:
+  std::string basePath_;
+  size_t numFiles_ = 4;
+
+  // Helper to create a partial vocabulary file
+  void createPartialVocabFile(size_t fileIdx,
+                               const std::vector<TripleComponentWithIndex>& words) {
+    std::string path = basePath_ + std::string(PARTIAL_VOCAB_WORDS_INFIX) +
+                       std::to_string(fileIdx);
+    ad_utility::serialization::FileWriteSerializer file(path);
+    file << static_cast<uint64_t>(words.size());
+    for (const auto& word : words) {
+      file << word;
+    }
+  }
+
+  void SetUp() override {
+    basePath_ = "vocabMultiFileTest/";
+    if (system(("mkdir -p " + basePath_).c_str())) {
+      std::cerr << "Could not create test directory\n";
+    }
+  }
+
+  void TearDown() override {
+    // Clean up test files
+    system(("rm -rf " + basePath_).c_str());
+  }
+};
+
+// Test with 2 files per batch (4 files total, batch size 2)
+TEST_F(MergeVocabularyMultiFileTest, twoFilesPerBatch) {
+  // File 0: words "alpha", "delta"
+  createPartialVocabFile(0, {{"\"alpha\"", false, 0}, {"\"delta\"", false, 1}});
+
+  // File 1: words "beta", "delta" (delta appears in both files of batch 0)
+  createPartialVocabFile(1, {{"\"beta\"", false, 0}, {"\"delta\"", false, 1}});
+
+  // File 2: words "charlie", "foxtrot"
+  createPartialVocabFile(2, {{"\"charlie\"", false, 0}, {"\"foxtrot\"", false, 1}});
+
+  // File 3: words "echo", "foxtrot" (foxtrot appears in both files of batch 1)
+  createPartialVocabFile(3, {{"\"echo\"", false, 0}, {"\"foxtrot\"", false, 1}});
+
+  std::vector<std::pair<std::string, bool>> mergeResult;
+  auto internalVocabularyAction = [&mergeResult](const auto& word,
+                                                  bool isExternal) -> uint64_t {
+    mergeResult.emplace_back(word, isExternal);
+    return mergeResult.size() - 1;
+  };
+
+  // Force 2 files per batch
+  auto res = mergeVocabulary(basePath_, numFiles_, TripleComponentComparator(),
+                             internalVocabularyAction, 1_GB, 2);
+
+  // Expected merged vocabulary (sorted, deduplicated)
+  std::vector<std::pair<std::string, bool>> expected = {
+      {"\"alpha\"", false},   {"\"beta\"", false}, {"\"charlie\"", false},
+      {"\"delta\"", false},   {"\"echo\"", false}, {"\"foxtrot\"", false}};
+
+  EXPECT_THAT(mergeResult, ::testing::ElementsAreArray(expected));
+
+  // Verify ID mappings are correct for all files
+  for (size_t i = 0; i < numFiles_; ++i) {
+    IdMap mapping = getIdMapFromFile(basePath_ +
+                                     std::string(PARTIAL_VOCAB_IDMAP_INFIX) +
+                                     std::to_string(i));
+    ASSERT_GT(mapping.size(), 0) << "Mapping for file " << i << " is empty";
+  }
+
+  // Specifically check that "delta" (appears in files 0 and 1) maps to same global ID
+  IdMap map0 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "0");
+  IdMap map1 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "1");
+
+  // File 0: local ID 1 = "delta" should map to global ID 3
+  EXPECT_EQ(map0[1].second, V(3));
+  // File 1: local ID 1 = "delta" should also map to global ID 3
+  EXPECT_EQ(map1[1].second, V(3));
+
+  // Check that "foxtrot" (appears in files 2 and 3) maps to same global ID
+  IdMap map2 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "2");
+  IdMap map3 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "3");
+
+  // File 2: local ID 1 = "foxtrot" should map to global ID 5
+  EXPECT_EQ(map2[1].second, V(5));
+  // File 3: local ID 1 = "foxtrot" should also map to global ID 5
+  EXPECT_EQ(map3[1].second, V(5));
+}
+
+// Test with words appearing across different batches
+TEST_F(MergeVocabularyMultiFileTest, wordAcrossBatches) {
+  // File 0: "alpha", "shared"
+  createPartialVocabFile(0, {{"\"alpha\"", false, 0}, {"\"shared\"", false, 1}});
+
+  // File 1: "beta"
+  createPartialVocabFile(1, {{"\"beta\"", false, 0}});
+
+  // File 2: "charlie", "shared" (shared appears in batch 0 and batch 1)
+  createPartialVocabFile(2, {{"\"charlie\"", false, 0}, {"\"shared\"", false, 1}});
+
+  // File 3: "delta"
+  createPartialVocabFile(3, {{"\"delta\"", false, 0}});
+
+  std::vector<std::pair<std::string, bool>> mergeResult;
+  auto internalVocabularyAction = [&mergeResult](const auto& word,
+                                                  bool isExternal) -> uint64_t {
+    mergeResult.emplace_back(word, isExternal);
+    return mergeResult.size() - 1;
+  };
+
+  // Batch size 2: batch 0 = files [0,1], batch 1 = files [2,3]
+  auto res = mergeVocabulary(basePath_, numFiles_, TripleComponentComparator(),
+                             internalVocabularyAction, 1_GB, 2);
+
+  // Expected: alpha, beta, charlie, delta, shared (sorted)
+  std::vector<std::pair<std::string, bool>> expected = {
+      {"\"alpha\"", false}, {"\"beta\"", false}, {"\"charlie\"", false},
+      {"\"delta\"", false}, {"\"shared\"", false}};
+
+  EXPECT_THAT(mergeResult, ::testing::ElementsAreArray(expected));
+
+  // Check that "shared" has same global ID from both files
+  IdMap map0 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "0");
+  IdMap map2 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "2");
+
+  // File 0: local ID 1 = "shared" should map to global ID 4
+  EXPECT_EQ(map0[1].second, V(4));
+  // File 2: local ID 1 = "shared" should also map to global ID 4
+  EXPECT_EQ(map2[1].second, V(4));
+}
+
+// Test with more complex scenario: 6 files, batch size 2
+TEST_F(MergeVocabularyMultiFileTest, complexMultiBatchScenario) {
+  numFiles_ = 6;
+
+  // Batch 0: files 0-1
+  createPartialVocabFile(0, {{"\"aaa\"", false, 0}, {"\"shared1\"", false, 1},
+                             {"\"shared2\"", false, 2}});
+  createPartialVocabFile(1, {{"\"bbb\"", false, 0}, {"\"shared1\"", false, 1}});
+
+  // Batch 1: files 2-3
+  createPartialVocabFile(2, {{"\"ccc\"", false, 0}, {"\"shared2\"", false, 1},
+                             {"\"shared3\"", false, 2}});
+  createPartialVocabFile(3, {{"\"ddd\"", false, 0}, {"\"shared3\"", false, 1}});
+
+  // Batch 2: files 4-5
+  createPartialVocabFile(4, {{"\"eee\"", false, 0}, {"\"shared1\"", false, 1}});
+  createPartialVocabFile(5, {{"\"fff\"", false, 0}, {"\"shared3\"", false, 1}});
+
+  std::vector<std::pair<std::string, bool>> mergeResult;
+  auto internalVocabularyAction = [&mergeResult](const auto& word,
+                                                  bool isExternal) -> uint64_t {
+    mergeResult.emplace_back(word, isExternal);
+    return mergeResult.size() - 1;
+  };
+
+  auto res = mergeVocabulary(basePath_, numFiles_, TripleComponentComparator(),
+                             internalVocabularyAction, 1_GB, 2);
+
+  // Expected: aaa, bbb, ccc, ddd, eee, fff, shared1, shared2, shared3
+  std::vector<std::pair<std::string, bool>> expected = {
+      {"\"aaa\"", false},     {"\"bbb\"", false},     {"\"ccc\"", false},
+      {"\"ddd\"", false},     {"\"eee\"", false},     {"\"fff\"", false},
+      {"\"shared1\"", false}, {"\"shared2\"", false}, {"\"shared3\"", false}};
+
+  EXPECT_THAT(mergeResult, ::testing::ElementsAreArray(expected));
+
+  // Verify shared1 appears in files 0, 1, 4 with same global ID (6)
+  IdMap map0 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "0");
+  IdMap map1 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "1");
+  IdMap map4 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "4");
+
+  EXPECT_EQ(map0[1].second, V(6));  // shared1 in file 0
+  EXPECT_EQ(map1[1].second, V(6));  // shared1 in file 1
+  EXPECT_EQ(map4[1].second, V(6));  // shared1 in file 4
+
+  // Verify shared2 appears in files 0, 2 with same global ID (7)
+  IdMap map2 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "2");
+  EXPECT_EQ(map0[2].second, V(7));  // shared2 in file 0
+  EXPECT_EQ(map2[1].second, V(7));  // shared2 in file 2
+
+  // Verify shared3 appears in files 2, 3, 5 with same global ID (8)
+  IdMap map3 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "3");
+  IdMap map5 = getIdMapFromFile(basePath_ +
+                                std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "5");
+  EXPECT_EQ(map2[2].second, V(8));  // shared3 in file 2
+  EXPECT_EQ(map3[1].second, V(8));  // shared3 in file 3
+  EXPECT_EQ(map5[1].second, V(8));  // shared3 in file 5
+}
+
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = LocalVocabIndexAndSplitVal;
