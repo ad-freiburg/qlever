@@ -231,6 +231,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   // the blocks of which some part has to be exported. Consume as few blocks
   // of the result as possible.
   namespace v = ql::views;
+
   return InputRangeTypeErased{
       OwningView{getIdTables(result)} |
       v::transform(tableToState)
