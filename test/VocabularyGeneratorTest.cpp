@@ -227,6 +227,54 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
 
+// Test for two-stage merge Vocabulary with small batch size
+TEST_F(MergeVocabularyTest, mergeVocabularyTwoStage) {
+  // Use a batch size of 1 to force two-stage merging with just 2 input files
+  VocabularyMetaData res;
+  std::vector<std::pair<std::string, bool>> mergeResult;
+  std::vector<std::pair<std::string, bool>> geoMergeResult;
+  {
+    // Simulate `Vocabulary::WordWriter::operation()` for testing purposes
+    auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
+                                        const auto& word,
+                                        bool isExternal) -> uint64_t {
+      if (ql::starts_with(word, "\"") &&
+          ql::ends_with(
+              word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
+        geoMergeResult.emplace_back(word, isExternal);
+        return (geoMergeResult.size() - 1) | (1ull << 59);
+      } else {
+        mergeResult.emplace_back(word, isExternal);
+        return mergeResult.size() - 1;
+      }
+    };
+
+    // Force two-stage merging by setting maxFilesPerBatch to 1
+    res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
+                          internalVocabularyAction, 1_GB, 1);
+  }
+
+  // Results should be identical to single-stage merge
+  EXPECT_THAT(mergeResult,
+              ::testing::ElementsAreArray(expectedMergedVocabulary_));
+  EXPECT_THAT(geoMergeResult,
+              ::testing::ElementsAreArray(expectedMergedGeoVocabulary_));
+
+  // Verify metadata is correct
+  ASSERT_EQ(res.langTaggedPredicates().begin(), Id::makeUndefined());
+  ASSERT_EQ(res.langTaggedPredicates().end(), Id::makeUndefined());
+  ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
+  ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
+
+  // Check that ID mappings are correct (should be same as single-stage)
+  IdMap mapping0 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(0));
+  ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
+  IdMap mapping1 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
+                                    std::to_string(1));
+  ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
+}
+
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = LocalVocabIndexAndSplitVal;
