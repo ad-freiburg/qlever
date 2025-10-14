@@ -91,16 +91,20 @@ TEST(GeometryInfoTest, BasicTests) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
+  // To avoid hard-coding lengths for unit tests unrelated to actual length
+  // computation, we compute the expected values.
+  auto len = getLengthForTesting;
+
   auto g = GeometryInfo::fromWktLiteral(litPoint);
   GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {0}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {314635}};
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, len(litLineString)};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {667239}};
+  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, len(litPolygon)};
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
@@ -108,15 +112,16 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, {1116317}};
+  GeometryInfo exp5{
+      5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, len(litMultiLineString)};
   checkGeoInfo(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}, {2443059}};
+  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}, len(litMultiPolygon)};
   checkGeoInfo(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {2090456}};
+  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, len(litCollection)};
   checkGeoInfo(g7, exp7);
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);

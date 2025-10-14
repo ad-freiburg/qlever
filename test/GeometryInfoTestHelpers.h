@@ -161,6 +161,15 @@ inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
           webMercProjFunc(b.getUpperRight())};
 }
 
+// ____________________________________________________________________________
+inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
+  auto len = ad_utility::GeometryInfo::getMetricLength(quotedWktLiteral);
+  if (!len.has_value()) {
+    throw std::runtime_error("Cannot compute expected length");
+  }
+  return len.value();
+}
+
 };  // namespace geoInfoTestHelpers
 
 #endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
