@@ -718,6 +718,9 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
+  // Ensure all ID map writers are closed before reading them back
+  batchToGlobalIdMaps.clear();
+
   // Stage 3: Compose the ID mappings
   composeIdMappings(basename, numFiles, batchSize, numBatches);
 
