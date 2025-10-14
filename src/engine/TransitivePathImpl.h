@@ -310,17 +310,19 @@ class TransitivePathImpl : public TransitivePathBase {
             [this, edges = std::move(edges), edgesVocab = std::move(edgesVocab),
              yieldOnce, getTargetId = std::move(getTargetId),
              startsWithGraphVariable, targetHelper = std::move(targetHelper),
+             mergedVocab = LocalVocab{},
              timer = ad_utility::Timer{ad_utility::Timer::Stopped}](
                 auto&& tableColumn) mutable {
               timer.cont();
-              LocalVocab mergedVocab = std::move(tableColumn.vocab_);
+              mergedVocab = std::move(tableColumn.vocab_);
               mergedVocab.mergeWith(edgesVocab);
               return ::ranges::views::enumerate(tableColumn.startNodes_) |
                      ql::views::transform([this, &edges, &getTargetId,
                                            yieldOnce, &timer,
                                            startsWithGraphVariable,
                                            &tableColumn, &mergedVocab](
-                                              const auto& enumerateValue) {
+                                              const auto&
+                                                  enumerateValue) mutable {
                        const auto& [currentRow, pair] = enumerateValue;
                        return ad_utility::OwningView(tableColumn.expandUndef(
                                   pair, edges, graphVariable_.has_value())) |
@@ -338,7 +340,7 @@ class TransitivePathImpl : public TransitivePathBase {
                               ql::views::transform(
                                   [this, &edges, &getTargetId, &tableColumn,
                                    &mergedVocab,
-                                   &currentRow](const auto& idPair) {
+                                   currentRow](const auto& idPair) {
                                     const auto& [startNode, graphId] = idPair;
                                     edges.setGraphId(graphId);
                                     Set connectedNodes = findConnectedNodes(
