@@ -83,7 +83,7 @@ DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
         absl::StrCat("The value ", dayTimeDurationStr,
                      " cannot be parsed as an `xsd:dayTimeDuration`.")};
   } else {
-    Type negation = match.get<negationGroup>().to_string() == "-"
+    Type negation = match.get<negationGroup>().to_view() == "-"
                         ? Type::Negative
                         : Type::Positive;
     int days = 0;
