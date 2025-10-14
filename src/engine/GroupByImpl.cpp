@@ -546,8 +546,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
   // parse the aggregate aliases
   const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
-    aggregates.emplace_back(alias._expression,
-                            varColMap.at(alias._target).columnIndex_);
+    aggregates.push_back(
+        {alias._expression, varColMap.at(alias._target).columnIndex_});
   }
 
   // Check if optimization for explicitly sorted child can be applied
@@ -659,19 +659,26 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
+/*
 CPP_template_def(int COLS, typename T)(
     requires ranges::invocable<T, size_t, size_t>) size_t
-    GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
-                                       const IdTableView<COLS>& idTable,
-                                       GroupBlock& currentGroupBlock) const {
+    */
+template <int COLS, typename T>
+size_t GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
+                                          const IdTableView<COLS>& idTable,
+                                          GroupBlock& currentGroupBlock) const {
   size_t blockStart = 0;
 
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
     bool rowMatchesCurrentBlock =
-        ql::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
-          return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
-        });
+        // TODO<joka921> ql::ranges has problems with the local lambda, find out
+        // what's wrong.
+        std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
+                    [&](const auto& colIdxAndValue) {
+                      return idTable(pos, colIdxAndValue.first) ==
+                             colIdxAndValue.second;
+                    });
     if (!rowMatchesCurrentBlock) {
       onBlockChange(blockStart, pos);
       // setup for processing the next block
@@ -1097,14 +1104,14 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
     // TODO<C++23> use views::enumerate
     size_t i = 0;
     for (const auto& groupedVariable : groupByVariables) {
-      groupedVariables.emplace_back(groupedVariable, i,
-                                    findGroupedVariable(expr, groupedVariable));
+      groupedVariables.push_back(
+          {groupedVariable, i, findGroupedVariable(expr, groupedVariable)});
       ++i;
     }
 
-    aliasesWithAggregateInfo.emplace_back(alias._expression, alias._outCol,
-                                          foundAggregates.value(),
-                                          groupedVariables);
+    aliasesWithAggregateInfo.push_back({alias._expression, alias._outCol,
+                                        foundAggregates.value(),
+                                        groupedVariables});
   }
 
   return HashMapOptimizationData{aliasesWithAggregateInfo};

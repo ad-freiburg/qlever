@@ -687,8 +687,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     return {Result::LazyResult{}, Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(
-      std::move(input), joinColumn, std::move(metaBlocks.value()));
+  auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
+      std::move(input), joinColumn, std::move(metaBlocks.value())});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
