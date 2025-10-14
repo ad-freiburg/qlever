@@ -51,6 +51,20 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
 }
 
 // ____________________________________________________________________________
+inline void checkMetricArea(std::optional<MetricArea> a,
+                            std::optional<MetricArea> b,
+                            Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().area(), b.value().area(),
+              // The metric area may be off by up to 1%
+              0.01 * a.value().area());
+}
+
+// ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
@@ -68,6 +82,8 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkCentroid(a.getCentroid(), b.getCentroid());
 
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
+
+  checkMetricArea(a.getMetricArea(), b.getMetricArea());
 }
 
 // ____________________________________________________________________________
@@ -84,6 +100,7 @@ inline void checkRequestedInfoForInstance(
                 sourceLocation);
   EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
             gi.getRequestedInfo<GeometryType>());
+  checkMetricArea(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
 }
 
 // ____________________________________________________________________________
@@ -100,6 +117,8 @@ inline void checkRequestedInfoForWktLiteral(
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
   EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
             GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+  checkMetricArea(gi.getMetricArea(),
+                  GeometryInfo::getRequestedInfo<MetricArea>(wkt));
 }
 
 // ____________________________________________________________________________
@@ -118,6 +137,7 @@ inline void checkInvalidLiteral(std::string_view wkt,
             expectValidGeometryType);
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
+  EXPECT_FALSE(GeometryInfo::getRequestedInfo<MetricArea>(wkt).has_value());
 }
 
 // ____________________________________________________________________________
@@ -211,6 +231,15 @@ inline void testCollectionArea(const std::string_view collectionWkt,
   EXPECT_EQ(collectionToMultiPolygon(parsed).size(), expectedNumPolygons);
   EXPECT_NEAR(computeMetricAreaCollection(parsed), expectedArea, allowedError);
   EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
+}
+
+// ____________________________________________________________________________
+inline MetricArea getAreaForTesting(const std::string_view wkt) {
+  auto area = GeometryInfo::getMetricArea(wkt);
+  if (!area.has_value()) {
+    return {std::numeric_limits<double>::quiet_NaN()};
+  }
+  return area.value();
 }
 
 };  // namespace geoInfoTestHelpers
