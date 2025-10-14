@@ -30,3 +30,6 @@ endif()
 
 add_library(server Server.cpp)
 qlever_target_link_libraries(server engine util index parser global http SortPerformanceEstimator)
+
+add_library(exportQecOnly ExportQueryExecutionTrees.cpp)
+qlever_target_link_libraries(exportQecOnly)

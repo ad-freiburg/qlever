@@ -892,7 +892,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   auto table = permutation.getDistinctCol0IdsAndCounts(
       cancellationHandle_, locatedTriplesSnapshot());
   if (numCounts == 0) {
-    table.setColumnSubset({{0}});
+    table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
@@ -1485,7 +1485,7 @@ void GroupByImpl::substituteAndEvaluate(
   originalChildrenForGroupVariable.reserve(substitutions.size());
   for (const auto& substitution : substitutions) {
     const auto& occurrences =
-        get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
+        std::get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
     // Substitute in the values of the grouped variable and store the original
     // expressions.
     originalChildrenForGroupVariable.emplace_back(

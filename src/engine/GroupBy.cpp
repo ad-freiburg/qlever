@@ -23,8 +23,9 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 GroupBy::~GroupBy() = default;
-GroupBy::GroupBy(GroupBy&&) noexcept = default;
-GroupBy& GroupBy::operator=(GroupBy&&) noexcept = default;
+// TODO<joka921> Why are those not noexcept?
+GroupBy::GroupBy(GroupBy&&) = default;
+GroupBy& GroupBy::operator=(GroupBy&&) = default;
 
 // _____________________________________________________________________________
 std::string GroupBy::getDescriptor() const { return _impl->getDescriptor(); }
