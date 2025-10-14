@@ -47,18 +47,19 @@ namespace {
 std::string_view raw(const std::integral auto& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
+}  // namespace
 
-// Return true iff the value can be serialized without a vocab entry.
-AD_ALWAYS_INLINE auto isTrivial(Id id) {
+namespace qlever::binary_export {
+
+// _____________________________________________________________________________
+bool BinaryExportHelpers::isTrivial(Id id) {
   auto datatype = id.getDatatype();
   return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
          datatype == Datatype::Int || datatype == Datatype::Double ||
          datatype == Datatype::Date || datatype == Datatype::GeoPoint ||
          datatype == Datatype::EncodedVal;
 }
-}  // namespace
 
-namespace qlever::binary_export {
 // _____________________________________________________________________________
 std::string StringMapping::flush(const Index& index) {
   numProcessedRows_ = 0;
@@ -106,7 +107,7 @@ Id StringMapping::remapId(Id id) {
 AD_ALWAYS_INLINE Id
 toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
                StringMapping& stringMapping) {
-  if (isTrivial(originalId)) {
+  if (BinaryExportHelpers::isTrivial(originalId)) {
     return originalId;
   } else {
     // TODO<joka921, RobinTF>, make the list exhaustive.
@@ -215,34 +216,8 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
     co_yield raw(resultSize);
   }
 }
+
 namespace {
-template <typename T>
-T read(auto& it, const auto& end) {
-  T buffer;
-  std::span bufferView{reinterpret_cast<char*>(&buffer), sizeof(T)};
-  for (char& byte : bufferView) {
-    if (it == end) {
-      throw std::runtime_error{"Stream ended unexpectedly."};
-    }
-    byte = static_cast<char>(*it);
-    ++it;
-  }
-  return buffer;
-}
-
-std::string readString(auto& it, const auto& end) {
-  std::string buffer;
-  buffer.resize(read<size_t>(it, end));
-  for (char& byte : buffer) {
-    if (it == end) {
-      throw std::runtime_error{"Stream ended unexpectedly."};
-    }
-    byte = static_cast<char>(*it);
-    ++it;
-  }
-  return buffer;
-}
-
 template <typename It, typename End>
 struct IteratorReader {
   It it;
@@ -251,23 +226,18 @@ struct IteratorReader {
   void operator()(char* target, size_t numBytes) {
     for (size_t i = 0; i < numBytes; ++i) {
       AD_CORRECTNESS_CHECK(it != end);
-      *target = absl::bit_cast<char>(*it);
+      *target = static_cast<char>(*it);
       ++it, ++target;
     }
   }
 };
+}  // namespace
 
-auto readVectorOfStrings(auto& it, auto end) {
-  std::vector<std::string> transmittedStrings;
-  std::string current;
-  while (!(current = readString(it, end)).empty()) {
-    transmittedStrings.emplace_back(std::move(current));
-  }
-  return transmittedStrings;
-}
-
-void rewriteVocabIds(IdTable& result, const size_t dirtyIndex, const auto& qec,
-                     auto& vocab, const auto& transmittedStrings) {
+// _____________________________________________________________________________
+void BinaryExportHelpers::rewriteVocabIds(
+    IdTable& result, const size_t dirtyIndex,
+    const QueryExecutionContext& qec, LocalVocab& vocab,
+    const std::vector<std::string>& transmittedStrings) {
   for (auto col : result.getColumns()) {
     ql::ranges::for_each(
         col.subspan(dirtyIndex), [&qec, &vocab, &transmittedStrings](Id& id) {
@@ -292,8 +262,11 @@ void rewriteVocabIds(IdTable& result, const size_t dirtyIndex, const auto& qec,
   }
 }
 
-Id toIdImpl(const auto& qec, const auto& prefixes, const auto& prefixMapping,
-            auto& vocab, Id::T bits) {
+// _____________________________________________________________________________
+Id BinaryExportHelpers::toIdImpl(
+    const QueryExecutionContext& qec, const std::vector<std::string>& prefixes,
+    const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
+    LocalVocab& vocab, Id::T bits) {
   // TODO<RobinTF> check local vocab for id conversion. Also the strings are
   // transmitted after the ids, so we might need to search `result` for
   // changes.
@@ -326,9 +299,12 @@ Id toIdImpl(const auto& qec, const auto& prefixes, const auto& prefixMapping,
   // TODO<RobinTF> Add assertion that type is either trivial or local vocab
   // index here.
   return id;
-};
+}
 
-auto getPrefixMapping(const auto& qec, const auto& prefixes) {
+// _____________________________________________________________________________
+ad_utility::HashMap<uint8_t, uint8_t> BinaryExportHelpers::getPrefixMapping(
+    const QueryExecutionContext& qec,
+    const std::vector<std::string>& prefixes) {
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
   const auto& localPrefixes = qec.getIndex().encodedIriManager().prefixes_;
   for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
@@ -341,8 +317,6 @@ auto getPrefixMapping(const auto& qec, const auto& prefixes) {
   return prefixMapping;
 }
 
-}  // namespace
-
 // _____________________________________________________________________________
 Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
@@ -350,6 +324,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
                                 std::vector<ColumnIndex> resultSortedOn) {
   // TODO<RobinTF> honor laziness setting.
   (void)requestLaziness;
+
   auto bytes = response.body_ | ql::views::join;
   auto it = ql::ranges::begin(bytes);
   auto end = ql::ranges::end(bytes);
@@ -360,7 +335,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
 
   auto [prefixes, variableNames] = readHeader(serializer);
 
-  auto prefixMapping = getPrefixMapping(qec, prefixes);
+  auto prefixMapping = BinaryExportHelpers::getPrefixMapping(qec, prefixes);
 
   auto numColumns = variableNames.size();
 
@@ -372,7 +347,7 @@ Result importBinaryHttpResponse(bool requestLaziness,
   // Special case 0 columns. In this case just return the correct amount of
   // columns.
   if (variableNames.empty()) {
-    auto numRows = read<uint64_t>(it, end);
+    auto numRows = BinaryExportHelpers::read<uint64_t>(it, end);
     result.resize(numRows);
     return Result{std::move(result), std::move(resultSortedOn), LocalVocab{}};
   }
@@ -382,23 +357,27 @@ Result importBinaryHttpResponse(bool requestLaziness,
   LocalVocab vocab;
 
   auto toId = [&qec, &prefixes, &vocab, &prefixMapping](Id::T bits) mutable {
-    return toIdImpl(qec, prefixes, prefixMapping, vocab, bits);
+    return BinaryExportHelpers::toIdImpl(qec, prefixes, prefixMapping, vocab,
+                                         bits);
   };
 
   // At which index we need to start converting values.
   size_t dirtyIndex = 0;
 
   while (it != end) {
-    auto firstValue = read<Id::T>(it, end);
+    auto firstValue = BinaryExportHelpers::read<Id::T>(it, end);
     if (firstValue == vocabMarker) {
-      auto transmittedStrings = readVectorOfStrings(it, end);
-      rewriteVocabIds(result, dirtyIndex, qec, vocab, transmittedStrings);
+      auto transmittedStrings =
+          BinaryExportHelpers::readVectorOfStrings(it, end);
+      BinaryExportHelpers::rewriteVocabIds(result, dirtyIndex, qec, vocab,
+                                           transmittedStrings);
       dirtyIndex = result.size();
     } else {
       result.emplace_back();
       result.at(result.size() - 1, 0) = toId(firstValue);
       for ([[maybe_unused]] auto colIndex : ql::views::iota(1u, numColumns)) {
-        result.at(result.size() - 1, colIndex) = toId(read<Id::T>(it, end));
+        result.at(result.size() - 1, colIndex) =
+            toId(BinaryExportHelpers::read<Id::T>(it, end));
       }
     }
   }
