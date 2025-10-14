@@ -7,6 +7,7 @@
 
 #include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./ValueGetterTestHelpers.h"
+#include "GeometryInfoTestHelpers.h"
 
 namespace {
 
@@ -163,14 +164,20 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
+  static constexpr std::string_view line =
+      "\"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-      "\"LINESTRING(2 2, 4 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, {314635}});
+      std::string{line},
+      ad_utility::GeometryInfo{
+          2, {{2, 2}, {4, 4}}, {3, 3}, getLengthForTesting(line)});
+  static constexpr std::string_view polygon =
+      "\"POLYGON(2 4, 4 4, 4 2, 2 2)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-      "\"POLYGON(2 4, 4 4, 4 "
-      "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}, {667238}});
+      std::string{polygon},
+      ad_utility::GeometryInfo{
+          3, {{2, 2}, {4, 4}}, {3, 3}, getLengthForTesting(polygon)});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                                 std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
