@@ -35,8 +35,8 @@ static auto constexpr getResultFunctionFactory =
        boost::beast::http::status status = boost::beast::http::status::ok,
        RequestMatchers matchers_ = {},
        std::exception_ptr mockException = nullptr,
-       ad_utility::source_location loc =
-           AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
+       ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC(),
+       std::string location = "") -> SendRequestType {
   return
       [=](const ad_utility::httpUtils::Url& url,
           ad_utility::SharedCancellationHandle,
@@ -73,6 +73,7 @@ static auto constexpr getResultFunctionFactory =
         };
         return HttpOrHttpsResponse{.status_ = status,
                                    .contentType_ = contentType,
+                                   .location_ = location,
                                    .body_ = body(predefinedResult)};
       };
 };

@@ -133,6 +133,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   const auto status = responseParser->get().result();
   const std::string contentType =
       responseParser->get()[boost::beast::http::field::content_type];
+  const std::string location =
+      responseParser->get()[boost::beast::http::field::location];
 
   auto getBody = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
                     std::unique_ptr<http::response_parser<http::buffer_body>>
@@ -158,6 +160,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   return {.status_ = status,
           .contentType_ = contentType,
+          .location_ = location,
           .body_ = getBody(std::move(client), std::move(responseParser),
                            std::move(buffer), std::move(handle))};
 }

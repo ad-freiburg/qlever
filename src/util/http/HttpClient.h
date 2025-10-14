@@ -29,6 +29,7 @@
 struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
+  std::string location_;
   cppcoro::generator<ql::span<std::byte>> body_;
 
   // Return the first `length` bytes of the response body as a string.

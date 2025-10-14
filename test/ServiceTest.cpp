@@ -267,7 +267,7 @@ TEST_F(ServiceTest, computeResult) {
     // status-code isn't ok
     expectThrowOrSilence(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
-        "SERVICE responded with HTTP status code: 400, Bad Request.",
+        "SERVICE responded with HTTP status code: 400, Bad Request",
         boost::beast::http::status::bad_request,
         "application/sparql-results+json");
     // contentType doesn't match
@@ -275,7 +275,7 @@ TEST_F(ServiceTest, computeResult) {
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
         "QLever requires the endpoint of a SERVICE to send "
         "the result as 'application/sparql-results+json' but "
-        "the endpoint sent 'wrong/type'.",
+        "the endpoint sent 'wrong/type'",
         boost::beast::http::status::ok, "wrong/type");
 
     // or Result has invalid structure
@@ -302,12 +302,12 @@ TEST_F(ServiceTest, computeResult) {
     expectThrowOrSilence(
         "{\"head\": {},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
     // wrong variables type (array of strings expected)
     expectThrowOrSilence(
         "{\"head\": {\"vars\": [\"x\", \"y\", 3]},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
 
     // Internal parser errors.
     expectThrowOrSilence(
