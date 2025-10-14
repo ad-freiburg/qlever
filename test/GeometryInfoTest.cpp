@@ -66,6 +66,11 @@ constexpr std::string_view litSmallRealWorldPolygon2 =
     "48.0145785,7.8335879 48.0147539,7.8335143 48.0147242,7.8333378 "
     "48.0146547))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const double areaSmallRealWorldPolygon2 = 491.0;
+constexpr std::string_view litSmallRealWorldPolygon2AsMulti =
+    "\"MULTIPOLYGON(((7.8333378 48.0146547,7.8334932 48.0144793,7.833657 "
+    "48.0145439,7.8336726 48.01455,7.8336875 48.0145564,7.8337433 "
+    "48.0145785,7.8335879 48.0147539,7.8335143 48.0147242,7.8333378 "
+    "48.0146547)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 // The outer boundary of this polygon is a triangle between Freiburg Central
 // Railway Station, Freiburg University Library and Freiburg Cathedral, ca.
@@ -305,13 +310,20 @@ TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
+  using namespace ad_utility::detail;
   testMultiPolygonArea(litRealWorldMultiPolygonFullyContained,
                        areaRealWorldMultiPolygonFullyContained);
   testMultiPolygonArea(litRealWorldMultiPolygonNonIntersecting,
                        areaRealWorldMultiPolygonNonIntersecting);
   testMultiPolygonArea(litRealWorldMultiPolygonIntersecting,
                        areaRealWorldMultiPolygonIntersecting);
-  // TODO Multipolygon with 0 members, 1 member
+
+  // Edge case: empty multipolygon
+  EXPECT_EQ(computeMetricAreaMultiPolygon(MultiPolygon<CoordType>{}), 0);
+
+  // Edge case: multipolygon with only one member
+  testMultiPolygonArea(litSmallRealWorldPolygon2AsMulti,
+                       areaSmallRealWorldPolygon2);
 }
 
 // ____________________________________________________________________________
