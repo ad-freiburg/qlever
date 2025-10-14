@@ -48,6 +48,25 @@ auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                                 internalWordCallback, memoryToUse);
 }
 
+// ____________________________________________________________________________
+// Helper: Create a generator that reads words from a partial vocabulary file.
+inline auto VocabularyMerger::makePartialVocabGenerator(
+    const std::string& basename, size_t fileIndex) {
+  ad_utility::serialization::FileReadSerializer infile{
+      absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
+  uint64_t numWords;
+  infile >> numWords;
+
+  return ad_utility::CachingTransformInputRange{
+      ad_utility::integerRange(numWords),
+      [fileIndex, infile{std::move(infile)}](
+          [[maybe_unused]] const std::size_t i) mutable {
+        TripleComponentWithIndex val;
+        infile >> val;
+        return QueueWord{std::move(val), fileIndex};
+      }};
+}
+
 // _________________________________________________________________
 template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
@@ -158,6 +177,9 @@ CPP_template_def(typename C, typename L)(
     // Process the word and update metadata
     processQueueWord(top, wordCallback, lessThan, progressBar);
 
+    // @Claude: Thee following code snippet (the getting of the target ID) is
+    // duplicated with the 1-stage, and the 2-stage approach, please factor out.
+
     // Get the current word (which has been updated by processQueueWord)
     const auto& word = lastTripleComponent_.value();
     Id targetId =
@@ -210,31 +232,11 @@ auto VocabularyMerger::makeComparators(W comparator) {
   };
 
   // Comparator for QueueWord
-  auto lessThanForQueue = [lessThan](const QueueWord& p1,
-                                     const QueueWord& p2) {
+  auto lessThanForQueue = [lessThan](const QueueWord& p1, const QueueWord& p2) {
     return lessThan(p1.entry_, p2.entry_);
   };
 
   return std::make_pair(std::move(lessThan), std::move(lessThanForQueue));
-}
-
-// ____________________________________________________________________________
-// Helper: Create a generator that reads words from a partial vocabulary file.
-inline auto VocabularyMerger::makePartialVocabGenerator(
-    const std::string& basename, size_t fileIndex) {
-  ad_utility::serialization::FileReadSerializer infile{
-      absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
-  uint64_t numWords;
-  infile >> numWords;
-
-  return ad_utility::CachingTransformInputRange{
-      ad_utility::integerRange(numWords),
-      [fileIndex, infile{std::move(infile)}](
-          [[maybe_unused]] const std::size_t i) mutable {
-        TripleComponentWithIndex val;
-        infile >> val;
-        return QueueWord{std::move(val), fileIndex};
-      }};
 }
 
 // ____________________________________________________________________________
@@ -260,15 +262,13 @@ inline auto VocabularyMerger::makeBatchVocabGenerator(
 // Helper: Process a queue word and update metadata/mappings.
 // Returns true if this is a new unique word.
 template <typename C, typename L>
-bool VocabularyMerger::processQueueWord(
-    const QueueWord& word, C& wordCallback, const L& lessThan,
-    ad_utility::ProgressBar& progressBar)
-    requires WordCallback<C> &&
-             ranges::predicate<L, TripleComponentWithIndex,
-                               TripleComponentWithIndex> {
-  bool isNewWord =
-      !lastTripleComponent_.has_value() ||
-      word.iriOrLiteral() != lastTripleComponent_->iriOrLiteral();
+bool VocabularyMerger::processQueueWord(const QueueWord& word, C& wordCallback,
+                                        const L& lessThan,
+                                        ad_utility::ProgressBar& progressBar)
+    requires WordCallback<C> && ranges::predicate<L, TripleComponentWithIndex,
+                                                  TripleComponentWithIndex> {
+  bool isNewWord = !lastTripleComponent_.has_value() ||
+                   word.iriOrLiteral() != lastTripleComponent_->iriOrLiteral();
 
   if (isNewWord) {
     if (lastTripleComponent_.has_value() &&
@@ -326,7 +326,8 @@ CPP_template_def(typename C, typename L)(
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
 
-    // Write to the batch-to-global ID map (batch index comes from partialFileId_)
+    // Write to the batch-to-global ID map (batch index comes from
+    // partialFileId_)
     size_t batchIdx = top.partialFileId_;
     batchToGlobalIdMaps[batchIdx].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
@@ -498,7 +499,8 @@ size_t VocabularyMerger::mergeSingleBatch(const std::string& basename,
       absl::StrCat(basename, BATCH_VOCAB_WORDS_INFIX, batchIndex);
   ad_utility::serialization::FileWriteSerializer outfile{batchVocabFile};
 
-  // Create ID map writers for the internal mappings (batch-local ID -> batch ID)
+  // Create ID map writers for the internal mappings (batch-local ID -> batch
+  // ID)
   std::vector<IdMapWriter> internalIdMaps;
   internalIdMaps.reserve(endFile - startFile);
   for (size_t i = startFile; i < endFile; ++i) {
@@ -507,6 +509,8 @@ size_t VocabularyMerger::mergeSingleBatch(const std::string& basename,
   }
 
   // Perform the merge
+  // @Claude: the setup of the parallelMultiwayMerge can be factored out into a
+  // function, it is duplicated.
   auto mergedWords =
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
@@ -603,19 +607,21 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
   auto [lessThan, lessThanForQueue] = makeComparators(comparator);
 
   // Create generators for batch files
-  std::vector<decltype(makeBatchVocabGenerator(basename, 0))> batchGenerators;
-  batchGenerators.reserve(numBatches);
-  for (size_t i = 0; i < numBatches; ++i) {
-    batchGenerators.push_back(makeBatchVocabGenerator(basename, i));
-  }
+  auto makeGenerator = [&basename](size_t batchIdx) {
+    return makeBatchVocabGenerator(basename, batchIdx);
+  };
+  auto batchGenerators =
+      ::ranges::to<std::vector>(ad_utility::integerRange(numBatches) |
+                                ::ranges::views::transform(makeGenerator));
 
   // Create ID map writers for batch-local ID -> global ID
-  std::vector<IdMapWriter> batchToGlobalIdMaps;
-  batchToGlobalIdMaps.reserve(numBatches);
-  for (size_t i = 0; i < numBatches; ++i) {
-    batchToGlobalIdMaps.emplace_back(
-        absl::StrCat(basename, ".batch-to-global-idmap.tmp.", i));
-  }
+  auto makeIdMap = [&basename](size_t batchIndex) {
+    return IdMapWriter{
+        absl::StrCat(basename, ".batch-to-global-idmap.tmp.", batchIndex)};
+  };
+  auto batchToGlobalIdMaps =
+      ::ranges::to<std::vector>(ad_utility::integerRange(numBatches) |
+                                ::ranges::views::transform(makeIdMap));
 
   // Perform the final merge
   auto mergedWords =
@@ -660,6 +666,7 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
+  // @Claude: The following code can be a separate function.
   // Stage 3: Compose the ID mappings
   // For each original file: read internal map (original -> batch), read batch
   // map (batch -> global), compose them to create (original -> global)
@@ -688,17 +695,15 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
     }
 
     // Clean up internal map file
-    ad_utility::deleteFile(internalMapFile, AD_CURRENT_SOURCE_LOC());
+    ad_utility::deleteFile(internalMapFile);
   }
 
   // Clean up batch files and batch-to-global maps
   for (size_t batchIdx = 0; batchIdx < numBatches; ++batchIdx) {
     ad_utility::deleteFile(
-        absl::StrCat(basename, BATCH_VOCAB_WORDS_INFIX, batchIdx),
-        AD_CURRENT_SOURCE_LOC());
+        absl::StrCat(basename, BATCH_VOCAB_WORDS_INFIX, batchIdx));
     ad_utility::deleteFile(
-        absl::StrCat(basename, ".batch-to-global-idmap.tmp.", batchIdx),
-        AD_CURRENT_SOURCE_LOC());
+        absl::StrCat(basename, ".batch-to-global-idmap.tmp.", batchIdx));
   }
 
   auto metaData = std::move(metaData_);
