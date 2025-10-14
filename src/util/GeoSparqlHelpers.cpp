@@ -59,16 +59,17 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 // ____________________________________________________________________________
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit) {
+  using enum UnitOfMeasurement;
   double multiplicator = 1;
   if (unit.has_value()) {
-    if (unit.value() == UnitOfMeasurement::METERS) {
+    if (unit.value() == METERS) {
       multiplicator = 1000;
-    } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
+    } else if (unit.value() == KILOMETERS) {
       multiplicator = 1;
-    } else if (unit.value() == UnitOfMeasurement::MILES) {
-      multiplicator = detail::kilometerToMile;
+    } else if (unit.value() == MILES) {
+      multiplicator = kilometerToMile;
     } else {
-      AD_CORRECTNESS_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
+      AD_CORRECTNESS_CHECK(!isLengthUnit(unit.value()));
       AD_THROW("Unsupported unit of measurement for distance.");
     }
   }
@@ -82,15 +83,55 @@ double valueInUnitToKilometer(double valueInUnit,
 }
 
 // ____________________________________________________________________________
-UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
-  if (iri == UNIT_METER_IRI) {
-    return UnitOfMeasurement::METERS;
-  } else if (iri == UNIT_KILOMETER_IRI) {
-    return UnitOfMeasurement::KILOMETERS;
-  } else if (iri == UNIT_MILE_IRI) {
-    return UnitOfMeasurement::MILES;
+double squareMeterToUnit(double squareMeters,
+                         std::optional<UnitOfMeasurement> unit) {
+  using enum UnitOfMeasurement;
+  double multiplicator = 1;
+  if (unit.has_value()) {
+    if (unit.value() == SQUARE_METERS) {
+      multiplicator = 1;
+    } else if (unit.value() == SQUARE_KILOMETERS) {
+      multiplicator = 1.0E-6;
+    } else if (unit.value() == SQUARE_MILES) {
+      multiplicator = squareMeterToSquareMile;
+    } else {
+      AD_CORRECTNESS_CHECK(!isAreaUnit(unit.value()));
+      AD_THROW("Unsupported unit of measurement for area.");
+    }
   }
-  return UnitOfMeasurement::UNKNOWN;
+  return multiplicator * squareMeters;
+}
+
+// ____________________________________________________________________________
+UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
+  using enum UnitOfMeasurement;
+  if (iri == UNIT_METER_IRI) {
+    return METERS;
+  } else if (iri == UNIT_KILOMETER_IRI) {
+    return KILOMETERS;
+  } else if (iri == UNIT_MILE_IRI) {
+    return MILES;
+  } else if (iri == UNIT_SQUARE_METER_IRI) {
+    return SQUARE_METERS;
+  } else if (iri == UNIT_SQUARE_KILOMETER_IRI) {
+    return SQUARE_KILOMETERS;
+  } else if (iri == UNIT_SQUARE_MILE_IRI) {
+    return SQUARE_MILES;
+  }
+  return UNKNOWN;
+}
+
+// ____________________________________________________________________________
+bool isLengthUnit(UnitOfMeasurement unit) {
+  using enum UnitOfMeasurement;
+  return unit == METERS || unit == KILOMETERS || unit == MILES;
+}
+
+// ____________________________________________________________________________
+bool isAreaUnit(UnitOfMeasurement unit) {
+  using enum UnitOfMeasurement;
+  return unit == SQUARE_METERS || unit == SQUARE_KILOMETERS ||
+         unit == SQUARE_MILES;
 }
 
 }  // namespace detail

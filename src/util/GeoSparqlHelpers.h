@@ -31,6 +31,8 @@ static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
 static constexpr double kilometerToMile = 0.62137119;
+static constexpr double squareMeterToSquareMile =
+    (kilometerToMile / 1000) * (kilometerToMile / 1000);
 
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
@@ -50,6 +52,17 @@ double kilometerToUnit(double kilometers,
 // `std::nullopt` it is treated as kilometers.
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit);
+
+// Convert square meters to another supported area unit. If `unit` is
+// `std::nullopt` it is treated as square meters (value is returned unchanged).
+double squareMeterToUnit(double squareMeters,
+                         std::optional<UnitOfMeasurement> unit);
+
+// Returns `true` iff `unit` is a unit for measuring length / distance.
+bool isLengthUnit(UnitOfMeasurement unit);
+
+// Returns `true` iff `unit` is a unit for measuring area.
+bool isAreaUnit(UnitOfMeasurement unit);
 
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
