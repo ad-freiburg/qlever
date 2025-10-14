@@ -287,6 +287,8 @@ addLinkAndDiscoverTest(DurationTest util)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
+addLinkAndDiscoverTest(TripleInTextIndexTest index)
+
 addLinkAndDiscoverTest(ValueIdTest util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
