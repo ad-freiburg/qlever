@@ -61,6 +61,8 @@ constexpr inline std::string_view BATCH_VOCAB_WORDS_INFIX =
     ".batch-vocab.words.tmp.";
 constexpr inline std::string_view BATCH_VOCAB_INTERNAL_IDMAP_INFIX =
     ".batch-vocab.internal-idmap.tmp.";
+constexpr inline std::string_view BATCH_TO_GLOBAL_IDMAP_INFIX =
+    ".batch-to-global-idmap.tmp.";
 
 // ________________________________________________________________
 constexpr inline std::string_view TMP_BASENAME_COMPRESSION =

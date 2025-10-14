@@ -174,10 +174,12 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
-// appearance.
+// appearance. Argument `maxFilesPerBatch` controls the maximum number of files
+// to merge simultaneously (to avoid file descriptor limits).
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+                     C& wordCallback, ad_utility::MemorySize memoryToUse,
+                     size_t maxFilesPerBatch = MAX_NUM_FILES_FOR_DIRECT_MERGE)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -220,7 +222,8 @@ class VocabularyMerger {
   template <typename W, typename C>
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
                        W comparator, C& wordCallback,
-                       ad_utility::MemorySize memoryToUse)
+                       ad_utility::MemorySize memoryToUse,
+                       size_t maxFilesPerBatch)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 
@@ -307,6 +310,19 @@ class VocabularyMerger {
                ranges::predicate<L, TripleComponentWithIndex,
                                  TripleComponentWithIndex>;
 
+  // Helper: Compute the target ID for the last processed triple component.
+  Id getTargetIdForLastComponent() const;
+
+  // Helper: Setup and execute parallel multiway merge for generators.
+  template <typename GeneratorRange, typename Comparator>
+  static auto setupParallelMerge(GeneratorRange&& generators,
+                                 const Comparator& lessThanForQueue,
+                                 ad_utility::MemorySize memoryToUse);
+
+  // Helper: Compose ID mappings in Stage 3 of two-stage merge.
+  void composeIdMappings(const std::string& basename, size_t numFiles,
+                         size_t batchSize, size_t numBatches);
+
   // Merge a batch of partial vocabulary files into a single batch file.
   // Returns the number of words in the merged batch.
   template <typename W>
@@ -317,7 +333,8 @@ class VocabularyMerger {
   // Perform two-stage merge when the number of files exceeds the limit.
   template <typename W, typename C>
   auto mergeTwoStage(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+                     C& wordCallback, ad_utility::MemorySize memoryToUse,
+                     size_t maxFilesPerBatch)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 };
