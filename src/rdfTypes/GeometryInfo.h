@@ -121,9 +121,10 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  // Added by other PRs:
   // uint32_t numGeometries_ = 1;
   // double metricLength_ = 0.0;
-  // double metricArea_ = 0.0; <--
+  double metricArea_ = 0.0;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
@@ -136,7 +137,7 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid);
+               Centroid centroid, MetricArea metricArea);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
@@ -166,10 +167,10 @@ class GeometryInfo {
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
 
   // Extract the metric area.
-  // MetricArea getMetricArea() const;
+  MetricArea getMetricArea() const;
 
   // Parse an arbitrary WKT literal and compute only the metric area.
-  // static std::optional<MetricArea> getMetricArea(std::string_view wkt);
+  static std::optional<MetricArea> getMetricArea(std::string_view wkt);
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(

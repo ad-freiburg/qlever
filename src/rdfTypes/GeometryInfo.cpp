@@ -5,6 +5,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <cstdint>
+#include <limits>
 
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -15,9 +16,10 @@ namespace ad_utility {
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-                           Centroid centroid)
+                           Centroid centroid, MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
-                   boundingBox.upperRight().toBitRepresentation()} {
+                   boundingBox.upperRight().toBitRepresentation()},
+      metricArea_{metricArea.area()} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -57,9 +59,15 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
     return std::nullopt;
   }
 
-  // TODO<ullingerc> add area ; ! try catch for s2 exceptions
+  double area = std::numeric_limits<double>::quiet_NaN();
+  try {
+    area = computeMetricArea(parsed.value());
+  } catch (std::exception) {
+    AD_LOG_WARN << "Could not compute area of WKT literal `" << wkt << "`."
+                << std::endl;
+  }
 
-  return GeometryInfo{type, boundingBox.value(), centroid.value()};
+  return GeometryInfo{type, boundingBox.value(), centroid.value(), {area}};
 }
 
 // ____________________________________________________________________________
@@ -75,7 +83,7 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point}, Centroid{point}};
+  return {util::geo::WKTType::POINT, {point, point}, Centroid{point}, {0.0}};
 }
 
 // ____________________________________________________________________________
@@ -170,6 +178,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return getBoundingBox();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return getWktType();
+  } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
+    return getMetricArea();
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -180,7 +190,7 @@ template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
 template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
 template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
-// template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
+template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
@@ -194,6 +204,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return GeometryInfo::getBoundingBox(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return GeometryInfo::getWktType(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
+    return GeometryInfo::getMetricArea(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -208,8 +220,7 @@ template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
 template std::optional<GeometryType>
 GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
-// template std::optional<MetricArea>
-// GeometryInfo::getRequestedInfo<MetricArea>(
-//     std::string_view wkt);
+template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
+    std::string_view wkt);
 
 }  // namespace ad_utility
