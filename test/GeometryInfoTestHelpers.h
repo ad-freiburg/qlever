@@ -53,7 +53,7 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
 // ____________________________________________________________________________
 inline void checkMetricLength(std::optional<MetricLength> a,
                               std::optional<MetricLength> b,
-                              Loc sourceLocation = Loc::current()) {
+                              Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(a.has_value(), b.has_value());
   if (!a.has_value()) {
