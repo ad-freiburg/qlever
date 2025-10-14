@@ -57,6 +57,8 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
     return std::nullopt;
   }
 
+  // TODO<ullingerc> add area ; ! try catch for s2 exceptions
+
   return GeometryInfo{type, boundingBox.value(), centroid.value()};
 }
 
