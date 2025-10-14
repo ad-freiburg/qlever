@@ -71,24 +71,29 @@ class DeviationAggExpression
 
 // The final operation for dividing by degrees of freedom and calculation square
 // root after summing up the squared deviation
-inline auto stdevFinalOperation = [](const NumericValue& aggregation,
-                                     size_t numElements) {
-  auto divAndRoot = [](double value, double degreesOfFreedom) {
+struct DivAndRoot {
+  double operator()(double value, double degreesOfFreedom) const {
     if (degreesOfFreedom <= 0) {
       return 0.0;
     } else {
       return std::sqrt(value / degreesOfFreedom);
     }
-  };
-  return makeNumericExpressionForAggregate<decltype(divAndRoot)>()(
-      aggregation, NumericValue{static_cast<double>(numElements) - 1});
+  }
+};
+
+struct StdevFinalOperation {
+  NumericValue operator()(const NumericValue& aggregation,
+                          size_t numElements) const {
+    return makeNumericExpressionForAggregate<DivAndRoot>()(
+        aggregation, NumericValue{static_cast<double>(numElements) - 1});
+  }
 };
 
 // The actual Standard Deviation Expression
 // Mind the explicit instantiation of StdevExpressionBase in
 // AggregateExpression.cpp
 using StdevExpressionBase =
-    DeviationAggExpression<AvgOperation, decltype(stdevFinalOperation)>;
+    DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 class StdevExpression : public StdevExpressionBase {
   using StdevExpressionBase::StdevExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromDouble(0); }

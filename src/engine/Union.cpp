@@ -147,7 +147,10 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
        &nextColumnIndex](const VarAndTypeInfo& varAndIndex) {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
-          using enum ColumnIndexAndTypeInfo::UndefStatus;
+          constexpr auto AlwaysDefined =
+              ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+          constexpr auto PossiblyUndefined =
+              ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
           variableColumns[variable] = ColumnIndexAndTypeInfo{
               nextColumnIndex,
               mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};

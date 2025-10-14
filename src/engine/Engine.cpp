@@ -22,7 +22,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   // TODO<joka921> Also experiment with sorting algorithms that take the
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
-    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
+    CALL_FIXED_SIZE(width, Engine::sort, &idTable, sortCols.at(0));
   } else if (sortCols.size() == 2) {
     auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
                                                            const auto& row2) {

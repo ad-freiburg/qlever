@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Algorithm.h"
 #include "util/Generator.h"
 #include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
@@ -277,7 +278,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesSnapshot());
-  return {lower == upper, std::midpoint(lower, upper)};
+  // NOTE: Starting from C++20 we could use `std::midpoint` here
+  return {lower == upper, lower + (upper - lower) / 2};
 }
 
 // _____________________________________________________________________________
@@ -378,12 +380,11 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
-  return cppcoro::fromInputRange(
-      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
-          ad_utility::CachingTransformInputRange<
-              ad_utility::OwningView<Permutation::IdTableGenerator>,
-              decltype(makeApplyColumnSubset()), LazyScanMetadata>{
-              std::move(lazyScanAllCols), makeApplyColumnSubset()}));
+  return ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
+      ad_utility::CachingTransformInputRange<
+          ad_utility::OwningView<Permutation::IdTableGenerator>,
+          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
+          std::move(lazyScanAllCols), makeApplyColumnSubset()});
 };
 
 // _____________________________________________________________________________
@@ -686,8 +687,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     return {Result::LazyResult{}, Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(
-      std::move(input), joinColumn, std::move(metaBlocks.value()));
+  auto state = std::make_shared<SharedGeneratorState>(SharedGeneratorState{
+      std::move(input), joinColumn, std::move(metaBlocks.value())});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
@@ -713,7 +714,7 @@ IndexScan::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
   ad_utility::HashSet<Variable> newVariables;
   for (const auto& [var, _] : getExternallyVisibleVariableColumns()) {
-    if (variables.contains(var)) {
+    if (ad_utility::contains(variables, var)) {
       newVariables.insert(var);
     }
   }

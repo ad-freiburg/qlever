@@ -45,7 +45,7 @@ using LazyInputView = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
 CPP_template(typename Input)(
-    requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
+    requires SameAsAny<Input, /*Result::Generator, */ Result::LazyResult>)
     LazyInputView
     convertGenerator(Input gen, OptionalPermutation permutation = {}) {
   auto transformer = [permutation = std::move(permutation)](auto& element) {
@@ -119,7 +119,7 @@ inline GeneratorWithDetails convertGenerator(
 CPP_template_2(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
+        std::function<void(IdTable&, LocalVocab&)>>) Result::LazyResult
     runLazyJoinAndConvertToGenerator(ActionT runLazyJoin,
                                      OptionalPermutation permutation) {
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(

@@ -28,7 +28,7 @@ class MagicServiceException : public std::runtime_error {
 struct MagicServiceQuery {
   MagicServiceQuery() = default;
   MagicServiceQuery(MagicServiceQuery&& other) noexcept = default;
-  MagicServiceQuery(const MagicServiceQuery& other) noexcept = default;
+  MagicServiceQuery(const MagicServiceQuery& other) = default;
   MagicServiceQuery& operator=(const MagicServiceQuery& other) = default;
   MagicServiceQuery& operator=(MagicServiceQuery&& a) noexcept = default;
   virtual ~MagicServiceQuery() = default;

@@ -127,7 +127,9 @@ CPP_template(typename ResultT)(
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
     using R = std::decay_t<decltype(x)>;
-    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
+    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))> &&
+                  !ad_utility::similarToInstantiation<R,
+                                                      VectorWithMemoryLimit>) {
       return AD_FWD(x);
     } else {
       return x.clone();

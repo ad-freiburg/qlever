@@ -18,6 +18,16 @@
 
 #include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
+
+namespace {
+// CTRE regex pattern for C++17 compatibility (namespace scope)
+constexpr ctll::fixed_string memorySizeRegex =
+    "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
+
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string amountGroup = "amount";
+constexpr ctll::fixed_string unitGroup = "unit";
+}  // namespace
 #include "util/ConstexprUtils.h"
 
 namespace ad_utility {
@@ -26,7 +36,7 @@ std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
   auto toString = [](const auto number, std::string_view unitName) {
     using T = std::decay_t<decltype(number)>;
-    if constexpr (std::integral<T>) {
+    if constexpr (ql::concepts::integral<T>) {
       return absl::StrCat(number, " ", unitName);
     } else {
       static_assert(ql::concepts::floating_point<T>);
@@ -67,16 +77,14 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  constexpr ctll::fixed_string regex =
-      "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
-  if (auto matcher = ctre::match<regex>(str)) {
-    auto amountString = matcher.get<"amount">().to_view();
+  if (auto matcher = ctre::match<memorySizeRegex>(str)) {
+    auto amountString = matcher.get<amountGroup>().to_view();
     // Even though CTRE supports to_number() with double values, this relies on
     // `std::from_chars` which is currently not supported by the standard
     // library used by our macOS build.
     double amount;
     absl::from_chars(amountString.begin(), amountString.end(), amount);
-    auto unitString = matcher.get<"unit">().to_view();
+    auto unitString = matcher.get<unitGroup>().to_view();
     switch (std::tolower(unitString.at(0))) {
       case 'b':
         if (ad_utility::contains(amountString, '.')) {

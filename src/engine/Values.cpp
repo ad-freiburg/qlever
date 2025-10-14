@@ -56,7 +56,10 @@ VariableToColumnMap Values::computeVariableToColumnMap() const {
   }
   VariableToColumnMap map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    using enum ColumnIndexAndTypeInfo::UndefStatus;
+    static constexpr auto AlwaysDefined =
+        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    static constexpr auto PossiblyUndefined =
+        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
     auto undefStatus = static_cast<bool>(colContainsUndef.at(i))
                            ? PossiblyUndefined
                            : AlwaysDefined;
@@ -116,7 +119,9 @@ Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
+  ad_utility::callFixedSizeVi(resWidth, [&, self = this](auto width) {
+    return self->writeValues<width>(&idTable, &localVocab);
+  });
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 

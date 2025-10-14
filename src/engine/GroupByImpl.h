@@ -121,11 +121,14 @@ class GroupByImpl : public Operation {
   // function returns the starting index of the last block of this `idTable`.
   // The argument `currentGroupBlock` is used to store the values of the group
   // by columns for the current group.
+  /*
   CPP_template(int COLS,
                typename T)(requires ranges::invocable<T, size_t, size_t>) size_t
-      searchBlockBoundaries(const T& onBlockChange,
-                            const IdTableView<COLS>& idTable,
-                            GroupBlock& currentGroupBlock) const;
+               */
+  template <int COLS, typename T>
+  size_t searchBlockBoundaries(const T& onBlockChange,
+                               const IdTableView<COLS>& idTable,
+                               GroupBlock& currentGroupBlock) const;
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>
@@ -362,7 +365,14 @@ class GroupByImpl : public Operation {
         : numOfGroupedColumns_{numOfGroupedColumns},
           alloc_{alloc},
           map_{alloc} {
-      using enum HashMapAggregateType;
+      static constexpr auto AVG = GroupByImpl::HashMapAggregateType::AVG;
+      static constexpr auto COUNT = GroupByImpl::HashMapAggregateType::COUNT;
+      static constexpr auto MIN = GroupByImpl::HashMapAggregateType::MIN;
+      static constexpr auto MAX = GroupByImpl::HashMapAggregateType::MAX;
+      static constexpr auto SUM = GroupByImpl::HashMapAggregateType::SUM;
+      static constexpr auto GROUP_CONCAT =
+          GroupByImpl::HashMapAggregateType::GROUP_CONCAT;
+      static constexpr auto SAMPLE = GroupByImpl::HashMapAggregateType::SAMPLE;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;
@@ -631,7 +641,7 @@ class GroupByImpl : public Operation {
 // _____________________________________________________________________________
 namespace groupBy::detail {
 template <typename A>
-concept VectorOfAggregationData =
+CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 
