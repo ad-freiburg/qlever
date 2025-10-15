@@ -282,8 +282,8 @@ class MergeVocabularyMultiFileTest : public ::testing::Test {
   size_t numFiles_ = 4;
 
   // Helper to create a partial vocabulary file
-  void createPartialVocabFile(size_t fileIdx,
-                               const std::vector<TripleComponentWithIndex>& words) {
+  void createPartialVocabFile(
+      size_t fileIdx, const std::vector<TripleComponentWithIndex>& words) {
     std::string path = basePath_ + std::string(PARTIAL_VOCAB_WORDS_INFIX) +
                        std::to_string(fileIdx);
     ad_utility::serialization::FileWriteSerializer file(path);
@@ -302,7 +302,7 @@ class MergeVocabularyMultiFileTest : public ::testing::Test {
 
   void TearDown() override {
     // Clean up test files
-    system(("rm -rf " + basePath_).c_str());
+    [[maybe_unused]] auto res = system(("rm -rf " + basePath_).c_str());
   }
 };
 
@@ -315,14 +315,16 @@ TEST_F(MergeVocabularyMultiFileTest, twoFilesPerBatch) {
   createPartialVocabFile(1, {{"\"beta\"", false, 0}, {"\"delta\"", false, 1}});
 
   // File 2: words "charlie", "foxtrot"
-  createPartialVocabFile(2, {{"\"charlie\"", false, 0}, {"\"foxtrot\"", false, 1}});
+  createPartialVocabFile(
+      2, {{"\"charlie\"", false, 0}, {"\"foxtrot\"", false, 1}});
 
   // File 3: words "echo", "foxtrot" (foxtrot appears in both files of batch 1)
-  createPartialVocabFile(3, {{"\"echo\"", false, 0}, {"\"foxtrot\"", false, 1}});
+  createPartialVocabFile(3,
+                         {{"\"echo\"", false, 0}, {"\"foxtrot\"", false, 1}});
 
   std::vector<std::pair<std::string, bool>> mergeResult;
   auto internalVocabularyAction = [&mergeResult](const auto& word,
-                                                  bool isExternal) -> uint64_t {
+                                                 bool isExternal) -> uint64_t {
     mergeResult.emplace_back(word, isExternal);
     return mergeResult.size() - 1;
   };
@@ -333,20 +335,20 @@ TEST_F(MergeVocabularyMultiFileTest, twoFilesPerBatch) {
 
   // Expected merged vocabulary (sorted, deduplicated)
   std::vector<std::pair<std::string, bool>> expected = {
-      {"\"alpha\"", false},   {"\"beta\"", false}, {"\"charlie\"", false},
-      {"\"delta\"", false},   {"\"echo\"", false}, {"\"foxtrot\"", false}};
+      {"\"alpha\"", false}, {"\"beta\"", false}, {"\"charlie\"", false},
+      {"\"delta\"", false}, {"\"echo\"", false}, {"\"foxtrot\"", false}};
 
   EXPECT_THAT(mergeResult, ::testing::ElementsAreArray(expected));
 
   // Verify ID mappings are correct for all files
   for (size_t i = 0; i < numFiles_; ++i) {
-    IdMap mapping = getIdMapFromFile(basePath_ +
-                                     std::string(PARTIAL_VOCAB_IDMAP_INFIX) +
-                                     std::to_string(i));
+    IdMap mapping = getIdMapFromFile(
+        basePath_ + std::string(PARTIAL_VOCAB_IDMAP_INFIX) + std::to_string(i));
     ASSERT_GT(mapping.size(), 0) << "Mapping for file " << i << " is empty";
   }
 
-  // Specifically check that "delta" (appears in files 0 and 1) maps to same global ID
+  // Specifically check that "delta" (appears in files 0 and 1) maps to same
+  // global ID
   IdMap map0 = getIdMapFromFile(basePath_ +
                                 std::string(PARTIAL_VOCAB_IDMAP_INFIX) + "0");
   IdMap map1 = getIdMapFromFile(basePath_ +
@@ -372,20 +374,22 @@ TEST_F(MergeVocabularyMultiFileTest, twoFilesPerBatch) {
 // Test with words appearing across different batches
 TEST_F(MergeVocabularyMultiFileTest, wordAcrossBatches) {
   // File 0: "alpha", "shared"
-  createPartialVocabFile(0, {{"\"alpha\"", false, 0}, {"\"shared\"", false, 1}});
+  createPartialVocabFile(0,
+                         {{"\"alpha\"", false, 0}, {"\"shared\"", false, 1}});
 
   // File 1: "beta"
   createPartialVocabFile(1, {{"\"beta\"", false, 0}});
 
   // File 2: "charlie", "shared" (shared appears in batch 0 and batch 1)
-  createPartialVocabFile(2, {{"\"charlie\"", false, 0}, {"\"shared\"", false, 1}});
+  createPartialVocabFile(2,
+                         {{"\"charlie\"", false, 0}, {"\"shared\"", false, 1}});
 
   // File 3: "delta"
   createPartialVocabFile(3, {{"\"delta\"", false, 0}});
 
   std::vector<std::pair<std::string, bool>> mergeResult;
   auto internalVocabularyAction = [&mergeResult](const auto& word,
-                                                  bool isExternal) -> uint64_t {
+                                                 bool isExternal) -> uint64_t {
     mergeResult.emplace_back(word, isExternal);
     return mergeResult.size() - 1;
   };
@@ -395,9 +399,11 @@ TEST_F(MergeVocabularyMultiFileTest, wordAcrossBatches) {
                              internalVocabularyAction, 1_GB, 2);
 
   // Expected: alpha, beta, charlie, delta, shared (sorted)
-  std::vector<std::pair<std::string, bool>> expected = {
-      {"\"alpha\"", false}, {"\"beta\"", false}, {"\"charlie\"", false},
-      {"\"delta\"", false}, {"\"shared\"", false}};
+  std::vector<std::pair<std::string, bool>> expected = {{"\"alpha\"", false},
+                                                        {"\"beta\"", false},
+                                                        {"\"charlie\"", false},
+                                                        {"\"delta\"", false},
+                                                        {"\"shared\"", false}};
 
   EXPECT_THAT(mergeResult, ::testing::ElementsAreArray(expected));
 
@@ -418,12 +424,14 @@ TEST_F(MergeVocabularyMultiFileTest, complexMultiBatchScenario) {
   numFiles_ = 6;
 
   // Batch 0: files 0-1
-  createPartialVocabFile(0, {{"\"aaa\"", false, 0}, {"\"shared1\"", false, 1},
+  createPartialVocabFile(0, {{"\"aaa\"", false, 0},
+                             {"\"shared1\"", false, 1},
                              {"\"shared2\"", false, 2}});
   createPartialVocabFile(1, {{"\"bbb\"", false, 0}, {"\"shared1\"", false, 1}});
 
   // Batch 1: files 2-3
-  createPartialVocabFile(2, {{"\"ccc\"", false, 0}, {"\"shared2\"", false, 1},
+  createPartialVocabFile(2, {{"\"ccc\"", false, 0},
+                             {"\"shared2\"", false, 1},
                              {"\"shared3\"", false, 2}});
   createPartialVocabFile(3, {{"\"ddd\"", false, 0}, {"\"shared3\"", false, 1}});
 
@@ -433,7 +441,7 @@ TEST_F(MergeVocabularyMultiFileTest, complexMultiBatchScenario) {
 
   std::vector<std::pair<std::string, bool>> mergeResult;
   auto internalVocabularyAction = [&mergeResult](const auto& word,
-                                                  bool isExternal) -> uint64_t {
+                                                 bool isExternal) -> uint64_t {
     mergeResult.emplace_back(word, isExternal);
     return mergeResult.size() - 1;
   };
