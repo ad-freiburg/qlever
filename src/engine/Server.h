@@ -80,6 +80,7 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
