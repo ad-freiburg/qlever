@@ -719,7 +719,8 @@ CompressedRelationReader::getBlocksForJoin(
       }
     }
     // The following check isn't expensive as there are only few blocks.
-    AD_CORRECTNESS_CHECK(ql::ranges::unique(result) == result.end());
+    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
+                         result.end());
     return result;
   };
 
