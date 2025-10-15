@@ -63,7 +63,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   double area = std::numeric_limits<double>::quiet_NaN();
   try {
     area = computeMetricArea(parsed.value());
-  } catch (InvalidPolygonError) {
+  } catch (const InvalidPolygonError&) {
     AD_LOG_WARN << "Could not compute area of WKT literal `" << wkt << "`."
                 << std::endl;
   }
@@ -140,7 +140,7 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
   }
   try {
     return detail::computeMetricArea(parsed.value());
-  } catch (InvalidPolygonError) {
+  } catch (const InvalidPolygonError&) {
     return std::nullopt;
   }
 }
