@@ -497,7 +497,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
                                        emptyLocatedTriples,
                                    Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
-    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple(
+    auto firstAndLastTriple = readerPtr->getFirstAndLastTripleIgnoringGraph(
         {spec, blockMetadata}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
@@ -553,8 +553,8 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
     auto trace = generateLocationTrace(loc);
     auto blockMetadata =
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
-    auto firstAndLastTriple =
-        readerPtr->getFirstAndLastTriple({spec, blockMetadata}, locatedTriples);
+    auto firstAndLastTriple = readerPtr->getFirstAndLastTripleIgnoringGraph(
+        {spec, blockMetadata}, locatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 

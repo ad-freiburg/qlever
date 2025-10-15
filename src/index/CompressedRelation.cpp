@@ -1323,7 +1323,7 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
 }
 
 // _____________________________________________________________________________
-auto CompressedRelationReader::getFirstAndLastTriple(
+auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
     const ScanSpecAndBlocks& metadataAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {

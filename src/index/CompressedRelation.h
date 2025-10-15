@@ -783,7 +783,7 @@ class CompressedRelationReader {
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(
+  getFirstAndLastTripleIgnoringGraph(
       const ScanSpecAndBlocks& metadataAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
