@@ -1422,6 +1422,52 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkMinY(boundingCoordInputs, IdVec{U, U, D(26.8), D(6), D(2), U});
   checkMaxX(boundingCoordInputs, IdVec{U, U, D(24.3), D(4), D(4), U});
   checkMaxY(boundingCoordInputs, IdVec{U, U, D(26.8), D(8), D(4), U});
+
+  auto expectedArea = [](std::string_view literal) -> double {
+    auto area = ad_utility::GeometryInfo::getMetricArea(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return -1;
+    }
+    return area.value().area();
+  };
+
+  // From other PR 2172 ----------------------
+  static constexpr std::string_view line =
+      "LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)";
+  static constexpr std::string_view polygon =
+      "POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+      "47.995562, 7.8412948 47.9977308))";
+  static constexpr std::string_view collection =
+      "GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
+      "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
+      "47.995562))";
+  const IdOrLiteralOrIriVec lengthInputs{U,
+                                         D(5),
+                                         v,
+                                         geoLit(line),
+                                         geoLit(polygon),
+                                         geoLit(collection),
+                                         lit("BLABLIBLU()")};
+  // --- End - From other PR 2172 ---------------------- ///
+
+  // Geometry area functions
+  auto checkArea = std::bind_front(testNaryExpression, &makeAreaExpression);
+  auto checkMetricArea = testUnaryExpression<&makeMetricAreaExpression>;
+  const auto squareKilometer =
+      lit("http://qudt.org/vocab/unit/KiloM2",
+          "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  checkArea(
+      Ids{U, U, D(0.0), D(0.0), D(expectedArea(polygon) / 1'000'000), D(0.0),
+          U},
+      lengthInputs,
+      IdOrLiteralOrIriVec{squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer});
+  checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
+                                    D(expectedArea(polygon)), D(0.0), U});
 }
 
 // ________________________________________________________________________________________

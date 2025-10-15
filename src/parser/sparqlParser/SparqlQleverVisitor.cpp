@@ -168,27 +168,25 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   using namespace sparqlExpression;
   // Create `SparqlExpression` with one child.
-  auto createUnary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     checkNumArgs(1);  // Check is unary.
     return function(std::move(argList[0]));
   };
   // Create `SparqlExpression` with two children.
-  auto createBinary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
-  auto createBinaryOrTernary =
-      CPP_template_lambda(&argList)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr,
-                                         std::optional<ExpressionPtr>>) {
+  auto createBinaryOrTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr,
+                  std::optional<ExpressionPtr>>) {
     if (argList.size() == 2) {
       return function(std::move(argList[0]), std::move(argList[1]),
                       std::nullopt);
@@ -218,10 +216,13 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
-      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
+      {"metricArea", &makeMetricAreaExpression},
+  };
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
+      {"area", &makeAreaExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
@@ -2638,22 +2639,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
 
-  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
 
-  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr>) {
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr, ExpressionPtr,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
