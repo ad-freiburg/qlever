@@ -198,6 +198,35 @@ class WktGeometricRelation {
   }
 };
 
+// Compute the area of a WKT geometry.
+class WktArea {
+ public:
+  ValueId operator()(
+      const std::optional<MetricArea>& area,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!area.has_value() ||
+        (unit.has_value() && !detail::isAreaUnit(unit.value()))) {
+      return ValueId::makeUndefined();
+    }
+    double val = detail::squareMeterToUnit(area.value().area(), unit);
+    if (std::isnan(val)) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(val);
+  }
+};
+
+// Compute the area of a WKT geometry in square meters.
+class WktMetricArea {
+ public:
+  ValueId operator()(const std::optional<MetricArea>& area) const {
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(area.value().area());
+  }
+};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_GEOSPARQLHELPERS_H
