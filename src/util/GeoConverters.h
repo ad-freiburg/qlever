@@ -1,6 +1,6 @@
 // Copyright 2025 The QLever Authors, in particular:
 //
-// 2025Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -18,6 +18,7 @@
 // Several helpers to convert geometry representations between `S2` and
 // `libspatialjoin`.
 namespace geometryConverters {
+
 // Helper function to convert `GeoPoint` objects to `S2Point`.
 inline S2Point toS2Point(const GeoPoint& p) {
   return S2LatLng::FromDegrees(p.getLat(), p.getLng()).ToPoint();
@@ -33,6 +34,7 @@ inline S2Polyline toS2Polyline(const util::geo::Line<double>& line) {
   return S2Polyline{
       ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
 }
+
 }  // namespace geometryConverters
 
 #endif  // QLEVER_GEOCONVERTERS_H
