@@ -982,28 +982,61 @@ TEST_F(ServiceTest, redirects) {
   auto finalResult = genJsonResult({"x", "y"}, {{"a", "b"}});
 
   // Helper to create a service with a custom redirect chain and final status.
+  // The mock function now implements redirect handling internally, similar to
+  // sendHttpOrHttpsRequest.
   auto createServiceWithRedirects =
       [&](const std::vector<std::pair<Status, std::string>>& redirectChain,
           Status finalStatus = Status::ok) -> Service {
-    auto callCount = std::make_shared<size_t>(0);
-    auto mockFunction = [redirectChain, finalStatus, finalResult, callCount](
+    auto mockFunction = [redirectChain, finalStatus, finalResult](
                             const ad_utility::httpUtils::Url& url,
                             ad_utility::SharedCancellationHandle,
                             const boost::beast::http::verb&, std::string_view,
-                            std::string_view,
-                            std::string_view) -> HttpOrHttpsResponse {
-      if (*callCount < redirectChain.size()) {
-        auto [status, location] = redirectChain[(*callCount)++];
-        return {status, "text/plain", location,
-                httpClientTestHelpers::getResultFunctionFactory(
-                    "", "", Status::ok, {}, nullptr)(url, {}, {}, {}, {}, {})
-                    .body_};
+                            std::string_view, std::string_view,
+                            size_t maxRedirects) -> HttpOrHttpsResponse {
+      // Simulate redirect handling
+      size_t redirectCount = 0;
+      for (const auto& [status, location] : redirectChain) {
+        // Check if this is a redirect status
+        bool isRedirect =
+            (status == Status::moved_permanently || status == Status::found ||
+             status == Status::temporary_redirect ||
+             status == Status::permanent_redirect);
+
+        if (!isRedirect) {
+          // Not a redirect, return directly
+          return {status, "application/sparql-results+json", location,
+                  httpClientTestHelpers::getResultFunctionFactory(
+                      finalResult, "application/sparql-results+json", status,
+                      {}, nullptr)(url, {}, {}, {}, {}, {}, 0)
+                      .body_};
+        }
+
+        // It's a redirect - check if we can follow it
+        if (redirectCount >= maxRedirects) {
+          // Exceeded max redirects - throw error
+          throw std::runtime_error(absl::StrCat(
+              "HTTP request to <", url.asString(),
+              "> exceeded maximum redirect limit of ", maxRedirects));
+        }
+
+        // Check if location is empty
+        if (location.empty()) {
+          throw std::runtime_error(
+              absl::StrCat("HTTP request to <", url.asString(),
+                           "> responded with redirect status code: ",
+                           static_cast<int>(status),
+                           " but no Location header was provided"));
+        }
+
+        // Follow the redirect
+        redirectCount++;
       }
-      (*callCount)++;
+
+      // After all redirects, return the final result
       return {finalStatus, "application/sparql-results+json", "",
               httpClientTestHelpers::getResultFunctionFactory(
                   finalResult, "application/sparql-results+json", finalStatus,
-                  {}, nullptr)(url, {}, {}, {}, {}, {})
+                  {}, nullptr)(url, {}, {}, {}, {}, {}, 0)
                   .body_};
     };
     return Service{testQec, parsedServiceClause, mockFunction};

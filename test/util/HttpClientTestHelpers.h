@@ -37,45 +37,45 @@ static auto constexpr getResultFunctionFactory =
        std::exception_ptr mockException = nullptr,
        ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC(),
        std::string location = "") -> SendRequestType {
-  return
-      [=](const ad_utility::httpUtils::Url& url,
-          ad_utility::SharedCancellationHandle,
-          const boost::beast::http::verb& method, std::string_view postData,
-          std::string_view contentTypeHeader, std::string_view acceptHeader) {
-        auto g = generateLocationTrace(loc);
-        // Check that the request parameters are as expected, e.g. that a
-        // request is sent to the correct url with the expected body.
-        EXPECT_THAT(url.asString(), matchers_.url_);
-        EXPECT_THAT(method, matchers_.method_);
-        EXPECT_THAT(postData, matchers_.postData_);
-        EXPECT_THAT(contentTypeHeader, matchers_.contentType_);
-        EXPECT_THAT(acceptHeader, matchers_.accept_);
+  return [=](const ad_utility::httpUtils::Url& url,
+             ad_utility::SharedCancellationHandle,
+             const boost::beast::http::verb& method, std::string_view postData,
+             std::string_view contentTypeHeader, std::string_view acceptHeader,
+             [[maybe_unused]] size_t maxRedirects) {
+    auto g = generateLocationTrace(loc);
+    // Check that the request parameters are as expected, e.g. that a
+    // request is sent to the correct url with the expected body.
+    EXPECT_THAT(url.asString(), matchers_.url_);
+    EXPECT_THAT(method, matchers_.method_);
+    EXPECT_THAT(postData, matchers_.postData_);
+    EXPECT_THAT(contentTypeHeader, matchers_.contentType_);
+    EXPECT_THAT(acceptHeader, matchers_.accept_);
 
-        if (mockException) {
-          std::rethrow_exception(mockException);
-        }
+    if (mockException) {
+      std::rethrow_exception(mockException);
+    }
 
-        auto body =
-            [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
-          // Randomly slice the string to make tests more robust.
-          std::mt19937 rng{std::random_device{}()};
+    auto body =
+        [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
+      // Randomly slice the string to make tests more robust.
+      std::mt19937 rng{std::random_device{}()};
 
-          const std::string resultStr = result;
-          std::uniform_int_distribution<size_t> distribution{
-              0, resultStr.length() / 2};
+      const std::string resultStr = result;
+      std::uniform_int_distribution<size_t> distribution{
+          0, resultStr.length() / 2};
 
-          for (size_t start = 0; start < resultStr.length();) {
-            size_t size = distribution(rng);
-            std::string resultCopy{resultStr.substr(start, size)};
-            co_yield ql::as_writable_bytes(ql::span{resultCopy});
-            start += size;
-          }
-        };
-        return HttpOrHttpsResponse{.status_ = status,
-                                   .contentType_ = contentType,
-                                   .location_ = location,
-                                   .body_ = body(predefinedResult)};
-      };
+      for (size_t start = 0; start < resultStr.length();) {
+        size_t size = distribution(rng);
+        std::string resultCopy{resultStr.substr(start, size)};
+        co_yield ql::as_writable_bytes(ql::span{resultCopy});
+        start += size;
+      }
+    };
+    return HttpOrHttpsResponse{.status_ = status,
+                               .contentType_ = contentType,
+                               .location_ = location,
+                               .body_ = body(predefinedResult)};
+  };
 };
 
 }  // namespace httpClientTestHelpers

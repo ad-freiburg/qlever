@@ -157,8 +157,17 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  // Send the query to the remote endpoint. Redirects are handled automatically
+  // by the HTTP client up to the limit specified by the runtime parameter
+  // `service-max-redirects`.
+  const size_t maxRedirects =
+      getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
+  HttpOrHttpsResponse response = getResultFunction_(
+      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceQuery, "application/sparql-query",
+      "application/sparql-results+json", maxRedirects);
+
   // Helper lambda to throw an error message with details.
-  HttpOrHttpsResponse response;
   auto throwErrorWithContext = [&serviceUrl,
                                 &response](std::string_view details) {
     throw std::runtime_error(absl::StrCat(
@@ -166,49 +175,6 @@ Result Service::computeResultImpl(bool requestLaziness) {
         ">: ", details, "; the first 100 bytes of the response are: '",
         std::move(response).readResponseHead(100), "'"));
   };
-
-  // Send the query to the remote endpoint. Follow redirects up to the limit
-  // specified by the runtime parameter `service-max-redirects`.
-  const size_t maxRedirects =
-      getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
-  size_t redirectCount = 0;
-  while (redirectCount <= maxRedirects) {
-    response = getResultFunction_(serviceUrl, cancellationHandle_,
-                                  boost::beast::http::verb::post, serviceQuery,
-                                  "application/sparql-query",
-                                  "application/sparql-results+json");
-
-    // Check if the response is a redirect (301, 302, 307, 308).
-    bool isRedirect =
-        (response.status_ == boost::beast::http::status::moved_permanently ||
-         response.status_ == boost::beast::http::status::found ||
-         response.status_ == boost::beast::http::status::temporary_redirect ||
-         response.status_ == boost::beast::http::status::permanent_redirect);
-    if (!isRedirect) {
-      break;
-    }
-
-    // If it is a redirect, but there is no Location header, we cannot
-    // proceed and throw an error.
-    if (response.location_.empty()) {
-      throwErrorWithContext(
-          absl::StrCat("SERVICE responded with redirect status code: ",
-                       static_cast<int>(response.status_),
-                       " but no Location header was provided"));
-    }
-
-    // Follow the redirect.
-    AD_LOG_INFO << "Following redirect to: " << response.location_ << std::endl;
-    serviceUrl = ad_utility::httpUtils::Url{response.location_};
-    redirectCount++;
-  }
-
-  // If the loop exited because we exceeded the maximum number of redirects,
-  // throw a corresponding error.
-  if (redirectCount > maxRedirects) {
-    throwErrorWithContext(absl::StrCat(
-        "SERVICE request exceeded maximum redirect limit of ", maxRedirects));
-  }
 
   // Verify status and content-type of the response.
   if (response.status_ != boost::beast::http::status::ok) {
