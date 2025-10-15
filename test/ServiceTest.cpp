@@ -967,3 +967,92 @@ TEST_F(ServiceTest, clone) {
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, redirects) {
+  using Status = boost::beast::http::status;
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://original.example.com/api>"),
+      "",
+      "{ }",
+      false};
+
+  auto finalResult = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  // Helper to create a service with a custom redirect chain and final status.
+  auto createServiceWithRedirects =
+      [&](const std::vector<std::pair<Status, std::string>>& redirectChain,
+          Status finalStatus = Status::ok) -> Service {
+    auto callCount = std::make_shared<size_t>(0);
+    auto mockFunction = [redirectChain, finalStatus, finalResult, callCount](
+                            const ad_utility::httpUtils::Url& url,
+                            ad_utility::SharedCancellationHandle,
+                            const boost::beast::http::verb&, std::string_view,
+                            std::string_view,
+                            std::string_view) -> HttpOrHttpsResponse {
+      if (*callCount < redirectChain.size()) {
+        auto [status, location] = redirectChain[(*callCount)++];
+        return {status, "text/plain", location,
+                httpClientTestHelpers::getResultFunctionFactory(
+                    "", "", Status::ok, {}, nullptr)(url, {}, {}, {}, {}, {})
+                    .body_};
+      }
+      (*callCount)++;
+      return {finalStatus, "application/sparql-results+json", "",
+              httpClientTestHelpers::getResultFunctionFactory(
+                  finalResult, "application/sparql-results+json", finalStatus,
+                  {}, nullptr)(url, {}, {}, {}, {}, {})
+                  .body_};
+    };
+    return Service{testQec, parsedServiceClause, mockFunction};
+  };
+
+  // Test whether all four redirect types (301, 302, 307, 308) work.
+  auto testRedirectType = [&](Status redirectStatus) {
+    auto service = createServiceWithRedirects(
+        {{redirectStatus, "http://redirected.example.com/api"}});
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  };
+  testRedirectType(Status::moved_permanently);   // 301
+  testRedirectType(Status::found);               // 302
+  testRedirectType(Status::temporary_redirect);  // 307
+  testRedirectType(Status::permanent_redirect);  // 308
+
+  // Test that redirect with empty location header throws.
+  auto serviceEmptyLocation =
+      createServiceWithRedirects({{Status::permanent_redirect, ""}});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceEmptyLocation.computeResultOnlyForTesting(),
+      ::testing::AllOf(::testing::HasSubstr("redirect status code"),
+                       ::testing::HasSubstr("no Location header")));
+
+  // Test that more than `service-max-redirects` redirects throws.
+  auto serviceExceedsLimit = createServiceWithRedirects({
+      {Status::permanent_redirect, "http://redirect1.example.com/api"},
+      {Status::permanent_redirect, "http://redirect2.example.com/api"},
+  });
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceExceedsLimit.computeResultOnlyForTesting(),
+      ::testing::AllOf(::testing::HasSubstr("exceeded"),
+                       ::testing::HasSubstr("redirect limit")));
+
+  // Test that exactly `service-max-redirects` redirects works.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(2);
+  auto serviceWithinLimit = createServiceWithRedirects({
+      {Status::permanent_redirect, "http://redirect1.example.com/api"},
+      {Status::permanent_redirect, "http://redirect2.example.com/api"},
+  });
+  EXPECT_NO_THROW(serviceWithinLimit.computeResultOnlyForTesting());
+
+  // Test that `service-max-redirects` set to 0 causes any redirect to throw.
+  setRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>(0);
+  auto serviceNoRedirects = createServiceWithRedirects(
+      {{Status::permanent_redirect, "http://redirected.example.com/api"}});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceNoRedirects.computeResultOnlyForTesting(),
+      ::testing::AllOf(::testing::HasSubstr("exceeded"),
+                       ::testing::HasSubstr("redirect limit")));
+}
