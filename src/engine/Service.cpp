@@ -157,25 +157,19 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
-  // Helper lambda to throw an error message with details.
-  HttpOrHttpsResponse response;
-  auto throwErrorWithContext = [&serviceUrl,
-                                &response](std::string_view details) {
-    throw std::runtime_error(absl::StrCat(
-        "Error while executing a SERVICE request to <", serviceUrl.asString(),
-        ">: ", details, "; the first 100 bytes of the response are: '",
-        std::move(response).readResponseHead(100), "'"));
-  };
-
   // Send the query to the remote endpoint. Redirects are handled automatically
   // by the HTTP client up to the limit specified by the runtime parameter
   // `service-max-redirects`.
   const size_t maxRedirects =
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
-  response = getResultFunction_(
+  HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json", maxRedirects);
+
+  auto throwErrorWithContext = [this, &response](std::string_view sv) {
+    this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
+  };
 
   // Verify status and content-type of the response.
   if (response.status_ != boost::beast::http::status::ok) {
