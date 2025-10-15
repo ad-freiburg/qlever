@@ -18,6 +18,11 @@
 #include "util/StringUtilsImpl.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string langTagRegex = "[a-zA-Z]+(-[a-zA-Z0-9]+)*";
+}  // namespace detail
 // ____________________________________________________________________________
 std::string_view commonPrefix(std::string_view a, const std::string_view b) {
   size_t maxIdx = std::min(a.size(), b.size());
@@ -53,7 +58,7 @@ std::string getUppercase(const std::string& orig) {
 
 // ____________________________________________________________________________
 bool strIsLangTag(const std::string& input) {
-  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
+  return ctre::match<detail::langTagRegex>(input);
 }
 
 // ____________________________________________________________________________
