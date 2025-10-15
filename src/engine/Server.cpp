@@ -50,7 +50,7 @@ Server::Server(unsigned short port, size_t numThreads,
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      noAccessCheck_(noAccessCheck)
+      noAccessCheck_(noAccessCheck),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
