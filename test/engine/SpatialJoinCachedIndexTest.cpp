@@ -11,6 +11,8 @@
 #include "engine/NamedResultCache.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
+#include "global/ValueId.h"
+#include "gmock/gmock.h"
 #include "rdfTypes/Variable.h"
 
 namespace {
@@ -73,7 +75,7 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   // osmway:300060683) which will be related to the station node <p1>
   // (osmnode:21769883). Additionally there is an unrelated line <w1>, a rail
   // segment in Berlin (osmway:69254641).
-  std::string kb =
+  const std::string kb =
       "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
       "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
       "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
@@ -94,12 +96,15 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
       "<w1> <asWKT> \"LINESTRING(13.4363731 52.5100129,13.4358858 "
       "52.5102196,13.4350587 52.5105704)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+  const MaxDistanceConfig maxDistance{1000};  // Use a radius of 1 km
+  const std::vector<std::string> expectedResultIris{
+      {"<s1>", "<s2>", "<s3>", "<s4>"}};
 
   // First, pin the linestrings as a named s2 index
-  std::string pinned = "SELECT * { ?s <asWKT> ?geo2 }";
+  std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
-  auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
+  auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
   // Check expected cache size
@@ -111,8 +116,8 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   // Prepare a spatial join using the s2 point polyline algorithm on this
   // dataset and use the `QueryExecutionContext` which holds the cached index.
   auto leftChild =
-      buildIndexScan(qec, {"?obj1", std::string{"<asWKT2>"}, "?geo1"});
-  SpatialJoinConfiguration config{MaxDistanceConfig{1000}, Variable{"?geo1"},
+      buildIndexScan(qec, {"?s1", std::string{"<asWKT2>"}, "?geo1"});
+  SpatialJoinConfiguration config{maxDistance, Variable{"?geo1"},
                                   Variable{"?geo2"}};
   config.algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
   config.rightCacheName_ = "dummy";
@@ -127,8 +132,23 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   auto res = spatialJoin->computeResult(false);
 
   EXPECT_TRUE(res.isFullyMaterialized());
-  EXPECT_EQ(res.idTable().numRows(), 4);
-  EXPECT_EQ(res.idTable().numColumns(), 4);
+  EXPECT_EQ(res.idTable().numRows(), expectedResultIris.size());
+  EXPECT_EQ(res.idTable().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
+
+  std::vector<std::string> resultIris;
+
+  auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
+                           .at(Variable{"?s2"})
+                           .columnIndex_;
+  for (size_t i = 0; i < res.idTable().numRows(); i++) {
+    auto valueId = res.idTable().at(i, subjectColIdx);
+    ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
+    auto entry = qec->getIndex().getVocab()[valueId.getVocabIndex()];
+    resultIris.push_back(entry);
+  }
+
+  EXPECT_THAT(resultIris,
+              ::testing::UnorderedElementsAreArray(expectedResultIris));
 }
 
 }  // namespace
