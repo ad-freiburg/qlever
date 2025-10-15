@@ -159,7 +159,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
 
   // Helper lambda to throw an error message with details.
   HttpOrHttpsResponse response;
-  auto throwErrorWithContext = [this, &serviceUrl,
+  auto throwErrorWithContext = [&serviceUrl,
                                 &response](std::string_view details) {
     throw std::runtime_error(absl::StrCat(
         "Error while executing a SERVICE request to <", serviceUrl.asString(),
