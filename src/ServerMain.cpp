@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatterns);
+                  std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates);
   } catch (const std::exception& e) {
