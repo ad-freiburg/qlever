@@ -137,7 +137,6 @@ inline void checkInvalidLiteral(std::string_view wkt,
             expectValidGeometryType);
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<MetricArea>(wkt).has_value());
 }
 
 // ____________________________________________________________________________

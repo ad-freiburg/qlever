@@ -4,6 +4,7 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -62,7 +63,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   double area = std::numeric_limits<double>::quiet_NaN();
   try {
     area = computeMetricArea(parsed.value());
-  } catch (std::exception) {
+  } catch (InvalidPolygonError) {
     AD_LOG_WARN << "Could not compute area of WKT literal `" << wkt << "`."
                 << std::endl;
   }
@@ -139,7 +140,7 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
   }
   try {
     return detail::computeMetricArea(parsed.value());
-  } catch (std::exception) {  // TODO<ullingerc>
+  } catch (InvalidPolygonError) {
     return std::nullopt;
   }
 }
@@ -151,7 +152,8 @@ std::string BoundingBox::asWkt() const {
 
 // ____________________________________________________________________________
 MetricArea::MetricArea(double area) : area_{area} {
-  AD_CORRECTNESS_CHECK(area >= 0, "Metric area must be positive");
+  AD_CORRECTNESS_CHECK(area >= 0 || std::isnan(area),
+                       "Metric area must be positive");
 }
 
 // ____________________________________________________________________________

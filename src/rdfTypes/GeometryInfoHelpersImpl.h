@@ -235,6 +235,9 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
 
   auto loop = std::make_unique<S2Loop>(cleaned);
   loop->Normalize();
+  if (!loop->IsValid()) {
+    throw InvalidPolygonError();
+  }
   return loop;
 }
 

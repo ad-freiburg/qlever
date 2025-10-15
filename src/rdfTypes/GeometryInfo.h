@@ -96,6 +96,14 @@ struct MetricArea {
   double area() const { return area_; };
 };
 
+// Class for internal exception handling of errors from `s2geometry`.
+class InvalidPolygonError : public std::runtime_error {
+ public:
+  explicit InvalidPolygonError()
+      : std::runtime_error{
+            "Computation encountered an invalid polygon geometry."} {}
+};
+
 // Forward declaration for concept
 class GeometryInfo;
 
