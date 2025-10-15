@@ -7,8 +7,6 @@
 #ifndef QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
 #define QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
 
-#include <ranges>
-
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"

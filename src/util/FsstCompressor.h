@@ -9,7 +9,6 @@
 #include <fsst.h>
 
 #include <memory>
-#include <ranges>
 #include <string>
 #include <vector>
 

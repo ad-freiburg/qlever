@@ -11,7 +11,6 @@
 
 #include <boost/circular_buffer.hpp>
 #include <future>
-#include <ranges>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
