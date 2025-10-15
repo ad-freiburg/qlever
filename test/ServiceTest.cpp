@@ -969,123 +969,46 @@ TEST_F(ServiceTest, clone) {
 }
 
 // ____________________________________________________________________________
-TEST_F(ServiceTest, redirects) {
-  using Status = boost::beast::http::status;
-
+// Integration test that verifies Service correctly passes maxRedirects
+// parameter to the HTTP client. Detailed redirect behavior tests are in
+// HttpTest.cpp.
+TEST_F(ServiceTest, redirectsIntegration) {
   parsedQuery::Service parsedServiceClause{
       {Variable{"?x"}, Variable{"?y"}},
-      TripleComponent::Iri::fromIriref("<http://original.example.com/api>"),
+      TripleComponent::Iri::fromIriref("<http://example.com/api>"),
       "",
       "{ }",
       false};
 
-  auto finalResult = genJsonResult({"x", "y"}, {{"a", "b"}});
-
-  // Helper to create a service with a custom redirect chain and final status.
-  // The mock function now implements redirect handling internally, similar to
-  // sendHttpOrHttpsRequest.
-  auto createServiceWithRedirects =
-      [&](const std::vector<std::pair<Status, std::string>>& redirectChain,
-          Status finalStatus = Status::ok) -> Service {
-    auto mockFunction = [redirectChain, finalStatus, finalResult](
-                            const ad_utility::httpUtils::Url& url,
-                            ad_utility::SharedCancellationHandle,
-                            const boost::beast::http::verb&, std::string_view,
-                            std::string_view, std::string_view,
-                            size_t maxRedirects) -> HttpOrHttpsResponse {
-      // Simulate redirect handling
-      size_t redirectCount = 0;
-      for (const auto& [status, location] : redirectChain) {
-        // Check if this is a redirect status
-        bool isRedirect =
-            (status == Status::moved_permanently || status == Status::found ||
-             status == Status::temporary_redirect ||
-             status == Status::permanent_redirect);
-
-        if (!isRedirect) {
-          // Not a redirect, return directly
-          return {status, "application/sparql-results+json", location,
-                  httpClientTestHelpers::getResultFunctionFactory(
-                      finalResult, "application/sparql-results+json", status,
-                      {}, nullptr)(url, {}, {}, {}, {}, {}, 0)
-                      .body_};
-        }
-
-        // It's a redirect - check if we can follow it
-        if (redirectCount >= maxRedirects) {
-          // Exceeded max redirects - throw error
-          throw std::runtime_error(absl::StrCat(
-              "HTTP request to <", url.asString(),
-              "> exceeded maximum redirect limit of ", maxRedirects));
-        }
-
-        // Check if location is empty
-        if (location.empty()) {
-          throw std::runtime_error(
-              absl::StrCat("HTTP request to <", url.asString(),
-                           "> responded with redirect status code: ",
-                           static_cast<int>(status),
-                           " but no Location header was provided"));
-        }
-
-        // Follow the redirect
-        redirectCount++;
-      }
-
-      // After all redirects, return the final result
-      return {finalStatus, "application/sparql-results+json", "",
-              httpClientTestHelpers::getResultFunctionFactory(
-                  finalResult, "application/sparql-results+json", finalStatus,
-                  {}, nullptr)(url, {}, {}, {}, {}, {}, 0)
-                  .body_};
+  // Mock that verifies maxRedirects is passed correctly.
+  auto mockWithMaxRedirectsCheck =
+      [](size_t expectedMaxRedirects,
+         const std::string& result) -> SendRequestType {
+    return [expectedMaxRedirects, result](
+               const ad_utility::httpUtils::Url&,
+               ad_utility::SharedCancellationHandle,
+               const boost::beast::http::verb&, std::string_view,
+               std::string_view, std::string_view,
+               size_t actualMaxRedirects) -> HttpOrHttpsResponse {
+      // Verify that the correct maxRedirects value is passed.
+      EXPECT_EQ(actualMaxRedirects, expectedMaxRedirects);
+      return httpClientTestHelpers::getResultFunctionFactory(
+          result, "application/sparql-results+json")(
+          ad_utility::httpUtils::Url{"http://example.com:80/api"}, {}, {}, {},
+          {}, {}, 0);
     };
-    return Service{testQec, parsedServiceClause, mockFunction};
   };
 
-  // Test whether all four redirect types (301, 302, 307, 308) work.
-  auto testRedirectType = [&](Status redirectStatus) {
-    auto service = createServiceWithRedirects(
-        {{redirectStatus, "http://redirected.example.com/api"}});
-    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
-  };
-  testRedirectType(Status::moved_permanently);   // 301
-  testRedirectType(Status::found);               // 302
-  testRedirectType(Status::temporary_redirect);  // 307
-  testRedirectType(Status::permanent_redirect);  // 308
+  // Test with default maxRedirects setting (should be 1).
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+  Service service1{testQec, parsedServiceClause,
+                   mockWithMaxRedirectsCheck(1, result)};
+  EXPECT_NO_THROW(service1.computeResultOnlyForTesting());
 
-  // Test that redirect with empty location header throws.
-  auto serviceEmptyLocation =
-      createServiceWithRedirects({{Status::permanent_redirect, ""}});
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      serviceEmptyLocation.computeResultOnlyForTesting(),
-      ::testing::AllOf(::testing::HasSubstr("redirect status code"),
-                       ::testing::HasSubstr("no Location header")));
-
-  // Test that more than `service-max-redirects` redirects throws.
-  auto serviceExceedsLimit = createServiceWithRedirects({
-      {Status::permanent_redirect, "http://redirect1.example.com/api"},
-      {Status::permanent_redirect, "http://redirect2.example.com/api"},
-  });
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      serviceExceedsLimit.computeResultOnlyForTesting(),
-      ::testing::AllOf(::testing::HasSubstr("exceeded"),
-                       ::testing::HasSubstr("redirect limit")));
-
-  // Test that exactly `service-max-redirects` redirects works.
+  // Test with custom maxRedirects setting.
   auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(2);
-  auto serviceWithinLimit = createServiceWithRedirects({
-      {Status::permanent_redirect, "http://redirect1.example.com/api"},
-      {Status::permanent_redirect, "http://redirect2.example.com/api"},
-  });
-  EXPECT_NO_THROW(serviceWithinLimit.computeResultOnlyForTesting());
-
-  // Test that `service-max-redirects` set to 0 causes any redirect to throw.
-  setRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>(0);
-  auto serviceNoRedirects = createServiceWithRedirects(
-      {{Status::permanent_redirect, "http://redirected.example.com/api"}});
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      serviceNoRedirects.computeResultOnlyForTesting(),
-      ::testing::AllOf(::testing::HasSubstr("exceeded"),
-                       ::testing::HasSubstr("redirect limit")));
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
+  Service service2{testQec, parsedServiceClause,
+                   mockWithMaxRedirectsCheck(5, result)};
+  EXPECT_NO_THROW(service2.computeResultOnlyForTesting());
 }

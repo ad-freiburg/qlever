@@ -381,3 +381,125 @@ TEST(HttpServer, RequestBodySizeLimit) {
   expectRequestSucceeds(10_kB);
   expectRequestSucceeds(5_MB);
 }
+
+// Test HTTP redirect handling in `sendHttpOrHttpsRequest`.
+TEST(HttpClient, Redirects) {
+  using ::testing::AllOf;
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Helper lamda to create a server that redirects to a given location.
+  auto makeRedirectServer = [](status redirectStatus, std::string location) {
+    return TestHttpServer([redirectStatus, location = std::move(location)](
+                              [[maybe_unused]] auto request,
+                              auto&& send) -> boost::asio::awaitable<void> {
+      auto response = []() -> cppcoro::generator<std::string> {
+        co_yield "";
+      }();
+      http::response<http::string_body> resp;
+      resp.result(redirectStatus);
+      resp.set(http::field::content_type, "text/plain");
+      if (!location.empty()) {
+        resp.set(http::field::location, location);
+      }
+      resp.body() = "";
+      resp.prepare_payload();
+      co_await send(std::move(resp));
+    });
+  };
+
+  // Helper lambda to create a server that returns OK.
+  auto makeOkServer = []() {
+    return TestHttpServer(
+        [](auto request, auto&& send) -> boost::asio::awaitable<void> {
+          auto response = []() -> cppcoro::generator<std::string> {
+            co_yield "Success";
+          }();
+          co_return co_await send(createOkResponse(
+              std::move(response), request, ad_utility::MediaType::textPlain));
+        });
+  };
+
+  // Test that all four redirect types (301, 302, 307, 308) work.
+  for (auto redirectStatus :
+       {status::moved_permanently, status::found, status::temporary_redirect,
+        status::permanent_redirect}) {
+    // Create final server first.
+    auto okServer = makeOkServer();
+    okServer.runInOwnThread();
+    std::string finalUrl =
+        absl::StrCat("http://localhost:", okServer.getPort());
+
+    // Create `redirectServer` that points to `okServer`.
+    auto redirectServer = makeRedirectServer(redirectStatus, finalUrl);
+    redirectServer.runInOwnThread();
+    std::string redirectUrl =
+        absl::StrCat("http://localhost:", redirectServer.getPort());
+
+    // Send request with `maxRedirects = 1'.
+    auto response = sendHttpOrHttpsRequest(Url{redirectUrl}, handle, verb::get,
+                                           "", "", "", 1);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
+
+    redirectServer.shutDown();
+    okServer.shutDown();
+  }
+
+  // Test that redirect with empty `Location` header throws.
+  {
+    auto server = makeRedirectServer(status::permanent_redirect, "");
+    server.runInOwnThread();
+    std::string url = absl::StrCat("http://localhost:", server.getPort());
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("redirect status code"),
+              HasSubstr("no Location header")));
+    server.shutDown();
+  }
+
+  // Test that exceeding max redirects throws, using a chain of two redirects.
+  {
+    // Create final server
+    auto finalServer = makeOkServer();
+    finalServer.runInOwnThread();
+    std::string finalUrl =
+        absl::StrCat("http://localhost:", finalServer.getPort());
+
+    // Create second redirect that points to final server
+    auto redirectServer2 =
+        makeRedirectServer(status::permanent_redirect, finalUrl);
+    redirectServer2.runInOwnThread();
+    std::string url2 =
+        absl::StrCat("http://localhost:", redirectServer2.getPort());
+
+    // Create first redirect that points to second redirect
+    auto redirectServer1 = makeRedirectServer(status::permanent_redirect, url2);
+    redirectServer1.runInOwnThread();
+    std::string url1 =
+        absl::StrCat("http://localhost:", redirectServer1.getPort());
+
+    // With maxRedirects=1, this should fail (needs 2 redirects)
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url1}, handle, verb::get, "", "", "", 1),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+
+    redirectServer1.shutDown();
+    redirectServer2.shutDown();
+    finalServer.shutDown();
+  }
+
+  // Test that `maxRedirects = 0` means no redirects are followed.
+  {
+    auto redirectServer =
+        makeRedirectServer(status::permanent_redirect, "http://example.com");
+    redirectServer.runInOwnThread();
+    std::string url =
+        absl::StrCat("http://localhost:", redirectServer.getPort());
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, handle, verb::get, "", "", "", 0),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+    redirectServer.shutDown();
+  }
+}
