@@ -882,6 +882,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
@@ -898,6 +899,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   Row columnNames{"?name1",
                   "?obj1",
@@ -921,6 +923,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   auto maxDist = std::numeric_limits<double>::max();
   MaxDistanceConfig maxDistConf{maxDist};
@@ -958,6 +961,7 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
                                         columnNames);
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   Row columnNames{"?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
@@ -976,6 +980,7 @@ TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   // expected behavior: point is skipped
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
@@ -994,6 +999,7 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   }
 }
 
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     SpatialJoin, SpatialJoinParamTest,
     ::testing::Combine(
@@ -1134,6 +1140,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, computeBoundingBox) {
   // ASSERT_EQ("", "uncomment the part below again");
   double circ = 40075 * 1000;  // circumference of the earth (at the equator)
@@ -1150,6 +1157,7 @@ TEST(SpatialJoin, computeBoundingBox) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, isContainedInBoundingBoxes) {
   SpatialJoinAlgorithms spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting();
@@ -1250,6 +1258,7 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
   }
 }
 
+// _____________________________________________________________________________
 void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
   auto checkBoundingBox = [](Box box, double minLng, double minLat,
                              double maxLng, double maxLat) {
@@ -1301,12 +1310,15 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, BoundingBoxOfArea) { testBoundingBoxOfAreaOrMidpointOfBox(); }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, MidpointOfBoundingBox) {
   testBoundingBoxOfAreaOrMidpointOfBox(false);
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
 
@@ -1557,6 +1569,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   return qec;
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, areaFormat) {
   auto qec = getAllGeometriesQEC();
   auto leftChild =
@@ -1582,6 +1595,7 @@ TEST(SpatialJoin, areaFormat) {
   ASSERT_EQ(res->idTable().numRows(), 36);
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, trueAreaDistance) {
   auto getDist = [](QueryExecutionContext* qec, std::string nr1,
                     std::string nr2, bool useMidpointForAreas) {
@@ -1642,6 +1656,7 @@ TEST(SpatialJoin, trueAreaDistance) {
               getDist(qec, "Area6", "Area6", false));
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, mixedDataSet) {
   auto testDist = [](QueryExecutionContext* qec, size_t maxDist,
                      size_t nrResultRows) {
