@@ -78,8 +78,8 @@ CPP_template(typename Sent)(
     return it.base() != sent.base();
   }
 
-  // Now the symmetric operators between a sentinel and an iterator.
-  // They are required by the C++17 mode of `range-v3`.
+  // The same operators as above, but with the argument order switched (sentinel
+  // first). They are required by the C++17 mode of `range-v3`.
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
   operator==(move_sentinel sent, const std::move_iterator<It> it) {
