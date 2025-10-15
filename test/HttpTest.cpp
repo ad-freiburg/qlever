@@ -388,7 +388,7 @@ TEST(HttpClient, Redirects) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  // Helper lamda to create a server that redirects to a given location.
+  // Helper lambda to create a server that redirects to a given location.
   auto makeRedirectServer = [](status redirectStatus, std::string location) {
     return TestHttpServer([redirectStatus, location = std::move(location)](
                               [[maybe_unused]] auto request,
