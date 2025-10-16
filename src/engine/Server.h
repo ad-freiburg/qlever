@@ -297,6 +297,7 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+  FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403

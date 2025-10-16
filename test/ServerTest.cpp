@@ -336,3 +336,8 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 }
+
+TEST(ServerTest, checkAccessToken) {
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  EXPECT_TRUE(server.checkAccessToken());
+}
