@@ -212,7 +212,7 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
 
 // Given an `S2Polygon` compute the area and convert it to approximated square
 // meters on earth.
-inline constexpr double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
+inline double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
   return S2Earth::SteradiansToSquareMeters(polygon.GetArea());
 }
 
