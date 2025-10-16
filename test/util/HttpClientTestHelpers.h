@@ -26,6 +26,7 @@ struct RequestMatchers {
   testing::Matcher<std::string_view> postData_ = testing::_;
   testing::Matcher<std::string_view> contentType_ = testing::_;
   testing::Matcher<std::string_view> accept_ = testing::_;
+  testing::Matcher<size_t> maxRedirects_ = testing::_;
 };
 
 // Factory for generating mocks of the `sendHttpOrHttpsRequest` function. Can
@@ -41,7 +42,7 @@ static auto constexpr getResultFunctionFactory =
              ad_utility::SharedCancellationHandle,
              const boost::beast::http::verb& method, std::string_view postData,
              std::string_view contentTypeHeader, std::string_view acceptHeader,
-             [[maybe_unused]] size_t maxRedirects) {
+             size_t maxRedirects) {
     auto g = generateLocationTrace(loc);
     // Check that the request parameters are as expected, e.g. that a
     // request is sent to the correct url with the expected body.
@@ -50,6 +51,7 @@ static auto constexpr getResultFunctionFactory =
     EXPECT_THAT(postData, matchers_.postData_);
     EXPECT_THAT(contentTypeHeader, matchers_.contentType_);
     EXPECT_THAT(acceptHeader, matchers_.accept_);
+    EXPECT_THAT(maxRedirects, matchers_.maxRedirects_);
 
     if (mockException) {
       std::rethrow_exception(mockException);

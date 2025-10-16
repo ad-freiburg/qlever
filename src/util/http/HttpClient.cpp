@@ -91,7 +91,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
     std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
-    std::string_view acceptHeader, [[maybe_unused]] size_t maxRedirects) {
+    std::string_view acceptHeader) {
   // Check that the client pointer is valid.
   AD_CORRECTNESS_CHECK(client);
   // Check that we have a stream (created in the constructor).

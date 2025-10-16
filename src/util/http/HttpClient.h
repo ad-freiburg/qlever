@@ -70,16 +70,14 @@ class HttpClientImpl {
   // well as the body of the response (possibly very large) as an
   // `cppcoro::generator<ql::span<std::byte>>`. The connection can be used
   // for only one request, as the client is moved to the content yielding
-  // coroutine. If `maxRedirects` is greater than 0, the function will
-  // automatically follow redirects (301, 302, 307, 308) up to the specified
-  // limit.
+  // coroutine.
   static HttpOrHttpsResponse sendRequest(
       std::unique_ptr<HttpClientImpl> client,
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
-      std::string_view acceptHeader = "text/plain", size_t maxRedirects = 0);
+      std::string_view acceptHeader = "text/plain");
 
   // Simple way to establish a websocket connection
   boost::beast::http::response<boost::beast::http::string_body>

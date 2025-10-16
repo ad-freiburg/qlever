@@ -968,10 +968,8 @@ TEST_F(ServiceTest, clone) {
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }
 
-// ____________________________________________________________________________
-// Integration test that verifies Service correctly passes maxRedirects
-// parameter to the HTTP client. Detailed redirect behavior tests are in
-// HttpTest.cpp.
+// Test that a `Service` operation correctly passes the `maxRedirects` parameter
+// to the HTTP client. The actual redirect handling is tested in `HttpTest.cpp`.
 TEST_F(ServiceTest, redirectsIntegration) {
   parsedQuery::Service parsedServiceClause{
       {Variable{"?x"}, Variable{"?y"}},
@@ -979,36 +977,29 @@ TEST_F(ServiceTest, redirectsIntegration) {
       "",
       "{ }",
       false};
-
-  // Mock that verifies maxRedirects is passed correctly.
-  auto mockWithMaxRedirectsCheck =
-      [](size_t expectedMaxRedirects,
-         const std::string& result) -> SendRequestType {
-    return [expectedMaxRedirects, result](
-               const ad_utility::httpUtils::Url&,
-               ad_utility::SharedCancellationHandle,
-               const boost::beast::http::verb&, std::string_view,
-               std::string_view, std::string_view,
-               size_t actualMaxRedirects) -> HttpOrHttpsResponse {
-      // Verify that the correct maxRedirects value is passed.
-      EXPECT_EQ(actualMaxRedirects, expectedMaxRedirects);
-      return httpClientTestHelpers::getResultFunctionFactory(
-          result, "application/sparql-results+json")(
-          ad_utility::httpUtils::Url{"http://example.com:80/api"}, {}, {}, {},
-          {}, {}, 0);
-    };
-  };
-
-  // Test with default maxRedirects setting (should be 1).
   auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
-  Service service1{testQec, parsedServiceClause,
-                   mockWithMaxRedirectsCheck(1, result)};
-  EXPECT_NO_THROW(service1.computeResultOnlyForTesting());
 
-  // Test with custom maxRedirects setting.
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
-  Service service2{testQec, parsedServiceClause,
-                   mockWithMaxRedirectsCheck(5, result)};
-  EXPECT_NO_THROW(service2.computeResultOnlyForTesting());
+  // Test with default setting for `maxRedirects`, which is 1.
+  {
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(1)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
+
+  // Test with custom setting for `maxRedirects`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(5)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
 }
