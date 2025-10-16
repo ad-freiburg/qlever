@@ -113,7 +113,7 @@ class WktCentroid {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid_);
+    return ValueId::makeFromGeoPoint(geom.value().centroid());
   }
 };
 
@@ -192,7 +192,7 @@ class WktNumGeometries {
     if (!numGeom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromInt(numGeom.value().numGeometries_);
+    return ValueId::makeFromInt(numGeom.value().numGeometries());
   }
 };
 

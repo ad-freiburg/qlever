@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -254,7 +255,7 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    if (!variable.name().starts_with(QLEVER_INTERNAL_VARIABLE_PREFIX)) {
+    if (!ql::starts_with(variable.name(), QLEVER_INTERNAL_VARIABLE_PREFIX)) {
       clause.addVisibleVariable(variable);
     }
   };
@@ -286,7 +287,8 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     for (auto& triple : basicPattern->_triples) {
       auto predicate = triple.getSimplePredicate();
       if (triple.o_ == variable && predicate.has_value() &&
-          !predicate.value().starts_with(
+          !ql::starts_with(
+              predicate.value(),
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
@@ -319,10 +321,10 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     if (!variableFoundInTriple) {
       return false;
     }
-    LOG(DEBUG) << "language filter variable " + variable.name() +
-                      " did not appear as object in any suitable "
-                      "triple. "
-                      "Using literal-to-language predicate instead.\n";
+    AD_LOG_DEBUG << "language filter variable " + variable.name() +
+                        " did not appear as object in any suitable "
+                        "triple. "
+                        "Using literal-to-language predicate instead.\n";
 
     // If necessary create an empty `BasicGraphPattern` at the end to which we
     // can append a triple.
@@ -531,7 +533,7 @@ void ParsedQuery::addOrderByClause(
 
 // _____________________________________________________________________________
 void ParsedQuery::addWarningOrThrow(std::string warning) {
-  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+  if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
     addWarning(std::move(warning));

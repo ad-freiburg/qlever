@@ -26,8 +26,9 @@ namespace detail {
 // function is called directly, but the invocation of the handler is posted to
 // the associated executor of the `handler`, or to the `executor` if no such
 // associated executor exists.
-CPP_template(typename Executor, typename Function, typename Handler)(
-    requires std::invocable<Function>) struct CallFunctionAndPassToHandler {
+CPP_template(typename Executor, typename Function,
+             typename Handler)(requires ql::concepts::invocable<
+                               Function>) struct CallFunctionAndPassToHandler {
   Executor executor_;
   Function function_;
   Handler handler_;
@@ -71,8 +72,8 @@ CPP_template(typename Executor, typename Function, typename Handler)(
 };
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
-CPP_template(typename Executor, typename Function,
-             typename Handler)(requires std::invocable<std::decay_t<Function>>)
+CPP_template(typename Executor, typename Function, typename Handler)(
+    requires ql::concepts::invocable<std::decay_t<Function>>)
     CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
         -> CallFunctionAndPassToHandler<std::decay_t<Executor>,
                                         std::decay_t<Function>,
@@ -86,14 +87,14 @@ CPP_template(typename Executor, typename Function,
 // Note: If no executor is associated with the `completionToken`, then the
 // handler will also be run on the `executor` that is passed to this function as
 // there is no other way of running it.
-CPP_template(typename Executor, typename CompletionToken,
-             typename Function)(requires std::invocable<Function> CPP_and(
-    std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-    std::is_void_v<std::invoke_result_t<
-        Function>>)) auto runFunctionOnExecutor(Executor executor,
-                                                Function function,
-                                                CompletionToken&
-                                                    completionToken) {
+CPP_template(typename Executor, typename CompletionToken, typename Function)(
+    requires ql::concepts::invocable<Function> CPP_and(
+        std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+        std::is_void_v<std::invoke_result_t<
+            Function>>)) auto runFunctionOnExecutor(Executor executor,
+                                                    Function function,
+                                                    CompletionToken&
+                                                        completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
 
@@ -127,7 +128,7 @@ template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
     std::promise<std::function<void()>> cancelCallback,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
@@ -175,7 +176,7 @@ inline net::awaitable<T> interruptible(
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   return interruptible(std::move(awaitable), std::move(handle),
                        std::promise<std::function<void()>>{}, std::move(loc));
 }

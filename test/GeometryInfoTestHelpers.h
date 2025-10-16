@@ -20,42 +20,30 @@ using Loc = source_location;
 // instances of the associated helper classes.
 
 // ____________________________________________________________________________
-inline void checkGeometryType(std::optional<GeometryType> a,
-                              std::optional<GeometryType> b,
-                              Loc sourceLocation = Loc::current()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.has_value(), b.has_value());
-  if (!a.has_value()) {
-    return;
-  }
-  ASSERT_EQ(a.value().type_, b.value().type_);
-}
-
-// ____________________________________________________________________________
 inline void checkCentroid(std::optional<Centroid> a, std::optional<Centroid> b,
-                          Loc sourceLocation = Loc::current()) {
+                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(a.has_value(), b.has_value());
   if (!a.has_value()) {
     return;
   }
-  ASSERT_NEAR(a.value().centroid_.getLat(), b.value().centroid_.getLat(),
+  ASSERT_NEAR(a.value().centroid().getLat(), b.value().centroid().getLat(),
               0.001);
-  ASSERT_NEAR(a.value().centroid_.getLng(), b.value().centroid_.getLng(),
+  ASSERT_NEAR(a.value().centroid().getLng(), b.value().centroid().getLng(),
               0.001);
 }
 
 // ____________________________________________________________________________
 inline void checkBoundingBox(std::optional<BoundingBox> a,
                              std::optional<BoundingBox> b,
-                             Loc sourceLocation = Loc::current()) {
+                             Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(a.has_value(), b.has_value());
   if (!a.has_value()) {
     return;
   }
-  auto [all, aur] = a.value();
-  auto [bll, bur] = b.value();
+  auto [all, aur] = a.value().pair();
+  auto [bll, bur] = b.value().pair();
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
   ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
@@ -65,7 +53,7 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
 // ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
-                         Loc sourceLocation = Loc::current()) {
+                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(actual.has_value(), expected.has_value());
   if (!actual.has_value() || !expected.has_value()) {
@@ -75,7 +63,7 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   auto a = actual.value();
   auto b = expected.value();
 
-  checkGeometryType(a.getWktType(), b.getWktType());
+  EXPECT_EQ(a.getWktType(), b.getWktType());
 
   checkCentroid(a.getCentroid(), b.getCentroid());
 
@@ -87,25 +75,24 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
 // ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(
     std::optional<GeometryInfo> optGeoInfo,
-    Loc sourceLocation = Loc::current()) {
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   ASSERT_TRUE(optGeoInfo.has_value());
   auto gi = optGeoInfo.value();
   auto l = generateLocationTrace(sourceLocation);
 
   checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>());
-
-  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>());
-
-  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
-
-  checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>());
-
+  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>(),
+                   sourceLocation);
+  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>(),
+                sourceLocation);
+  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
+            gi.getRequestedInfo<GeometryType>());
   EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
 }
 
 // ____________________________________________________________________________
 inline void checkRequestedInfoForWktLiteral(
-    const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
+    const std::string_view& wkt, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   auto optGeoInfo = GeometryInfo::fromWktLiteral(wkt);
   ASSERT_TRUE(optGeoInfo.has_value());
@@ -115,8 +102,8 @@ inline void checkRequestedInfoForWktLiteral(
                    GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
   checkCentroid(gi.getCentroid(),
                 GeometryInfo::getRequestedInfo<Centroid>(wkt));
-  checkGeometryType(gi.getWktType(),
-                    GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
+            GeometryInfo::getRequestedInfo<GeometryType>(wkt));
   EXPECT_EQ(gi.getNumGeometries(),
             GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
 }
@@ -125,7 +112,7 @@ inline void checkRequestedInfoForWktLiteral(
 inline void checkInvalidLiteral(std::string_view wkt,
                                 bool expectValidGeometryType = false,
                                 bool expectNumGeom = false,
-                                Loc sourceLocation = Loc::current()) {
+                                Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
 
   EXPECT_FALSE(GeometryInfo::fromWktLiteral(wkt).has_value());
@@ -144,7 +131,7 @@ inline void checkInvalidLiteral(std::string_view wkt,
 
 // ____________________________________________________________________________
 inline void checkUtilBoundingBox(util::geo::DBox a, util::geo::DBox b,
-                                 Loc sourceLocation = Loc::current()) {
+                                 Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_NEAR(a.getLowerLeft().getX(), b.getLowerLeft().getX(), 0.001);
   ASSERT_NEAR(a.getLowerLeft().getY(), b.getLowerLeft().getY(), 0.001);

@@ -13,11 +13,13 @@
 
 #include <boost/optional.hpp>
 
+#include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/TimeTracer.h"
 
 class Permutation;
 
@@ -25,7 +27,14 @@ struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
 
-  bool operator<=>(const NumAddedAndDeleted&) const = default;
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(NumAddedAndDeleted, numAdded_,
+                                              numDeleted_)
+
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const NumAddedAndDeleted& n) {
+    str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
+    return str;
+  }
 };
 
 // A triple and its block in a particular permutation. For a detailed definition
@@ -48,7 +57,9 @@ struct LocatedTriple {
       ql::span<const CompressedBlockMetadata> blockMetadata,
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
-  bool operator==(const LocatedTriple&) const = default;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+                                              triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
@@ -161,7 +172,9 @@ class LocatedTriplesPerBlock {
   // PRECONDITION: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      ql::span<const LocatedTriple> locatedTriples);
+      ql::span<const LocatedTriple> locatedTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
   //
@@ -243,7 +256,13 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 // of the previous block is smaller and the first triple of the next block is
 // larger), then the block is the next block.
 //
-// 2.2. In particular, if the triple is smaller than all triples in the
+// 2.2. [Exception to 2.1] triples that are equal to the last triple of a block
+// with only the graph ID being higher, also belong to that block. This enforces
+// the invariant that triples that only differ in their graph are stored in the
+// same block (this is expected and enforced by the
+// `CompressedRelationReader/Writer`).
+//
+// 2.3. In particular, if the triple is smaller than all triples in the
 // permutation, the position is the first position of the first block.
 //
 // 3. If the triple is larger than all triples in the permutation, the block

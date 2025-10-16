@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
@@ -21,10 +22,14 @@ namespace ad_utility {
 
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
+ private:
   GeoPoint centroid_;
 
-  Centroid(GeoPoint centroid) : centroid_{centroid} {};
+ public:
+  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {};
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
+
+  GeoPoint centroid() const { return centroid_; };
 };
 
 // The individual coordinates describing the bounding box.
@@ -33,8 +38,19 @@ enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
 struct BoundingBox {
+ private:
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
+
+ public:
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
+      : lowerLeft_{lowerLeft}, upperRight_{upperRight} {};
+
+  GeoPoint lowerLeft() const { return lowerLeft_; }
+  GeoPoint upperRight() const { return upperRight_; }
+  std::pair<GeoPoint, GeoPoint> pair() const {
+    return {lowerLeft_, upperRight_};
+  }
 
   std::string asWkt() const;
 
@@ -54,16 +70,29 @@ struct EncodedBoundingBox {
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
 struct GeometryType {
+ private:
   uint8_t type_;
-  GeometryType(uint8_t type) : type_{type} {};
+
+ public:
+  explicit GeometryType(uint8_t type) : type_{type} {};
+
+  uint8_t type() const { return type_; };
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
 // Represents the number of child geometries inside a collection geometry type.
 struct NumGeometries {
+ private:
   uint32_t numGeometries_;
+
+ public:
+  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {};
+
+  uint32_t numGeometries() const { return numGeometries_; }
 
   constexpr bool operator==(const NumGeometries& other) const = default;
 };
@@ -144,13 +173,14 @@ class GeometryInfo {
   static std::optional<NumGeometries> getNumGeometries(std::string_view wkt);
 
   // Extract the requested information from this object.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo> RequestedInfo getRequestedInfo() const;
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) RequestedInfo
+      getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
-  template <typename RequestedInfo = GeometryInfo>
-  requires RequestedInfoT<RequestedInfo>
-  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+  CPP_template(typename RequestedInfo = GeometryInfo)(
+      requires RequestedInfoT<RequestedInfo>) static std::
+      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // For the disk serialization we require that a `GeometryInfo` is trivially

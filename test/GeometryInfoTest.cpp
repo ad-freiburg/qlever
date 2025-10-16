@@ -61,15 +61,15 @@ constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
   GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {2}};
-  ASSERT_EQ(g.getWktType().type_, 5);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLat(), 1.5, 0.0001);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLng(), 1.5, 0.0001);
-  auto [lowerLeft, upperRight] = g.getBoundingBox();
+  ASSERT_EQ(g.getWktType().type(), 5);
+  ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
+  ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
+  auto [lowerLeft, upperRight] = g.getBoundingBox().pair();
   ASSERT_NEAR(lowerLeft.getLat(), 1, 0.0001);
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
   ASSERT_NEAR(upperRight.getLat(), 2, 0.0001);
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
-  ASSERT_EQ(g.getNumGeometries().numGeometries_, 2);
+  ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -125,12 +125,12 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, p, {1}};
+  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, p2, {1}};
+  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, {1}};
   checkGeoInfo(g2, exp2);
 }
 
@@ -197,6 +197,10 @@ TEST(GeometryInfoTest, GeometryTypeAsIri) {
   ASSERT_FALSE(GeometryType{8}.asIri().has_value());
 }
 
+namespace {
+constexpr std::string_view example = "Example";
+}
+
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
   using namespace ad_utility::detail;
@@ -225,10 +229,10 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   checkBoundingBox(bb1, bbExp1);
 
   auto bb1Wkt =
-      boundingBoxAsWkt(bb1.value().lowerLeft_, bb1.value().upperRight_);
+      boundingBoxAsWkt(bb1.value().lowerLeft(), bb1.value().upperRight());
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
-  EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
+  EXPECT_EQ(addSfPrefix<example>(), "http://www.opengis.net/ont/sf#Example");
   EXPECT_FALSE(wktTypeToIri(0).has_value());
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
@@ -247,10 +251,10 @@ TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
   checkInvalidLiteral(litCoordOutOfRange, true, true);
-  checkGeometryType(GeometryInfo::getWktType(litCoordOutOfRange).value().type_,
-                    {2});
-  checkGeometryType(
-      GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange), {2});
+  EXPECT_EQ(GeometryInfo::getWktType(litCoordOutOfRange).value(),
+            std::optional<GeometryType>{GeometryType{2}});
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
+            std::optional<GeometryType>{GeometryType{2}});
   EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
             NumGeometries{1});
 }

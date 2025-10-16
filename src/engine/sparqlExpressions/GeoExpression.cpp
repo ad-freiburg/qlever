@@ -5,8 +5,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <type_traits>
-
+#include "backports/type_traits.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"

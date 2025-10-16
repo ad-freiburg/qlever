@@ -8,8 +8,8 @@
 #define QLEVER_SRC_UTIL_COMPARISONWITHNAN_H
 
 #include <cmath>
-#include <type_traits>
 
+#include "backports/type_traits.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {

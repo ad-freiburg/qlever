@@ -32,10 +32,11 @@ TEST(ParseException, illegalConstructorArguments) {
 // _____________________________________________________________________________
 void expectParseExceptionWithMetadata(
     const std::string& input, const std::optional<ExceptionMetadata>& metadata,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   try {
-    SparqlParser::parseQuery(input);
+    static EncodedIriManager ev;
+    SparqlParser::parseQuery(&ev, input);
     FAIL();  // Should be unreachable.
   } catch (const ParseException& e) {
     // The constructor has to be bracketed because EXPECT_EQ is a macro.

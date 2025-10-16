@@ -8,8 +8,15 @@
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
+#include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string distCaptureGroup = "dist";
+constexpr ctll::fixed_string resultsCaptureGroup = "results";
+}  // namespace detail
 
 // ____________________________________________________________________________
 void SpatialQuery::addParameter(const SparqlTriple& triple) {
@@ -123,7 +130,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
-        " in ppatial search; supported arguments are: `<left>`, `<right>`, "
+        " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
         "`<joinType>`, `<payload>`, and `<algorithm>`"));
   }
@@ -147,6 +154,26 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     throw SpatialSearchException(
         "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
         "at least one of them is required for the selected algorithm");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` does not support the option "
+        "`<numNearestNeighbors>`");
+  }
+
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
+      joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value()) {
+    throw SpatialSearchException(
+        "The algorithm `<libspatialjoin>` supports the "
+        "`<maxDistance>` option only if `<joinType>` is set to "
+        "`<within-dist>`.");
+  }
+
+  if (joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    throw SpatialSearchException(
+        "The selected algorithm does not support the `<joinType>` option. Only "
+        "the `<libspatialjoin>` algorithm is suitable for this option.");
   }
 
   if (!right_.has_value()) {
@@ -235,11 +262,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
 
   // Check if one of the regexes matches
   if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     AD_CORRECTNESS_CHECK(maxDist_.has_value());
   } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
-    maxResults_ = matchToInt(match.get<"results">());
-    maxDist_ = matchToInt(match.get<"dist">());
+    maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
+    maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
   } else {

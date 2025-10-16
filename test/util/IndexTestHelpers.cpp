@@ -6,12 +6,15 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
+using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
@@ -94,8 +97,6 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, Permutation::Enum permutation, size_t subjectColIdx,
           size_t objectColIdx) {
-        auto cancellationDummy =
-            std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
             ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
@@ -123,15 +124,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
 
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot);
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationHandle, locatedTriplesSnapshot);
+      cancellationDummy, locatedTriplesSnapshot);
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
@@ -152,7 +151,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en . <zz> <label> <zz>";
+        "\"zz\"@en . <zz> <label> <zz> .";
   }
 
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
@@ -189,6 +188,16 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
+    if (c.encodedIriManager.has_value()) {
+      // Extract prefixes without angle brackets from the EncodedIriManager
+      std::vector<std::string> prefixes;
+      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
+                             !ql::ends_with(prefix, '>'));
+        prefixes.push_back(prefix.substr(1));
+      }
+      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+    }
     index.createFromFiles({spec});
     if (c.createTextIndex) {
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
@@ -304,10 +313,11 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
+    std::unique_ptr<NamedResultCache> namedCache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{});
+            SortPerformanceEstimator{}, namedCache_.get());
   };
 
   static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
@@ -326,7 +336,8 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                      }
                    }},
                    std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
-                   std::make_unique<QueryResultCache>()});
+                   std::make_unique<QueryResultCache>(),
+                   std::make_unique<NamedResultCache>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
@@ -346,14 +357,15 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() -> TripleComponent {
-      if (el.starts_with('<') || el.starts_with('@')) {
+      if (ql::starts_with(el, '<') || ql::starts_with(el, '@')) {
         return TripleComponent::Iri::fromIriref(el);
       } else {
-        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        AD_CONTRACT_CHECK(ql::starts_with(el, '\"'));
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index.getVocab());
+    static const EncodedIriManager encodedIriManager;
+    auto id = literalOrIri.toValueId(index.getVocab(), encodedIriManager);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

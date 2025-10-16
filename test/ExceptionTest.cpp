@@ -13,8 +13,7 @@ using namespace ad_utility;
 
 namespace {
 auto makeMatcher = [](const std::string& condition,
-                      ad_utility::source_location l =
-                          ad_utility::source_location::current()) {
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   using namespace ::testing;
   auto line = l.line();
   auto e = [](size_t l) { return EndsWith(std::to_string(l)); };
@@ -38,7 +37,7 @@ TEST(Exception, AbortException) {
 }
 
 TEST(Exception, Exception) {
-  ad_utility::source_location l = ad_utility::source_location::current();
+  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC();
   Exception e{"exceptionE"};
   ASSERT_THAT(e.what(), ::testing::StartsWith("exceptionE"));
   ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
@@ -48,7 +47,7 @@ TEST(Exception, Exception) {
 TEST(Exception, AD_THROW) {
   ad_utility::source_location l;
   try {
-    l = ad_utility::source_location::current();
+    l = AD_CURRENT_SOURCE_LOC();
     AD_THROW("anError");
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {

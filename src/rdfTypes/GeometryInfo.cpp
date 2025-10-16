@@ -16,9 +16,9 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries)
-    : boundingBox_{boundingBox.lowerLeft_.toBitRepresentation(),
-                   boundingBox.upperRight_.toBitRepresentation()},
-      numGeometries_{numGeometries.numGeometries_} {
+    : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
+                   boundingBox.upperRight().toBitRepresentation()},
+      numGeometries_{numGeometries.numGeometries()} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -27,14 +27,14 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                        "WKT Type out of range");
   AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
-  uint64_t centroidBits = centroid.centroid_.toBitRepresentation();
+  uint64_t centroidBits = centroid.centroid().toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
   AD_CORRECTNESS_CHECK(
-      boundingBox.lowerLeft_.getLat() <= boundingBox.upperRight_.getLat() &&
-          boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng(),
+      boundingBox.lowerLeft().getLat() <= boundingBox.upperRight().getLat() &&
+          boundingBox.lowerLeft().getLng() <= boundingBox.upperRight().getLng(),
       "Bounding box coordinates invalid: first point must be lower "
       "left and second point must be upper right of a rectangle.");
 
@@ -55,10 +55,10 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   auto centroid = centroidAsGeoPoint(parsed.value());
   auto numGeom = countChildGeometries(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
-    LOG(DEBUG) << "The WKT string `" << wkt
-               << "` would lead to an invalid centroid or bounding box. It "
-                  "will thus be treated as an invalid WKT literal."
-               << std::endl;
+    AD_LOG_DEBUG << "The WKT string `" << wkt
+                 << "` would lead to an invalid centroid or bounding box. It "
+                    "will thus be treated as an invalid WKT literal."
+                 << std::endl;
     return std::nullopt;
   }
 
@@ -73,18 +73,19 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
     // Type 0 represents invalid type
     return std::nullopt;
   }
-  return wktType;
+  return GeometryType{wktType};
 };
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point}, point, {1}};
+  return {util::geo::WKTType::POINT, {point, point}, Centroid{point}, {1}};
 }
 
 // ____________________________________________________________________________
 GeometryType GeometryInfo::getWktType() const {
-  return static_cast<uint8_t>(
-      (geometryTypeAndCentroid_ & bitMaskGeometryType) >> ValueId::numDataBits);
+  return GeometryType{
+      static_cast<uint8_t>((geometryTypeAndCentroid_ & bitMaskGeometryType) >>
+                           ValueId::numDataBits)};
 }
 
 // ____________________________________________________________________________
@@ -94,8 +95,8 @@ std::optional<std::string_view> GeometryType::asIri() const {
 
 // ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
-  return {GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
-                                          bitMaskCentroid)};
+  return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
+                                                  bitMaskCentroid)};
 }
 
 // ____________________________________________________________________________
@@ -172,9 +173,8 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 }
 
 // ____________________________________________________________________________
-template <typename RequestedInfo>
-requires RequestedInfoT<RequestedInfo>
-RequestedInfo GeometryInfo::getRequestedInfo() const {
+CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
+    RequestedInfo GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -198,10 +198,9 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 
 // ____________________________________________________________________________
-template <typename RequestedInfo>
-requires RequestedInfoT<RequestedInfo>
-std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
-    std::string_view wkt) {
+CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
+    std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+        std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
