@@ -170,6 +170,17 @@ inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
   return len.value();
 }
 
+using DAnyGeometry = util::geo::AnyGeometry<double>;
+using ad_utility::detail::AnyGeometryMember;
+
+// ____________________________________________________________________________
+inline void checkAnyGeometryMemberEnum(
+    DAnyGeometry geom, AnyGeometryMember enumVal,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  EXPECT_EQ(geom.getType(), static_cast<uint8_t>(enumVal));
+}
+
 };  // namespace geoInfoTestHelpers
 
 #endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H

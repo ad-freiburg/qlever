@@ -5,10 +5,11 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
-#include "gmock/gmock.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/geo/Collection.h"
+#include "util/geo/Geo.h"
 
 namespace {
 
@@ -285,6 +286,22 @@ TEST(GeometryInfoTest, WebMercProjection) {
   auto result1 =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
   checkUtilBoundingBox(result1, b1);
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, AnyGeometryMember) {
+  // Test that the enum we define corresponds to the geometry type identifiers
+  // used by `libspatialjoin`.
+  using namespace util::geo;
+  using enum AnyGeometryMember;
+
+  checkAnyGeometryMemberEnum({DPoint{}}, POINT);
+  checkAnyGeometryMemberEnum({DLine{}}, LINE);
+  checkAnyGeometryMemberEnum({DPolygon{}}, POLYGON);
+  checkAnyGeometryMemberEnum({DMultiLine{}}, MULTILINE);
+  checkAnyGeometryMemberEnum({DMultiPolygon{}}, MULTIPOLYGON);
+  checkAnyGeometryMemberEnum({DMultiPoint{}}, MULTIPOINT);
+  checkAnyGeometryMemberEnum({DCollection{}}, COLLECTION);
 }
 
 }  // namespace
