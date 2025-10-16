@@ -452,7 +452,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       permutation, std::move(scanSpec),
       permutation.getAugmentedMetadataForPermutation(snapshot), snapshot,
       localVocabMapping, insertInfo, cancellationHandle,
-      std::array{ADDITIONAL_COLUMN_GRAPH_ID});
+      std::array{static_cast<ColumnIndex>(ADDITIONAL_COLUMN_GRAPH_ID)});
 }
 
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
