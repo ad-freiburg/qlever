@@ -1085,9 +1085,11 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
   };
   using PT = CompressedBlockMetadata::PermutedTriple;
   using ::testing::Optional;
-  using ::testing::Pair;
-  for (auto graphId :
-       std::array<std::optional<Id>, 4>{std::nullopt, g1, g2, g3}) {
+
+  // The test result should not be affected by the graph. It should be
+  // independent of that.
+  std::array<std::optional<Id>, 4> allGraphs{std::nullopt, g1, g2, g3};
+  for (auto graphId : allGraphs) {
     EXPECT_THAT(
         getTriples(std::nullopt, std::nullopt, graphId),
         Optional(FirstAndLastTripleEq(PT{a, a, a, g1}, PT{a, b, k, g3})));
