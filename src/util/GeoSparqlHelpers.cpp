@@ -60,20 +60,23 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit) {
   using enum UnitOfMeasurement;
-  double multiplicator = 1;
-  if (unit.has_value()) {
-    if (unit.value() == METERS) {
-      multiplicator = 1000;
-    } else if (unit.value() == KILOMETERS) {
-      multiplicator = 1;
-    } else if (unit.value() == MILES) {
-      multiplicator = kilometerToMile;
-    } else {
-      AD_CORRECTNESS_CHECK(!isLengthUnit(unit.value()));
-      AD_THROW("Unsupported unit of measurement for distance.");
+  auto multiplicator = [&]() {
+    if (!unit.has_value()) {
+      return 1.0;
     }
-  }
-  return multiplicator * kilometers;
+    switch (unit.value()) {
+      case METERS:
+        return 1000.0;
+      case KILOMETERS:
+        return 1.0;
+      case MILES:
+        return kilometerToMile;
+      default:
+        AD_CORRECTNESS_CHECK(!isLengthUnit(unit.value()));
+        AD_THROW("Unsupported unit of measurement for distance.");
+    }
+  };
+  return multiplicator() * kilometers;
 }
 
 // ____________________________________________________________________________
@@ -86,20 +89,23 @@ double valueInUnitToKilometer(double valueInUnit,
 double squareMeterToUnit(double squareMeters,
                          std::optional<UnitOfMeasurement> unit) {
   using enum UnitOfMeasurement;
-  double multiplicator = 1;
-  if (unit.has_value()) {
-    if (unit.value() == SQUARE_METERS) {
-      multiplicator = 1;
-    } else if (unit.value() == SQUARE_KILOMETERS) {
-      multiplicator = 1.0E-6;
-    } else if (unit.value() == SQUARE_MILES) {
-      multiplicator = squareMeterToSquareMile;
-    } else {
-      AD_CORRECTNESS_CHECK(!isAreaUnit(unit.value()));
-      AD_THROW("Unsupported unit of measurement for area.");
+  auto multiplicator = [&]() {
+    if (!unit.has_value()) {
+      return 1.0;
     }
-  }
-  return multiplicator * squareMeters;
+    switch (unit.value()) {
+      case SQUARE_METERS:
+        return 1.0;
+      case SQUARE_KILOMETERS:
+        return 1.0E-6;
+      case SQUARE_MILES:
+        return squareMeterToSquareMile;
+      default:
+        AD_CORRECTNESS_CHECK(!isAreaUnit(unit.value()));
+        AD_THROW("Unsupported unit of measurement for area.");
+    }
+  };
+  return multiplicator() * squareMeters;
 }
 
 // ____________________________________________________________________________
