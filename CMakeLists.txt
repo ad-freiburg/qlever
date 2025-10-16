@@ -467,6 +467,9 @@ qlever_target_link_libraries(compilationInfo)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
+add_executable(RebuildPsoAndPosMain src/index/RebuildPsoAndPosMain.cpp)
+qlever_target_link_libraries(RebuildPsoAndPosMain qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 if (USE_PRECOMPILED_HEADERS)
