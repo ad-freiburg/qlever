@@ -117,6 +117,18 @@ constexpr std::string_view litRealWorldMultiPolygonIntersecting =
 const double areaRealWorldMultiPolygonIntersecting = 119319.0;
 const size_t numRealWorldMultiPolygonIntersecting = 2;
 
+// Two polygons which intersect each other. This is equivalent to the one above
+// but contains an additional ca. 15103 square meter hole which has to be
+// considered correctly during the computation of the polygons' union for
+// determining the area.
+constexpr std::string_view litRealWorldMultiPolygonHoleIntersection =
+    "\"MULTIPOLYGON(((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+    "47.995562, 7.8412948 47.9977308),(7.847796 47.995486, 7.844982 47.995615, "
+    "7.8447057 47.9969221)),((7.847796 47.995486, 7.844529 47.995205, 7.844933 "
+    "47.994211)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonHoleIntersection =
+    areaRealWorldMultiPolygonIntersecting - 15103.0;
+
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
       litPoint,           litLineString,   litPolygon,   litMultiPoint,
@@ -326,6 +338,8 @@ TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
                        areaRealWorldMultiPolygonNonIntersecting);
   testMultiPolygonArea(litRealWorldMultiPolygonIntersecting,
                        areaRealWorldMultiPolygonIntersecting);
+  testMultiPolygonArea(litRealWorldMultiPolygonHoleIntersection,
+                       areaRealWorldMultiPolygonHoleIntersection);
 
   // Edge case: empty multipolygon
   EXPECT_EQ(computeMetricAreaMultiPolygon(MultiPolygon<CoordType>{}), 0);
