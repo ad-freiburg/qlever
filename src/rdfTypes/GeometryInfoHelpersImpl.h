@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
 
+#include <absl/functional/function_ref.h>
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
@@ -201,34 +202,54 @@ inline double computeMetricLengthPolygon(const Polygon<CoordType>& geom) {
 // members.
 template <typename T>
 inline double computeMetricLengthMulti(
-    const std::vector<T>& geom, std::function<double(const T&)> lenFunction) {
+    const std::vector<T>& geom,
+    absl::FunctionRef<double(const T&)> lenFunction) {
   return ::ranges::accumulate(::ranges::transform_view(geom, lenFunction), 0);
 }
+
+// Helper enum for readable handling of the geometry type identifiers used by
+// `AnyGeometry`.
+enum class AnyGeometryMember : uint8_t {
+  POINT,
+  LINE,
+  POLYGON,
+  MULTILINE,
+  MULTIPOLYGON,
+  COLLECTION,
+  MULTIPOINT
+};
+
+// Convert an instance of the custom container type `AnyGeometry` from
+// `pb_util` to the variant used here.
+inline ParsedWkt anyGeometryToVariant(const AnyGeometry<CoordType>& geom) {
+  using enum AnyGeometryMember;
+  switch (AnyGeometryMember{geom.getType()}) {
+    case POINT:
+      return geom.getPoint();
+    case LINE:
+      return geom.getLine();
+    case POLYGON:
+      return geom.getPolygon();
+    case MULTILINE:
+      return geom.getMultiLine();
+    case MULTIPOLYGON:
+      return geom.getMultiPolygon();
+    case COLLECTION:
+      return geom.getCollection();
+    case MULTIPOINT:
+      return geom.getMultiPoint();
+    default:
+      AD_FAIL();
+  }
+}
+
+// Forward declare so the compiler can see the function for cyclic recursion.
+MetricLength computeMetricLength(const ParsedWkt& geometry);
 
 // Compute the length for the custom container type `AnyGeometry` from
 // `pb_util`. It can dynamically hold any geometry type.
 inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
-  switch (geom.getType()) {
-    case 0:  // Point
-      return 0.0;
-    case 1:  // Line
-      return latLngLen<CoordType>(geom.getLine());
-    case 2:  // Polygon
-      return computeMetricLengthPolygon(geom.getPolygon());
-    case 3:  // MultiLine
-      return computeMetricLengthMulti<Line<CoordType>>(geom.getMultiLine(),
-                                                       latLngLen<CoordType>);
-    case 4:  // MultiPolygon
-      return computeMetricLengthMulti<Polygon<CoordType>>(
-          geom.getMultiPolygon(), computeMetricLengthPolygon);
-    case 5:  // Collection
-      return computeMetricLengthMulti<AnyGeometry<CoordType>>(
-          geom.getCollection(), computeMetricLengthAnyGeom);
-    case 6:  // MultiPoint
-      return 0.0;
-    default:
-      AD_FAIL();
-  }
+  return computeMetricLength(anyGeometryToVariant(geom)).length();
 }
 
 // Compute the length for a parsed WKT geometry.
