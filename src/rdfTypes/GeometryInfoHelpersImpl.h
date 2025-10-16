@@ -2,14 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
-#define QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
+#ifndef QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
+#define QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
 
+#include <s2/s2earth.h>
 #include <s2/s2latlng.h>
 #include <s2/s2loop.h>
 #include <s2/s2point.h>
 #include <s2/s2polygon.h>
-// TODO link s2?
 #include <spatialjoin/BoxIds.h>
 #include <util/geo/Geo.h>
 
@@ -25,6 +25,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
+#include "util/GeoConverters.h"
 #include "util/Log.h"
 
 // This file contains functions used for parsing and processing WKT geometries
@@ -34,7 +35,7 @@
 namespace ad_utility::detail {
 
 using namespace ::util::geo;
-using CoordType = double;
+using namespace geometryConverters;
 using ParsedWkt =
     std::variant<Point<CoordType>, Line<CoordType>, Polygon<CoordType>,
                  MultiPoint<CoordType>, MultiLine<CoordType>,
@@ -54,7 +55,7 @@ inline std::string addDatatype(const std::string_view wkt) {
   auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
       GEO_WKT_LITERAL);
   lit.addDatatype(dt);
-  return lit.toStringRepresentation();
+  return std::move(lit.toStringRepresentation());
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
@@ -209,56 +210,10 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
 
-// TODO
-constexpr double EARTH_RADIUS_METERS = 6'371'000.0;
-constexpr double STERADIAN_TO_M2 = EARTH_RADIUS_METERS * EARTH_RADIUS_METERS;
-
-// Helper to convert a libspatialjoin `Ring` to an `S2Loop`
-inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
-  std::vector<S2Point> points;
-  for (const auto& latlon : ring) {
-    S2LatLng s2latlng = S2LatLng::FromDegrees(latlon.getY(), latlon.getX());
-    points.push_back(s2latlng.ToPoint());
-  }
-
-  // Ensure that there are no zero-length edges (that is edges with twice the
-  // same point), as this will lead to an exception from `S2Loop`.
-  std::vector<S2Point> cleaned;
-  for (size_t i = 0; i < points.size(); ++i) {
-    if (i == 0 || points.at(i) != points.at(i - 1)) {
-      cleaned.push_back(points.at(i));
-    }
-  }
-  if (cleaned.front() == cleaned.back()) {
-    cleaned.pop_back();
-  }
-
-  auto loop = std::make_unique<S2Loop>(cleaned);
-  loop->Normalize();
-  if (!loop->IsValid()) {
-    throw InvalidPolygonError();
-  }
-  return loop;
-}
-
-inline S2Polygon makeS2Polygon(const Polygon<CoordType>& polygon) {
-  std::vector<std::unique_ptr<S2Loop>> loops;
-
-  // Outer boundary
-  loops.push_back(makeS2Loop(polygon.getOuter()));
-
-  // Holes
-  for (const auto& hole : polygon.getInners()) {
-    loops.push_back(makeS2Loop(hole));
-  }
-
-  S2Polygon s2polygon;
-  s2polygon.InitNested(std::move(loops));
-  return s2polygon;
-}
-
-inline double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
-  return polygon.GetArea() * STERADIAN_TO_M2;
+// Given an `S2Polygon` compute the area and convert it to approximated square
+// meters on earth.
+inline constexpr double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
+  return S2Earth::SteradiansToSquareMeters(polygon.GetArea());
 }
 
 // Compute the area of a polygon in square meters on earth using s2
@@ -344,4 +299,4 @@ inline double computeMetricArea(const ParsedWkt& geometry) {
 
 }  // namespace ad_utility::detail
 
-#endif  // QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
+#endif  // QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
