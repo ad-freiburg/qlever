@@ -85,7 +85,10 @@ struct GeometryType {
 };
 
 // Represents the area of the WKT geometry in square meters on the earth's
-// surface.
+// surface. The value `NaN` is allowed here to express that the given polygon
+// (or multipolygon, collection) is malformed semantically not syntactically
+// s.t. we cannot determine an area. This is allowed as such polygons may still
+// have some of the other properties of `GeometryInfo`.
 struct MetricArea {
  private:
   double area_;

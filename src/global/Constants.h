@@ -209,20 +209,6 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
                                 GEO_WKT_LITERAL,
                                 string_constants::detail::closeAngle>();
 
-// Possibly also add more length units, e.g. feet
-// TODO area units - let's see which ones we need
-// unit:AC (acre), 4046.8564224 square metres
-// unit:ARE (are)
-// unit:CentiM2
-// unit:DecaARE, 10 are
-// unit:DeciM2
-// unit:FT2, square feet
-// unit:HA , hectare 10 000 square meters
-// unit:IN2 , square inch
-// unit:KiloM2
-// unit:M2
-// unit:MI2 square mile
-// unit:YD2 square yard
 enum class UnitOfMeasurement {
   METERS,
   KILOMETERS,
