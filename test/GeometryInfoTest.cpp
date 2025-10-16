@@ -2,7 +2,10 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
+
+#include <range/v3/numeric/accumulate.hpp>
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -251,6 +254,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   ASSERT_TRUE(parseRes2.second.has_value());
   auto parsed2 = parseRes2.second.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
+  EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
 }
 
 // ____________________________________________________________________________
@@ -302,6 +306,31 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
   checkAnyGeometryMemberEnum({DMultiPolygon{}}, MULTIPOLYGON);
   checkAnyGeometryMemberEnum({DMultiPoint{}}, MULTIPOINT);
   checkAnyGeometryMemberEnum({DCollection{}}, COLLECTION);
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
+  // This test builds a big geometry collection containing one geometry of every
+  // supported geometry type and feeds it to `computeMetricLength`.
+  using namespace ad_utility::detail;
+
+  double expected = 0.0;
+  DCollection collection;
+
+  for (const auto& lit : getAllTestLiterals()) {
+    expected += getLengthForTesting(lit).length();
+
+    auto parsed = parseWkt(lit);
+    ASSERT_TRUE(parsed.second.has_value());
+    std::visit(
+        [&](const auto& value) -> void {
+          collection.push_back(AnyGeometry<CoordType>{value});
+        },
+        parsed.second.value());
+  }
+
+  auto result = computeMetricLength(collection);
+  checkMetricLength(MetricLength{expected}, result);
 }
 
 }  // namespace
