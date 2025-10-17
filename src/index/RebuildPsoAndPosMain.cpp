@@ -50,10 +50,15 @@ int main(int argc, char** argv) {
 
   // Parse command line arguments.
   std::string indexBasename;
+  std::string memoryLimitStr = "16GB";
   po::options_description options("Rebuild PSO and POS permutations from OSP");
   options.add_options()("help,h", "Produce this help message")(
       "index,i", po::value(&indexBasename)->required(),
-      "The basename of the index (without .index.osp suffix)");
+      "The basename of the index (without .index.osp suffix)")(
+      "memory-for-sorting,m", po::value(&memoryLimitStr)->default_value("16G"),
+      "Memory limit for sorting; use half of what you would use for "
+      "--stxxl-memory of IndexBuilderMain (which sorts up to two permutations "
+      "at the same time)");
   po::variables_map optionsMap;
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
@@ -62,9 +67,10 @@ int main(int argc, char** argv) {
       std::cout << "Rebuild PSO and POS permutations from OSP permutation\n\n";
       std::cout << options << '\n';
       std::cout << "\nExample usage:\n";
-      std::cout << "  " << argv[0] << " -i /path/to/index\n\n";
+      std::cout << "  " << argv[0] << " -i /path/to/index\n";
+      std::cout << "  " << argv[0] << " -i /path/to/index -m 32G\n\n";
       std::cout << "This will read all triples from OSP, sort them by PSO, "
-                << "and create both PSO and POS permutations.\n";
+                << "and create the permutations PSO and POS\n";
       return EXIT_SUCCESS;
     }
 
@@ -120,15 +126,17 @@ int main(int argc, char** argv) {
   //
   // NOTE: OSP returns data in [O, S, P, G, S-Pattern, O-Pattern] column order.
   // To sort for PSO, we use SortTriple<2, 1, 0>.
-  AD_LOG_INFO << "Reading triples and pushing to PSO sorter ..." << std::endl;
+  auto memoryLimit = ad_utility::MemorySize::parse(memoryLimitStr);
+  AD_LOG_INFO << "Reading triples and pushing to PSO sorter "
+              << "(memory limit for sorting: " << memoryLimit.asString()
+              << ") ..." << std::endl;
   using PsoSorterFromOsp =
       ad_utility::CompressedExternalIdTableSorter<SortTriple<2, 1, 0>,
                                                   NUM_COLUMNS_WITH_PATTERNS>;
-  auto memoryLimit = 16_GB;
   PsoSorterFromOsp psoSorter(indexBasename + ".pso-rebuild-sorter.dat",
                              NUM_COLUMNS_WITH_PATTERNS, memoryLimit, allocator);
   size_t totalTriples = 0;
-  ad_utility::ProgressBar progressBar{totalTriples, "Triples read: "};
+  ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
   for (auto& block : generator) {
     totalTriples += block.numRows();
     psoSorter.pushBlock(block);
@@ -204,5 +212,5 @@ int main(int argc, char** argv) {
               << std::endl;
 
   // Done.
-  AD_LOG_INFO << "Rebuilding of PSO and POS from OSP completed" << std::endl;
+  AD_LOG_INFO << "Rebuild of PSO and POS from OSP completed" << std::endl;
 }
