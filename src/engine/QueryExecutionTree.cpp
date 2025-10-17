@@ -213,7 +213,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
       "`LIMIT` and `OFFSET` are applied by "
       "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
       "implementations.");
-  resultTree->applyLimit(resultTree->getRootOperation()->getLimitOffset());
+  resultTree->applyLimit(rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but

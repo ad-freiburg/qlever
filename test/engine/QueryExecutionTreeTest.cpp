@@ -116,10 +116,9 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
 
   auto strippedIndex = QueryExecutionTree::makeTreeWithStrippedColumns(
       indexScan, {Variable{"?s"}});
-  EXPECT_EQ(strippedIndex->getRootOperation()->getLimitOffset(),
-            LimitOffsetClause(2, 3));
-  EXPECT_FALSE(std::dynamic_pointer_cast<StripColumns>(
-      strippedIndex->getRootOperation()));
+  EXPECT_EQ(strippedIndex->getRootOperation()->getLimitOffset(), limitOffset);
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(strippedIndex->getRootOperation()));
 
   auto strippedValues = QueryExecutionTree::makeTreeWithStrippedColumns(
       valuesForTesting, {Variable{"?s"}});
@@ -127,10 +126,10 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
       strippedValues->getRootOperation()->getLimitOffset().isUnconstrained());
   ASSERT_TRUE(std::dynamic_pointer_cast<StripColumns>(
       strippedValues->getRootOperation()));
-  EXPECT_EQ(strippedIndex->getRootOperation()
+  EXPECT_EQ(strippedValues->getRootOperation()
                 ->getChildren()
                 .at(0)
                 ->getRootOperation()
                 ->getLimitOffset(),
-            LimitOffsetClause(2, 3));
+            limitOffset);
 }
