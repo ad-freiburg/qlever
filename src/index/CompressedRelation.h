@@ -778,12 +778,14 @@ class CompressedRelationReader {
       const BlockMetadataRanges& blockMetadata);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given arguments would lead to. Return `nullopt` if the scan result would
-  // be empty. This function is used to more efficiently filter the blocks of
-  // index scans between joining them to get better estimates for the beginning
-  // and end of incomplete blocks.
+  // given arguments would lead to, ignoring any graph filters set for
+  // `metadataAndBlocks`. So this always returns the first and last triple we
+  // would get in any graph. Return `nullopt` if the scan result would be empty.
+  // This function is used to more efficiently filter the blocks of index scans
+  // between joining them to get better estimates for the beginning and end of
+  // incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(
+  getFirstAndLastTripleIgnoringGraph(
       const ScanSpecAndBlocks& metadataAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 

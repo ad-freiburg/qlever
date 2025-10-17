@@ -1323,7 +1323,7 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
 }
 
 // _____________________________________________________________________________
-auto CompressedRelationReader::getFirstAndLastTriple(
+auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
     const ScanSpecAndBlocks& metadataAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
@@ -1333,8 +1333,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   const auto& blocks = metadataAndBlocks.getBlockMetadataView();
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
-  ScanSpecification scanSpecForAllColumns{
-      std::nullopt, std::nullopt, std::nullopt, {}, scanSpec.graphFilter()};
+  ScanSpecification scanSpecForAllColumns{std::nullopt, std::nullopt,
+                                          std::nullopt};
   auto config =
       getScanConfig(scanSpecForAllColumns,
                     std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
