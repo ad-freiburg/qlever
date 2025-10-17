@@ -24,54 +24,6 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
-template <typename InputRange, typename AggregatorT, typename FullyCachedFuncT>
-class CachingWrapper
-    : public InputRangeFromGet<ql::ranges::range_value_t<InputRange>> {
- public:
-  using T = ql::ranges::range_value_t<InputRange>;
-
-  CachingWrapper(InputRange generator, AggregatorT aggregator,
-                 FullyCachedFuncT onFullyCached)
-      : generator_(std::move(generator)),
-        aggregator_(std::move(aggregator)),
-        onFullyCached_(std::move(onFullyCached)) {}
-
-  std::optional<T> get() override {
-    if (!initialized_) {
-      it_ = generator_.begin();
-      initialized_ = true;
-    }
-
-    if (it_ == generator_.end()) {
-      if (shouldBeAggregated_ && aggregatedData_.has_value()) {
-        onFullyCached_(std::move(aggregatedData_.value()));
-      }
-      return std::nullopt;
-    }
-
-    T element = std::move(*it_);
-    ++it_;
-
-    if (shouldBeAggregated_) {
-      shouldBeAggregated_ = aggregator_(aggregatedData_, element);
-      if (!shouldBeAggregated_) {
-        aggregatedData_.reset();
-      }
-    }
-
-    return element;
-  }
-
- private:
-  InputRange generator_;
-  AggregatorT aggregator_;
-  FullyCachedFuncT onFullyCached_;
-  ql::ranges::iterator_t<InputRange> it_;
-  std::optional<T> aggregatedData_;
-  bool shouldBeAggregated_ = true;
-  bool initialized_ = false;
-};
-
 CPP_template(typename InputRange, typename AggregatorT,
              typename T = ql::ranges::range_value_t<InputRange>,
              typename FullyCachedFuncT = int)(
@@ -82,8 +34,50 @@ CPP_template(typename InputRange, typename AggregatorT,
             T>) auto wrapGeneratorWithCache(InputRange generator,
                                             AggregatorT aggregator,
                                             FullyCachedFuncT onFullyCached) {
-  return InputRangeTypeErased<T>{std::make_unique<
-      CachingWrapper<InputRange, AggregatorT, FullyCachedFuncT>>(
+  struct CachingWrapper : public InputRangeFromGet<T> {
+    InputRange generator_;
+    AggregatorT aggregator_;
+    FullyCachedFuncT onFullyCached_;
+    ql::ranges::iterator_t<InputRange> it_;
+    std::optional<T> aggregatedData_;
+    bool shouldBeAggregated_ = true;
+    bool initialized_ = false;
+
+    CachingWrapper(InputRange generator, AggregatorT aggregator,
+                   FullyCachedFuncT onFullyCached)
+        : generator_(std::move(generator)),
+          aggregator_(std::move(aggregator)),
+          onFullyCached_(std::move(onFullyCached)) {}
+
+    std::optional<T> get() override {
+      if (!std::exchange(initialized_, true)) {
+        it_ = generator_.begin();
+      } else {
+        ++it_;
+      }
+
+      if (it_ == generator_.end()) {
+        if (aggregatedData_.has_value()) {
+          AD_CORRECTNESS_CHECK(shouldBeAggregated_);
+          onFullyCached_(std::move(aggregatedData_.value()));
+        }
+        return std::nullopt;
+      }
+
+      T element = std::move(*it_);
+
+      if (shouldBeAggregated_) {
+        shouldBeAggregated_ = aggregator_(aggregatedData_, element);
+        if (!shouldBeAggregated_) {
+          aggregatedData_.reset();
+        }
+      }
+
+      return element;
+    }
+  };
+
+  return InputRangeTypeErased<T>{std::make_unique<CachingWrapper>(
       std::move(generator), std::move(aggregator), std::move(onFullyCached))};
 }
 
