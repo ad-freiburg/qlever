@@ -209,72 +209,78 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::LazyResult TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce) const {
-  ad_utility::Timer timer{ad_utility::Timer::Stopped};
-  size_t outputRow = 0;
-  IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-  auto hullIt = hull.begin();
-  return Result::LazyResult{ad_utility::InputRangeFromGetCallable(
-      [this, timer, outputRow, table = std::move(table),
-       mergedVocab = LocalVocab{}, hull = std::move(hull),
-       hullIt = std::move(hullIt), startSideCol, targetSideCol,
-       yieldOnce]() mutable -> std::optional<Result::IdTableVocabPair> {
-        // When yielding multiple times, there is an early return statement in
-        // the while loop. Yielding once requires us to iterate over the entire
-        // hull to fully transform it into a result table.
-        while (hullIt != hull.end()) {
-          auto& [node, graph, targets, localVocab, idTable, inputRow] = *hullIt;
-          timer.cont();
-          // As an optimization nodes without any linked nodes should not get
-          // yielded in the first place.
-          AD_CONTRACT_CHECK(!targets.empty());
-          if (!yieldOnce) {
-            table.reserve(targets.size());
-          }
-          std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-          if (idTable.has_value()) {
-            inputView = idTable->template asStaticView<INPUT_WIDTH>();
-          }
-          for (Id linkedNode : targets) {
-            table.emplace_back();
-            table(outputRow, startSideCol) = node;
-            table(outputRow, targetSideCol) = linkedNode;
-            if (inputView.has_value()) {
-              copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                                     inputRow, outputRow);
-            }
-            if (graphVariable_.has_value()) {
-              table(outputRow, table.numColumns() - 1) = graph;
-            }
-            outputRow++;
+  auto transformer =
+      [this, startSideCol, targetSideCol, yieldOnce, outputRow = size_t{0}](
+          NodeWithTargets& nodeWithTargets, IdTableStatic<OUTPUT_WIDTH>& table,
+          ad_utility::Timer& timer, LocalVocab& mergedVocab) mutable
+      -> std::optional<Result::IdTableVocabPair> {
+    auto& [node, graph, targets, vocab, idTable, row] = nodeWithTargets;
+    timer.cont();
+    // As an optimization nodes without any linked nodes should not get
+    // yielded in the first place.
+    AD_CONTRACT_CHECK(!targets.empty());
+    if (!yieldOnce) {
+      table.reserve(targets.size());
+    }
+
+    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+    if (idTable.has_value()) {
+      inputView = idTable->template asStaticView<INPUT_WIDTH>();
+    }
+    for (Id linkedNode : targets) {
+      table.emplace_back();
+      table(outputRow, startSideCol) = node;
+      table(outputRow, targetSideCol) = linkedNode;
+      if (inputView.has_value()) {
+        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table, row,
+                                               outputRow);
+      }
+      if (graphVariable_.has_value()) {
+        table(outputRow, table.numColumns() - 1) = graph;
+      }
+      outputRow++;
+    }
+
+    timer.stop();
+    if (yieldOnce) {
+      mergedVocab.mergeWith(vocab);
+      return std::nullopt;
+    }
+
+    auto result = Result::IdTableVocabPair{std::move(table).toDynamic(),
+                                           std::move(vocab)};
+    table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
+    outputRow = 0;
+    return result;
+  };
+
+  if (yieldOnce) {
+    return Result::LazyResult{ad_utility::lazySingleValueRange(
+        [this, transform = std::move(transformer),
+         timer = ad_utility::Timer{ad_utility::Timer::Stopped},
+         hull = std::move(hull)]() mutable {
+          LocalVocab mergedVocab{};
+          IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
+          for (auto& nodeWithTargets : hull) {
+            std::ignore = transform(nodeWithTargets, table, timer, mergedVocab);
           }
 
-          if (yieldOnce) {
-            mergedVocab.mergeWith(localVocab);
-            ++hullIt;
-            continue;
-          } else {
-            timer.stop();
-            runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-            auto result = Result::IdTableVocabPair{std::move(table).toDynamic(),
-                                                   std::move(localVocab)};
-            table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
-            outputRow = 0;
-            ++hullIt;
-            return result;
-          }
-        }
-
-        if (yieldOnce) {
-          // make sure we dont yield another value after this
-          yieldOnce = false;
-          timer.start();
           runtimeInfo().addDetail("IdTable fill time", timer.msecs());
           return Result::IdTableVocabPair{std::move(table).toDynamic(),
                                           std::move(mergedVocab)};
-        }
+        })};
+  }
 
-        return std::nullopt;
-      })};
+  return Result::LazyResult(ad_utility::CachingTransformInputRange(
+      std::move(hull),
+      [this, transform = std::move(transformer), mergedVocab = LocalVocab{},
+       table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()},
+       timer = ad_utility::Timer{ad_utility::Timer::Stopped}](
+          auto& nodeWithTarget) mutable {
+        auto result = transform(nodeWithTarget, table, timer, mergedVocab);
+        runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+        return std::move(result.value());
+      }));
 }
 
 // _____________________________________________________________________________
