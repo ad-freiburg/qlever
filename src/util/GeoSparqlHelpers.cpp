@@ -60,7 +60,7 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit) {
   using enum UnitOfMeasurement;
-  auto multiplicator = [&]() {
+  auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
     }
@@ -89,7 +89,7 @@ double valueInUnitToKilometer(double valueInUnit,
 double squareMeterToUnit(double squareMeters,
                          std::optional<UnitOfMeasurement> unit) {
   using enum UnitOfMeasurement;
-  auto multiplicator = [&]() {
+  auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
     }

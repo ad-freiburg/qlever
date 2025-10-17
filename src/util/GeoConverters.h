@@ -25,27 +25,25 @@ namespace geometryConverters {
 using CoordType = double;
 using namespace util::geo;
 
+// Helper function to convert `GeoPoint` objects to `S2Point`.
+inline S2Point toS2Point(const DPoint& p) {
+  return S2LatLng::FromDegrees(p.getY(), p.getX()).ToPoint();
+}
+
 // Helper to convert a `libspatialjoin` `Ring` to an `S2Loop`
 inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
-  std::vector<S2Point> points;
-  for (const auto& latlon : ring) {
-    S2LatLng s2latlng = S2LatLng::FromDegrees(latlon.getY(), latlon.getX());
-    points.push_back(s2latlng.ToPoint());
-  }
+  std::vector<S2Point> points =
+      ::ranges::to<std::vector>(ring | ::ranges::views::transform(&toS2Point));
 
   // Ensure that there are no zero-length edges (that is edges with twice the
   // same point), as this will lead to an exception from `S2Loop`.
-  std::vector<S2Point> cleaned;
-  for (size_t i = 0; i < points.size(); ++i) {
-    if (i == 0 || points.at(i) != points.at(i - 1)) {
-      cleaned.push_back(points.at(i));
-    }
-  }
-  if (cleaned.front() == cleaned.back()) {
-    cleaned.pop_back();
+  auto new_end = ql::ranges::unique(points);
+  points.erase(new_end.begin(), points.end());
+  if (points.front() == points.back()) {
+    points.pop_back();
   }
 
-  auto loop = std::make_unique<S2Loop>(cleaned);
+  auto loop = std::make_unique<S2Loop>(std::move(points));
   loop->Normalize();
   if (!loop->IsValid()) {
     throw ad_utility::InvalidPolygonError();
