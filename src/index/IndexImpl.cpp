@@ -255,7 +255,7 @@ IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(
       NumColumnsIndexBuilding + 2, std::move(blockGenerator),
-      DEFAULT_MEMORY_LIMIT_INDEX_BUILDING, *thirdSorter);
+      DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER, *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
