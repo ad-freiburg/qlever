@@ -307,7 +307,7 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     return NodeGenerator(
-        ql::ranges::transform_view(
+        ::ranges::transform_view(
             ad_utility::OwningView(std::move(startNodes)),
             [this, edges = std::move(edges), edgesVocab = std::move(edgesVocab),
              yieldOnce, getTargetId = std::move(getTargetId),
