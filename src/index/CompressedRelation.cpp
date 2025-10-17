@@ -1697,7 +1697,7 @@ auto CompressedRelationWriter::createPermutationPair(
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
       twinRelationSorter(basename + ".twin-twinRelationSorter", numColumns,
-                         4_GB, alloc);
+                         40_GB, alloc);
 
   DistinctIdCounter distinctCol1Counter;
   auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
