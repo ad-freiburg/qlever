@@ -209,9 +209,11 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   auto& resultTree = optTree.value();
   AD_CORRECTNESS_CHECK(resultTree != nullptr);
   AD_CORRECTNESS_CHECK(
-      rootOperation->getLimitOffset() ==
-          resultTree->getRootOperation()->getLimitOffset(),
-      "Stripping columns must keep the same limit and offset.");
+      resultTree->getRootOperation()->getLimitOffset().isUnconstrained(),
+      "`LIMIT` and `OFFSET` are applied by "
+      "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
+      "implementations.");
+  resultTree->applyLimit(resultTree->getRootOperation()->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but

@@ -718,13 +718,11 @@ IndexScan::makeTreeWithStrippedColumns(
     }
   }
 
-  auto tree = ad_utility::makeExecutionTree<IndexScan>(
+  return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)});
-  tree->applyLimit(getLimitOffset());
-  return tree;
 }
 
 // _____________________________________________________________________________
