@@ -338,6 +338,10 @@ TEST(ServerTest, configurePinnedResultWithName) {
 }
 
 TEST(ServerTest, checkAccessToken) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "", true};
-  EXPECT_TRUE(server.checkAccessToken());
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  EXPECT_TRUE(server.checkAccessToken("accessToken"));
+  EXPECT_FALSE(server.checkAccessToken("invalidAccessToken"));
+
+  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
