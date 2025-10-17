@@ -219,68 +219,70 @@ enum class AnyGeometryMember : uint8_t {
   MULTIPOINT
 };
 
-// Convert an instance of the custom container type `AnyGeometry` from
-// `pb_util` to the variant used here.
-inline ParsedWkt anyGeometryToVariant(const AnyGeometry<CoordType>& geom) {
+// Forward declare so the compiler can see the function for cyclic recursion.
+double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom);
+
+// Helper to implement the computation of metric length for the different
+// geometry types. This is used for visiting the `ParsedWkt` variant in
+// `computeMetricLength` below as well as for computing the length for
+// geometries from the dynamic container class `AnyGeometry`.
+struct MetricLengthVisitor {
+  template <typename T>
+  auto operator()(const T& geom) const {
+    if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>>) {
+      return 0.0;
+    } else if constexpr (std::is_same_v<T, Line<CoordType>>) {
+      return latLngLen<CoordType>(geom);
+    } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
+      return computeMetricLengthPolygon(geom);
+    } else if constexpr (std::is_same_v<T, MultiLine<CoordType>>) {
+      return computeMetricLengthMulti<Line<CoordType>>(geom,
+                                                       latLngLen<CoordType>);
+    } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
+      return computeMetricLengthMulti<Polygon<CoordType>>(
+          geom, computeMetricLengthPolygon);
+    } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+      return computeMetricLengthMulti<AnyGeometry<CoordType>>(
+          geom, computeMetricLengthAnyGeom);
+    } else {
+      // Check that there are no further geometry types
+      static_assert(alwaysFalse<T>);
+    }
+  }
+};
+static constexpr MetricLengthVisitor metricLengthVisitor;
+
+// Compute the length for the custom container type `AnyGeometry` from
+// `pb_util`. It can dynamically hold any geometry type.
+inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
   using enum AnyGeometryMember;
+  // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
+  // this is why we use our own enum here. The correct matching of the integer
+  // identifiers for the geometry types with this enum is tested in
+  // `GeometryInfoTest.cpp`.
   switch (AnyGeometryMember{geom.getType()}) {
     case POINT:
-      return geom.getPoint();
+      return metricLengthVisitor(geom.getPoint());
     case LINE:
-      return geom.getLine();
+      return metricLengthVisitor(geom.getLine());
     case POLYGON:
-      return geom.getPolygon();
+      return metricLengthVisitor(geom.getPolygon());
     case MULTILINE:
-      return geom.getMultiLine();
+      return metricLengthVisitor(geom.getMultiLine());
     case MULTIPOLYGON:
-      return geom.getMultiPolygon();
+      return metricLengthVisitor(geom.getMultiPolygon());
     case COLLECTION:
-      return geom.getCollection();
+      return metricLengthVisitor(geom.getCollection());
     case MULTIPOINT:
-      return geom.getMultiPoint();
+      return metricLengthVisitor(geom.getMultiPoint());
     default:
       AD_FAIL();
   }
 }
 
-// Forward declare so the compiler can see the function for cyclic recursion.
-MetricLength computeMetricLength(const ParsedWkt& geometry);
-
-// Compute the length for the custom container type `AnyGeometry` from
-// `pb_util`. It can dynamically hold any geometry type.
-inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
-  return computeMetricLength(anyGeometryToVariant(geom)).length();
-}
-
 // Compute the length for a parsed WKT geometry.
 inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
-  return {std::visit(
-      [](const auto& geom) -> double {
-        using T = std::decay_t<decltype(geom)>;
-        // This is redundant with `computeMetricLengthAnyGeom`, however the
-        // decision can be made at compile time here, unlike with `AnyGeometry`
-        // which is a runtime construct.
-        if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>>) {
-          return 0.0;
-        } else if constexpr (std::is_same_v<T, Line<CoordType>>) {
-          return latLngLen<CoordType>(geom);
-        } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
-          return computeMetricLengthPolygon(geom);
-        } else if constexpr (std::is_same_v<T, MultiLine<CoordType>>) {
-          return computeMetricLengthMulti<Line<CoordType>>(
-              geom, latLngLen<CoordType>);
-        } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
-          return computeMetricLengthMulti<Polygon<CoordType>>(
-              geom, computeMetricLengthPolygon);
-        } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-          return computeMetricLengthMulti<AnyGeometry<CoordType>>(
-              geom, computeMetricLengthAnyGeom);
-        } else {
-          // Check that there are no further geometry types
-          static_assert(alwaysFalse<T>);
-        }
-      },
-      geometry)};
+  return {std::visit(metricLengthVisitor, geometry)};
 }
 
 }  // namespace ad_utility::detail
