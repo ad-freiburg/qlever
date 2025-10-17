@@ -187,6 +187,7 @@ class ExportQueryExecutionTrees {
   // format.
   static STREAMABLE_GENERATOR_TYPE computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
+      const LimitOffsetClause& limitOffset,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
