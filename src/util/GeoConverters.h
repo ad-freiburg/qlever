@@ -37,8 +37,8 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
 
   // Ensure that there are no zero-length edges (that is edges with twice the
   // same point), as this will lead to an exception from `S2Loop`.
-  auto new_end = ql::ranges::unique(points);
-  points.erase(new_end.begin(), points.end());
+  auto ret = std::ranges::unique(points);
+  points.erase(ret.begin(), ret.end());
   if (points.front() == points.back()) {
     points.pop_back();
   }
