@@ -45,11 +45,12 @@ using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken,
+               ad_utility::MemorySize maxMem, std::string accessToken, bool noAccessCheck,
                bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
+      noAccessCheck_(noAccessCheck),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -1210,6 +1211,10 @@ CPP_template_def(typename Function,
 // _____________________________________________________________________________
 bool Server::checkAccessToken(
     std::optional<std::string_view> accessToken) const {
+  if (noAccessCheck_) {
+    AD_LOG_DEBUG << "Skipping access check" << std::endl;
+    return true;
+  }
   if (!accessToken) {
     return false;
   }
