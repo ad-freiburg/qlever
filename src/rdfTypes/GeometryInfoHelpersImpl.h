@@ -210,39 +210,6 @@ inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 };
 
-// Given an `S2Polygon` compute the area and convert it to approximated square
-// meters on earth.
-inline double computeMetricAreaS2Polygon(const S2Polygon& polygon) {
-  return S2Earth::SteradiansToSquareMeters(polygon.GetArea());
-}
-
-// Compute the area of a polygon in square meters on earth using s2
-inline double computeMetricAreaPolygon(const Polygon<CoordType>& polygon) {
-  return computeMetricAreaS2Polygon(makeS2Polygon(polygon));
-}
-
-// Compute the area of a multipolygon in square meters on earth using s2
-inline double computeMetricAreaMultiPolygon(
-    const MultiPolygon<CoordType>& polygons) {
-  // Empty multipolygon has empty area
-  if (polygons.empty()) {
-    return 0.0;
-  }
-  // Multipolygon with one member has exactly area of this member
-  if (polygons.size() == 1) {
-    return computeMetricAreaPolygon(polygons.at(0));
-  }
-  // For a multipolygon with multiple members, we need to compute the union of
-  // the polygons to determine their area.
-  // TODO<ullingerc>: the number of steps could be reduced by building the union
-  // in pairs (like divide-and-conquer) or using `S2Builder`
-  auto unionPolygon = makeS2Polygon(polygons.at(0));
-  for (size_t i = 1; i < polygons.size(); ++i) {
-    unionPolygon.InitToUnion(unionPolygon, makeS2Polygon(polygons.at(i)));
-  }
-  return computeMetricAreaS2Polygon(unionPolygon);
-};
-
 // Extract all (potentially nested) polygons from a geometry collection. This is
 // used to calculate area as points and lines have no area and are therefore
 // neutral to the area of a collection.
@@ -269,33 +236,58 @@ inline MultiPolygon<CoordType> collectionToMultiPolygon(
   return polygons;
 }
 
-// Compute the area in square meters of a geometry collection on earth using s2
-inline double computeMetricAreaCollection(
-    const Collection<CoordType>& collection) {
-  return computeMetricAreaMultiPolygon(collectionToMultiPolygon(collection));
-}
+// Helper to implement the computation of metric area for the different
+// geometry types.
+struct MetricAreaVisitor {
+  // Given an `S2Polygon` compute the area and convert it to approximated
+  // square meters on earth.
+  double operator()(const S2Polygon& polygon) const {
+    return S2Earth::SteradiansToSquareMeters(polygon.GetArea());
+  }
 
-// Compute the area in square meters of a geometry on earth using s2
-inline double computeMetricArea(const ParsedWkt& geometry) {
-  return std::visit(
-      [](const auto& geom) -> double {
-        using T = std::decay_t<decltype(geom)>;
-        if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                                Line<CoordType>, MultiLine<CoordType>>) {
-          return 0.0;
-        } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
-          return computeMetricAreaPolygon(geom);
-        } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
-          return computeMetricAreaMultiPolygon(geom);
-        } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-          return computeMetricAreaCollection(geom);
-        } else {
-          // Check that there are no further geometry types
-          static_assert(alwaysFalse<T>);
-        }
-      },
-      geometry);
-}
+  double operator()(const Polygon<CoordType>& polygon) const {
+    return MetricAreaVisitor{}(makeS2Polygon(polygon));
+  }
+
+  double operator()(const MultiPolygon<CoordType>& polygons) const {
+    // Empty multipolygon has empty area
+    if (polygons.empty()) {
+      return 0.0;
+    }
+    // Multipolygon with one member has exactly area of this member
+    if (polygons.size() == 1) {
+      return MetricAreaVisitor{}(polygons.at(0));
+    }
+    // For a multipolygon with multiple members, we need to compute the union of
+    // the polygons to determine their area.
+    // TODO<ullingerc>: the number of steps could be reduced by building the
+    // union in pairs (like divide-and-conquer) or using `S2Builder`
+    auto unionPolygon = makeS2Polygon(polygons.at(0));
+    for (size_t i = 1; i < polygons.size(); ++i) {
+      unionPolygon.InitToUnion(unionPolygon, makeS2Polygon(polygons.at(i)));
+    }
+    return MetricAreaVisitor{}(unionPolygon);
+  }
+
+  // Compute the area in square meters of a geometry collection
+  double operator()(const Collection<CoordType>& collection) const {
+    return MetricAreaVisitor{}(collectionToMultiPolygon(collection));
+  }
+
+  // The remaining geometry types always return the area zero
+  CPP_template(typename T)(
+      requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
+                         Line<CoordType>, MultiLine<CoordType>>) double
+  operator()(const T&) const {
+    return 0.0;
+  }
+
+  double operator()(const ParsedWkt& geom) const {
+    return std::visit(MetricAreaVisitor{}, geom);
+  };
+};
+
+static constexpr MetricAreaVisitor computeMetricArea;
 
 }  // namespace ad_utility::detail
 

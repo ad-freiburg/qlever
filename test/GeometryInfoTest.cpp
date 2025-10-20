@@ -323,30 +323,37 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
-  testPolygonArea(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
-  testPolygonArea(litSmallRealWorldPolygon2, areaSmallRealWorldPolygon2);
-  testPolygonArea(litSmallRealWorldPolygonWithHole,
-                  areaSmallRealWorldPolygonWithHole);
+  using namespace ad_utility::detail;
+  testMetricArea<Polygon<CoordType>>(litSmallRealWorldPolygon1,
+                                     areaSmallRealWorldPolygon1);
+  testMetricArea<Polygon<CoordType>>(litSmallRealWorldPolygon2,
+                                     areaSmallRealWorldPolygon2);
+  testMetricArea<Polygon<CoordType>>(litSmallRealWorldPolygonWithHole,
+                                     areaSmallRealWorldPolygonWithHole);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
   using namespace ad_utility::detail;
-  testMultiPolygonArea(litRealWorldMultiPolygonFullyContained,
-                       areaRealWorldMultiPolygonFullyContained);
-  testMultiPolygonArea(litRealWorldMultiPolygonNonIntersecting,
-                       areaRealWorldMultiPolygonNonIntersecting);
-  testMultiPolygonArea(litRealWorldMultiPolygonIntersecting,
-                       areaRealWorldMultiPolygonIntersecting);
-  testMultiPolygonArea(litRealWorldMultiPolygonHoleIntersection,
-                       areaRealWorldMultiPolygonHoleIntersection);
+  testMetricArea<MultiPolygon<CoordType>>(
+      litRealWorldMultiPolygonFullyContained,
+      areaRealWorldMultiPolygonFullyContained);
+  testMetricArea<MultiPolygon<CoordType>>(
+      litRealWorldMultiPolygonNonIntersecting,
+      areaRealWorldMultiPolygonNonIntersecting);
+  testMetricArea<MultiPolygon<CoordType>>(
+      litRealWorldMultiPolygonIntersecting,
+      areaRealWorldMultiPolygonIntersecting);
+  testMetricArea<MultiPolygon<CoordType>>(
+      litRealWorldMultiPolygonHoleIntersection,
+      areaRealWorldMultiPolygonHoleIntersection);
 
   // Edge case: empty multipolygon
-  EXPECT_EQ(computeMetricAreaMultiPolygon(MultiPolygon<CoordType>{}), 0);
+  EXPECT_EQ(computeMetricArea(MultiPolygon<CoordType>{}), 0);
 
   // Edge case: multipolygon with only one member
-  testMultiPolygonArea(litSmallRealWorldPolygon2AsMulti,
-                       areaSmallRealWorldPolygon2);
+  testMetricArea<MultiPolygon<CoordType>>(litSmallRealWorldPolygon2AsMulti,
+                                          areaSmallRealWorldPolygon2);
 }
 
 // ____________________________________________________________________________
@@ -360,31 +367,33 @@ TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
       removeDatatype(litSmallRealWorldPolygon2), ")");
   const double expectedCollection1 =
       areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
-  testCollectionArea(addDatatype(collection1), 2, expectedCollection1);
+  testMetricArea<Collection<CoordType>>(addDatatype(collection1),
+                                        expectedCollection1, 2);
 
   // Collection with only one member (polygon)
   auto collection2 = absl::StrCat(
       "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ")");
-  testCollectionArea(addDatatype(collection2), 1, areaSmallRealWorldPolygon1);
+  testMetricArea<Collection<CoordType>>(addDatatype(collection2),
+                                        areaSmallRealWorldPolygon1, 1);
 
   // Collection with only one member (non-polygon)
   auto collection3 =
       absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
-  testCollectionArea(addDatatype(collection3), 0, 0);
+  testMetricArea<Collection<CoordType>>(addDatatype(collection3), 0, 0);
 
   // Collection containing a multipolygon
   auto collection4 =
       absl::StrCat("GEOMETRYCOLLECTION(",
                    removeDatatype(litRealWorldMultiPolygonIntersecting), ")");
-  testCollectionArea(addDatatype(collection4),
-                     numRealWorldMultiPolygonIntersecting,
-                     areaRealWorldMultiPolygonIntersecting);
+  testMetricArea<Collection<CoordType>>(addDatatype(collection4),
+                                        areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting);
 
   // Collection containing a nested collection
   auto collection5 = absl::StrCat("GEOMETRYCOLLECTION(", collection4, ")");
-  testCollectionArea(addDatatype(collection5),
-                     numRealWorldMultiPolygonIntersecting,
-                     areaRealWorldMultiPolygonIntersecting);
+  testMetricArea<Collection<CoordType>>(addDatatype(collection5),
+                                        areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting);
 }
 
 // ____________________________________________________________________________

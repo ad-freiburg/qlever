@@ -184,51 +184,21 @@ inline T getGeometryOfTypeOrThrow(
 }
 
 // ____________________________________________________________________________
-inline void testPolygonArea(const std::string_view polygonWkt,
-                            double expectedArea,
-                            Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+template <typename T>
+inline void testMetricArea(const std::string_view wkt, double expectedArea,
+                           size_t expectedNumPolygons = 0,
+                           Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   using namespace ad_utility::detail;
   auto l = generateLocationTrace(sourceLocation);
-  const auto parsed = getGeometryOfTypeOrThrow<Polygon<CoordType>>(polygonWkt);
+  const auto parsed = getGeometryOfTypeOrThrow<T>(wkt);
 
   // One percent deviation from expected area is ok
   const double allowedError = 0.01 * expectedArea;
 
-  EXPECT_NEAR(computeMetricAreaPolygon(parsed), expectedArea, allowedError);
-  EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
-};
-
-// ____________________________________________________________________________
-inline void testMultiPolygonArea(const std::string_view multiPolygonWkt,
-                                 double expectedArea,
-                                 Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  using namespace ad_utility::detail;
-  auto l = generateLocationTrace(sourceLocation);
-  const auto parsed =
-      getGeometryOfTypeOrThrow<MultiPolygon<CoordType>>(multiPolygonWkt);
-
-  // One percent deviation from expected area is ok
-  const double allowedError = 0.01 * expectedArea;
-
-  EXPECT_NEAR(computeMetricAreaMultiPolygon(parsed), expectedArea,
-              allowedError);
-  EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
-};
-
-// ____________________________________________________________________________
-inline void testCollectionArea(const std::string_view collectionWkt,
-                               size_t expectedNumPolygons, double expectedArea,
-                               Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  using namespace ad_utility::detail;
-  auto l = generateLocationTrace(sourceLocation);
-  const auto parsed =
-      getGeometryOfTypeOrThrow<Collection<CoordType>>(collectionWkt);
-
-  // One percent deviation from expected area is ok
-  const double allowedError = 0.01 * expectedArea;
-
-  EXPECT_EQ(collectionToMultiPolygon(parsed).size(), expectedNumPolygons);
-  EXPECT_NEAR(computeMetricAreaCollection(parsed), expectedArea, allowedError);
+  if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+    EXPECT_EQ(collectionToMultiPolygon(parsed).size(), expectedNumPolygons);
+  }
+  EXPECT_NEAR(computeMetricArea(parsed), expectedArea, allowedError);
   EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
 }
 
