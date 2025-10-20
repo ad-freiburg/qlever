@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
+#include <s2/s2polyline.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -1745,5 +1746,41 @@ TEST(SpatialJoin, NumberOfThreads) {
 }
 
 }  // namespace runtimeParameters
+
+namespace parsing {
+
+TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
+  // Test that the `getPolyline` functions correctly checks the geometry type of
+  // its input literals
+
+  std::string kb =
+      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s2> <asWKT> \"POLYGON((7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942, 7.8428469 47.9995367))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s3> <asWKT> \"POINT(1 2)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
+  auto result = scan->getResult();
+  auto col = scan->getVariableColumn(Variable{"?geo"});
+
+  auto check = [&](size_t row) {
+    return SpatialJoinAlgorithms::getPolyline(result->idTable(), row, col,
+                                              qec->getIndex());
+  };
+
+  EXPECT_TRUE(check(0).has_value());
+  EXPECT_FALSE(check(1).has_value());
+  EXPECT_FALSE(check(2).has_value());
+}
+
+}  // namespace parsing
 
 }  // namespace

@@ -146,12 +146,18 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const IdTable& restable, size_t row, ColumnIndex col, const Index& index) {
+  using namespace util::geo;
   auto id = restable.at(row, col);
   auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
   }
-  auto line = util::geo::lineFromWKT<double>(str.value().first);
+  // The `lineFromWKT` function skips the part of the string before the first
+  // opening bracket. The geometry type needs to be checked separately.
+  if (getWKTType(str.value().first) != WKTType::LINESTRING) {
+    return std::nullopt;
+  }
+  auto line = lineFromWKT<double>(str.value().first);
   return line.empty() ? std::nullopt : std::optional{toS2Polyline(line)};
 }
 
