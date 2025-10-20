@@ -236,7 +236,7 @@ struct MetricLengthVisitor {
     static_assert(ad_utility::isInstantiation<std::decay_t<T>, std::vector>);
 
     return ::ranges::accumulate(
-        ::ranges::transform_view(multiGeom, MetricLengthVisitor()), 0);
+        ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
   }
 
   // Compute the length for the custom container type `AnyGeometry` from
@@ -251,19 +251,19 @@ struct MetricLengthVisitor {
     // `GeometryInfoTest.cpp`.
     switch (AnyGeometryMember{geom.getType()}) {
       case POINT:
-        return MetricLengthVisitor()(geom.getPoint());
+        return MetricLengthVisitor{}(geom.getPoint());
       case LINE:
-        return MetricLengthVisitor()(geom.getLine());
+        return MetricLengthVisitor{}(geom.getLine());
       case POLYGON:
-        return MetricLengthVisitor()(geom.getPolygon());
+        return MetricLengthVisitor{}(geom.getPolygon());
       case MULTILINE:
-        return MetricLengthVisitor()(geom.getMultiLine());
+        return MetricLengthVisitor{}(geom.getMultiLine());
       case MULTIPOLYGON:
-        return MetricLengthVisitor()(geom.getMultiPolygon());
+        return MetricLengthVisitor{}(geom.getMultiPolygon());
       case COLLECTION:
-        return MetricLengthVisitor()(geom.getCollection());
+        return MetricLengthVisitor{}(geom.getCollection());
       case MULTIPOINT:
-        return MetricLengthVisitor()(geom.getMultiPoint());
+        return MetricLengthVisitor{}(geom.getMultiPoint());
       default:
         AD_FAIL();
     }
@@ -271,7 +271,7 @@ struct MetricLengthVisitor {
 
   // Compute the length for a parsed WKT geometry.
   MetricLength operator()(const ParsedWkt& geometry) const {
-    return MetricLength{std::visit(MetricLengthVisitor(), geometry)};
+    return MetricLength{std::visit(MetricLengthVisitor{}, geometry)};
   }
 };
 static constexpr MetricLengthVisitor computeMetricLength;
