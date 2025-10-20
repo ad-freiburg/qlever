@@ -12,6 +12,7 @@
 #include <array>
 #include <range/v3/numeric/accumulate.hpp>
 #include <string_view>
+#include <type_traits>
 
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -208,9 +209,11 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to implement the computation of metric length for the different
 // geometry types.
 struct MetricLengthVisitor {
-  template <typename T>
-  double operator()(const T& geom) const {
-    if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>>) {
+  CPP_template(typename T)(
+      requires ad_utility::SimilarToAny<T, Point<CoordType>, Line<CoordType>,
+                                        Polygon<CoordType>>) double
+  operator()(const T& geom) const {
+    if constexpr (std::is_same_v<T, Point<CoordType>>) {
       return 0.0;
     } else if constexpr (std::is_same_v<T, Line<CoordType>>) {
       return latLngLen<CoordType>(geom);
@@ -229,6 +232,9 @@ struct MetricLengthVisitor {
                            T, MultiLine<CoordType>, MultiPolygon<CoordType>,
                            MultiPoint<CoordType>, Collection<CoordType>>) double
   operator()(const T& multiGeom) const {
+    // This overload only handles the geometry types implemented by vectors.
+    static_assert(ad_utility::isInstantiation<std::decay_t<T>, std::vector>);
+
     return ::ranges::accumulate(
         ::ranges::transform_view(multiGeom, MetricLengthVisitor()), 0);
   }
