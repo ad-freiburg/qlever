@@ -12,7 +12,6 @@
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
-#include "gmock/gmock.h"
 #include "rdfTypes/Variable.h"
 
 namespace {
