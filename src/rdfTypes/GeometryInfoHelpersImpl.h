@@ -209,21 +209,15 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to implement the computation of metric length for the different
 // geometry types.
 struct MetricLengthVisitor {
-  CPP_template(typename T)(
-      requires ad_utility::SimilarToAny<T, Point<CoordType>, Line<CoordType>,
-                                        Polygon<CoordType>>) double
-  operator()(const T& geom) const {
-    if constexpr (std::is_same_v<T, Point<CoordType>>) {
-      return 0.0;
-    } else if constexpr (std::is_same_v<T, Line<CoordType>>) {
-      return latLngLen<CoordType>(geom);
-    } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
-      // Compute the length of the outer boundary of a polygon.
-      return latLngLen<CoordType>(geom.getOuter());
-    } else {
-      // Check that there are no further geometry types
-      static_assert(alwaysFalse<T>);
-    }
+  double operator()(const Point<CoordType>&) const { return 0.0; }
+
+  double operator()(const Line<CoordType>& geom) const {
+    return latLngLen<CoordType>(geom);
+  }
+
+  // Compute the length of the outer boundary of a polygon.
+  double operator()(const Polygon<CoordType>& geom) const {
+    return latLngLen<CoordType>(geom.getOuter());
   }
 
   // Compute the length of a multi-geometry by adding up the lengths of its
