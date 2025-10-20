@@ -68,7 +68,8 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                 << std::endl;
   }
 
-  return GeometryInfo{type, boundingBox.value(), centroid.value(), {area}};
+  return GeometryInfo{type, boundingBox.value(), centroid.value(),
+                      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -84,7 +85,12 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point}, Centroid{point}, {0.0}};
+  return {
+      util::geo::WKTType::POINT,
+      {point, point},
+      Centroid{point},
+      MetricArea{0.0},
+  };
 }
 
 // ____________________________________________________________________________
@@ -130,7 +136,9 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
-MetricArea GeometryInfo::getMetricArea() const { return {metricArea_}; }
+MetricArea GeometryInfo::getMetricArea() const {
+  return MetricArea{metricArea_};
+}
 
 // ____________________________________________________________________________
 std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
@@ -139,7 +147,7 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
     return std::nullopt;
   }
   try {
-    return detail::computeMetricArea(parsed.value());
+    return MetricArea{detail::computeMetricArea(parsed.value())};
   } catch (const InvalidPolygonError&) {
     return std::nullopt;
   }

@@ -94,7 +94,7 @@ struct MetricArea {
   double area_;
 
  public:
-  MetricArea(double area);
+  explicit MetricArea(double area);
 
   double area() const { return area_; };
 };

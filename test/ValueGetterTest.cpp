@@ -7,6 +7,7 @@
 
 #include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./ValueGetterTestHelpers.h"
+#include "rdfTypes/GeometryInfo.h"
 
 namespace {
 
@@ -166,14 +167,13 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       "\"LINESTRING(2 2, 4 "
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      ad_utility::GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, {0}});
+      GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}, MetricArea{0}});
   static constexpr std::string_view polygon =
       "\"POLYGON(2 4, 4 4, 4 2, 2 2)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
       std::string{polygon},
-      ad_utility::GeometryInfo{
-          3, {{2, 2}, {4, 4}}, {3, 3}, getAreaForTesting(polygon)});
+      GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}, getAreaForTesting(polygon)});
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                                 std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
@@ -188,7 +188,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   checkGeoInfoFromValueId(
       ValueId::makeFromGeoPoint({3, 2}),
-      ad_utility::GeometryInfo{1, {{3, 2}, {3, 2}}, {3, 2}, {0}});
+      GeometryInfo{1, {{3, 2}, {3, 2}}, {3, 2}, MetricArea{0}});
   checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);

@@ -138,7 +138,7 @@ const auto getAllTestLiterals = []() {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {5}};
+  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -151,17 +151,17 @@ TEST(GeometryInfoTest, BasicTests) {
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {5}),
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricArea{5}),
       ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {0}),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, MetricArea{0}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Negative area
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {-900}),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricArea{-900}),
       ::testing::HasSubstr("Metric area must be positive"));
 }
 
@@ -170,11 +170,11 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   auto area = getAreaForTesting;
 
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {0}};
+  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, MetricArea{0}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {0}};
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, MetricArea{0}};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
@@ -182,11 +182,11 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, {0}};
+  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, MetricArea{0}};
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, {0}};
+  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, MetricArea{0}};
   checkGeoInfo(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
@@ -205,12 +205,12 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}, {0}};
+  GeometryInfo exp{1, {p, p}, Centroid{p}, MetricArea{0}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, {0}};
+  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, MetricArea{0}};
   checkGeoInfo(g2, exp2);
 }
 
