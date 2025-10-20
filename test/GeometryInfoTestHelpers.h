@@ -236,7 +236,7 @@ inline void testCollectionArea(const std::string_view collectionWkt,
 inline MetricArea getAreaForTesting(const std::string_view wkt) {
   auto area = GeometryInfo::getMetricArea(wkt);
   if (!area.has_value()) {
-    return {std::numeric_limits<double>::quiet_NaN()};
+    return MetricArea{std::numeric_limits<double>::quiet_NaN()};
   }
   return area.value();
 }
