@@ -1749,6 +1749,7 @@ TEST(SpatialJoin, NumberOfThreads) {
 
 namespace parsing {
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
   // Test that the `getPolyline` functions correctly checks the geometry type of
   // its input literals
