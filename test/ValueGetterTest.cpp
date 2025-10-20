@@ -192,7 +192,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   checkGeoInfoFromValueId(
       ValueId::makeFromGeoPoint({3, 2}),
-      ad_utility::GeometryInfo{1, {{3, 2}, {3, 2}}, {3, 2}, {0}});
+      ad_utility::GeometryInfo{
+          1, {{3, 2}, {3, 2}}, {3, 2}, ad_utility::MetricLength{0}});
   checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
   checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);

@@ -91,7 +91,7 @@ struct MetricLength {
   double length_;
 
  public:
-  MetricLength(double length);
+  explicit MetricLength(double length);
 
   double length() const { return length_; }
 };

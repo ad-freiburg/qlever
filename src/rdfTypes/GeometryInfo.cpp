@@ -86,7 +86,10 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point}, Centroid{point}, {0.0}};
+  return {util::geo::WKTType::POINT,
+          {point, point},
+          Centroid{point},
+          MetricLength{0.0}};
 }
 
 // ____________________________________________________________________________
@@ -147,7 +150,9 @@ std::string BoundingBox::asWkt() const {
 }
 
 // ____________________________________________________________________________
-MetricLength GeometryInfo::getMetricLength() const { return {metricLength_}; };
+MetricLength GeometryInfo::getMetricLength() const {
+  return MetricLength{metricLength_};
+};
 
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(

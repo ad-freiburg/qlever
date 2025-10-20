@@ -66,7 +66,7 @@ const auto getAllTestLiterals = []() {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {900}};
+  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricLength{900}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -79,17 +79,17 @@ TEST(GeometryInfoTest, BasicTests) {
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}),
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricLength{1}),
       ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, MetricLength{1}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Negative length
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {-900}),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, MetricLength{-900}),
       ::testing::HasSubstr("Metric length must be positive"));
 }
 
@@ -100,7 +100,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   auto len = getLengthForTesting;
 
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {0}};
+  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, MetricLength{0}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
@@ -112,7 +112,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, {0}};
+  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, MetricLength{0}};
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
@@ -136,12 +136,12 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}, {0}};
+  GeometryInfo exp{1, {p, p}, Centroid{p}, MetricLength{0}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, {0}};
+  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, MetricLength{0}};
   checkGeoInfo(g2, exp2);
 }
 
@@ -329,7 +329,7 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
         parsed.second.value());
   }
 
-  auto result = computeMetricLength(collection);
+  MetricLength result{computeMetricLength(collection)};
   checkMetricLength(MetricLength{expected}, result);
 }
 
