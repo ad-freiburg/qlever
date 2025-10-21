@@ -54,6 +54,7 @@ struct RuntimeParameters {
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
+  SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
   Bool throwOnUnboundVariables_{false, "throw-on-unbound-variables"};
 
