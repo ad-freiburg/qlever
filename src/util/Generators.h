@@ -121,7 +121,7 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
       innerReady_ = false;
 
       return std::visit(
-          [](auto&& value) -> std::optional<T> {
+          [](auto& value) -> std::optional<T> {
             using ValueType = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<ValueType, std::monostate>) {
               return std::nullopt;
@@ -181,11 +181,13 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
         } catch (const FinishedBecauseOuterIsFinishedException&) {
           // This means that the outer thread is completely finished and only
           // waits for the inner thread to join.
+          return;
         } catch (...) {
           // The function has created an exception, pass it to the outer thread.
           try {
             writeValue(std::current_exception());
           } catch (const FinishedBecauseOuterIsFinishedException&) {
+            return;
           }
         }
       }};
