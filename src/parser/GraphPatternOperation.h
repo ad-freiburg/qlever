@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
@@ -211,6 +212,22 @@ using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult>;
+static_assert(ql::concepts::copyable<Optional>);
+static_assert(ql::concepts::copyable<Union>);
+static_assert(ql::concepts::copyable<Subquery>);
+static_assert(ql::concepts::copyable<TransPath>);
+static_assert(ql::concepts::copyable<Bind>);
+static_assert(ql::concepts::copyable<BasicGraphPattern>);
+static_assert(ql::concepts::copyable<Values>);
+static_assert(ql::concepts::copyable<Service>);
+static_assert(ql::concepts::copyable<PathQuery>);
+static_assert(ql::concepts::copyable<SpatialQuery>);
+static_assert(ql::concepts::copyable<TextSearchQuery>);
+static_assert(ql::concepts::copyable<Minus>);
+static_assert(ql::concepts::copyable<GroupGraphPattern>);
+static_assert(ql::concepts::copyable<Describe>);
+static_assert(ql::concepts::copyable<Load>);
+static_assert(ql::concepts::copyable<NamedCachedResult>);
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

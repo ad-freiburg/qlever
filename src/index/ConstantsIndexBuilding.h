@@ -31,12 +31,17 @@ constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
-constinit inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP =
-    50'000;
+inline std::atomic<size_t>& BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() {
+  static std::atomic<size_t> value = 50'000;
+  return value;
+}
 
 // When merging the vocabulary, this many finished words are buffered
 // before they are written to the output.
-constinit inline std::atomic<size_t> BATCH_SIZE_VOCABULARY_MERGE = 10'000'000;
+inline std::atomic<size_t>& BATCH_SIZE_VOCABULARY_MERGE() {
+  static std::atomic<size_t> value = 10'000'000;
+  return value;
+}
 
 // When the BZIP2 parser encounters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
@@ -93,8 +98,10 @@ constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 // A buffer size used during the second pass of the Index build.
 // It is not const, so we can set it to a much lower value for unit tests to
 // increase the test coverage.
-constinit inline std::atomic<size_t> BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS =
-    10'000;
+inline std::atomic<size_t>& BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() {
+  static std::atomic<size_t> value = 10'000;
+  return value;
+}
 
 // The uncompressed size in bytes of a block of a single column of the
 // permutations. If chosen too large, then we lose performance for very small

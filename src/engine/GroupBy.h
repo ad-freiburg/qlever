@@ -25,8 +25,9 @@ class GroupBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree);
 
   ~GroupBy() override;
-  GroupBy(GroupBy&&) noexcept;
-  GroupBy& operator=(GroupBy&&) noexcept;
+  // TODO<joka921> Why can't those be noexcept?
+  GroupBy(GroupBy&&);
+  GroupBy& operator=(GroupBy&&);
 
   // Internal constructor used for the implementation of `clone`.
   GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);

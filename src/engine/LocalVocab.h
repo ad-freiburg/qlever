@@ -183,9 +183,9 @@ class LocalVocab {
   // Wrapper around a bunch of word sets without any access provided to them.
   // This is useful to extend the lifetime of this `LocalVocab` without making
   // this instance read-only by merging and/or cloning.
-  class [[nodiscard(
+  class QL_NODISCARD(
       "The sole purpose of this object is to extend "
-      "lifetimes.")]] LifetimeExtender {
+      "lifetimes.") LifetimeExtender {
     friend LocalVocab;
     std::vector<std::shared_ptr<const Set>> wordSets_;
 

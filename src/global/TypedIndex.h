@@ -14,7 +14,7 @@ namespace ad_utility {
 using IndexTag = ConstexprSmallString<30>;
 // A strong Index type that internally stores a value of `Type` but can only be
 // explicitly converted to and from the underlying `Value`
-template <typename Type, IndexTag tag>
+template <typename Type, const IndexTag& tag>
 struct TypedIndex {
  private:
   Type _value;

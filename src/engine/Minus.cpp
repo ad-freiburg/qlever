@@ -9,6 +9,7 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -324,7 +325,7 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   const auto* vars = &variables;
   for (const auto& [jcl, _] : _matchedColumns) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }
@@ -343,7 +344,7 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   [[maybe_unused]] bool keepJoinColumns =
       ql::ranges::any_of(jcls, [&](const auto& jcl) {
         const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
-        return variables.contains(var);
+        return ad_utility::contains(variables, var);
       });
   return ad_utility::makeExecutionTree<Minus>(
       getExecutionContext(), std::move(left), std::move(right));

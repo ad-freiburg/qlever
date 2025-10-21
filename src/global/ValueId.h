@@ -9,11 +9,11 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <bit>
 #include <cstdint>
 #include <limits>
 
 #include "backports/functional.h"
+#include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
@@ -46,7 +46,7 @@ enum struct Datatype {
 };
 
 /// Convert the `Datatype` enum to the corresponding string
-constexpr std::string_view toString(Datatype type) {
+inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
       return "Undefined";
@@ -94,8 +94,12 @@ class ValueId {
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
+  /// TODO<joka921> This constant is currently only used in unit tests.
+  /// Find the exact value for CPP17 mode, and static assert it in C++20 mode.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static constexpr double minPositiveDouble =
       absl::bit_cast<double>(1ull << numDatatypeBits);
+#endif
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -191,6 +195,7 @@ class ValueId {
     return ql::compareThreeWay(_bits, other._bits);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_CONSTEXPR(ValueId, _bits)
 
   // When there are no local vocab entries, then comparison can only be done
   // on the underlying bits, which allows much better code generation (e.g.
@@ -198,12 +203,6 @@ class ValueId {
   // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
     return ql::compareThreeWay(_bits, other._bits);
-  }
-
-  // For some reason which I (joka921) don't understand, we still need
-  // operator== although we already have operator <=>.
-  constexpr bool operator==(const ValueId& other) const {
-    return ql::compareThreeWay(*this, other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.

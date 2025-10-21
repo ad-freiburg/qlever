@@ -277,4 +277,5 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   }
 }
 
+auto copySpatialQueryOnlyForTesting(SpatialQuery src) { return src; }
 }  // namespace parsedQuery

@@ -67,21 +67,23 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
 }
 
 // _____________________________________________________________________________
-[[maybe_unused]] auto regexImpl = [](const std::optional<std::string>& input,
-                                     const std::shared_ptr<RE2>& pattern) {
-  if (!input.has_value() || !pattern) {
-    return Id::makeUndefined();
+struct RegexImpl {
+  Id operator()(const std::optional<std::string>& input,
+                const std::shared_ptr<RE2>& pattern) const {
+    if (!input.has_value() || !pattern) {
+      return Id::makeUndefined();
+    }
+    // Check for invalid regexes.
+    if (!pattern->ok()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
   }
-  // Check for invalid regexes.
-  if (!pattern->ok()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
 };
+[[maybe_unused]] inline constexpr RegexImpl regexImpl{};
 
 using RegexExpression =
-    string_expressions::StringExpressionImpl<2, decltype(regexImpl),
-                                             RegexValueGetter>;
+    string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
 }  // namespace sparqlExpression::detail
 
@@ -235,9 +237,9 @@ ExpressionResult PrefixRegexExpression::evaluate(
       }
       checkCancellation(context);
     }
-    return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
-                       ad_utility::SetOfIntervals{},
-                       ad_utility::SetOfIntervals::Union{});
+    return std::accumulate(
+        resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
+        ad_utility::SetOfIntervals{}, ad_utility::SetOfIntervals::Union{});
   }
 
   // If the input is not sorted by the variable, we have to check each row

@@ -6,9 +6,13 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <map>
 #include <numeric>
+#include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -33,6 +37,11 @@ constexpr bool contains(Container&& container, const T& element) {
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
+    // TODO<joka921> find a better solution here...
+  } else if constexpr (ad_utility::similarToAnyInstantiationOf<
+                           Container, std::set, std::map, std::unordered_map,
+                           std::unordered_set>) {
+    return container.find(element) != container.end();
   } else {
     return ql::ranges::find(std::begin(container), std::end(container),
                             element) != std::end(container);
@@ -173,7 +182,8 @@ CPP_template(typename ForwardIterator, typename Tp,
                                ForwardIterator>) constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 
@@ -200,7 +210,8 @@ CPP_template(typename ForwardIterator, typename Tp,
                                ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 

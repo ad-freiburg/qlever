@@ -503,7 +503,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto timesOfChildren = _runtimeInfo->children_ |
                          ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
+      std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
   signalQueryUpdate();
 }
