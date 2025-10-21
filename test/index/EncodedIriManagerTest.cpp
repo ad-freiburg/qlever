@@ -126,4 +126,133 @@ TEST(EncodedIriManager, emptyPrefixes) {
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 }
 
+// _____________________________________________________________________________
+TEST(EncodedIriManager, BitPatternMode) {
+  // Create an EncodedIriManager with bit pattern mode
+  // For testing, let's use a simple prefix and specify that bits 10-15 must be
+  // zero
+  EncodedIriManager em;
+  detail::PrefixConfig cfg("<http://example.org/", 10, 15);
+  em.prefixes_.push_back(cfg);
+
+  // Test values that should encode successfully (bits 10-15 are zero)
+  // Value with bits 10-15 all zero: e.g., 1023 (binary: 1111111111, bits 0-9
+  // set)
+  auto id1 = em.encode("<http://example.org/1023>");
+  ASSERT_TRUE(id1.has_value());
+  EXPECT_EQ(em.toString(id1.value()), "<http://example.org/1023>");
+
+  // Test value 0 (all bits zero)
+  auto id2 = em.encode("<http://example.org/0>");
+  ASSERT_TRUE(id2.has_value());
+  EXPECT_EQ(em.toString(id2.value()), "<http://example.org/0>");
+
+  // Test value with upper bits set but bits 10-15 zero
+  // 65536 = 2^16, binary: 10000000000000000 (bit 16 set, bits 10-15 zero)
+  auto id3 = em.encode("<http://example.org/65536>");
+  ASSERT_TRUE(id3.has_value());
+  EXPECT_EQ(em.toString(id3.value()), "<http://example.org/65536>");
+
+  // Test values that should NOT encode (bits 10-15 are not all zero)
+  // 1024 = 2^10, binary: 10000000000 (bit 10 is set)
+  auto id4 = em.encode("<http://example.org/1024>");
+  EXPECT_FALSE(id4.has_value());
+
+  // 2048 = 2^11, binary: 100000000000 (bit 11 is set)
+  auto id5 = em.encode("<http://example.org/2048>");
+  EXPECT_FALSE(id5.has_value());
+
+  // 32768 = 2^15, binary: 1000000000000000 (bit 15 is set)
+  auto id6 = em.encode("<http://example.org/32768>");
+  EXPECT_FALSE(id6.has_value());
+
+  // Test combined value: 66559 = 65536 + 1023 (bits 10-15 zero, others set)
+  auto id7 = em.encode("<http://example.org/66559>");
+  ASSERT_TRUE(id7.has_value());
+  EXPECT_EQ(em.toString(id7.value()), "<http://example.org/66559>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, BitPatternAndPlainMixed) {
+  // Create an EncodedIriManager with both plain and bit pattern prefixes
+  EncodedIriManager em;
+  detail::PrefixConfig plainCfg("<http://plain.org/");
+  detail::PrefixConfig bitPatternCfg("<http://bitpattern.org/", 8, 11);
+  em.prefixes_.push_back(plainCfg);
+  em.prefixes_.push_back(bitPatternCfg);
+
+  // Test plain mode
+  auto id1 = em.encode("<http://plain.org/12345>");
+  ASSERT_TRUE(id1.has_value());
+  EXPECT_EQ(em.toString(id1.value()), "<http://plain.org/12345>");
+
+  // Test bit pattern mode with valid value (bits 8-11 zero)
+  // 255 = 2^8 - 1, binary: 11111111 (bits 0-7 set, bits 8-11 zero)
+  auto id2 = em.encode("<http://bitpattern.org/255>");
+  ASSERT_TRUE(id2.has_value());
+  EXPECT_EQ(em.toString(id2.value()), "<http://bitpattern.org/255>");
+
+  // Test bit pattern mode with invalid value (bit 8 set)
+  // 256 = 2^8
+  auto id3 = em.encode("<http://bitpattern.org/256>");
+  EXPECT_FALSE(id3.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, JsonSerializationBackwardCompatibility) {
+  using namespace ::testing;
+
+  // Create an EncodedIriManager with old-style plain prefixes
+  EncodedIriManager em1;
+  em1.prefixes_.emplace_back("<http://example.org/");
+  em1.prefixes_.emplace_back("<http://test.org/");
+
+  // Serialize to JSON
+  nlohmann::json j1;
+  to_json(j1, em1);
+
+  // Deserialize and check
+  EncodedIriManager em2;
+  from_json(j1, em2);
+  EXPECT_EQ(em2.prefixes_.size(), 2);
+  EXPECT_EQ(em2.prefixes_[0].prefix, "<http://example.org/");
+  EXPECT_FALSE(em2.prefixes_[0].isBitPatternMode());
+  EXPECT_EQ(em2.prefixes_[1].prefix, "<http://test.org/");
+  EXPECT_FALSE(em2.prefixes_[1].isBitPatternMode());
+
+  // Create an EncodedIriManager with bit pattern prefixes
+  EncodedIriManager em3;
+  em3.prefixes_.emplace_back("<http://bitpattern.org/", 5, 10);
+  em3.prefixes_.emplace_back("<http://plain.org/");
+
+  // Serialize to JSON
+  nlohmann::json j3;
+  to_json(j3, em3);
+
+  // Deserialize and check
+  EncodedIriManager em4;
+  from_json(j3, em4);
+  EXPECT_EQ(em4.prefixes_.size(), 2);
+  EXPECT_EQ(em4.prefixes_[0].prefix, "<http://bitpattern.org/");
+  EXPECT_TRUE(em4.prefixes_[0].isBitPatternMode());
+  auto [bitStart, bitEnd] = em4.prefixes_[0].getBitRange();
+  EXPECT_EQ(bitStart, 5);
+  EXPECT_EQ(bitEnd, 10);
+  EXPECT_EQ(em4.prefixes_[1].prefix, "<http://plain.org/");
+  EXPECT_FALSE(em4.prefixes_[1].isBitPatternMode());
+
+  // Test backward compatibility: old format JSON
+  nlohmann::json oldFormatJson;
+  oldFormatJson["prefixes-with-leading-angle-brackets"] =
+      std::vector<std::string>{"<http://old.org/", "<http://legacy.org/"};
+
+  EncodedIriManager em5;
+  from_json(oldFormatJson, em5);
+  EXPECT_EQ(em5.prefixes_.size(), 2);
+  EXPECT_EQ(em5.prefixes_[0].prefix, "<http://old.org/");
+  EXPECT_FALSE(em5.prefixes_[0].isBitPatternMode());
+  EXPECT_EQ(em5.prefixes_[1].prefix, "<http://legacy.org/");
+  EXPECT_FALSE(em5.prefixes_[1].isBitPatternMode());
+}
+
 }  // namespace
