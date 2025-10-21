@@ -1271,6 +1271,26 @@ GraphPatternOperation Visitor::visitTextSearchQuery(
   return textSearchQuery;
 }
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitExternalValuesQuery(
+    Parser::ServiceGraphPatternContext* ctx,
+    const TripleComponent::Iri& serviceIri) {
+  parsedQuery::ExternalValuesQuery externalValuesQuery;
+
+  try {
+    // Extract the identifier from the service IRI
+    externalValuesQuery.identifier_ =
+        parsedQuery::ExternalValuesQuery::extractIdentifier(
+            serviceIri.toStringRepresentation());
+  } catch (const std::exception& ex) {
+    reportError(ctx->varOrIri(), ex.what());
+  }
+
+  parseBodyOfMagicServiceQuery(externalValuesQuery, ctx, "external values");
+
+  return externalValuesQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
@@ -1300,6 +1320,9 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitSpatialQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitTextSearchQuery(ctx);
+  } else if (ql::starts_with(serviceIri.toStringRepresentation(),
+                             EXTERNAL_VALUES_IRI_PREFIX)) {
+    return visitExternalValuesQuery(ctx, serviceIri);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitNamedCachedResult(serviceIri, ctx);

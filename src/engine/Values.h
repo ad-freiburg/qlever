@@ -16,6 +16,7 @@ class Values : public Operation {
  private:
   std::vector<float> multiplicities_;
 
+ protected:
   SparqlValues parsedValues_;
 
  public:

@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/container/inlined_vector.h>
 
+#include "engine/ExternallySpecifiedValues.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
@@ -729,6 +730,32 @@ std::unique_ptr<Operation> Operation::clone() const {
   // the cloned operation.
   AD_EXPENSIVE_CHECK(!canResultBeCached() ||
                      getCacheKey() == result->getCacheKey());
+  return result;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::cloneAndGetExternalValues(
+    std::vector<ExternallySpecifiedValues*>& externalValues) {
+  auto result = clone();
+
+  // Check if this operation itself is an ExternallySpecifiedValues
+  if (auto* externalValuesOp = dynamic_cast<ExternallySpecifiedValues*>(result.get())) {
+    externalValues.push_back(externalValuesOp);
+  }
+
+  // Recursively process all children
+  for (auto* child : result->getChildren()) {
+    if (child != nullptr) {
+      // Note: We don't need to collect the result since the children are
+      // already part of the cloned tree. We just need to collect the
+      // ExternallySpecifiedValues pointers.
+      std::vector<ExternallySpecifiedValues*> childExternalValues;
+      child->getOperation()->cloneAndGetExternalValues(childExternalValues);
+      externalValues.insert(externalValues.end(), childExternalValues.begin(),
+                            childExternalValues.end());
+    }
+  }
+
   return result;
 }
 
