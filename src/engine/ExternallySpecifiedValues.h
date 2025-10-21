@@ -20,6 +20,10 @@ class ExternallySpecifiedValues : public Values {
   // Get the identifier of this external values operation
   const std::string& getIdentifier() const { return identifier_; }
 
+  // Update the values stored in this operation. Asserts that the variables
+  // in the new values match the existing variables.
+  void updateValues(parsedQuery::SparqlValues newValues);
+
   // Override to ensure external values are never cached
   bool canResultBeCachedImpl() const override { return false; }
 

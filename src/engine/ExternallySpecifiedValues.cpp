@@ -27,6 +27,19 @@ std::string ExternallySpecifiedValues::getDescriptor() const {
 }
 
 // ____________________________________________________________________________
+void ExternallySpecifiedValues::updateValues(
+    parsedQuery::SparqlValues newValues) {
+  AD_CONTRACT_CHECK(
+      newValues._variables == parsedValues_._variables,
+      absl::StrCat(
+          "Variables in updateValues must match the existing variables. "
+          "Expected: ",
+          parsedValues_.variablesToString(),
+          ", got: ", newValues.variablesToString()));
+  parsedValues_ = std::move(newValues);
+}
+
+// ____________________________________________________________________________
 std::unique_ptr<Operation> ExternallySpecifiedValues::cloneImpl() const {
   return std::make_unique<ExternallySpecifiedValues>(*this);
 }

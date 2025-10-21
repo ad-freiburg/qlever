@@ -3205,6 +3205,12 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
+  // Check that all variables are unique
+  ad_utility::HashSet<Variable> uniqueVars(externalValuesQuery.variables_.begin(),
+                                            externalValuesQuery.variables_.end());
+  AD_CONTRACT_CHECK(uniqueVars.size() == externalValuesQuery.variables_.size(),
+                    "Variables in external values query must be unique");
+
   // Create an ExternallySpecifiedValues operation with empty values initially
   parsedQuery::SparqlValues emptyValues;
   emptyValues._variables = externalValuesQuery.variables_;

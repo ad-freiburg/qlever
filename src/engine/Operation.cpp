@@ -734,29 +734,19 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Operation::cloneAndGetExternalValues(
+void Operation::getExternalValues(
     std::vector<ExternallySpecifiedValues*>& externalValues) {
-  auto result = clone();
-
   // Check if this operation itself is an ExternallySpecifiedValues
-  if (auto* externalValuesOp = dynamic_cast<ExternallySpecifiedValues*>(result.get())) {
+  if (auto* externalValuesOp = dynamic_cast<ExternallySpecifiedValues*>(this)) {
     externalValues.push_back(externalValuesOp);
   }
 
   // Recursively process all children
-  for (auto* child : result->getChildren()) {
+  for (auto* child : getChildren()) {
     if (child != nullptr) {
-      // Note: We don't need to collect the result since the children are
-      // already part of the cloned tree. We just need to collect the
-      // ExternallySpecifiedValues pointers.
-      std::vector<ExternallySpecifiedValues*> childExternalValues;
-      child->getOperation()->cloneAndGetExternalValues(childExternalValues);
-      externalValues.insert(externalValues.end(), childExternalValues.begin(),
-                            childExternalValues.end());
+      child->getOperation()->getExternalValues(externalValues);
     }
   }
-
-  return result;
 }
 
 // _____________________________________________________________________________

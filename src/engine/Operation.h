@@ -345,9 +345,9 @@ class Operation {
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
 
-  // Clone this operation and collect all ExternallySpecifiedValues operations
-  // in the cloned tree. This allows external modification of the values.
-  std::unique_ptr<Operation> cloneAndGetExternalValues(
+  // Recursively collect all ExternallySpecifiedValues operations in this
+  // operation tree. This allows external modification of the values.
+  void getExternalValues(
       std::vector<ExternallySpecifiedValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
