@@ -148,7 +148,20 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
+    // This can still leave some QueueWords in the buffer.
     writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
+  }
+  // If last words have not been written yet, write them
+  if (currentWord_.has_value()) {
+    auto& word = currentWord_.value();
+    writeAndGetEqualWordIds(word, wordCallback);
+    // Write pair of local and global IDs to buffer.
+    std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
+    for (const auto& idPair : word.partialIds_) {
+      writeBuffer.emplace_back(idPair.fileId_,
+                               std::pair{idPair.localIndex_, word.targetId_});
+    }
+    doActualWrite(writeBuffer);
   }
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
@@ -168,6 +181,13 @@ CPP_template_def(typename C, typename L)(
                            ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
+  // Used to retrieve the next word once the old `EqualWords` have been written
+  // or there have not been `EqualWords` before.
+  auto getNewCurrentWord = [](const QueueWord& queueWord) {
+    return EqualWords(queueWord.iriOrLiteral(), queueWord.isExternal(),
+                      queueWord.partialFileId_, queueWord.id());
+  };
+
   // Smaller grained buffer for the actual inner write.
   auto bufSize = bufferSize_ / 5;
   std::future<void> writeFut;
@@ -176,25 +196,54 @@ CPP_template_def(typename C, typename L)(
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
-    // Process the word and update metadata
-    processQueueWord(top, wordCallback, lessThan, progressBar);
+    if (!currentWord_.has_value()) {
+      currentWord_ = getNewCurrentWord(top);
+      continue;
+    }
+    auto& word = currentWord_.value();
+    // If the same word, add to EqualWords
+    if (word.iriOrLiteral_ == top.iriOrLiteral()) {
+      word.isExternal_ = word.isExternal_ || top.isExternal();
+      word.partialIds_.emplace_back(top.partialFileId_, top.id());
+    } else {
+      // Here code only gets executed if a new iriOrLiteral is seen
 
-    // Get the target ID for the processed word
-    Id targetId = getTargetIdForLastComponent();
-
-    // Write pair of local and global ID to buffer.
-    writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
-
-    if (writeBuffer.size() >= bufSize) {
-      auto task = [this, buffer = std::move(writeBuffer)]() {
-        this->doActualWrite(buffer);
-      };
-      if (writeFut.valid()) {
-        writeFut.get();
+      // Dummy values for isExternal and index can be used since
+      // lessThan only extracts iriOrLiteral_
+      if (!lessThan(TripleComponentWithIndex{currentWord_.value().iriOrLiteral_,
+                                             false, 0},
+                    top.entry_)) {
+        AD_LOG_WARN << "Total vocabulary order violated for "
+                    << currentWord_->iriOrLiteral_ << " and "
+                    << top.iriOrLiteral() << std::endl;
       }
-      writeFut = std::async(task);
-      writeBuffer.clear();
-      writeBuffer.reserve(bufSize);
+
+      // TODO<optimization> If we aim to further speed this up, we could
+      // order all the write requests to _outfile _externalOutfile and all the
+      // idVecs to have a more useful external access pattern.
+
+      writeAndGetEqualWordIds(word, wordCallback);
+      // Write pair of local and global IDs to buffer.
+      for (const auto& idPair : word.partialIds_) {
+        writeBuffer.emplace_back(idPair.fileId_,
+                                 std::pair{idPair.localIndex_, word.targetId_});
+        if (writeBuffer.size() >= bufSize) {
+          auto task = [this, buffer = std::move(writeBuffer)]() {
+            this->doActualWrite(buffer);
+          };
+          if (writeFut.valid()) {
+            writeFut.get();
+          }
+          writeFut = std::async(task);
+          writeBuffer.clear();
+          writeBuffer.reserve(bufSize);
+        }
+      }
+      if (progressBar.update()) {
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+      }
+      // Set new currentWord_ since old have been written
+      currentWord_ = getNewCurrentWord(top);
     }
   }
 
@@ -214,6 +263,22 @@ inline void VocabularyMerger::doActualWrite(
     idMaps_[id].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
   }
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
+    writeAndGetEqualWordIds(EqualWords& equalWords, C& wordCallback) {
+  equalWords.targetId_ = [this, &equalWords, &wordCallback]() {
+    if (equalWords.isBlankNode()) {
+      return Id::makeFromBlankNodeIndex(
+          BlankNodeIndex::make(metaData_.getNextBlankNodeIndex()));
+    } else {
+      auto index =
+          wordCallback(equalWords.iriOrLiteral_, equalWords.isExternal_);
+      metaData_.addWord(equalWords.iriOrLiteral_, index);
+      return Id::makeFromVocabIndex(VocabIndex::make(index));
+    }
+  }();
 }
 
 // ____________________________________________________________________________
@@ -252,59 +317,6 @@ inline auto VocabularyMerger::makeBatchVocabGenerator(
         infile >> val;
         return QueueWord{std::move(val), batchIndex};
       }};
-}
-
-// ____________________________________________________________________________
-// Helper: Process a queue word and update metadata/mappings.
-// Returns true if this is a new unique word.
-template <typename C, typename L>
-bool VocabularyMerger::processQueueWord(const QueueWord& word, C& wordCallback,
-                                        const L& lessThan,
-                                        ad_utility::ProgressBar& progressBar)
-    requires WordCallback<C> && ranges::predicate<L, TripleComponentWithIndex,
-                                                  TripleComponentWithIndex> {
-  bool isNewWord = !lastTripleComponent_.has_value() ||
-                   word.iriOrLiteral() != lastTripleComponent_->iriOrLiteral();
-
-  if (isNewWord) {
-    if (lastTripleComponent_.has_value() &&
-        !lessThan(*lastTripleComponent_, word.entry_)) {
-      AD_LOG_WARN << "Vocabulary order violated for "
-                  << lastTripleComponent_->iriOrLiteral() << " and "
-                  << word.iriOrLiteral() << std::endl;
-    }
-    lastTripleComponent_ = TripleComponentWithIndex{
-        word.iriOrLiteral(), word.isExternal(), metaData_.numWordsTotal()};
-
-    // Write the new word to the vocabulary.
-    auto& nextWord = lastTripleComponent_.value();
-    if (nextWord.isBlankNode()) {
-      nextWord.index_ = metaData_.getNextBlankNodeIndex();
-    } else {
-      nextWord.index_ =
-          wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-      metaData_.addWord(word.iriOrLiteral(), nextWord.index_);
-    }
-    if (progressBar.update()) {
-      AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-    }
-  } else {
-    // If a word appears with different values for `isExternal`, externalize it.
-    bool& external = lastTripleComponent_->isExternal();
-    external = external || word.isExternal();
-  }
-
-  return isNewWord;
-}
-
-// ____________________________________________________________________________
-// Helper: Compute the target ID for the last processed triple component.
-inline Id VocabularyMerger::getTargetIdForLastComponent() const {
-  AD_CONTRACT_CHECK(lastTripleComponent_.has_value());
-  const auto& word = lastTripleComponent_.value();
-  return word.isBlankNode()
-             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
 }
 
 // ____________________________________________________________________________
@@ -376,18 +388,50 @@ CPP_template_def(typename C, typename L)(
         std::vector<IdMapWriter>& batchToGlobalIdMaps) {
   AD_LOG_TIMING << "Start writing a batch of merged words (two-stage)\n";
 
+  // Used to retrieve the next word once the old `EqualWords` have been written
+  // or there have not been `EqualWords` before.
+  auto getNewCurrentWord = [](const QueueWord& queueWord) {
+    return EqualWords(queueWord.iriOrLiteral(), queueWord.isExternal(),
+                      queueWord.partialFileId_, queueWord.id());
+  };
+
   for (auto& top : buffer) {
-    // Process the word and update metadata
-    processQueueWord(top, wordCallback, lessThan, progressBar);
+    if (!currentWord_.has_value()) {
+      currentWord_ = getNewCurrentWord(top);
+      continue;
+    }
+    auto& word = currentWord_.value();
+    // If the same word, add to EqualWords
+    if (word.iriOrLiteral_ == top.iriOrLiteral()) {
+      word.isExternal_ = word.isExternal_ || top.isExternal();
+      word.partialIds_.emplace_back(top.partialFileId_, top.id());
+    } else {
+      // Here code only gets executed if a new iriOrLiteral is seen
 
-    // Get the target ID for the processed word
-    Id targetId = getTargetIdForLastComponent();
+      // Dummy values for isExternal and index can be used since
+      // lessThan only extracts iriOrLiteral_
+      if (!lessThan(TripleComponentWithIndex{currentWord_.value().iriOrLiteral_,
+                                             false, 0},
+                    top.entry_)) {
+        AD_LOG_WARN << "Total vocabulary order violated for "
+                    << currentWord_->iriOrLiteral_ << " and "
+                    << top.iriOrLiteral() << std::endl;
+      }
 
-    // Write to the batch-to-global ID map (batch index comes from
-    // partialFileId_)
-    size_t batchIdx = top.partialFileId_;
-    batchToGlobalIdMaps[batchIdx].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
+      writeAndGetEqualWordIds(word, wordCallback);
+      // Write to batch-to-global ID maps (batch index comes from partialFileId_)
+      for (const auto& idPair : word.partialIds_) {
+        size_t batchIdx = idPair.fileId_;
+        batchToGlobalIdMaps[batchIdx].push_back(
+            {Id::makeFromVocabIndex(VocabIndex::make(idPair.localIndex_)),
+             word.targetId_});
+      }
+      if (progressBar.update()) {
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+      }
+      // Set new currentWord_ since old have been written
+      currentWord_ = getNewCurrentWord(top);
+    }
   }
 }
 
@@ -570,46 +614,75 @@ size_t VocabularyMerger::mergeSingleBatch(const std::string& basename,
       setupParallelMerge(std::move(generators), lessThanForQueue, memoryToUse);
 
   size_t batchLocalId = 0;
-  std::optional<TripleComponentWithIndex> lastComponent = std::nullopt;
+  struct BatchEqualWords {
+    std::string iriOrLiteral_;
+    bool isExternal_;
+    size_t batchLocalId_;
+    struct PartialIds {
+      size_t fileId_;
+      size_t localIndex_;
+    };
+    std::vector<PartialIds> partialIds_;
+
+    BatchEqualWords(std::string iriOrLiteral, bool isExternal,
+                    size_t fileId, size_t localIndex)
+        : iriOrLiteral_(std::move(iriOrLiteral)),
+          isExternal_(isExternal),
+          partialIds_({{fileId, localIndex}}) {}
+  };
+  std::optional<BatchEqualWords> currentBatchWord = std::nullopt;
 
   // Buffer for writing
   ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
   byteBuffer.reserve(10'000'000);
 
-  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
-    // Check if this is a new unique word
-    bool isNewWord =
-        !lastComponent.has_value() ||
-        currentWord.iriOrLiteral() != lastComponent->iriOrLiteral();
+  auto writeCurrentBatchWord = [&]() {
+    if (!currentBatchWord.has_value()) return;
+    auto& word = currentBatchWord.value();
+    word.batchLocalId_ = batchLocalId++;
 
-    if (isNewWord) {
-      if (lastComponent.has_value() &&
-          !lessThan(*lastComponent, currentWord.entry_)) {
-        AD_LOG_WARN << "Batch vocabulary order violated for "
-                    << lastComponent->iriOrLiteral() << " and "
-                    << currentWord.iriOrLiteral() << std::endl;
-      }
-      lastComponent = TripleComponentWithIndex{
-          currentWord.iriOrLiteral(), currentWord.isExternal(), batchLocalId};
+    // Write to batch vocabulary file
+    byteBuffer << word.iriOrLiteral_;
+    byteBuffer << word.isExternal_;
+    byteBuffer << word.batchLocalId_;
 
-      // Write to batch vocabulary file
-      byteBuffer << lastComponent->iriOrLiteral_;
-      byteBuffer << lastComponent->isExternal();
-      byteBuffer << batchLocalId;
+    // Write to internal ID maps
+    for (const auto& idPair : word.partialIds_) {
+      size_t internalMapIndex = idPair.fileId_ - startFile;
+      internalIdMaps[internalMapIndex].push_back(
+          {Id::makeFromVocabIndex(VocabIndex::make(idPair.localIndex_)),
+           Id::makeFromVocabIndex(VocabIndex::make(word.batchLocalId_))});
+    }
+  };
 
-      ++batchLocalId;
-    } else {
-      // If a word appears with different externalization values, externalize it
-      lastComponent->isExternal() =
-          lastComponent->isExternal() || currentWord.isExternal();
+  for (QueueWord& qword : ql::views::join(mergedWords)) {
+    if (!currentBatchWord.has_value()) {
+      currentBatchWord = BatchEqualWords(qword.iriOrLiteral(), qword.isExternal(),
+                                         qword.partialFileId_, qword.id());
+      continue;
     }
 
-    // Write to internal ID map (original file's local ID -> batch local ID)
-    size_t internalMapIndex = currentWord.partialFileId_ - startFile;
-    internalIdMaps[internalMapIndex].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(currentWord.id())),
-         Id::makeFromVocabIndex(VocabIndex::make(lastComponent->index_))});
+    auto& word = currentBatchWord.value();
+    if (word.iriOrLiteral_ == qword.iriOrLiteral()) {
+      // Same word, merge isExternal flags and add to partialIds
+      word.isExternal_ = word.isExternal_ || qword.isExternal();
+      word.partialIds_.emplace_back(qword.partialFileId_, qword.id());
+    } else {
+      // New word, write the current one first
+      if (!lessThan(TripleComponentWithIndex{word.iriOrLiteral_, false, 0},
+                    qword.entry_)) {
+        AD_LOG_WARN << "Batch vocabulary order violated for "
+                    << word.iriOrLiteral_ << " and "
+                    << qword.iriOrLiteral() << std::endl;
+      }
+      writeCurrentBatchWord();
+      currentBatchWord = BatchEqualWords(qword.iriOrLiteral(), qword.isExternal(),
+                                         qword.partialFileId_, qword.id());
+    }
   }
+
+  // Write the last word
+  writeCurrentBatchWord();
 
   // Write the batch vocabulary file
   uint64_t numWords = batchLocalId;
@@ -714,6 +787,19 @@ auto VocabularyMerger::mergeTwoStage(const std::string& basename,
   if (!sortedBuffer.empty()) {
     writeQueueWordsToIdMapTwoStage(sortedBuffer, wordCallback, lessThan,
                                    progressBar, batchToGlobalIdMaps);
+  }
+
+  // If last words have not been written yet, write them
+  if (currentWord_.has_value()) {
+    auto& word = currentWord_.value();
+    writeAndGetEqualWordIds(word, wordCallback);
+    // Write to batch-to-global ID maps
+    for (const auto& idPair : word.partialIds_) {
+      size_t batchIdx = idPair.fileId_;
+      batchToGlobalIdMaps[batchIdx].push_back(
+          {Id::makeFromVocabIndex(VocabIndex::make(idPair.localIndex_)),
+           word.targetId_});
+    }
   }
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
