@@ -98,16 +98,30 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
-  // A list of IRI prefixes (without angle brackets). IRIs that start with one
-  // of these prefixes, followed by a sequence of a bounded number of digits
-  // are encoded directly in the internal ID. This reduces the size of the
-  // vocabulary (see above) and the time for exporting results involving
-  // such IRIs.
+  // Configuration for encoding IRIs directly into IDs.
+  //
+  // Each entry is either:
+  // - A simple string prefix (without angle brackets) for plain digit encoding
+  // - A tuple of (prefix, bitStart, bitEnd) for bit pattern encoding
+  //
+  // Plain mode: IRIs starting with the prefix followed by digits are encoded.
+  // Bit pattern mode: IRIs with numeric values where bits [bitStart, bitEnd)
+  // are zero get compressed by removing those bits.
+  //
+  // This reduces vocabulary size and improves export performance.
   //
   // NOTE: Read the description of
   // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
   // limitations regarding the correctness of FILTER and ORDER BY.
+  //
+  // Example:
+  //   prefixesForIdEncodedIris_ = {"http://example.org/"};  // plain mode
+  //   prefixesForIdEncodedIrisWithBitPattern_ = {
+  //     {"http://bitpattern.org/", 10, 16}  // bit pattern mode [10, 16)
+  //   };
   std::vector<std::string> prefixesForIdEncodedIris_;
+  std::vector<std::tuple<std::string, size_t, size_t>>
+      prefixesForIdEncodedIrisWithBitPattern_;
 
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index

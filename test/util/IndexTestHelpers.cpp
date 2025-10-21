@@ -189,14 +189,28 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
     if (c.encodedIriManager.has_value()) {
-      // Extract prefixes without angle brackets from the EncodedIriManager
-      std::vector<std::string> prefixes;
-      for (const auto& prefix : c.encodedIriManager.value().prefixes_) {
-        AD_CORRECTNESS_CHECK(ql::starts_with(prefix, '<') &&
-                             !ql::ends_with(prefix, '>'));
-        prefixes.push_back(prefix.substr(1));
+      // Extract prefixes from the EncodedIriManager, handling both plain and
+      // bit pattern modes
+      std::vector<std::string> plainPrefixes;
+      std::vector<std::tuple<std::string, size_t, size_t>> bitPatternPrefixes;
+
+      for (const auto& prefixConfig : c.encodedIriManager.value().prefixes_) {
+        AD_CORRECTNESS_CHECK(ql::starts_with(prefixConfig.prefix, '<') &&
+                             !ql::ends_with(prefixConfig.prefix, '>'));
+        std::string prefixWithoutBracket = prefixConfig.prefix.substr(1);
+
+        if (prefixConfig.isBitPatternMode()) {
+          auto [bitStart, bitEnd] = prefixConfig.getBitRange();
+          bitPatternPrefixes.emplace_back(std::move(prefixWithoutBracket),
+                                          bitStart, bitEnd);
+        } else {
+          plainPrefixes.push_back(std::move(prefixWithoutBracket));
+        }
       }
-      index.getImpl().setPrefixesForEncodedValues(std::move(prefixes));
+
+      index.getImpl().setPrefixesForEncodedValues(std::move(plainPrefixes));
+      index.getImpl().setPrefixesForEncodedValuesWithBitPattern(
+          std::move(bitPatternPrefixes));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {

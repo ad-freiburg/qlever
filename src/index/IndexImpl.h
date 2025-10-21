@@ -275,6 +275,12 @@ class IndexImpl {
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
+  // Set the prefixes with bit patterns for IRIs that will be encoded directly
+  // into the `Id`; see `EncodedIriManager` for details.
+  void setPrefixesForEncodedValuesWithBitPattern(
+      std::vector<std::tuple<std::string, size_t, size_t>>
+          prefixesWithBitPatterns);
+
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
