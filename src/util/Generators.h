@@ -172,11 +172,13 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
 
         // Write the `value` to the `storage` and notify the outer thread that
         // it has to consume it.
-        auto writeValue = [this](auto value) noexcept {
+        auto writeValue = [this, &lock](auto value) noexcept {
           AD_CORRECTNESS_CHECK(state_ == State::Inner);
           storage_ = std::move(value);
           state_ = State::Outer;
+          lock.unlock();
           cv_.notify_one();
+          lock.lock();
         };
 
         // Write the `value`, pass control to the outer thread and wait till it
