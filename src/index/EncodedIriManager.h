@@ -28,17 +28,19 @@ struct PrefixConfig {
   std::string prefix;
 
   // For bit pattern mode: the range of bits that must be zero in the numeric
-  // value (inclusive). If not set, plain digit encoding is used.
+  // value [bitStart, bitEnd) (half-open interval, bitEnd is exclusive).
+  // If not set, plain digit encoding is used.
   std::optional<std::pair<size_t, size_t>> zeroBitRange;
 
   // Default constructor for plain prefix mode
   explicit PrefixConfig(std::string p) : prefix(std::move(p)) {}
 
-  // Constructor for bit pattern mode
+  // Constructor for bit pattern mode. The bit range is [bitStart, bitEnd)
+  // where bitEnd is exclusive.
   PrefixConfig(std::string p, size_t bitStart, size_t bitEnd)
       : prefix(std::move(p)), zeroBitRange(std::make_pair(bitStart, bitEnd)) {
-    AD_CONTRACT_CHECK(bitStart <= bitEnd);
-    AD_CONTRACT_CHECK(bitEnd < 64);
+    AD_CONTRACT_CHECK(bitStart < bitEnd);
+    AD_CONTRACT_CHECK(bitEnd <= 64);
   }
 
   // Check if this is a bit pattern encoding
@@ -74,8 +76,9 @@ struct PrefixConfig {
 // 2. BIT PATTERN MODE (new):
 // For IRIs with numeric values where certain bits are always zero, this mode
 // compresses the value by removing those zero bits. The prefix configuration
-// specifies a bit range [bitStart, bitEnd] that must be all zeros. The value
-// is then stored with those bits removed, allowing more efficient encoding.
+// specifies a bit range [bitStart, bitEnd) (half-open interval) that must be
+// all zeros. The value is then stored with those bits removed, allowing more
+// efficient encoding.
 //
 // An `Id` has 64 bits, of which the `NumBitsTotal` rightmost bits are
 // used for the encoding. The `64 - NumBitsTotal` leftmost bits are ignored when
@@ -303,9 +306,9 @@ class EncodedIriManagerImpl {
 
  private:
   // Encode a number with bit pattern constraints. The numString must parse to
-  // a valid uint64_t, and the bits in the specified range must all be zero.
-  // Returns nullopt if constraints are not met or if the number is too large
-  // to fit after removing the zero bits.
+  // a valid uint64_t, and the bits in the range [bitStart, bitEnd) must all be
+  // zero. Returns nullopt if constraints are not met or if the number is too
+  // large to fit after removing the zero bits.
   std::optional<Id> encodeBitPattern(
       std::string_view numString, size_t prefixIndex,
       std::pair<size_t, size_t> bitRange) const {
@@ -321,17 +324,17 @@ class EncodedIriManagerImpl {
       value = value * 10 + (c - '0');
     }
 
-    // Check that all bits in the specified range are zero
-    for (size_t bit = bitStart; bit <= bitEnd; ++bit) {
+    // Check that all bits in the range [bitStart, bitEnd) are zero
+    for (size_t bit = bitStart; bit < bitEnd; ++bit) {
       if ((value >> bit) & 1) {
         return std::nullopt;
       }
     }
 
     // Remove the zero bits from the value
-    size_t numZeroBits = bitEnd - bitStart + 1;
+    size_t numZeroBits = bitEnd - bitStart;
     uint64_t lowerBits = value & ad_utility::bitMaskForLowerBits(bitStart);
-    uint64_t upperBits = value >> (bitEnd + 1);
+    uint64_t upperBits = value >> bitEnd;
     uint64_t compressedValue = (upperBits << bitStart) | lowerBits;
 
     // Check if the compressed value fits in the available encoding bits
@@ -345,7 +348,8 @@ class EncodedIriManagerImpl {
   }
 
   // Decode a bit pattern encoded value back to the original uint64_t and
-  // append it to the result string.
+  // append it to the result string. The bit range [bitStart, bitEnd) specifies
+  // which bits were removed during encoding.
   static void decodeBitPattern(std::string& result, uint64_t encoded,
                                 std::pair<size_t, size_t> bitRange) {
     auto [bitStart, bitEnd] = bitRange;
@@ -353,7 +357,7 @@ class EncodedIriManagerImpl {
     // Reconstruct the original value by reinserting the zero bits
     uint64_t lowerBits = encoded & ad_utility::bitMaskForLowerBits(bitStart);
     uint64_t upperBits = encoded >> bitStart;
-    uint64_t originalValue = (upperBits << (bitEnd + 1)) | lowerBits;
+    uint64_t originalValue = (upperBits << bitEnd) | lowerBits;
 
     // Convert to decimal string
     result.append(std::to_string(originalValue));

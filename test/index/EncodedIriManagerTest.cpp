@@ -129,15 +129,15 @@ TEST(EncodedIriManager, emptyPrefixes) {
 // _____________________________________________________________________________
 TEST(EncodedIriManager, BitPatternMode) {
   // Create an EncodedIriManager with bit pattern mode
-  // For testing, let's use a simple prefix and specify that bits 10-15 must be
-  // zero
+  // For testing, let's use a simple prefix and specify that bits [10, 16) must
+  // be zero
   EncodedIriManager em;
-  detail::PrefixConfig cfg("<http://example.org/", 10, 15);
+  detail::PrefixConfig cfg("<http://example.org/", 10, 16);
   em.prefixes_.push_back(cfg);
 
-  // Test values that should encode successfully (bits 10-15 are zero)
-  // Value with bits 10-15 all zero: e.g., 1023 (binary: 1111111111, bits 0-9
-  // set)
+  // Test values that should encode successfully (bits [10, 16) are zero)
+  // Value with bits [10, 16) all zero: e.g., 1023 (binary: 1111111111, bits
+  // 0-9 set)
   auto id1 = em.encode("<http://example.org/1023>");
   ASSERT_TRUE(id1.has_value());
   EXPECT_EQ(em.toString(id1.value()), "<http://example.org/1023>");
@@ -147,13 +147,13 @@ TEST(EncodedIriManager, BitPatternMode) {
   ASSERT_TRUE(id2.has_value());
   EXPECT_EQ(em.toString(id2.value()), "<http://example.org/0>");
 
-  // Test value with upper bits set but bits 10-15 zero
-  // 65536 = 2^16, binary: 10000000000000000 (bit 16 set, bits 10-15 zero)
+  // Test value with upper bits set but bits [10, 16) zero
+  // 65536 = 2^16, binary: 10000000000000000 (bit 16 set, bits [10, 16) zero)
   auto id3 = em.encode("<http://example.org/65536>");
   ASSERT_TRUE(id3.has_value());
   EXPECT_EQ(em.toString(id3.value()), "<http://example.org/65536>");
 
-  // Test values that should NOT encode (bits 10-15 are not all zero)
+  // Test values that should NOT encode (bits [10, 16) are not all zero)
   // 1024 = 2^10, binary: 10000000000 (bit 10 is set)
   auto id4 = em.encode("<http://example.org/1024>");
   EXPECT_FALSE(id4.has_value());
@@ -162,11 +162,11 @@ TEST(EncodedIriManager, BitPatternMode) {
   auto id5 = em.encode("<http://example.org/2048>");
   EXPECT_FALSE(id5.has_value());
 
-  // 32768 = 2^15, binary: 1000000000000000 (bit 15 is set)
+  // 32768 = 2^15, binary: 1000000000000000 (bit 15 is set, within [10, 16))
   auto id6 = em.encode("<http://example.org/32768>");
   EXPECT_FALSE(id6.has_value());
 
-  // Test combined value: 66559 = 65536 + 1023 (bits 10-15 zero, others set)
+  // Test combined value: 66559 = 65536 + 1023 (bits [10, 16) zero, others set)
   auto id7 = em.encode("<http://example.org/66559>");
   ASSERT_TRUE(id7.has_value());
   EXPECT_EQ(em.toString(id7.value()), "<http://example.org/66559>");
@@ -177,7 +177,7 @@ TEST(EncodedIriManager, BitPatternAndPlainMixed) {
   // Create an EncodedIriManager with both plain and bit pattern prefixes
   EncodedIriManager em;
   detail::PrefixConfig plainCfg("<http://plain.org/");
-  detail::PrefixConfig bitPatternCfg("<http://bitpattern.org/", 8, 11);
+  detail::PrefixConfig bitPatternCfg("<http://bitpattern.org/", 8, 12);
   em.prefixes_.push_back(plainCfg);
   em.prefixes_.push_back(bitPatternCfg);
 
@@ -186,13 +186,13 @@ TEST(EncodedIriManager, BitPatternAndPlainMixed) {
   ASSERT_TRUE(id1.has_value());
   EXPECT_EQ(em.toString(id1.value()), "<http://plain.org/12345>");
 
-  // Test bit pattern mode with valid value (bits 8-11 zero)
-  // 255 = 2^8 - 1, binary: 11111111 (bits 0-7 set, bits 8-11 zero)
+  // Test bit pattern mode with valid value (bits [8, 12) zero)
+  // 255 = 2^8 - 1, binary: 11111111 (bits 0-7 set, bits [8, 12) zero)
   auto id2 = em.encode("<http://bitpattern.org/255>");
   ASSERT_TRUE(id2.has_value());
   EXPECT_EQ(em.toString(id2.value()), "<http://bitpattern.org/255>");
 
-  // Test bit pattern mode with invalid value (bit 8 set)
+  // Test bit pattern mode with invalid value (bit 8 is set, within [8, 12))
   // 256 = 2^8
   auto id3 = em.encode("<http://bitpattern.org/256>");
   EXPECT_FALSE(id3.has_value());
@@ -222,7 +222,7 @@ TEST(EncodedIriManager, JsonSerializationBackwardCompatibility) {
 
   // Create an EncodedIriManager with bit pattern prefixes
   EncodedIriManager em3;
-  em3.prefixes_.emplace_back("<http://bitpattern.org/", 5, 10);
+  em3.prefixes_.emplace_back("<http://bitpattern.org/", 5, 11);
   em3.prefixes_.emplace_back("<http://plain.org/");
 
   // Serialize to JSON
@@ -237,7 +237,7 @@ TEST(EncodedIriManager, JsonSerializationBackwardCompatibility) {
   EXPECT_TRUE(em4.prefixes_[0].isBitPatternMode());
   auto [bitStart, bitEnd] = em4.prefixes_[0].getBitRange();
   EXPECT_EQ(bitStart, 5);
-  EXPECT_EQ(bitEnd, 10);
+  EXPECT_EQ(bitEnd, 11);
   EXPECT_EQ(em4.prefixes_[1].prefix, "<http://plain.org/");
   EXPECT_FALSE(em4.prefixes_[1].isBitPatternMode());
 
