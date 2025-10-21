@@ -92,33 +92,42 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
     ad_utility::JThread thread_;
     std::mutex mutex_;
     std::condition_variable cv_;
+    // Only one of the threads can run at the same time. The semantics are
+    // `Inner` -> The inner thread that runs the callback has to produce the
+    // next value. `Outer` -> The outer thread that is the generator has to
+    // yield the next value. `OuterIsFinished` -> The generator is finished and
+    // will read no further values from the inner thread, the inner thread has
+    // to stop.
+    enum struct State { Inner, Outer, OuterIsFinished };
+    State state_ = State::Inner;
     // Used to pass the produced values from the inner thread to the generator.
     // `monostate` means that the inner thread is finished and there will be no
     // further values. `exception_ptr` means that the inner thread has
     // encountered an exception, which is then rethrown by the outer generator.
     std::variant<std::monostate, T, std::exception_ptr> storage_;
-    // Only one of the threads can run at the same time. The semantics are
-    // `Inner` -> The inner thread that runs the callback has to produce the
-    // next value. `Outer` -> The outer thread that is the generator has to
-    // yield the next value. value. `OuterIsFinished` -> The generator is
-    // finished and will read no further values from the inner thread, the inner
-    // thread has to stop.
-    bool outerReady_ = false;
-    bool innerReady_ = false;
-    bool finished_ = false;
 
    public:
     explicit CallbackToRangeAdapter(F functionWithCallback)
         : functionWithCallback_(std::move(functionWithCallback)) {}
 
     std::optional<T> get() override {
-      if (!thread_.joinable()) startThread();
-
       std::unique_lock lock(mutex_);
-      outerReady_ = true;
-      cv_.notify_one();
-      cv_.wait(lock, [this] { return innerReady_ || finished_; });
-      innerReady_ = false;
+
+      if (!thread_.joinable()) {
+        lock.unlock();
+        startThread();
+      } else {
+        // Signal the inner thread to produce the next value.
+        state_ = State::Inner;
+        lock.unlock();
+        cv_.notify_one();
+      }
+
+      // Wait for the inner thread to produce a value.
+      lock.lock();
+      cv_.wait(lock, [this] { return state_ != State::Inner; });
+
+      if (state_ == State::OuterIsFinished) return std::nullopt;
 
       return std::visit(
           [](auto& value) -> std::optional<T> {
@@ -138,7 +147,7 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
     ~CallbackToRangeAdapter() {
       {
         std::unique_lock lock(mutex_);
-        finished_ = true;
+        state_ = State::OuterIsFinished;
       }
       cv_.notify_one();
     }
@@ -149,26 +158,33 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
       thread_ = ad_utility::JThread{[this]() {
         struct FinishedBecauseOuterIsFinishedException {};
 
+        std::unique_lock lock(mutex_);
+        AD_CORRECTNESS_CHECK(state_ == State::Inner);
+
+        // Wait for the outer thread to consume the last value and return
+        // control to the inner thread.
+        auto wait = [this, &lock]() {
+          cv_.wait(lock, [this] { return state_ != State::Outer; });
+          if (state_ == State::OuterIsFinished) {
+            throw FinishedBecauseOuterIsFinishedException{};
+          }
+        };
+
         // Write the `value` to the `storage` and notify the outer thread that
         // it has to consume it.
-        auto writeValue = [this](auto value) {
-          std::unique_lock lock(mutex_);
-          cv_.wait(lock, [this] { return outerReady_ || finished_; });
-          if (finished_) throw FinishedBecauseOuterIsFinishedException{};
-          AD_CORRECTNESS_CHECK(outerReady_ && !innerReady_);
+        auto writeValue = [this](auto value) noexcept {
+          AD_CORRECTNESS_CHECK(state_ == State::Inner);
           storage_ = std::move(value);
-          outerReady_ = false;
-          innerReady_ = true;
+          state_ = State::Outer;
           cv_.notify_one();
         };
 
         // Write the `value`, pass control to the outer thread and wait till it
         // is our turn again.
         auto writeValueAndWait = [&](T value) {
+          AD_CORRECTNESS_CHECK(state_ == State::Inner);
           writeValue(std::move(value));
-          std::unique_lock lock(mutex_);
-          cv_.wait(lock, [this] { return outerReady_ || finished_; });
-          if (finished_) throw FinishedBecauseOuterIsFinishedException{};
+          wait();
         };
 
         try {
@@ -184,17 +200,13 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
           return;
         } catch (...) {
           // The function has created an exception, pass it to the outer thread.
-          try {
-            writeValue(std::current_exception());
-          } catch (const FinishedBecauseOuterIsFinishedException&) {
-            return;
-          }
+          writeValue(std::current_exception());
         }
       }};
     }
   };
 
-  return InputRangeTypeErased<T>{std::make_unique<CallbackToRangeAdapter>(
+  return InputRangeTypeErased{std::make_unique<CallbackToRangeAdapter>(
       std::move(functionWithCallback))};
 }
 };  // namespace ad_utility
