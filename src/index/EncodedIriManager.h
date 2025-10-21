@@ -183,10 +183,10 @@ class EncodedIriManagerImpl {
   // 4. There are more digits than fit into `NumBitsEncoding` (4 bits / digit)
   std::optional<Id> encode(std::string_view repr) const {
     // Find the matching prefix.
-    auto it =
-        ql::ranges::find_if(prefixes_, [&repr](const detail::PrefixConfig& cfg) {
-          return ql::starts_with(repr, cfg.prefix);
-        });
+    auto it = ql::ranges::find_if(prefixes_,
+                                  [&repr](const detail::PrefixConfig& cfg) {
+                                    return ql::starts_with(repr, cfg.prefix);
+                                  });
     if (it == prefixes_.end()) {
       return std::nullopt;
     }
@@ -276,10 +276,10 @@ class EncodedIriManagerImpl {
     if (j.contains(jsonKeyExtended_)) {
       const auto& configs = j[jsonKeyExtended_];
       for (const auto& item : configs) {
-        std::string prefix = item["prefix"];
+        std::string prefix = static_cast<std::string>(item["prefix"]);
         if (item.contains("zeroBitStart") && item.contains("zeroBitEnd")) {
-          size_t bitStart = item["zeroBitStart"];
-          size_t bitEnd = item["zeroBitEnd"];
+          size_t bitStart = static_cast<size_t>(item["zeroBitStart"]);
+          size_t bitEnd = static_cast<size_t>(item["zeroBitEnd"]);
           encodedIriManager.prefixes_.emplace_back(std::move(prefix), bitStart,
                                                    bitEnd);
         } else {
@@ -288,7 +288,8 @@ class EncodedIriManagerImpl {
       }
     } else if (j.contains(jsonKey_)) {
       // Fall back to old format for backward compatibility
-      std::vector<std::string> oldPrefixes = j[jsonKey_];
+      std::vector<std::string> oldPrefixes =
+          static_cast<std::vector<std::string>>(j[jsonKey_]);
       for (auto& prefix : oldPrefixes) {
         encodedIriManager.prefixes_.emplace_back(std::move(prefix));
       }
@@ -309,9 +310,9 @@ class EncodedIriManagerImpl {
   // a valid uint64_t, and the bits in the range [bitStart, bitEnd) must all be
   // zero. Returns nullopt if constraints are not met or if the number is too
   // large to fit after removing the zero bits.
-  std::optional<Id> encodeBitPattern(
-      std::string_view numString, size_t prefixIndex,
-      std::pair<size_t, size_t> bitRange) const {
+  std::optional<Id> encodeBitPattern(std::string_view numString,
+                                     size_t prefixIndex,
+                                     std::pair<size_t, size_t> bitRange) const {
     auto [bitStart, bitEnd] = bitRange;
 
     // Parse the numeric string to uint64_t
@@ -332,7 +333,6 @@ class EncodedIriManagerImpl {
     }
 
     // Remove the zero bits from the value
-    size_t numZeroBits = bitEnd - bitStart;
     uint64_t lowerBits = value & ad_utility::bitMaskForLowerBits(bitStart);
     uint64_t upperBits = value >> bitEnd;
     uint64_t compressedValue = (upperBits << bitStart) | lowerBits;
@@ -351,7 +351,7 @@ class EncodedIriManagerImpl {
   // append it to the result string. The bit range [bitStart, bitEnd) specifies
   // which bits were removed during encoding.
   static void decodeBitPattern(std::string& result, uint64_t encoded,
-                                std::pair<size_t, size_t> bitRange) {
+                               std::pair<size_t, size_t> bitRange) {
     auto [bitStart, bitEnd] = bitRange;
 
     // Reconstruct the original value by reinserting the zero bits
