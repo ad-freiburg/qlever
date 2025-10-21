@@ -47,8 +47,6 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     tracer.beginTrace("locateTriples");
     auto& perm = index_.getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        // TODO<qup42>: replace with `getAugmentedMetadata` once integration
-        //  is done
         triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
@@ -192,10 +190,6 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   });
   tracer.endTrace("removeInverseTriples");
   tracer.beginTrace("updateMetadata");
-  // Manually update the block metadata, because `eraseTripleInAllPermutations`
-  // does not update them for performance reason.
-  ql::ranges::for_each(locatedTriples(),
-                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
   tracer.endTrace("updateMetadata");
   tracer.beginTrace("locatedAndAdd");
 
@@ -321,6 +315,12 @@ void DeltaTriples::setOriginalMetadata(
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::updateAugmentedMetadata() {
+  ql::ranges::for_each(locatedTriples(),
+                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
 }
 
 // _____________________________________________________________________________
