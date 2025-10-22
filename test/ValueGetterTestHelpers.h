@@ -207,10 +207,8 @@ using namespace valueGetterTestHelpers;
 using namespace geoInfoTestHelpers;
 
 // Helper class to test different value getters
-CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
-    requires InvocableWithExactReturnType<
-        CheckFunction, void, std::optional<ReturnType>,
-        std::optional<ReturnType>>) class ValueGetterTester {
+template <typename ValueGetter, typename ReturnType>
+class ValueGetterTester {
  private:
   // Test knowledge graph that contains all used literals and iris.
   std::string testTtl_ =
@@ -222,14 +220,14 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
       " \"POLYGON(2 4, 4 4, 4 2, 2 "
       "2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
-  CheckFunction checkFunction_{};
 
  public:
   // Helper that constructs a local vocab, inserts the literal and passes the
   // `LocalVocabIndex` as a `ValueId` to the `ValueGetter`.
-  void checkFromLocalVocab(std::string literal,
-                           std::optional<ReturnType> expected,
-                           Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  void checkFromLocalVocab(
+      std::string literal,
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     // Empty knowledge graph, so everything needs to be in the local vocab.
@@ -242,12 +240,13 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
-    checkFunction_(res, expected);
+    EXPECT_THAT(res, expected);
   }
 
   // Helper that tests the `ValueGetter` using the `ValueId` of a
   // `VocabIndex` for a given string in the example knowledge graph.
-  void checkFromVocab(std::string literal, std::optional<ReturnType> expected,
+  void checkFromVocab(std::string literal,
+                      ::testing::Matcher<std::optional<ReturnType>> expected,
                       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
@@ -257,22 +256,24 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
         << "Given test literal is not contained in test dataset";
     auto id = ValueId::makeFromVocabIndex(idx);
     auto res = getter(id, &testContext.context);
-    checkFunction_(res, expected);
+    EXPECT_THAT(res, expected);
   }
 
   // Helper that tests the `ValueGetter` for any custom `ValueId`
-  void checkFromValueId(ValueId input, std::optional<ReturnType> expected,
+  void checkFromValueId(ValueId input,
+                        ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     auto res = getter(input, &testContext.context);
-    checkFunction_(res, expected);
+    EXPECT_THAT(res, expected);
   }
 
   // Helper that tests the `ValueGetter` for any literal (or IRI) directly
   // passed to it
-  void checkFromLiteral(std::string literal, std::optional<ReturnType> expected,
+  void checkFromLiteral(std::string literal,
+                        ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
@@ -281,12 +282,13 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
             literal);
     auto res = getter(litOrIri, &testContext.context);
-    checkFunction_(res, expected);
+    EXPECT_THAT(res, expected);
   }
 
   // Run the same test case on vocab, local vocab and literal
   void checkFromLocalAndNormalVocabAndLiteral(
-      std::string wktInput, std::optional<ReturnType> expected,
+      std::string wktInput,
+      ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     checkFromVocab(wktInput, expected);
@@ -295,22 +297,32 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
   }
 };
 
-auto checkFuncGeoInfo = [](auto a, auto b) { checkGeoInfo(a, b); };
+MATCHER_P(GeoInfoMatcher, expected,
+          "Checks a GeometryInfo object using checkGeoInfo") {
+  checkGeoInfo(arg, expected);
+  return true;  // `checkGeoInfo` reports errors on its own
+}
 using GeoInfoTester = ValueGetterTester<
     sparqlExpression::detail::GeometryInfoValueGetter<ad_utility::GeometryInfo>,
-    ad_utility::GeometryInfo, decltype(checkFuncGeoInfo)>;
+    ad_utility::GeometryInfo>;
 
-auto checkFuncGeoPointOrWkt = [](auto a, auto b) { checkGeoPointOrWkt(a, b); };
+MATCHER_P(GeoPointOrWktMatcher, expected,
+          "Checks a GeoPointOrWkt using checkGeoPointOrWkt") {
+  checkGeoPointOrWkt(arg, expected);
+  return true;  // `checkGeoPointOrWkt` reports errors on its own
+}
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
-                      GeoPointOrWkt, decltype(checkFuncGeoPointOrWkt)>;
+                      GeoPointOrWkt>;
 
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(wktInput,
-                                                               wktInput);
+  // We input `wktInput` twice because we expect the value getter to return the
+  // wkt string if it is given a plain wkt string.
+  GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(
+      wktInput, GeoPointOrWktMatcher(wktInput));
 }
 
 }  // namespace geoInfoVGTestHelpers
