@@ -6,11 +6,12 @@
 #ifndef QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
-#include <concepts>
 #include <cstdint>
 #include <string>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
@@ -47,7 +48,7 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    bool operator==(const UNDEF&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF)
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>
@@ -70,17 +71,17 @@ class TripleComponent {
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
   CPP_template(typename FirstArg, typename... Args)(
-      requires CPP_NOT(
-          std::same_as<ql::remove_cvref_t<FirstArg>, TripleComponent>) &&
+      requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
+                                             TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Storing variables and literals as strings is deprecated. The following
       // checks help find places, where this is accidentally still done.
-      AD_CONTRACT_CHECK(!getString().starts_with("?"));
-      AD_CONTRACT_CHECK(!getString().starts_with('"'));
-      AD_CONTRACT_CHECK(!getString().starts_with("'"));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), "?"));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), '"'));
+      AD_CONTRACT_CHECK(!ql::starts_with(getString(), "'"));
     }
   }
 
@@ -125,15 +126,15 @@ class TripleComponent {
   }
 
   /// Equality comparison between two `TripleComponent`s.
-  bool operator==(const TripleComponent&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(TripleComponent, _variant)
 
   /// Hash value for `TripleComponent` object.
-  /// Note: It is important to use `std::same_as` because otherwise this
-  /// overload would also be eligible for the contained types that are
+  /// Note: It is important to use `ql::concepts::same_as` because otherwise
+  /// this overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  CPP_template(typename H,
-               typename TC)(requires std::same_as<TC, TripleComponent>) friend H
+  CPP_template(typename H, typename TC)(
+      requires ql::concepts::same_as<TC, TripleComponent>) friend H
       AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
@@ -286,9 +287,9 @@ class TripleComponent {
   void checkThatStringIsValid() {
     if (isString()) {
       const auto& s = getString();
-      AD_CONTRACT_CHECK(!s.starts_with('?'));
-      AD_CONTRACT_CHECK(!s.starts_with('"'));
-      AD_CONTRACT_CHECK(!s.starts_with('\''));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '?'));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '"'));
+      AD_CONTRACT_CHECK(!ql::starts_with(s, '\''));
     }
   }
 };

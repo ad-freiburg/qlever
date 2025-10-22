@@ -47,7 +47,7 @@ class LoadTest : public ::testing::Test {
          std::string contentType = "text/turtle",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> SendRequestType {
+             AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     httpClientTestHelpers::RequestMatchers matchers{
         .method_ = testing::Eq(boost::beast::http::verb::get),
         .postData_ = testing::Eq(""),
@@ -85,10 +85,9 @@ TEST_F(LoadTest, computeResult) {
   auto testSilentBehavior = [this](parsedQuery::Load pq,
                                    SendRequestType sendFunc,
                                    ad_utility::source_location loc =
-                                       ad_utility::source_location::current()) {
-    auto impl = [this, &pq,
-                 &sendFunc](ad_utility::source_location loc =
-                                ad_utility::source_location::current()) {
+                                       AD_CURRENT_SOURCE_LOC()) {
+    auto impl = [this, &pq, &sendFunc](ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
@@ -100,7 +99,8 @@ TEST_F(LoadTest, computeResult) {
     // Not silent, but syntax test mode is activated.
     pq.silent_ = false;
     {
-      auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
       impl();
     }
     // Silent, but syntax test mode is deactivated.
@@ -112,8 +112,7 @@ TEST_F(LoadTest, computeResult) {
       [this, testSilentBehavior](
           parsedQuery::Load pq, SendRequestType sendFunc,
           const testing::Matcher<std::string>& expectedError,
-          ad_utility::source_location loc =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
@@ -124,8 +123,7 @@ TEST_F(LoadTest, computeResult) {
   auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
              const testing::Matcher<std::string>& expectedError,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
 
@@ -139,8 +137,7 @@ TEST_F(LoadTest, computeResult) {
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
-             ad_utility::source_location loc =
-                 ad_utility::source_location::current()) {
+             ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
 
         Load load{
@@ -243,7 +240,8 @@ TEST_F(LoadTest, computeResult) {
 
 TEST_F(LoadTest, getCacheKey) {
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -260,7 +258,9 @@ TEST_F(LoadTest, getCacheKey) {
                 testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
 
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
@@ -280,7 +280,9 @@ TEST_F(LoadTest, clone) {
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
+            false);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
@@ -289,7 +291,8 @@ TEST_F(LoadTest, clone) {
   }
   // When the results are cached, we get decoupled object that is the same.
   {
-    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
     auto clone = load.clone();
     ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));

@@ -8,6 +8,8 @@
 #include <atomic>
 
 #include "backports/algorithm.h"
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
@@ -26,7 +28,8 @@ class alignas(16) LocalVocabEntry
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
-  using IdProxy = ad_utility::TypedIndex<uint64_t, "LveIdProxy">;
+  static constexpr std::string_view proxyTag = "LveIdProxy";
+  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
 
  private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
@@ -45,9 +48,9 @@ class alignas(16) LocalVocabEntry
   using Base::Base;
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  explicit(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  explicit(false) LocalVocabEntry(Base&& base) noexcept
-      : Base{std::move(base)} {}
+  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
+  QL_EXPLICIT(false)
+  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
@@ -86,9 +89,11 @@ class alignas(16) LocalVocabEntry
   // cached `position` if it has previously been computed for both of the
   // entries, but it is currently questionable whether this gains much
   // performance.
-  auto operator<=>(const LocalVocabEntry& rhs) const {
-    return static_cast<const Base&>(*this) <=> static_cast<const Base&>(rhs);
+  auto compareThreeWay(const LocalVocabEntry& rhs) const {
+    return ql::compareThreeWay(static_cast<const Base&>(*this),
+                               static_cast<const Base&>(rhs));
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
  private:
   // The expensive case of looking up the position in vocab.

@@ -66,8 +66,8 @@ CPP_requires(writeSerializerRequires,
              requires(S s, const char* ptr, size_t numBytes)(
                  s.serializeBytes(ptr, numBytes),
                  typename std::decay_t<S>::SerializerType{},
-                 concepts::requires_<std::same_as<typename S::SerializerType,
-                                                  WriteSerializerTag>>));
+                 concepts::requires_<ql::concepts::same_as<
+                     typename S::SerializerType, WriteSerializerTag>>));
 
 template <typename S>
 CPP_concept WriteSerializer = CPP_requires_ref(writeSerializerRequires, S);
@@ -79,8 +79,8 @@ CPP_requires(readSerializerRequires,
              requires(S s, char* ptr, size_t numBytes)(
                  s.serializeBytes(ptr, numBytes),
                  typename std::decay_t<S>::SerializerType{},
-                 concepts::requires_<std::same_as<typename S::SerializerType,
-                                                  ReadSerializerTag>>));
+                 concepts::requires_<ql::concepts::same_as<
+                     typename S::SerializerType, ReadSerializerTag>>));
 
 template <typename S>
 CPP_concept ReadSerializer = CPP_requires_ref(readSerializerRequires, S);

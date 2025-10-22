@@ -4,8 +4,6 @@
 
 #include "./CheckUsePatternTrick.h"
 
-#include <ranges>
-
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
@@ -69,7 +67,8 @@ bool isVariableContainedInGraphPatternOperation(
     } else {
       static_assert(
           ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
-                                p::SpatialQuery, p::TextSearchQuery, p::Load>);
+                                p::SpatialQuery, p::TextSearchQuery, p::Load,
+                                p::NamedCachedResult>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();

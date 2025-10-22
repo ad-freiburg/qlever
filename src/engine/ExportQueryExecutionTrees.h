@@ -3,9 +3,12 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
+
+#include <functional>
 
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -36,10 +39,16 @@ class ExportQueryExecutionTrees {
   // `mediaType` and the query type will throw. The result is returned as a
   // `generator` that lazily computes the serialized result in large chunks of
   // bytes.
-  static cppcoro::generator<std::string> computeResult(
+  using ComputeResultReturnType =
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      cppcoro::generator<std::string>;
+#else
+      void;
+#endif
+  static ComputeResultReturnType computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Return the corresponding blank node string representation for the export if
   // this iri is a blank node iri. Otherwise, return std::nullopt.
@@ -66,7 +75,7 @@ class ExportQueryExecutionTrees {
   // queries is completely performed inside this module.
   template <bool removeQuotesAndAngleBrackets = false,
             bool returnOnlyLiterals = false,
-            typename EscapeFunction = std::identity>
+            typename EscapeFunction = ql::identity>
   static std::optional<std::pair<std::string, const char*>> idToStringAndType(
       const Index& index, Id id, const LocalVocab& localVocab,
       EscapeFunction&& escapeFunction = EscapeFunction{});
@@ -145,7 +154,7 @@ class ExportQueryExecutionTrees {
   static LiteralOrIri getLiteralOrIriFromVocabIndex(
       const Index& index, Id id, const LocalVocab& localVocab);
 
-  // Convert a `stream_generator` to an "ordinary" `generator<string>` that
+  // Convert a `stream_generator` to an "ordinary" `InputRange<string>` that
   // yields exactly the same chunks as the `stream_generator`. Exceptions that
   // happen during the creation of the first chunk (default chunk size is 1MB)
   // will be immediately thrown when calling this function. Exceptions that
@@ -153,9 +162,12 @@ class ExportQueryExecutionTrees {
   // the resulting `generator<string>` together with a message, that explains,
   // that there is no good mechanism for handling errors during a chunked HTTP
   // response transfer.
-  static cppcoro::generator<std::string>
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  static ad_utility::InputRangeTypeErased<std::string>
   convertStreamGeneratorForChunkedTransfer(
-      ad_utility::streams::stream_generator streamGenerator);
+      STREAMABLE_GENERATOR_TYPE streamGenerator);
+#endif
 
  private:
   // Make sure that the offset is not applied again when exporting the
@@ -173,14 +185,16 @@ class ExportQueryExecutionTrees {
   // `constructQueryResultBindingsToQLeverJSON` for the bindings and adds the
   // remaining (meta) fields needed for the `application/qlever-results+json`
   // format.
-  static ad_utility::streams::stream_generator computeResultAsQLeverJSON(
+  static STREAMABLE_GENERATOR_TYPE computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
+      const LimitOffsetClause& limitOffset,
       const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the bindings of the result of a SELECT query in the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
+  static ad_utility::InputRangeTypeErased<std::string>
+  selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
@@ -189,7 +203,7 @@ class ExportQueryExecutionTrees {
 
   // Generate the bindings of the result of a CONSTRUCT query in the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string>
+  static ad_utility::InputRangeTypeErased<std::string>
   constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
@@ -199,7 +213,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the individual bindings for the
   // `application/ qlever+json` format.
-  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
+  static auto idTableToQLeverJSONBindings(
       const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result, uint64_t& resultSize,
@@ -207,8 +221,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.
-  static cppcoro::generator<QueryExecutionTree::StringTriple>
-  constructQueryResultToTriples(
+  static auto constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
@@ -217,24 +230,29 @@ class ExportQueryExecutionTrees {
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
   template <MediaType format>
-  static ad_utility::streams::stream_generator constructQueryResultToStream(
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the result of a SELECT query as a CSV or TSV or binary stream.
   template <MediaType format>
-  static ad_utility::streams::stream_generator selectQueryResultToStream(
+  static STREAMABLE_GENERATOR_TYPE selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
+      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+      STREAMABLE_YIELDER_ARG_DECL);
 
   // Public for testing.
  public:
   struct TableConstRefWithVocab {
-    const IdTable& idTable_;
-    const LocalVocab& localVocab_;
+    std::reference_wrapper<const IdTable> idTable_;
+    std::reference_wrapper<const LocalVocab> localVocab_;
+
+    const IdTable& idTable() const { return idTable_.get(); }
+
+    const LocalVocab& localVocab() const { return localVocab_.get(); }
   };
   // Helper type that contains an `IdTable` and a view with related indices to
   // access the `IdTable` with.
@@ -245,8 +263,8 @@ class ExportQueryExecutionTrees {
 
  private:
   // Yield all `IdTables` provided by the given `result`.
-  static cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
-  getIdTables(const Result& result);
+  static ad_utility::InputRangeTypeErased<TableConstRefWithVocab> getIdTables(
+      const Result& result);
 
   // Generate the result in "blocks" and, when iterating over the generator
   // from beginning to end, return the total number of rows in the result
@@ -265,9 +283,9 @@ class ExportQueryExecutionTrees {
   //
   // Blocks after the LIMIT are not even requested.
  public:
-  static cppcoro::generator<TableWithRange> getRowIndices(
+  static ad_utility::InputRangeTypeErased<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result,
-      uint64_t& resutSizeTotal);
+      uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
 
  private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);

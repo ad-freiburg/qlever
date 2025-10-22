@@ -324,7 +324,7 @@ auto testDatetime(std::string_view input, int year, int month, int day,
 // Specialization of `testDatetimeImpl` for parsing `xsd:date`.
 auto testDate(std::string_view input, int year, int month, int day,
               Date::TimeZone timeZone = 0,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateYearOrDuration::parseXsdDate, input,
                           XSD_DATE_TYPE, year, month, day, -1, 0, 0, timeZone);
@@ -332,7 +332,7 @@ auto testDate(std::string_view input, int year, int month, int day,
 
 // Specialization of `testDatetimeImpl` for parsing `xsd:gYear`.
 auto testYear(std::string_view input, int year, Date::TimeZone timeZone = 0,
-              source_location l = source_location::current()) {
+              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateYearOrDuration::parseGYear, input, XSD_GYEAR_TYPE,
                           year, 0, 0, -1, 0, 0, timeZone);
@@ -341,7 +341,7 @@ auto testYear(std::string_view input, int year, Date::TimeZone timeZone = 0,
 // Specialization of `testDatetimeImpl` for parsing `xsd:gYearMonth`.
 auto testYearMonth(std::string_view input, int year, int month,
                    Date::TimeZone timeZone = 0,
-                   source_location l = source_location::current()) {
+                   source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateYearOrDuration::parseGYearMonth, input,
                           XSD_GYEARMONTH_TYPE, year, month, 0, -1, 0, 0,

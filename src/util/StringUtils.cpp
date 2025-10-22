@@ -10,6 +10,7 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
@@ -17,6 +18,11 @@
 #include "util/StringUtilsImpl.h"
 
 namespace ad_utility {
+
+namespace detail {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string langTagRegex = "[a-zA-Z]+(-[a-zA-Z0-9]+)*";
+}  // namespace detail
 // ____________________________________________________________________________
 std::string_view commonPrefix(std::string_view a, const std::string_view b) {
   size_t maxIdx = std::min(a.size(), b.size());
@@ -52,7 +58,7 @@ std::string getUppercase(const std::string& orig) {
 
 // ____________________________________________________________________________
 bool strIsLangTag(const std::string& input) {
-  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
+  return ctre::match<detail::langTagRegex>(input);
 }
 
 // ____________________________________________________________________________
@@ -60,7 +66,7 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
   if (languageRange.empty() || languageTag.empty()) {
     return false;
   } else {
-    if (languageRange.ends_with("*")) {
+    if (ql::ends_with(languageRange, "*")) {
       languageRange.pop_back();
     }
     ql::ranges::transform(languageTag, std::begin(languageTag),

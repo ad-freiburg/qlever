@@ -33,8 +33,8 @@ using ValueType =
 
 // Concept that requires that `T` logically stores numeric values.
 template <typename T>
-CPP_concept StoresNumeric =
-    concepts::integral<ValueType<T>> || ad_utility::FloatingPoint<ValueType<T>>;
+CPP_concept StoresNumeric = concepts::integral<ValueType<T>> ||
+                            ql::concepts::floating_point<ValueType<T>>;
 
 // Concept that requires that `T` logically stores `std::string`s.
 template <typename T>

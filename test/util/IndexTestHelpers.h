@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "AllocatorTestHelpers.h"
+#include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -41,6 +42,7 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // a function that takes this struct and creates an index from it.
 
 struct TestIndexConfig {
+  using TextScoringMetric = qlever::TextScoringMetric;
   // A turtle string, from which the index is built. If `nullopt`, a default
   // input will be used and the resulting index will have the following
   // properties: Its vocabulary contains the literals `"alpha", "älpha", "A",
@@ -83,7 +85,11 @@ struct TestIndexConfig {
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
                       c.indexType, c.encodedIriManager);
   }
-  bool operator==(const TestIndexConfig&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
+      TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
+      usePrefixCompression, blocksizePermutations, createTextIndex,
+      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
+      scoringMetric, bAndKParam, indexType, vocabularyType, encodedIriManager)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
