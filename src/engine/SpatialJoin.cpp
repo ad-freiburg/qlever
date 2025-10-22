@@ -205,11 +205,11 @@ std::string SpatialJoin::getCacheKeyImpl() const {
       // cache key. This is to ensure invalidation of the cache for this
       // operation when the user rebuilds the underlying cached s2 index.
       if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
-        os << "cache entry address:"
+        os << "cache entry: ("
            << _executionContext->namedResultCache()
                   .get(config_.rightCacheName_.value())
-                  .get()
-           << "\n";
+                  ->cacheKey_
+           << ")\n";
       }
     }
 

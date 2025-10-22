@@ -100,14 +100,15 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
       {"<s1>", "<s2>", "<s3>", "<s4>"}};
 
   // First, pin the linestrings as a named s2 index
-  std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
+  const std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
+  const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
 
   // Check expected cache size
-  auto cacheEntry = qec->namedResultCache().get("dummy");
+  const auto cacheEntry = qec->namedResultCache().get("dummy");
   EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
   EXPECT_EQ(cacheEntry->result_->numRows(), 5);
   EXPECT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
@@ -128,7 +129,7 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
                                                  std::nullopt);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
-  auto res = spatialJoin->computeResult(false);
+  const auto res = spatialJoin->computeResult(false);
 
   EXPECT_TRUE(res.isFullyMaterialized());
   EXPECT_EQ(res.idTable().numRows(), expectedResultIris.size());
@@ -136,9 +137,9 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
 
   std::vector<std::string> resultIris;
 
-  auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
-                           .at(Variable{"?s2"})
-                           .columnIndex_;
+  const auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
+                                 .at(Variable{"?s2"})
+                                 .columnIndex_;
   for (size_t i = 0; i < res.idTable().numRows(); i++) {
     auto valueId = res.idTable().at(i, subjectColIdx);
     ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
@@ -149,11 +150,10 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   EXPECT_THAT(resultIris,
               ::testing::UnorderedElementsAreArray(expectedResultIris));
 
-  auto cacheKey = spatialJoin->getCacheKey();
+  const auto cacheKey = spatialJoin->getCacheKey();
   EXPECT_THAT(cacheKey, ::testing::HasSubstr("right cache name:dummy"));
-  std::ostringstream os;
-  os << "cache entry address:" << cacheEntry.get();
-  EXPECT_THAT(cacheKey, ::testing::HasSubstr(os.str()));
+  EXPECT_THAT(cacheKey, ::testing::HasSubstr(absl::StrCat(
+                            "cache entry: (", pinResultCacheKey, ")")));
 }
 
 }  // namespace

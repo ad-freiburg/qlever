@@ -44,6 +44,7 @@ TEST(NamedResultCache, basicWorkflow) {
         varColMap,
         {1, 0},
         localVocab.clone(),
+        "cache key",
         std::nullopt};
   };
   // store something in the cache and check that it's there
@@ -54,7 +55,7 @@ TEST(NamedResultCache, basicWorkflow) {
     ASSERT_NE(res, nullptr);
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
-                 outGeoIndex] = *res;
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -68,7 +69,7 @@ TEST(NamedResultCache, basicWorkflow) {
     ASSERT_NE(res, nullptr);
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
-                 outGeoIndex] = *res;
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -90,7 +91,7 @@ TEST(NamedResultCache, basicWorkflow) {
     ASSERT_NE(res, nullptr);
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
-                 outGeoIndex] = *res;
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));

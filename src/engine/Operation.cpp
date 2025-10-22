@@ -454,8 +454,11 @@ void Operation::storeToNamedResultCache(const Result& result) {
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.idTable().clone()),
-      getExternallyVisibleVariableColumns(), result.sortedBy(),
-      result.localVocab().clone(), geoIndex()};
+      getExternallyVisibleVariableColumns(),
+      result.sortedBy(),
+      result.localVocab().clone(),
+      getCacheKey(),
+      geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 
