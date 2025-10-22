@@ -230,10 +230,10 @@ const std::string geoInfoTtl =
     " \"someType\"^^<someType>,"
     " <https://example.com/test>,"
     " \"noType\" ,"
-    " \"LINESTRING(2 2, 4 "
-    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
-    " \"POLYGON(2 4, 4 4, 4 2, 2 "
-    "2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+    " \"LINESTRING(2 2, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+    " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
 // Helper that tests the GeometryInfoValueGetter using the ValueId of a
 // VocabIndex for a string in the example knowledge graph.
