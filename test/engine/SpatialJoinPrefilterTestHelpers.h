@@ -210,8 +210,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
   cfg.computeDE9IM = false;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                       size_t t, const char* a, const char* b,
-                       const char* pred) {
+                       size_t t, const char* a, size_t, const char* b, size_t,
+                       const char* pred, size_t) {
     if (joinTypeVal == WITHIN_DIST) {
       results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
