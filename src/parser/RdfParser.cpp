@@ -1032,8 +1032,8 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
                             "constants in ConstantsIndexCreation.h or "
                             "decompress your file and "
                             "use --file-format mmap\n";
-            AD_LOG_ERROR << "Logging first 1000 unparsed characters\n";
-            AD_LOG_ERROR << unparsed.substr(0, 1000) << std::endl;
+            AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
             if (ex.has_value()) {
               throw ex.value();
 
