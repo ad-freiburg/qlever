@@ -166,12 +166,12 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   using ad_utility::GeometryInfo;
   GeoInfoTester t;
   t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"LINESTRING(2 2, 4 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
       GeoInfoMatcher(GeometryInfo{2, {{2, 2}, {4, 4}}, {3, 3}}));
   t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"POLYGON(2 4, 4 4, 4 "
-      "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
       GeoInfoMatcher(GeometryInfo{3, {{2, 2}, {4, 4}}, {3, 3}}));
 
   auto nullopt = GeoInfoMatcher(std::nullopt);

@@ -211,15 +211,15 @@ template <typename ValueGetter, typename ReturnType>
 class ValueGetterTester {
  private:
   // Test knowledge graph that contains all used literals and iris.
-  std::string testTtl_ =
+  const std::string testTtl_ =
       "<x> <y> \"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>, "
       " \"someType\"^^<someType>,"
       " <https://example.com/test>,"
       " \"noType\" ,"
-      " \"LINESTRING(2 2, 4 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
-      " \"POLYGON(2 4, 4 4, 4 2, 2 "
-      "2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+      " \"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+      " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
 
  public:
   // Helper that constructs a local vocab, inserts the literal and passes the
