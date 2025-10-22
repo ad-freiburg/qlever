@@ -32,7 +32,7 @@ TEST(ParseException, illegalConstructorArguments) {
 // _____________________________________________________________________________
 void expectParseExceptionWithMetadata(
     const std::string& input, const std::optional<ExceptionMetadata>& metadata,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   try {
     static EncodedIriManager ev;

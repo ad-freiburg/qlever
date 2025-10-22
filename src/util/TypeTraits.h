@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_UTIL_TYPETRAITS_H
 #define QLEVER_SRC_UTIL_TYPETRAITS_H
 
-#include <concepts>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -346,7 +345,7 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept InvocableWithSimilarReturnType =
-    std::invocable<Fn, Args...> &&
+    ql::concepts::invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
@@ -355,8 +354,8 @@ CPP_concept InvocableWithSimilarReturnType =
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept InvocableWithExactReturnType =
-    std::invocable<Fn, Args...> &&
-    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
+    ql::concepts::invocable<Fn, Args...> &&
+    ql::concepts::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
@@ -369,7 +368,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithSimilarReturnType =
-    std::regular_invocable<Fn, Args...> &&
+    ql::concepts::regular_invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
@@ -383,8 +382,8 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithExactReturnType =
-    std::regular_invocable<Fn, Args...> &&
-    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
+    ql::concepts::regular_invocable<Fn, Args...> &&
+    ql::concepts::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 // True iff `T` is a value type or an rvalue reference. Can be used to force
 // rvalue references for templated functions: For example: void f(auto&& x) //
@@ -392,10 +391,6 @@ CPP_concept RegularInvocableWithExactReturnType =
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
 CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
-
-// Ensures that T is a floating-point type.
-template <typename T>
-CPP_concept FloatingPoint = std::is_floating_point_v<T>;
 
 // Make a variadic type unique (std::tuple containing each type once)
 namespace detail {

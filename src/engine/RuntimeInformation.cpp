@@ -7,8 +7,7 @@
 
 #include <absl/strings/str_join.h>
 
-#include <ranges>
-
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TransparentFunctors.h"
@@ -62,7 +61,7 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
   } else {
     out << value;
   }
-  if (key.ends_with("Time")) {
+  if (ql::ends_with(key, "Time")) {
     out << " ms";
   }
 }

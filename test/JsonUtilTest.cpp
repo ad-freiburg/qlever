@@ -16,10 +16,9 @@
 */
 CPP_template(typename WantedJsonClassType)(
     requires OrderedOrUnorderedJson<
-        WantedJsonClassType>) static void doFileToJsonTest(ad_utility::source_location
-                                                               l = ad_utility::
-                                                                   source_location::
-                                                                       current()) {
+        WantedJsonClassType>) static void doFileToJsonTest(ad_utility::
+                                                               source_location l =
+                                                                   AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doFileToJsonTest")};
 

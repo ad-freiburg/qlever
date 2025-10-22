@@ -229,7 +229,7 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
   // `LocalVocabIndex` as a `ValueId` to the `ValueGetter`.
   void checkFromLocalVocab(std::string literal,
                            std::optional<ReturnType> expected,
-                           Loc sourceLocation = Loc::current()) {
+                           Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     // Empty knowledge graph, so everything needs to be in the local vocab.
@@ -248,7 +248,7 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
   // Helper that tests the `ValueGetter` using the `ValueId` of a
   // `VocabIndex` for a given string in the example knowledge graph.
   void checkFromVocab(std::string literal, std::optional<ReturnType> expected,
-                      Loc sourceLocation = Loc::current()) {
+                      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
@@ -262,7 +262,7 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
 
   // Helper that tests the `ValueGetter` for any custom `ValueId`
   void checkFromValueId(ValueId input, std::optional<ReturnType> expected,
-                        Loc sourceLocation = Loc::current()) {
+                        Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
@@ -273,7 +273,7 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
   // Helper that tests the `ValueGetter` for any literal (or IRI) directly
   // passed to it
   void checkFromLiteral(std::string literal, std::optional<ReturnType> expected,
-                        Loc sourceLocation = Loc::current()) {
+                        Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
@@ -287,7 +287,7 @@ CPP_template(typename ValueGetter, typename ReturnType, typename CheckFunction)(
   // Run the same test case on vocab, local vocab and literal
   void checkFromLocalAndNormalVocabAndLiteral(
       std::string wktInput, std::optional<ReturnType> expected,
-      Loc sourceLocation = Loc::current()) {
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
     checkFromVocab(wktInput, expected);
     checkFromLocalVocab(wktInput, expected);
@@ -307,7 +307,7 @@ using GeoPointOrWktTester =
 
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
-    std::string wktInput, Loc sourceLocation = Loc::current()) {
+    std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(wktInput,
                                                                wktInput);

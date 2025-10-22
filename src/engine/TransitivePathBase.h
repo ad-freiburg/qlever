@@ -3,14 +3,16 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
 #include <absl/hash/hash.h>
 
-#include <functional>
 #include <memory>
 
+#include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -125,7 +127,7 @@ using NodeGenerator = cppcoro::generator<NodeWithTargets>;
  */
 class TransitivePathBase : public Operation {
  protected:
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
 
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
@@ -324,7 +326,7 @@ class TransitivePathBase : public Operation {
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {},
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
   /**
@@ -347,7 +349,7 @@ class TransitivePathBase : public Operation {
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, Graphs activeGraphs = {},
+      size_t maxDist, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
   std::vector<QueryExecutionTree*> getChildren() override;
@@ -380,3 +382,5 @@ class TransitivePathBase : public Operation {
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+
+#endif

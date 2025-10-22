@@ -36,12 +36,13 @@ auto parseQuery(std::string query,
 }  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
-                  {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
+                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
               testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinresult", {"true"}}}),
+  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
               testing::Pair(false, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pinsubtrees", {"otherValue"}}}),
-              testing::Pair(false, false));
+  EXPECT_THAT(
+      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
+      testing::Pair(false, false));
 }
 
 // _____________________________________________________________________________
@@ -239,13 +240,16 @@ TEST(ServerTest, createResponseMetadata) {
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
       deltaTriples, handle);
-  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
 
   // Assertions
+  ad_utility::timer::TimeTracer tracer2(
+      "ServerTest::createResponseMetadata tracer2");
+  tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   json metadata = Server::createResponseMetadataForUpdate(
-      requestTimer, index, deltaTriples, plannedQuery,
-      plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
-      countAfter);
+      index, deltaTriples.getSnapshot(), plannedQuery,
+      plannedQuery.queryExecutionTree_, updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -284,8 +288,7 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
               "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
           const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
                                                                       {"12"}}},
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
         Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
@@ -304,4 +307,32 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   expectExportLimit(csv, std::nullopt);
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, configurePinnedResultWithName) {
+  auto qec = ad_utility::testing::getQec();
+
+  // Test with no pinNamed value - should not modify qec
+  std::optional<std::string> noPinNamed = std::nullopt;
+  Server::configurePinnedResultWithName(noPinNamed, true, *qec);
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
+
+  // Test with pinNamed and valid access token - should set the pin name
+  std::optional<std::string> pinNamed = "test_query_name";
+  Server::configurePinnedResultWithName(pinNamed, true, *qec);
+  EXPECT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value(), "test_query_name");
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+
+  // Test with pinNamed but invalid access token - should throw exception
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::configurePinnedResultWithName(pinNamed, false, *qec),
+      testing::HasSubstr(
+          "Pinning a result with a name requires a valid access token"));
+
+  // Verify qec was not modified when exception was thrown
+  EXPECT_FALSE(qec->pinResultWithName().has_value());
 }

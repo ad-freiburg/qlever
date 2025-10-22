@@ -32,9 +32,17 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                    std::less<>{},
-                                    &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(
+                blockMetadata, triple.toPermutedTriple(),
+                [](const auto& a, const auto& b) {
+                  // All identical triples with different graphs are currently
+                  // stored in the same block, so we don't need to check the
+                  // graph. In particular, if this triple is equal (without
+                  // graphs) to the first or last triple of a block, then this
+                  // call to `lower_bound` will correctly identify this block.
+                  return a.tieWithoutGraph() < b.tieWithoutGraph();
+                },
+                &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, insertOrDelete);
       },
@@ -64,7 +72,7 @@ namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
-template <typename Row, template <typename, size_t...> typename Tp, size_t... I>
+template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
 };
@@ -224,7 +232,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    ql::span<const LocatedTriple> locatedTriples) {
+    ql::span<const LocatedTriple> locatedTriples,
+    ad_utility::timer::TimeTracer& tracer) {
+  tracer.beginTrace("adding");
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
@@ -236,7 +246,10 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     handles.emplace_back(handle);
   }
 
+  tracer.endTrace("adding");
+  tracer.beginTrace("updateMetadata");
   updateAugmentedMetadata();
+  tracer.endTrace("updateMetadata");
 
   return handles;
 }
@@ -351,6 +364,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, blockUpdates);
     augmentedMetadata_->push_back(lastBlock);
+
+    AD_CORRECTNESS_CHECK(
+        CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+            *augmentedMetadata_));
   }
 }
 

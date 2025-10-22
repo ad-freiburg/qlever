@@ -10,6 +10,7 @@
 
 #include <re2/re2.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
@@ -50,7 +51,7 @@ using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 // Ensures that the T value is convertible to a numeric Id.
 template <typename T>
 CPP_concept ValueAsNumericId =
-    concepts::integral<T> || ad_utility::FloatingPoint<T> ||
+    concepts::integral<T> || ql::concepts::floating_point<T> ||
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
@@ -60,9 +61,9 @@ CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
     return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
+  } else if constexpr (ql::concepts::floating_point<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
@@ -216,8 +217,8 @@ struct IsSomethingValueGetter
   Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
     // TODO<joka921> Use the `isLiteral` etc. functions directly as soon as the
     // local vocabulary also stores `LiteralOrIri`.
-    return Id::makeFromBool(s.toStringRepresentation().starts_with(
-        isLiteralOrIriSomethingFunction));
+    return Id::makeFromBool(ql::starts_with(s.toStringRepresentation(),
+                                            isLiteralOrIriSomethingFunction));
   }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
@@ -419,9 +420,11 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // `GeometryInfo` is available, the WKT literal is parsed and only the
 // `RequestedInfo` is computed ad hoc (for example the bounding box is not
 // calculated, when requesting the centroid).
-template <typename RequestedInfo = ad_utility::GeometryInfo>
-requires ad_utility::RequestedInfoT<RequestedInfo>
-struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+
+CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
+    requires ad_utility::RequestedInfoT<
+        RequestedInfo>) struct GeometryInfoValueGetter
+    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;

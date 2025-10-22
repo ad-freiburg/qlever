@@ -24,9 +24,10 @@ namespace detail {
 //    `SparqlExpression::Ptr` and returns a `unique_ptr` to a new instance of
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
-template <typename NaryOperation, prefilterExpressions::IsDatatype Datatype>
-requires(isOperation<NaryOperation>)
-class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_class_template(typename NaryOperation,
+                   prefilterExpressions::IsDatatype Datatype)(
+    requires(isOperation<NaryOperation>)) class IsDatatypeExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
@@ -49,10 +50,10 @@ class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
 //______________________________________________________________________________
 // Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
 // `isNumeric`, and the custom function `isWktPoint`. Note that the value
-// getters already return the correct `Id`, hence `std::identity`.
+// getters already return the correct `Id`, hence `ql::identity`.
 template <typename Getter, prefilterExpressions::IsDatatype Datatype>
 using IsDtypeExpression =
-    IsDatatypeExpressionImpl<Operation<1, FV<std::identity, Getter>>, Datatype>;
+    IsDatatypeExpressionImpl<Operation<1, FV<ql::identity, Getter>>, Datatype>;
 
 using isLiteralExpression =
     IsDtypeExpression<IsLiteralValueGetter,
@@ -68,7 +69,7 @@ using isIriExpression =
 
 // We currently don't support pre-filtering for `isGeoPointExpression`.
 using isGeoPointExpression =
-    NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
+    NARY<1, FV<ql::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
 
 //______________________________________________________________________________
 // The expression for `bound` is slightly different as `IsValidValueGetter`

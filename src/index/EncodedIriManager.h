@@ -5,12 +5,19 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/BitUtils.h"
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
 #include "util/json.h"
+
+namespace detail {
+// CTRE named capture group identifiers for C++17 compatibility
+constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+}  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
@@ -99,7 +106,7 @@ class EncodedIriManagerImpl {
     for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
       const auto& a = prefixesWithoutAngleBrackets.at(i);
       const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
-      if (b.starts_with(a)) {
+      if (ql::starts_with(b, a)) {
         throw std::runtime_error(absl::StrCat(
             "None of the prefixes specified with `--encode-as-id` "
             "may be a prefix of another; here is a violating pair: \"",
@@ -108,7 +115,7 @@ class EncodedIriManagerImpl {
     }
     prefixes_.reserve(prefixesWithoutAngleBrackets.size());
     for (const auto& prefix : prefixesWithoutAngleBrackets) {
-      if (prefix.starts_with('<')) {
+      if (ql::starts_with(prefix, '<')) {
         throw std::runtime_error(absl::StrCat(
             "The prefixes specified with `--encode-as-id` must not "
             "be enclosed in angle brackets; here is a violating prefix: \"",
@@ -128,7 +135,7 @@ class EncodedIriManagerImpl {
   std::optional<Id> encode(std::string_view repr) const {
     // Find the matching prefix.
     auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
-      return repr.starts_with(prefix);
+      return ql::starts_with(repr, prefix);
     });
     if (it == prefixes_.end()) {
       return std::nullopt;
@@ -144,7 +151,8 @@ class EncodedIriManagerImpl {
     }
 
     // Extract the substring with the digits, and check that it is not too long.
-    const auto& numString = match.template get<"digits">().to_view();
+    const auto& numString =
+        match.template get<detail::digitsCaptureGroup>().to_view();
     if (numString.size() > NumDigits) {
       return std::nullopt;
     }
@@ -194,7 +202,7 @@ class EncodedIriManagerImpl {
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  bool operator==(const EncodedIriManagerImpl&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
 
  private:
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit

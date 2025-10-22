@@ -7,13 +7,18 @@
 #include <ctre-unicode.hpp>
 #include <sstream>
 
+namespace {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string blankNodeLabelRegex = "\\w(?:(?:\\w|-|\\.)*\\w)?";
+}  // namespace
+
 // _____________________________________________________________________________
 BlankNode::BlankNode(bool generated, std::string label)
     : _generated{generated}, _label{std::move(label)} {
   // roughly check allowed characters as blank node labels.
   // Weaker than the SPARQL grammar, but good
   // enough so that it will likely never be an issue
-  AD_CONTRACT_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
+  AD_CONTRACT_CHECK(ctre::match<blankNodeLabelRegex>(_label));
 }
 
 // ___________________________________________________________________________

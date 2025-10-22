@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include "TransitivePathBase.h"
 
 #include <absl/strings/str_cat.h>
@@ -182,13 +184,13 @@ TransitivePathBase::~TransitivePathBase() = default;
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
     return {lhs_, rhs_};
   } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath right to left" << std::endl;
+    AD_LOG_DEBUG << "Computing TransitivePath right to left" << std::endl;
     return {rhs_, lhs_};
   }
-  LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+  AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
   return {lhs_, rhs_};
 }
 
@@ -423,7 +425,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     size_t maxDist, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable) {
   bool useBinSearch =
-      RuntimeParameters().get<"use-binsearch-transitive-path">();
+      getRuntimeParameter<&RuntimeParameters::useBinsearchTransitivePath_>();
   return makeTransitivePath(
       qec, std::move(child), std::move(leftSide), std::move(rightSide), minDist,
       maxDist, useBinSearch, std::move(activeGraphs), graphVariable);
@@ -575,11 +577,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
                                           rhs, minDist_, maxDist_, useBinSearch,
-                                          {}, graphVariable_));
+                                          activeGraphs_, graphVariable_));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
     candidates.push_back(makeTransitivePath(
         getExecutionContext(), alternativeSubtree, lhs, rhs, minDist_, maxDist_,
-        useBinSearch, {}, graphVariable_));
+        useBinSearch, activeGraphs_, graphVariable_));
   }
 
   auto& p = *ql::ranges::min_element(
@@ -664,3 +666,5 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
 // initialization.
 const Variable TransitivePathBase::internalGraphHelper_{
     "?_Qlever_internal_transitive_path_graph", false};
+
+#endif

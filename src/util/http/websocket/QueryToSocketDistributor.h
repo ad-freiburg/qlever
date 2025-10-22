@@ -5,10 +5,10 @@
 #ifndef QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 #define QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 
-#include <functional>
 #include <memory>
 #include <vector>
 
+#include "backports/functional.h"
 #include "util/UniqueCleanup.h"
 #include "util/http/beast.h"
 
@@ -26,7 +26,7 @@ class QueryToSocketDistributor
     : public std::enable_shared_from_this<QueryToSocketDistributor> {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
-  mutable net::deadline_timer infiniteTimer_;
+  mutable net::steady_timer infiniteTimer_;
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};

@@ -8,7 +8,6 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
 #include <spatialjoin/Sweeper.h>
-#include <spatialjoin/WKTParse.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -273,6 +272,10 @@ class SpatialJoinAlgorithms {
   // this vector stores the geometries, which have already been parsed
   std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
       geometries_;
+
+  // After adding the given amount of rows to the WKT parser, it will be checked
+  // if the user has cancelled their query.
+  static constexpr size_t wktParserChunkSizeForCancellationCheck = 10'000;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
