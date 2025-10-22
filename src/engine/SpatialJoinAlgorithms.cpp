@@ -400,15 +400,15 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.useBoxIds = true;
     cfg.useArea = true;
     cfg.useOBB = false;
-    cfg.useCutouts = true;
     cfg.useDiagBox = true;
     cfg.useFastSweepSkip = true;
     cfg.useInnerOuter = false;
     cfg.noGeometryChecks = false;
     cfg.withinDist = withinDist;
+    cfg.computeDE9IM = false;
     cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                         size_t t, const char* a, const char* b,
-                         const char* pred) {
+                         size_t t, const char* a, size_t, const char* b, size_t,
+                         const char* pred, size_t) {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         results[t].push_back({std::atoi(a), std::atoi(b)});
         resultDists[t].push_back(atof(pred));
