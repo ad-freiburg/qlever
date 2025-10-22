@@ -15,10 +15,10 @@ auto iri = ad_utility::testing::iri;
 TEST(SparqlParser, Update) {
   auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   // Automatically test all updates for their `_originalString`.
-  auto expectUpdate = [&expectUpdate_](
-                          const std::string& query, auto&& expected,
-                          ad_utility::source_location l =
-                              ad_utility::source_location::current()) {
+  auto expectUpdate = [&expectUpdate_](const std::string& query,
+                                       auto&& expected,
+                                       ad_utility::source_location l =
+                                           AD_CURRENT_SOURCE_LOC()) {
     expectUpdate_(query,
                   testing::ElementsAre(
                       testing::AllOf(expected, m::pq::OriginalString(query))),
@@ -205,12 +205,10 @@ TEST(SparqlParser, Clear) {
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
   auto Iri = TripleComponent::Iri::fromIriref;
 
-  expectClear("CLEAR ALL", m::Clear(Variable("?g")));
+  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  expectClear("CLEAR ALL", m::Clear(Variable("?g"), GVB::ALL));
   expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectClear("CLEAR NAMED", m::Clear(Variable("?g"),
-                                      "?g != "
-                                      "<http://qlever.cs.uni-freiburg.de/"
-                                      "builtin-functions/default-graph>"));
+  expectClear("CLEAR NAMED", m::Clear(Variable("?g"), GVB::NAMED));
   expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
@@ -222,12 +220,10 @@ TEST(SparqlParser, Drop) {
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
   auto Iri = TripleComponent::Iri::fromIriref;
 
-  expectDrop("DROP ALL", m::Clear(Variable("?g")));
+  using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
+  expectDrop("DROP ALL", m::Clear(Variable("?g"), GVB::ALL));
   expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectDrop("DROP NAMED", m::Clear(Variable("?g"),
-                                    "?g != "
-                                    "<http://qlever.cs.uni-freiburg.de/"
-                                    "builtin-functions/default-graph>"));
+  expectDrop("DROP NAMED", m::Clear(Variable("?g"), GVB::NAMED));
   expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 

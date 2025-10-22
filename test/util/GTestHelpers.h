@@ -11,6 +11,8 @@
 #include <concepts>
 #include <optional>
 
+#include "backports/concepts.h"
+#include "backports/three_way_comparison.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -121,6 +123,14 @@ MATCHER_P2(HasKeyMatching, key, matcher,
                    << arg[key] << ' ';
   return testing::ExplainMatchResult(matcher, arg[key], result_listener);
 }
+MATCHER_P(HasKey, key, (negation ? "has no key " : "has key ")) {
+  if (!arg.contains(key)) {
+    *result_listener << "that does not contain key \"" << key << '"';
+    return false;
+  }
+  *result_listener << "that contains key \"" << key << "\" ";
+  return true;
+}
 
 // Matcher that can be used the make assertions about objects `<<` (insert into
 // stream) operator.
@@ -150,9 +160,10 @@ class CopyShield {
     return *this;
   }
 
-  auto operator<=>(const T& other) const requires std::three_way_comparable<T> {
-    return *pointer_ <=> other;
+  auto compareThreeWay(const T& other) const {
+    return ql::compareThreeWay(*pointer_, other);
   }
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
   bool operator==(const T& other) const requires std::equality_comparable<T> {
     return *pointer_ == other;

@@ -7,15 +7,13 @@
 
 #include <coroutine>
 #include <exception>
-#include <functional>
-#include <iterator>
-#include <type_traits>
 #include <utility>
 
-#include "Iterators.h"
 #include "backports/algorithm.h"
+#include "backports/functional.h"
+#include "backports/iterator.h"
+#include "backports/type_traits.h"
 #include "util/Exception.h"
-#include "util/TypeTraits.h"
 
 namespace cppcoro {
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
@@ -23,6 +21,15 @@ namespace cppcoro {
 // generator). For an example see `GeneratorTest.cpp`.
 struct GetDetails {};
 static constexpr GetDetails getDetails;
+
+template <typename Details>
+struct SetDetailsPointer {
+  Details* pointer_;
+};
+template <typename Details>
+struct SetDetails {
+  Details details_;
+};
 
 // This struct is used as the default of the details object for the case that
 // there are no details
@@ -38,7 +45,7 @@ class generator_promise {
   // Even if the generator only yields `const` values, the `value_type`
   // shouldn't be `const` because otherwise several static checks when
   // interacting with the STL fail.
-  using value_type = std::remove_cvref_t<T>;
+  using value_type = ql::remove_cvref_t<T>;
   using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
   using pointer_type = std::remove_reference_t<T>*;
 
@@ -95,7 +102,40 @@ class generator_promise {
     return {*this};
   }
 
+  struct SetDetailsPointerAwaiter {
+    SetDetailsPointerAwaiter(generator_promise& promise,
+                             struct SetDetailsPointer<Details> details) {
+      promise.setDetailsPointer(details.pointer_);
+    }
+    constexpr bool await_ready() const { return true; }
+    constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
+      return false;
+    }
+    constexpr void await_resume() const noexcept {}
+  };
+
+  struct SetDetailsAwaiter {
+    SetDetailsAwaiter(generator_promise& promise,
+                      struct SetDetails<Details> details) {
+      promise.setDetails(std::move(details.details_));
+    }
+    constexpr bool await_ready() const { return true; }
+    constexpr bool await_suspend(std::coroutine_handle<>) const noexcept {
+      return false;
+    }
+    constexpr void await_resume() const noexcept {}
+  };
+
   static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  SetDetailsPointerAwaiter await_transform(SetDetailsPointer<Details> details)
+      requires hasDetails {
+    return {*this, details};
+  }
+  SetDetailsAwaiter await_transform(SetDetails<Details> details)
+      requires hasDetails {
+    return {*this, details};
+  }
+
   Details& details() requires hasDetails {
     return std::holds_alternative<Details>(m_details)
                ? std::get<Details>(m_details)
@@ -105,6 +145,10 @@ class generator_promise {
   void setDetailsPointer(Details* pointer) requires hasDetails {
     AD_CONTRACT_CHECK(pointer != nullptr);
     m_details = pointer;
+  }
+
+  void setDetails(Details details) requires hasDetails {
+    m_details = std::move(details);
   }
 
  private:
@@ -296,15 +340,6 @@ T getSingleElement(generator<T, Details> g) {
   T t = std::move(*it);
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
-}
-
-// helper function to convert ad_utility::InputRangeTypeErased<T> to
-// cppcoro::generator<T> with no details
-template <typename T>
-generator<T> fromInputRange(ad_utility::InputRangeTypeErased<T> range) {
-  for (auto& value : range) {
-    co_yield value;
-  }
 }
 }  // namespace cppcoro
 

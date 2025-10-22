@@ -7,14 +7,13 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
-#include <functional>
 #include <optional>
 #include <tuple>
 #include <unordered_set>
 
 #include "../test/util/GTestHelpers.h"
 #include "../test/util/TypeTraitsTestHelpers.h"
+#include "backports/functional.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConfigManager/Validator.h"
@@ -261,7 +260,7 @@ args)`.
 template <typename F>
 void doConstructorTest(
     F generateValidatorManager,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};
 
@@ -408,7 +407,8 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         QL_CONCEPT_OR_NOTHING(
+             std::same_as<ConstConfigOptionProxy<bool>>) auto... args) {
         return ConfigOptionValidatorManager(
             [errorMessage =
                  std::move(errorMessage)](const std::same_as<bool> auto... b)
@@ -427,9 +427,12 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
   doConstructorTest(
       [](std::string errorMessage, std::string descriptor,
          const auto& translationFunction,
-         std::same_as<ConstConfigOptionProxy<bool>> auto... args) {
+         QL_CONCEPT_OR_NOTHING(
+             std::same_as<ConstConfigOptionProxy<bool>>) auto... args) {
         return ConfigOptionValidatorManager(
-            [](const std::same_as<bool> auto... b) { return (b && ...); },
+            [](const QL_CONCEPT_OR_NOTHING(std::same_as<bool>) auto... b) {
+              return (b && ...);
+            },
             std::move(errorMessage), std::move(descriptor), translationFunction,
             args...);
       });
@@ -442,7 +445,7 @@ auto checkValidator(
     // ValidatorFunction<ParameterTypes...> auto func,
     ValidatorFunc func, const std::tuple<ParameterTypes...>& validValues,
     const std::tuple<ParameterTypes...>& nonValidValues,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "checkValidator")};
 

@@ -18,6 +18,7 @@
 #include <cmath>
 #include <set>
 
+#include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinParser.h"
@@ -129,7 +130,7 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
 size_t SpatialJoinAlgorithms::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
   size_t userPreference =
-      RuntimeParameters().get<"spatial-join-max-num-threads">();
+      getRuntimeParameter<&RuntimeParameters::spatialJoinMaxNumThreads_>();
   if (userPreference == 0 || maxHwConcurrency < userPreference) {
     return maxHwConcurrency;
   }
@@ -856,10 +857,13 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     size_t rowLeft_;
     size_t rowRight_;
 
-    auto operator<=>(const AddedPair& other) const {
-      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_)
-                                          : (rowLeft_ <=> other.rowLeft_);
+    auto compareThreeWay(const AddedPair& other) const {
+      return (rowLeft_ == other.rowLeft_)
+                 ? ql::compareThreeWay(rowRight_, other.rowRight_)
+                 : ql::compareThreeWay(rowLeft_, other.rowLeft_);
     }
+
+    QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(AddedPair)
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
@@ -961,5 +965,5 @@ void SpatialJoinAlgorithms::throwIfCancelled() const {
 // ____________________________________________________________________________
 double SpatialJoinAlgorithms::maxAreaPrefilterBox() {
   return static_cast<double>(
-      RuntimeParameters().get<"spatial-join-prefilter-max-size">());
+      getRuntimeParameter<&RuntimeParameters::spatialJoinPrefilterMaxSize_>());
 }

@@ -22,7 +22,9 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
+#include "util/Generator.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
@@ -70,6 +72,12 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
+  AD_CONTRACT_CHECK(
+      parserBufferSize().getBytes() > 0,
+      "The buffer size of the RDF parser must be greater than zero");
+  AD_CONTRACT_CHECK(
+      memoryLimitIndexBuilding().getBytes() > 0,
+      " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(files, &encodedIriManager(),
                                               parserBufferSize());
 }
@@ -83,10 +91,12 @@ template <typename T1, typename T2>
 static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
+    return std::move(idTable);
   };
-  return ad_utility::inPlaceTransformView(
+
+  return ad_utility::CachingTransformInputRange{
       ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset);
+      setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
@@ -612,7 +622,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
-    deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
+    deleteTemporaryFile(
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
   }
 
   return res;
@@ -746,11 +757,12 @@ auto IndexImpl::convertPartialToGlobalIds(
     if (idx >= actualLinesPerPartial.size()) {
       return std::nullopt;
     }
-    std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
+    std::string filename =
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
     auto map =
-        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(mmapFilename);
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
-    deleteTemporaryFile(mmapFilename);
+    deleteTemporaryFile(filename);
     return std::pair{idx, std::move(map)};
   };
 
@@ -830,22 +842,12 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  // TODO: remove this conversion once CompressedRelationWriter will be
-  // migrated to non coroutines
-  auto sortedTriplesGenerator{
-      cppcoro::fromInputRange(std::forward<T>(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          std::move(sortedTriplesGenerator), permutation, perBlockCallbacks);
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
-
-  // There previously was a bug in the CompressedIdTableSorter that lead to
-  // semantically correct blocks, but with too large block sizes for the twin
-  // relation. This assertion would have caught this bug.
-  AD_CORRECTNESS_CHECK(metaData1.blockData().size() ==
-                       metaData2.blockData().size());
 
   return {numDistinctCol0, std::move(metaData1), std::move(metaData2)};
 }
@@ -1154,7 +1156,7 @@ void IndexImpl::readConfiguration() {
   }
 
   auto loadDataMember = [this](std::string_view key, auto& target,
-                               std::optional<std::type_identity_t<
+                               std::optional<ql::type_identity_t<
                                    std::decay_t<decltype(target)>>>
                                    defaultValue = std::nullopt) {
     using Target = std::decay_t<decltype(target)>;
@@ -1420,9 +1422,10 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  std::string partialCompressionFilename = absl::StrCat(
-      onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
+      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
+  std::string partialCompressionFilename =
+      absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
+                   PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,
