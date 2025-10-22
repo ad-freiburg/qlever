@@ -148,6 +148,12 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
 
   EXPECT_THAT(resultIris,
               ::testing::UnorderedElementsAreArray(expectedResultIris));
+
+  auto cacheKey = spatialJoin->getCacheKey();
+  EXPECT_THAT(cacheKey, ::testing::HasSubstr("right cache name:dummy"));
+  std::ostringstream os;
+  os << "cache entry address:" << cacheEntry.get();
+  EXPECT_THAT(cacheKey, ::testing::HasSubstr(os.str()));
 }
 
 }  // namespace

@@ -195,6 +195,24 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     }
     os << "\n";
 
+    // If we use the s2-point-polyline algorithm, we also need to add the cache
+    // entry name to our own cache key because the `ExplicitIdTableOperation`
+    // which then becomes our right child doesn't have a cache key on its own.
+    if (config_.rightCacheName_.has_value()) {
+      os << "right cache name:" << config_.rightCacheName_.value() << "\n";
+
+      // Additionally we add the pointer address of the cache entry to the
+      // cache key. This is to ensure invalidation of the cache for this
+      // operation when the user rebuilds the underlying cached s2 index.
+      if (algo == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+        os << "cache entry address:"
+           << _executionContext->namedResultCache()
+                  .get(config_.rightCacheName_.value())
+                  .get()
+           << "\n";
+      }
+    }
+
     // Algorithm is not included here because it should not have any impact on
     // the result.
     return std::move(os).str();
