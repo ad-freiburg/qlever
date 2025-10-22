@@ -54,6 +54,9 @@ double valueInUnitToKilometer(double valueInUnit,
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
 
+// Get the n-th element of a WKT collection type.
+std::optional<std::string> wktGetGeometryN(std::string_view wkt, int64_t n);
+
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
@@ -164,6 +167,37 @@ class WktGeometryType {
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return {LiteralOrIri{lit}};
+  }
+};
+
+// Get the WKT for the n-th element of the given collection WKT (`MultiPoint`,
+// `MultiLineString`, `MultiPolygon` or `GeometryCollection`)
+class WktGeometryN {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<std::string>& wkt,
+      const std::optional<int64_t>& n) const {
+    using namespace triple_component;
+    if (!wkt.has_value() || !n.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto inputContent = wkt.value();
+
+    // TODO change this
+    auto litInput = Literal::literalWithoutQuotes(inputContent);
+    litInput.addDatatype(detail::wktLiteralIri);
+
+    auto resultWkt =
+        detail::wktGetGeometryN(litInput.toStringRepresentation(), n.value());
+
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{lit}};
   }
 };
