@@ -1850,3 +1850,14 @@ void IndexImpl::setPrefixesForEncodedValues(
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValuesWithBitPattern(
+    std::vector<std::tuple<std::string, size_t, size_t>>
+        prefixesWithBitPatterns) {
+  // Add bit pattern prefixes to the existing encodedIriManager
+  for (auto& [prefix, bitStart, bitEnd] : prefixesWithBitPatterns) {
+    encodedIriManager_.prefixes_.emplace_back(absl::StrCat("<", prefix),
+                                              bitStart, bitEnd);
+  }
+}
