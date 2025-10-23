@@ -5,12 +5,12 @@
 #ifndef QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
 #define QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
 
-#include <backports/algorithm.h>
-
 #include <array>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 /// A String/character array that can be constructed at compile time. It can

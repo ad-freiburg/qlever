@@ -213,9 +213,7 @@ class DayTimeDuration {
 
   //____________________________________________________________________________
   // Comparison == on bits
-  // TODO<joka921> consolidate with the rewrite.
-  [[nodiscard]] /*constexpr*/ bool operator==(
-      const DayTimeDuration& rhs) const {
+  [[nodiscard]] bool operator==(const DayTimeDuration& rhs) const {
     return toBits() == rhs.toBits();
   }
 

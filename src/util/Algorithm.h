@@ -24,6 +24,14 @@
 
 namespace ad_utility {
 
+namespace algorithm::detail {
+template <typename T, typename U>
+CPP_requires(HasMemberContains,
+             requires(const T& t, const U& u)(t.contains(u)));
+template <typename T, typename U>
+CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
+}  // namespace algorithm::detail
+
 /**
  * Checks whether an element is contained in a container.
  *
@@ -38,9 +46,11 @@ constexpr bool contains(Container&& container, const T& element) {
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
     // TODO<joka921> find a better solution here...
-  } else if constexpr (ad_utility::similarToAnyInstantiationOf<
-                           Container, std::set, std::map, std::unordered_map,
-                           std::unordered_set>) {
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberContains,
+                                        const Container&, T)) {
+    return container.contains(element);
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberFind,
+                                        const Container&, T)) {
     return container.find(element) != container.end();
   } else {
     return ql::ranges::find(std::begin(container), std::end(container),

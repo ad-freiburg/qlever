@@ -126,6 +126,15 @@ CPP_template(typename V, typename Pred)(
     }
   };
 
+  // Return the address of the underlying predicate.
+  auto* getAddressOfPred() {
+    if constexpr (ad_utility::isSimilar<decltype(pred_), Pred>) {
+      return &pred_;
+    } else {
+      return &pred_.get();
+    }
+  }
+
  public:
   TakeUntilInclusiveView() = default;
   TakeUntilInclusiveView(V base, Pred pred)
@@ -133,7 +142,7 @@ CPP_template(typename V, typename Pred)(
 
   auto begin() {
     return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_),
-                    &pred_.get()};
+                    getAddressOfPred()};
   }
 
   auto end() { return ql::default_sentinel; }
