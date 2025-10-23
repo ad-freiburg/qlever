@@ -42,6 +42,14 @@ NARY_EXPRESSION(
     FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
        GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
 
+NARY_EXPRESSION(
+    AreaExpression, 2,
+    FV<ad_utility::WktArea, GeometryInfoValueGetter<ad_utility::MetricArea>,
+       UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(MetricAreaExpression, 1,
+                FV<ad_utility::WktMetricArea,
+                   GeometryInfoValueGetter<ad_utility::MetricArea>>);
+
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
@@ -111,6 +119,17 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     return std::make_unique<DistExpression>(std::move(child1),
                                             std::move(child2));
   }
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeAreaExpression(SparqlExpression::Ptr child1,
+                                         SparqlExpression::Ptr child2) {
+  return std::make_unique<AreaExpression>(std::move(child1), std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeMetricAreaExpression(SparqlExpression::Ptr child1) {
+  return std::make_unique<MetricAreaExpression>(std::move(child1));
 }
 
 // _____________________________________________________________________________

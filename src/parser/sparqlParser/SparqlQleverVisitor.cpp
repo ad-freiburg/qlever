@@ -225,11 +225,13 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
+      {"metricArea", &makeMetricAreaExpression},
   };
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},
+      {"area", &makeAreaExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
