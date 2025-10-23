@@ -15,6 +15,8 @@
 #include <s2/s2polyline.h>
 #include <util/geo/Geo.h>
 
+#include "backports/algorithm.h"
+#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 
@@ -24,6 +26,22 @@ namespace geometryConverters {
 
 using CoordType = double;
 using namespace util::geo;
+
+// Helper function to convert `GeoPoint` objects to `S2Point`.
+inline S2Point toS2Point(const GeoPoint& p) {
+  return S2LatLng::FromDegrees(p.getLat(), p.getLng()).ToPoint();
+}
+
+// Helper function to convert `libspatialjoin` `DPoint` objects to `S2LatLng`.
+inline S2LatLng toS2LatLng(const util::geo::DPoint& point) {
+  return S2LatLng::FromDegrees(point.getY(), point.getX());
+}
+
+inline S2Polyline toS2Polyline(const util::geo::Line<double>& line) {
+  AD_CORRECTNESS_CHECK(!line.empty());
+  return S2Polyline{
+      ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
+}
 
 // Helper function to convert `GeoPoint` objects to `S2Point`.
 inline S2Point toS2Point(const DPoint& p) {
@@ -69,4 +87,4 @@ inline S2Polygon makeS2Polygon(const Polygon<CoordType>& polygon) {
 
 }  // namespace geometryConverters
 
-#endif  // QLEVER_SRC_UTIL_GEOCONVERTERS_H
+#endif  // QLEVER_GEOCONVERTERS_H
