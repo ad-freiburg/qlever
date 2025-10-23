@@ -68,7 +68,7 @@ double kilometerToUnit(double kilometers,
     } else if (unit.value() == UnitOfMeasurement::MILES) {
       multiplicator = detail::kilometerToMile;
     } else {
-      AD_CORRECTNESS_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
+      AD_CORRECTNESS_CHECK(!isLengthUnit(unit.value()));
       AD_THROW("Unsupported unit of measurement for distance.");
     }
   }
@@ -91,6 +91,12 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
     return UnitOfMeasurement::MILES;
   }
   return UnitOfMeasurement::UNKNOWN;
+}
+
+// ____________________________________________________________________________
+bool isLengthUnit(UnitOfMeasurement unit) {
+  using enum UnitOfMeasurement;
+  return unit == METERS || unit == KILOMETERS || unit == MILES;
 }
 
 }  // namespace detail

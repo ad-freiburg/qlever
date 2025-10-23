@@ -13,7 +13,7 @@ using namespace SpatialJoinPrefilterTestHelpers;
 using enum SpatialJoinType;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
-// `GeoVocabulary` which holds various literals carefully selected literals. It
+// `GeoVocabulary` which holds various carefully selected literals. It
 // then performs a spatial join and examines the result as well as the
 // prefiltering during the geometry parsing.
 

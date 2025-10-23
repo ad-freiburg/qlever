@@ -51,6 +51,20 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
 }
 
 // ____________________________________________________________________________
+inline void checkMetricLength(std::optional<MetricLength> a,
+                              std::optional<MetricLength> b,
+                              Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().length(), b.value().length(),
+              // The metric length may be off by up to 1%
+              0.01 * a.value().length());
+}
+
+// ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
@@ -70,6 +84,8 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
 
   EXPECT_EQ(a.getNumGeometries(), b.getNumGeometries());
+
+  checkMetricLength(a.getMetricLength(), b.getMetricLength());
 }
 
 // ____________________________________________________________________________
@@ -88,6 +104,7 @@ inline void checkRequestedInfoForInstance(
   EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
             gi.getRequestedInfo<GeometryType>());
   EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
+  checkMetricLength(gi.getMetricLength(), gi.getRequestedInfo<MetricLength>());
 }
 
 // ____________________________________________________________________________
@@ -106,6 +123,8 @@ inline void checkRequestedInfoForWktLiteral(
             GeometryInfo::getRequestedInfo<GeometryType>(wkt));
   EXPECT_EQ(gi.getNumGeometries(),
             GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
+  checkMetricLength(gi.getMetricLength(),
+                    GeometryInfo::getRequestedInfo<MetricLength>(wkt));
 }
 
 // ____________________________________________________________________________
@@ -149,6 +168,26 @@ inline util::geo::I32Point webMercProjFunc(const util::geo::DPoint& p) {
 inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
   return {webMercProjFunc(b.getLowerLeft()),
           webMercProjFunc(b.getUpperRight())};
+}
+
+// ____________________________________________________________________________
+inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
+  auto len = ad_utility::GeometryInfo::getMetricLength(quotedWktLiteral);
+  if (!len.has_value()) {
+    throw std::runtime_error("Cannot compute expected length");
+  }
+  return len.value();
+}
+
+using DAnyGeometry = util::geo::AnyGeometry<double>;
+using ad_utility::detail::AnyGeometryMember;
+
+// ____________________________________________________________________________
+inline void checkAnyGeometryMemberEnum(
+    DAnyGeometry geom, AnyGeometryMember enumVal,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  EXPECT_EQ(geom.getType(), static_cast<uint8_t>(enumVal));
 }
 
 };  // namespace geoInfoTestHelpers
