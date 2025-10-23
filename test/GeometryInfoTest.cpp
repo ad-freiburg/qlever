@@ -373,6 +373,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, MetricLength) {
+  using namespace ad_utility::detail;
+
   MetricLength m1{5};
   EXPECT_EQ(m1.length(), 5);
 
@@ -561,10 +563,10 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
-                sizeof(EncodedGeometryTypeAndCentroid) +
+                4  // Alignment
+                    + sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(MetricLength) + 4  // Alignment
-  );
+                    sizeof(MetricLength) + sizeof(MetricArea));
 }
 
 }  // namespace
