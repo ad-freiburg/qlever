@@ -333,4 +333,18 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
   checkMetricLength(MetricLength{expected}, result);
 }
 
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
+  // These assertions check that we are not wasting space with alignment bytes
+  // when serializing `GeometryInfo` objects.
+  static_assert(sizeof(EncodedBoundingBox) == 16);
+  static_assert(sizeof(GeometryType) == 1);
+  static_assert(sizeof(MetricLength) == sizeof(double));
+
+  using EncodedGeometryTypeAndCentroid = uint64_t;
+  static_assert(sizeof(GeometryInfo) == sizeof(EncodedGeometryTypeAndCentroid) +
+                                            sizeof(EncodedBoundingBox) +
+                                            sizeof(MetricLength));
+}
+
 }  // namespace
