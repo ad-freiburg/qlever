@@ -1419,13 +1419,13 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       geoLit("BLABLIBLU(1 1, 2 2)"),
       geoLit("LINESTRING(-5000 0, 1 2)"),
   };
-  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U});
-  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U});
-  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U});
-  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U});
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
 
   auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
-  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U});
+  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U, I(1)});
   const IdOrLiteralOrIriVec exampleMultiGeoms{
       geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
       geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
