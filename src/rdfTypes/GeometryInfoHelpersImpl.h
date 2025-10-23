@@ -227,7 +227,7 @@ struct MetricLengthVisitor {
                            MultiPoint<CoordType>, Collection<CoordType>>) double
   operator()(const T& multiGeom) const {
     // This overload only handles the geometry types implemented by vectors.
-    static_assert(ad_utility::isInstantiation<std::decay_t<T>, std::vector>);
+    static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
     return ::ranges::accumulate(
         ::ranges::transform_view(multiGeom, MetricLengthVisitor{}), 0);
