@@ -18,14 +18,16 @@
 
 namespace ad_utility {
 
-/// A lambda that accesses the `i`-th element in a `randomAccessContainer`
+/// A struct that accesses the `i`-th element in a `randomAccessContainer`
 /// using `operator[]`
-inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
-                                          auto i) -> decltype(auto) {
-  return randomAccessContainer[i];
+struct AccessViaBracketOperator {
+  template <typename Container, typename Index>
+  decltype(auto) operator()(Container&& randomAccessContainer, Index i) const {
+    return randomAccessContainer[i];
+  }
 };
 
-using AccessViaBracketOperator = decltype(accessViaBracketOperator);
+inline constexpr AccessViaBracketOperator accessViaBracketOperator{};
 
 template <typename A, typename P>
 CPP_requires(has_valid_accessor_, requires(A& a, P& p, uint64_t i)(&a(*p, i)));
@@ -99,9 +101,11 @@ class IteratorForAccessOperator {
     return ql::compareThreeWay(index_, rhs.index_);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
-
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
+  }
+  bool operator!=(const IteratorForAccessOperator& rhs) const {
+    return index_ != rhs.index_;
   }
 
   IteratorForAccessOperator& operator+=(difference_type n) {

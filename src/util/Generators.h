@@ -1,7 +1,6 @@
 //   Copyright 2024, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
-//   Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_GENERATORS_H
 #define QLEVER_SRC_UTIL_GENERATORS_H
@@ -13,7 +12,6 @@
 #include <optional>
 
 #include "util/Generator.h"
-#include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
 
@@ -24,61 +22,30 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
+// NOTE: The `int` is just a dummy value.
 CPP_template(typename InputRange, typename AggregatorT,
              typename T = ql::ranges::range_value_t<InputRange>,
              typename FullyCachedFuncT = int)(
     requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
                                           const T&>
-        CPP_and InvocableWithExactReturnType<
-            FullyCachedFuncT, void,
-            T>) auto wrapGeneratorWithCache(InputRange generator,
-                                            AggregatorT aggregator,
-                                            FullyCachedFuncT onFullyCached) {
-  struct CachingWrapper : public InputRangeFromGet<T> {
-    InputRange generator_;
-    AggregatorT aggregator_;
-    FullyCachedFuncT onFullyCached_;
-    ql::ranges::iterator_t<InputRange> it_;
-    std::optional<T> aggregatedData_;
-    bool shouldBeAggregated_ = true;
-    bool initialized_ = false;
-
-    CachingWrapper(InputRange generator, AggregatorT aggregator,
-                   FullyCachedFuncT onFullyCached)
-        : generator_(std::move(generator)),
-          aggregator_(std::move(aggregator)),
-          onFullyCached_(std::move(onFullyCached)) {}
-
-    std::optional<T> get() override {
-      if (!std::exchange(initialized_, true)) {
-        it_ = generator_.begin();
-      } else {
-        ++it_;
+        CPP_and InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
+    cppcoro::generator<T> wrapGeneratorWithCache(
+        InputRange generator, AggregatorT aggregator,
+        FullyCachedFuncT onFullyCached) {
+  std::optional<T> aggregatedData{};
+  bool shouldBeAggregated = true;
+  for (T& element : generator) {
+    if (shouldBeAggregated) {
+      shouldBeAggregated = aggregator(aggregatedData, element);
+      if (!shouldBeAggregated) {
+        aggregatedData.reset();
       }
-
-      if (it_ == generator_.end()) {
-        if (aggregatedData_.has_value()) {
-          AD_CORRECTNESS_CHECK(shouldBeAggregated_);
-          onFullyCached_(std::move(aggregatedData_.value()));
-        }
-        return std::nullopt;
-      }
-
-      T element = std::move(*it_);
-
-      if (shouldBeAggregated_) {
-        shouldBeAggregated_ = aggregator_(aggregatedData_, element);
-        if (!shouldBeAggregated_) {
-          aggregatedData_.reset();
-        }
-      }
-
-      return element;
     }
-  };
-
-  return InputRangeTypeErased<T>{std::make_unique<CachingWrapper>(
-      std::move(generator), std::move(aggregator), std::move(onFullyCached))};
+    co_yield element;
+  }
+  if (aggregatedData.has_value()) {
+    onFullyCached(std::move(aggregatedData).value());
+  }
 }
 
 // Convert a callback-based `functionWithCallback` into a generator by spawning
