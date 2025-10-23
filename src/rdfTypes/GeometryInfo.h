@@ -135,7 +135,7 @@ class GeometryInfo {
   // Added by other PRs:
   // uint32_t numGeometries_ = 1;
   // double metricLength_ = 0.0;
-  double metricArea_ = 0.0;
+  MetricArea metricArea_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes

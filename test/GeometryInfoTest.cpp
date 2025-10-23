@@ -428,4 +428,18 @@ TEST(GeometryInfoTest, WebMercProjection) {
   checkUtilBoundingBox(result1, b1);
 }
 
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
+  // These assertions check that we are not wasting space with alignment bytes
+  // when serializing `GeometryInfo` objects.
+  static_assert(sizeof(EncodedBoundingBox) == 16);
+  static_assert(sizeof(GeometryType) == 1);
+  static_assert(sizeof(MetricArea) == sizeof(double));
+
+  using EncodedGeometryTypeAndCentroid = uint64_t;
+  static_assert(sizeof(GeometryInfo) == sizeof(EncodedGeometryTypeAndCentroid) +
+                                            sizeof(EncodedBoundingBox) +
+                                            sizeof(MetricArea));
+}
+
 }  // namespace
