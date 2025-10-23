@@ -11,6 +11,7 @@
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -2472,7 +2473,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <http://example.com/some-nonsense> ;"
+                "spatialSearch:joinType <http://example.com/some-nonsense> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2487,7 +2488,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <intersects> ;"
+                "spatialSearch:joinType <intersects> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2506,7 +2507,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:numNearestNeighbors 5 ;"
                 "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
-                "spatialSearch:joinType <within-dist> ;"
+                "spatialSearch:joinType <within-dist> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -2524,12 +2525,198 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:numNearestNeighbors 5 ;"
                 "spatialSearch:algorithm spatialSearch:s2 ;"
-                "spatialSearch:joinType <within-dist> ;"
+                "spatialSearch:joinType <within-dist> ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
       ::testing::HasSubstr(
           "The selected algorithm does not support the `<joinType>` option"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:experimentalRightCacheName \"dummy\" . "
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "`<experimentalRightCacheName>` is only supported by the "
+          "`<experimentalPointPolyline>` algorithm"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ;"
+          "spatialSearch:experimentalRightCacheName <http://example.com> . "
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "must be the name of a pinned cache entry as a string literal"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ."
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "parameter `<experimentalRightCacheName>` is mandatory"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "PREFIX spatialSearch: "
+          "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+          "SELECT * WHERE {"
+          "?x <p> ?y ."
+          "SERVICE spatialSearch: {"
+          "_:config spatialSearch:right ?b ;"
+          "spatialSearch:left ?y ;"
+          "spatialSearch:maxDistance 5 ;"
+          "spatialSearch:algorithm spatialSearch:experimentalPointPolyline ;"
+          "spatialSearch:experimentalRightCacheName \"dummy\" . "
+          " { ?a <p> ?b . }"
+          "}}",
+          ::testing::_),
+      ::testing::HasSubstr(
+          "a group graph pattern for the right side may not be specified"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
+  using V = Variable;
+  using PV = PayloadVariables;
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinAlgorithm;
+
+  std::string kb =
+      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+      "<s> <p> \"LINESTRING(15.5 2.5, 16.0 3.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+      "<s2> <p> \"LINESTRING(11.5 21.5, 11.5 22.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+      "<s3> <p2> <o2>.";
+  size_t numLineStrings = 3;
+  std::string pinned = "SELECT * { ?s <p> ?o }";
+
+  std::string testQuery =
+      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y ."
+      "SERVICE qlss: {"
+      "_:config qlss:right ?o ;"
+      "qlss:left ?y ;"
+      "qlss:maxDistance 500 ;"
+      "qlss:algorithm qlss:experimentalPointPolyline ;"
+      "qlss:experimentalRightCacheName \"dummy\" ."
+      "} }";
+
+  // Requested query for right child not pinned
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(testQuery, ::testing::_),
+      ::testing::HasSubstr(
+          "\"dummy\" is not contained in the named result cache"));
+
+  // Requested query for right child pinned but without the cached geometry
+  // index
+  {
+    auto qec = ad_utility::testing::getQec(kb);
+    qec->pinResultWithName() = {"dummy", std::nullopt};
+    auto plan = h::parseAndPlan(pinned, qec);
+    [[maybe_unused]] auto pinResult = plan.getResult();
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::expect(testQuery, ::testing::_, qec),
+        ::testing::HasSubstr("no cached geometry index was found"));
+  }
+
+  // Requested query for right child correctly pinned
+  {
+    auto qec = ad_utility::testing::getQec(kb);
+    qec->pinResultWithName() = {"dummy", V{"?o"}};
+    auto plan = h::parseAndPlan(pinned, qec);
+    [[maybe_unused]] auto pinResult = plan.getResult();
+
+    h::expect(
+        "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+        "SELECT * WHERE {"
+        "?x <p> ?y ."
+        "SERVICE qlss: {"
+        "_:config qlss:right ?o ;"
+        "qlss:left ?y ;"
+        "qlss:maxDistance 500 ;"
+        "qlss:algorithm qlss:experimentalPointPolyline ;"
+        "qlss:experimentalRightCacheName \"dummy\" ."
+        "} }",
+        h::spatialJoin(500, -1, V{"?y"}, V{"?o"}, std::nullopt, PV::all(),
+                       S2_POINT_POLYLINE, std::nullopt, scan("?x", "<p>", "?y"),
+                       h::ExplicitIdTableOperation(numLineStrings)),
+        qec);
+
+    // Payload variables from the cached right side are allowed
+    h::expect(
+        "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+        "SELECT * WHERE {"
+        "?x <p> ?y ."
+        "SERVICE qlss: {"
+        "_:config qlss:right ?o ;"
+        "qlss:left ?y ;"
+        "qlss:maxDistance 500 ;"
+        "qlss:algorithm qlss:experimentalPointPolyline ;"
+        "qlss:experimentalRightCacheName \"dummy\" ;"
+        "qlss:payload ?s ."
+        "} }",
+        h::spatialJoin(500, -1, V{"?y"}, V{"?o"}, std::nullopt, PV::all(),
+                       S2_POINT_POLYLINE, std::nullopt, scan("?x", "<p>", "?y"),
+                       h::ExplicitIdTableOperation(numLineStrings)),
+        qec);
+  }
+
+  // Query is pinned correctly with geometry index, but the user does not
+  // request the correct column to be used
+  {
+    auto qec = ad_utility::testing::getQec(kb);
+    qec->pinResultWithName() = {"dummy", V{"?o"}};
+    auto plan = h::parseAndPlan(pinned, qec);
+    [[maybe_unused]] auto pinResult = plan.getResult();
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::expect(
+            "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+            "SELECT * WHERE {"
+            "?x <p> ?y ."
+            "SERVICE qlss: {"
+            "_:config qlss:right ?wrongVariableHere ;"
+            "qlss:left ?y ;"
+            "qlss:maxDistance 500 ;"
+            "qlss:algorithm qlss:experimentalPointPolyline ;"
+            "qlss:experimentalRightCacheName \"dummy\" ."
+            "} }",
+            ::testing::_, qec),
+        ::testing::HasSubstr(
+            "built on the column \"?o\" but this query requests "
+            "\"?wrongVariableHere\" as the right join variable"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -5470,7 +5657,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
   qec = ad_utility::testing::getQec(
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
-  qec->pinResultWithName() = "dummyQuery";
+  qec->pinResultWithName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
