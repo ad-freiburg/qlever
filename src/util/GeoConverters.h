@@ -87,4 +87,4 @@ inline S2Polygon makeS2Polygon(const Polygon<CoordType>& polygon) {
 
 }  // namespace geometryConverters
 
-#endif  // QLEVER_GEOCONVERTERS_H
+#endif  // QLEVER_SRC_UTIL_GEOCONVERTERS_H
