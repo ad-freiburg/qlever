@@ -464,9 +464,8 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
-      "centroid", "envelope", "geometryType", "minX",
-
-      "minY",     "maxX",     "maxY",         "numGeometries", , "metricLength",
+      "centroid", "envelope", "geometryType",  "minX",         "minY",
+      "maxX",     "maxY",     "numGeometries", "metricLength",
   };
   for (const auto& func : unaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
