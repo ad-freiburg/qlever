@@ -19,7 +19,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, MetricLength metricLength)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
-      metricLength_{metricLength.length()} {
+      metricLength_{metricLength} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -150,9 +150,7 @@ std::string BoundingBox::asWkt() const {
 }
 
 // ____________________________________________________________________________
-MetricLength GeometryInfo::getMetricLength() const {
-  return MetricLength{metricLength_};
-};
+MetricLength GeometryInfo::getMetricLength() const { return metricLength_; };
 
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
