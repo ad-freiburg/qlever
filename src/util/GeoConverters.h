@@ -25,7 +25,6 @@
 namespace geometryConverters {
 
 using CoordType = double;
-using namespace util::geo;
 
 // Helper function to convert `GeoPoint` objects to `S2Point`.
 inline S2Point toS2Point(const GeoPoint& p) {
@@ -37,21 +36,23 @@ inline S2LatLng toS2LatLng(const util::geo::DPoint& point) {
   return S2LatLng::FromDegrees(point.getY(), point.getX());
 }
 
-inline S2Polyline toS2Polyline(const util::geo::Line<double>& line) {
+// Helper function to convert `libspatialjoin` `DLine` objects to `S2Polyline`.
+inline S2Polyline toS2Polyline(const util::geo::DLine& line) {
   AD_CORRECTNESS_CHECK(!line.empty());
   return S2Polyline{
       ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
 }
 
-// Helper function to convert `GeoPoint` objects to `S2Point`.
-inline S2Point toS2Point(const DPoint& p) {
+// Helper function to convert `libspatialjoin` `DPoint` objects to `S2Point`.
+inline S2Point utilPointToS2Point(const util::geo::DPoint& p) {
   return S2LatLng::FromDegrees(p.getY(), p.getX()).ToPoint();
 }
 
 // Helper to convert a `libspatialjoin` `Ring` to an `S2Loop`
-inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
-  std::vector<S2Point> points =
-      ::ranges::to<std::vector>(ring | ::ranges::views::transform(&toS2Point));
+inline std::unique_ptr<S2Loop> makeS2Loop(
+    const util::geo::Ring<CoordType>& ring) {
+  std::vector<S2Point> points = ::ranges::to<std::vector>(
+      ring | ::ranges::views::transform(&utilPointToS2Point));
 
   // Ensure that there are no zero-length edges (that is edges with twice the
   // same point), as this will lead to an exception from `S2Loop`.
@@ -69,7 +70,7 @@ inline std::unique_ptr<S2Loop> makeS2Loop(const Ring<CoordType>& ring) {
 }
 
 // Helper to convert a `libspatialjoin` `Polygon` to an `S2Polygon`
-inline S2Polygon makeS2Polygon(const Polygon<CoordType>& polygon) {
+inline S2Polygon makeS2Polygon(const util::geo::Polygon<CoordType>& polygon) {
   std::vector<std::unique_ptr<S2Loop>> loops;
 
   // Outer boundary
