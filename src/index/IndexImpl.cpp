@@ -253,8 +253,9 @@ IndexImpl::buildOspWithPatterns(
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-  createSecondPermutationPair(NumColumnsIndexBuilding + 2,
-                              std::move(blockGenerator), *thirdSorter);
+  createSecondPermutationPair(
+      NumColumnsIndexBuilding + 2, std::move(blockGenerator),
+      DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER, *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
@@ -290,7 +291,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto internalTriplesUnique = BlocksOfTriples{ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>())};
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
-                      false);
+                      false, memoryLimitIndexBuilding_ / 2);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
@@ -397,37 +398,43 @@ void IndexImpl::createFromFiles(
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
+                               std::move(firstSorterWithUnique),
+                               memoryLimitIndexBuilding_ / 2);
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
     // Without patterns, we explicitly have to pass in the next sorters to all
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique), secondSorter);
+    createFirstPermutationPair(
+        NumColumnsIndexBuilding, std::move(firstSorterWithUnique),
+        DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER, secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
+    createSecondPermutationPair(
+        NumColumnsIndexBuilding, secondSorter.getSortedBlocks<0>(),
+        DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER, thirdSorter);
     secondSorter.clear();
     createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+                               thirdSorter.getSortedBlocks<0>(),
+                               memoryLimitIndexBuilding_ / 2);
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
     auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
+        NumColumnsIndexBuilding, std::move(firstSorterWithUnique),
+        DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER);
     firstSorter.clearUnderlying();
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-                               thirdSorterPtr->template getSortedBlocks<0>());
+                               thirdSorterPtr->template getSortedBlocks<0>(),
+                               memoryLimitIndexBuilding_ / 2);
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -810,12 +817,12 @@ auto IndexImpl::convertPartialToGlobalIds(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(size_t numColumns,
-                                     const std::string& fileName1,
-                                     const std::string& fileName2,
-                                     T&& sortedTriples,
-                                     Permutation::KeyOrder permutation,
-                                     Callbacks&&... perTripleCallbacks) {
+IndexImpl::createPermutationPairImpl(
+    size_t numColumns, const std::string& fileName1,
+    const std::string& fileName2, T&& sortedTriples,
+    Permutation::KeyOrder permutation,
+    ad_utility::MemorySize twinRelationSorterMemory,
+    Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   static_assert(MetaData::isMmapBased_);
@@ -845,7 +852,8 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks,
+          twinRelationSorterMemory);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -858,13 +866,14 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
+                              ad_utility::MemorySize twinRelationSorterMemory,
                               Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
       onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
-      p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder(), twinRelationSorterMemory, AD_FWD(perTripleCallbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
   meta1.calculateStatistics(numDistinctCol0);
@@ -879,13 +888,13 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 
 // ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
-size_t IndexImpl::createPermutationPair(size_t numColumns,
-                                        SortedTriplesType&& sortedTriples,
-                                        const Permutation& p1,
-                                        const Permutation& p2,
-                                        CallbackTypes&&... perTripleCallbacks) {
+size_t IndexImpl::createPermutationPair(
+    size_t numColumns, SortedTriplesType&& sortedTriples, const Permutation& p1,
+    const Permutation& p2, ad_utility::MemorySize twinRelationSorterMemory,
+    CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
-      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, twinRelationSorterMemory,
+      AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
   // pso_.meta_, ... which however are not used during index building.
@@ -1703,6 +1712,8 @@ CPP_template_def(typename... NextSorter)(requires(
     1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
+                                            ad_utility::MemorySize
+                                                twinRelationSorterMemory,
                                             NextSorter&&... nextSorter)
 
 {
@@ -1715,10 +1726,10 @@ CPP_template_def(typename... NextSorter)(requires(
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
-  size_t numPredicatesTotal =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
-                            nextSorter.makePushCallback()...,
-                            std::ref(predicateCounter), countTriplesNormal);
+  size_t numPredicatesTotal = createPermutationPair(
+      numColumns, AD_FWD(sortedTriples), pso_, pos_, twinRelationSorterMemory,
+      nextSorter.makePushCallback()..., std::ref(predicateCounter),
+      countTriplesNormal);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormalAndTotal(numPredicatesNormal,
                                                numPredicatesTotal);
@@ -1734,15 +1745,18 @@ CPP_template_def(typename... NextSorter)(
     requires(sizeof...(NextSorter) <=
              1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
                                                  BlocksOfTriples sortedTriples,
+                                                 ad_utility::MemorySize
+                                                     twinRelationSorterMemory,
                                                  NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
-                      AD_FWD(nextSorter)...);
+                      twinRelationSorterMemory, AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         size_t numColumns, BlocksOfTriples sortedTriples,
+        ad_utility::MemorySize twinRelationSorterMemory,
         NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   size_t numSubjectsTotal = 0;
@@ -1766,7 +1780,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), spo_, sop_, twinRelationSorterMemory,
         nextSorter.makePushCallback()..., pushTripleToPatterns,
         std::ref(numSubjectCounter));
     patternCreator.finish();
@@ -1778,7 +1792,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     numSubjectsTotal = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        numColumns, AD_FWD(sortedTriples), spo_, sop_, twinRelationSorterMemory,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
@@ -1795,13 +1809,15 @@ CPP_template_def(typename... NextSorter)(
     requires(sizeof...(NextSorter) <=
              1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
                                                  BlocksOfTriples sortedTriples,
+                                                 ad_utility::MemorySize
+                                                     twinRelationSorterMemory,
                                                  NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
   auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
   size_t numObjectsTotal = createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), osp_, ops_,
+      numColumns, AD_FWD(sortedTriples), osp_, ops_, twinRelationSorterMemory,
       nextSorter.makePushCallback()..., std::ref(objectCounter));
   configurationJson_["num-objects"] = NumNormalAndInternal::fromNormalAndTotal(
       numObjectsNormal, numObjectsTotal);
