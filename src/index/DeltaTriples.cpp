@@ -189,8 +189,6 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
     }
   });
   tracer.endTrace("removeInverseTriples");
-  tracer.beginTrace("updateMetadata");
-  tracer.endTrace("updateMetadata");
   tracer.beginTrace("locatedAndAdd");
 
   std::vector<LocatedTripleHandles> handles = locateAndAddTriples(
