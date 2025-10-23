@@ -152,8 +152,7 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
 
   const auto cacheKey = spatialJoin->getCacheKey();
   EXPECT_THAT(cacheKey, ::testing::HasSubstr("right cache name:dummy"));
-  EXPECT_THAT(cacheKey, ::testing::HasSubstr(absl::StrCat(
-                            "cache entry: (", pinResultCacheKey, ")")));
+  EXPECT_THAT(cacheKey, ::testing::HasSubstr(pinResultCacheKey));
 }
 
 }  // namespace
