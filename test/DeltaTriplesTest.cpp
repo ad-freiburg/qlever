@@ -141,7 +141,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto UnorderedTriplesAre = [&mapKeys, this, &vocab, &localVocab](
                                  const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
-          IdTriple<0>, DeltaTriples::LocatedTripleHandles>&> {
+          IdTriple<0>, DeltaTriples::LocatedTripleHandles<false>>&> {
     return testing::ResultOf(
         "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
         testing::UnorderedElementsAreArray(

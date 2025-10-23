@@ -64,6 +64,18 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   isLoaded_ = true;
 }
 
+// _____________________________________________________________________________
+void Permutation::setOriginalMetadataForDeltaTriples(
+    DeltaTriples& deltaTriples) const {
+  if (isInternalPermutation_) {
+    deltaTriples.setInternalOriginalMetadata(permutation(),
+                                             metaData().blockDataShared());
+  } else {
+    deltaTriples.setOriginalMetadata(permutation(),
+                                     metaData().blockDataShared());
+  }
+}
+
 // _____________________________________________________________________
 IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           ColumnIndicesRef additionalColumns,
@@ -243,29 +255,21 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
       ScanSpecification{id, std::nullopt, std::nullopt});
 }
 
-// TODO<joka921> The following two functions always assume that there were no
-// updates to the additional triples (which is technically true for now, because
-// we never modify the additional triples with the delta triples, because there
-// is some functionality missing for this. We have to fix this here and in the
-// `DeltaTriples` class.
-
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  static const LocatedTriplesSnapshot emptySnapshot{
-      {}, LocalVocab{}.getLifetimeExtender(), 0};
-  const auto& actualSnapshot =
-      isInternalPermutation_ ? emptySnapshot : locatedTriplesSnapshot;
-  return actualSnapshot.getLocatedTriplesForPermutation(permutation_);
+  return isInternalPermutation_
+             ? locatedTriplesSnapshot.getInternalLocatedTriplesForPermutation(
+                   permutation_)
+             : locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+                   permutation_);
 }
 
 // ______________________________________________________________________
 BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   BlockMetadataSpan blocks(
-      isInternalPermutation_
-          ? meta_.blockData()
-          : getLocatedTriplesForPermutation(locatedTriplesSnapshot)
-                .getAugmentedMetadata());
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot)
+          .getAugmentedMetadata());
   return {{blocks.begin(), blocks.end()}};
 }

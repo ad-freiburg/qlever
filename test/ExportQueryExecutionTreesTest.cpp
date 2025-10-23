@@ -1466,7 +1466,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-          qec->getIndex(), Id::max(), LocalVocab{}),
+          qec->getIndex().getImpl(), Id::max(), LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
@@ -1877,7 +1877,8 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
               cases) {
         for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
           auto result = ExportQueryExecutionTrees::idToLiteral(
-              qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
+              qec->getIndex().getImpl(), id, LocalVocab{},
+              onlyLiteralsWithXsdString);
           if (expected) {
             EXPECT_THAT(result,
                         ::testing::Optional(::testing::ResultOf(
@@ -1960,7 +1961,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
       {ValueId::makeUndefined(), std::nullopt}};
   for (const auto& [valueId, expRes] : expected) {
     ASSERT_EQ(ExportQueryExecutionTrees::idToLiteralOrIri(
-                  qec->getIndex(), valueId, LocalVocab{}),
+                  qec->getIndex().getImpl(), valueId, LocalVocab{}),
               expRes);
   }
 }
@@ -2166,7 +2167,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
 
     // Test getLiteralOrIriFromVocabIndex with the encoded ID
     auto result = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), encodedId, emptyLocalVocab);
+        qec->getIndex().getImpl(), encodedId, emptyLocalVocab);
 
     // The result should be the original IRI
     EXPECT_TRUE(result.isIri());
@@ -2184,7 +2185,7 @@ TEST(ExportQueryExecutionTrees, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     Id vocabId = Id::makeFromVocabIndex(vocabIndex);
 
     auto vocabResult = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-        qec->getIndex(), vocabId, emptyLocalVocab);
+        qec->getIndex().getImpl(), vocabId, emptyLocalVocab);
 
     // Should successfully return some IRI or literal from vocabulary
     EXPECT_FALSE(vocabResult.toStringRepresentation().empty());
