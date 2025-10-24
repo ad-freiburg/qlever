@@ -170,14 +170,14 @@ class DeltaTriples {
   }
   DeltaTriplesCount getCounts() const;
 
-  // Insert triples. The block metadata must be updated before the next query
-  // with `updateAugmentedMetadata`.
+  // Insert triples. The block metadata must be updated using
+  // `updateAugmentedMetadata` before the next query.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples. The block metadata must be updated before the next query
-  // with `updateAugmentedMetadata`.
+  // Delete triples. The block metadata must be updated using
+  // `updateAugmentedMetadata` before the next query.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
