@@ -3,6 +3,7 @@
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <util/geo/Geo.h>
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -53,10 +54,13 @@ const auto getAllTestLiterals = []() {
       litMultiLineString, litMultiPolygon, litCollection};
 };
 
+constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
+                                                              2, 2, 3};
+
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}};
+  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {2}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -65,45 +69,52 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
   ASSERT_NEAR(upperRight.getLat(), 2, 0.0001);
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
+  ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
 
   // Too large wkt type value
-  AD_EXPECT_THROW_WITH_MESSAGE(GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}),
-                               ::testing::HasSubstr("WKT Type out of range"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}),
+      ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
+
+  // Zero geometries
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}),
+      ::testing::HasSubstr("Number of geometries must be strictly positive"));
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
+  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {1}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {1}};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {1}};
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, {2}};
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}};
+  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, {2}};
   checkGeoInfo(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}};
+  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}, {2}};
   checkGeoInfo(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
+  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {3}};
   checkGeoInfo(g7, exp7);
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
@@ -114,12 +125,12 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}};
+  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}};
+  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, {1}};
   checkGeoInfo(g2, exp2);
 }
 
@@ -205,6 +216,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
+  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
   ASSERT_TRUE(parseRes1.second.has_value());
   auto parsed1 = parseRes1.second.value();
 
@@ -225,6 +237,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+
+  EXPECT_EQ(countChildGeometries(parsed1), 1);
 }
 
 // ____________________________________________________________________________
@@ -236,11 +250,13 @@ TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
-  checkInvalidLiteral(litCoordOutOfRange, true);
+  checkInvalidLiteral(litCoordOutOfRange, true, true);
   EXPECT_EQ(GeometryInfo::getWktType(litCoordOutOfRange).value(),
             std::optional<GeometryType>{GeometryType{2}});
   EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
             std::optional<GeometryType>{GeometryType{2}});
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
+            NumGeometries{1});
 }
 
 // _____________________________________________________________________________
@@ -250,6 +266,23 @@ TEST(GeometryInfoTest, WebMercProjection) {
   auto result1 =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
   checkUtilBoundingBox(result1, b1);
+}
+
+// _____________________________________________________________________________
+TEST(GeometryInfoTest, NumGeometries) {
+  const auto testLiterals = getAllTestLiterals();
+  ASSERT_EQ(testLiterals.size(), allTestLiteralNumGeometries.size());
+
+  for (size_t i = 0; i < testLiterals.size(); ++i) {
+    const auto& lit = testLiterals[i];
+    NumGeometries expected{allTestLiteralNumGeometries[i]};
+
+    EXPECT_EQ(GeometryInfo::getNumGeometries(lit), expected);
+
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    EXPECT_EQ(gi.value().getNumGeometries(), expected);
+  }
 }
 
 }  // namespace

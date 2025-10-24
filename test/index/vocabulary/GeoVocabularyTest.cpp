@@ -132,7 +132,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(nonGeoIdx)).has_value());
   auto gi = vocabulary.getGeoInfo(VocabIndex::make(geoIdx));
   ASSERT_TRUE(gi.has_value());
-  GeometryInfo exp{2, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp{2, {{2, 2}, {4, 4}}, {3, 3}, {1}};
   checkGeoInfo(gi.value(), exp);
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying

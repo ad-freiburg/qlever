@@ -1407,21 +1407,29 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkMaxY =
       testUnaryExpression<&makeBoundingCoordinateExpression<MAX_Y>>;
 
-  const IdOrLiteralOrIriVec boundingCoordInputs{
+  const IdOrLiteralOrIriVec exampleGeoms{
       U,
       D(0.0),
       v,  // POINT(24.3, 26.8)
       geoLit("LINESTRING(2 8, 4 6)"),
       geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
-      lit("BLABLIBLU(1 1, 2 2)")
-      // TODO<ullingerc> Handle invalid geo literals gracefully. Then add
-      // geoLit("BLABLIBLU(1 1, 2 2)")
+      lit("BLABLIBLU(1 1, 2 2)"),
+      geoLit("BLABLIBLU(1 1, 2 2)"),
   };
-  using IdVec = std::vector<ValueId>;
-  checkMinX(boundingCoordInputs, IdVec{U, U, D(24.3), D(2), D(2), U});
-  checkMinY(boundingCoordInputs, IdVec{U, U, D(26.8), D(6), D(2), U});
-  checkMaxX(boundingCoordInputs, IdVec{U, U, D(24.3), D(4), D(4), U});
-  checkMaxY(boundingCoordInputs, IdVec{U, U, D(26.8), D(8), D(4), U});
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U});
+
+  auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
+  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U});
+  const IdOrLiteralOrIriVec exampleMultiGeoms{
+      geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
+      geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
+      geoLit("MULTIPOLYGON(((1 2, 3 4, 1 2)),((1 2, 3 4, 1 2.5)),((5 6, 7 8, 9 "
+             "0, 5 6), (7 6, 5 4, 7 6)))"),
+      geoLit("GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(2 8, 4 6))")};
+  checkNumGeometries(exampleMultiGeoms, Ids{I(4), I(1), I(2), I(3), I(2)});
 }
 
 // ________________________________________________________________________________________

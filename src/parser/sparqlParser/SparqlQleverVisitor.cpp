@@ -224,7 +224,9 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
-      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
+      {"numGeometries", &makeNumGeometriesExpression},
+  };
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
