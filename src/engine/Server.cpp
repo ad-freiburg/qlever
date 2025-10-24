@@ -451,17 +451,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
     requireValidAccessToken("rebuild-index");
     logCommand(cmd, "rebuilding index");
-    // The function requires a SharedCancellationHandle, but the operation is
-    // not cancellable.
+    // There is no mechanism to actually cancel the handle.
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     // We don't directly `co_await` because of lifetime issues (bugs) in the
     // Conan setup.
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [this] {
+        [this, &handle] {
           index_.deltaTriplesManager().modify<void>(
-              [](DeltaTriples& deltaTriples) {
-                deltaTriples.materializeToIndex();
+              [&handle](DeltaTriples& deltaTriples) {
+                // TODO<RobinTF> Ideally acquire a snapshot of the delta triples
+                // to then build the new index based on this snapshot without
+                // holding the lock any longer.
+                deltaTriples.materializeToIndex(handle);
               },
               false);
         },

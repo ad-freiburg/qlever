@@ -391,6 +391,58 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
       false);
 }
 
+std::pair<std::vector<std::tuple<VocabIndex, std::string_view, Id>>,
+          ad_utility::HashMap<Id, Id>>
+DeltaTriples::materializeLocalVocab() const {
+  auto& vocab = index_.getVocab();
+
+  size_t newWordCount = 0;
+  std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
+  insertInfo.reserve(localVocab_.size());
+
+  ad_utility::HashMap<Id, Id> localVocabMapping;
+
+  for (const LocalVocabEntry& entry : localVocab_.primaryWordSet()) {
+    const auto& [lower, upper] = entry.positionInVocab();
+    AD_CORRECTNESS_CHECK(lower == upper);
+    Id id = Id::fromBits(upper.get());
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
+    insertInfo.emplace_back(id.getVocabIndex(),
+                            entry.asLiteralOrIri().toStringRepresentation(),
+                            Id::makeFromLocalVocabIndex(&entry));
+  }
+  ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
+    return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
+           std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
+  });
+
+  auto vocabWriter = vocab.makeWordWriterPtr("tmp_index.vocabulary");
+  for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
+    auto actualIndex = VocabIndex::make(vocabIndex);
+    while (insertInfo.size() > newWordCount &&
+           std::get<VocabIndex>(insertInfo.at(newWordCount)) == actualIndex) {
+      AD_CORRECTNESS_CHECK(std::get<Id>(insertInfo.at(newWordCount)) <
+                           Id::makeFromVocabIndex(actualIndex));
+      auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
+      auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+      localVocabMapping.emplace(
+          std::get<Id>(insertInfo.at(newWordCount)),
+          Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+      newWordCount++;
+    }
+    auto word = vocab[actualIndex];
+    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    AD_CORRECTNESS_CHECK(newIndex == vocabIndex + newWordCount);
+  }
+
+  for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
+    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    localVocabMapping.emplace(
+        id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+  }
+  return std::pair{std::move(insertInfo), std::move(localVocabMapping)};
+}
+
 namespace {
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
@@ -465,59 +517,14 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 }  // namespace
 
 // _____________________________________________________________________________
-void DeltaTriples::materializeToIndex() {
-  auto& vocab = index_.getVocab();
+void DeltaTriples::materializeToIndex(
+    const CancellationHandle& cancellationHandle) {
+  const auto& [insertInfo, localVocabMapping] = materializeLocalVocab();
 
-  size_t newWordCount = 0;
-  std::vector<std::tuple<VocabIndex, std::string_view, Id>> insertInfo;
-  insertInfo.reserve(localVocab_.size());
-
-  ad_utility::HashMap<Id, Id> localVocabMapping;
-
-  for (const LocalVocabEntry& entry :
-       const_cast<const LocalVocab&>(localVocab_).primaryWordSet()) {
-    const auto& [lower, upper] = entry.positionInVocab();
-    AD_CORRECTNESS_CHECK(lower == upper);
-    Id id = Id::fromBits(upper.get());
-    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
-    insertInfo.emplace_back(id.getVocabIndex(),
-                            entry.asLiteralOrIri().toStringRepresentation(),
-                            Id::makeFromLocalVocabIndex(&entry));
-  }
-  ql::ranges::sort(insertInfo, [](const auto& tupleA, const auto& tupleB) {
-    return std::tie(std::get<VocabIndex>(tupleA).get(), std::get<Id>(tupleA)) <
-           std::tie(std::get<VocabIndex>(tupleB).get(), std::get<Id>(tupleB));
-  });
-
-  auto vocabWriter = vocab.makeWordWriterPtr("tmp_index.vocabulary");
-  for (size_t vocabIndex = 0; vocabIndex < vocab.size(); ++vocabIndex) {
-    auto actualIndex = VocabIndex::make(vocabIndex);
-    while (insertInfo.size() > newWordCount &&
-           std::get<VocabIndex>(insertInfo.at(newWordCount)) == actualIndex) {
-      AD_CORRECTNESS_CHECK(std::get<Id>(insertInfo.at(newWordCount)) <
-                           Id::makeFromVocabIndex(actualIndex));
-      auto word = std::get<std::string_view>(insertInfo.at(newWordCount));
-      auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-      localVocabMapping.emplace(
-          std::get<Id>(insertInfo.at(newWordCount)),
-          Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-      newWordCount++;
-    }
-    auto word = vocab[actualIndex];
-    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-    AD_CORRECTNESS_CHECK(newIndex == vocabIndex + newWordCount);
-  }
-
-  for (const auto& [_, word, id] : insertInfo | ql::views::drop(newWordCount)) {
-    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-    localVocabMapping.emplace(
-        id, Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-  }
-
+  // TODO<RobinTF> Move much of this logic to `IndexImpl`. This way the "public"
+  // wrappers can be avoided.
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   auto snapshot = getSnapshot();
-  CancellationHandle cancellationHandle =
-      std::make_shared<CancellationHandle::element_type>();
   IndexImpl newIndex{index_.allocator(), false};
   newIndex.loadConfigFromOldIndex("tmp_index", index_);
 
