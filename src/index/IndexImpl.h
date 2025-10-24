@@ -567,12 +567,6 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
- public:
-  void createPermutationPairPublic(
-      size_t numColumns,
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
-      const Permutation& p1, const Permutation& p2);
-
  protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -716,12 +710,17 @@ class IndexImpl {
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
           NextSorter&&... nextSorter);
+
+  void createSPOAndSOPPublic(size_t numColumns, BlocksOfTriples sortedTriples);
+
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
       sizeof...(NextSorter) <=
       1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                                NextSorter&&... nextSorter);
+
+  void createOSPAndOPSPublic(size_t numColumns, BlocksOfTriples sortedTriples);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the

@@ -404,11 +404,8 @@ void IndexImpl::createFromFiles(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
-  // TODO: this will become ad_utility::InputRangeErased so no conversion
-  // will be needed after https://github.com/ad-freiburg/qlever/pull/2208
-  // For the first permutation, perform a unique.
-  auto firstSorterWithUnique{ad_utility::InputRangeTypeErased{
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput())}};
+  auto firstSorterWithUnique =
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -893,15 +890,6 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
               << meta2.statistics() << std::endl;
 
   return metaData;
-}
-
-// ________________________________________________________________________
-void IndexImpl::createPermutationPairPublic(
-    size_t numColumns,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
-    const Permutation& p1, const Permutation& p2) {
-  [[maybe_unused]] auto value =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
 }
 
 // ________________________________________________________________________
@@ -1822,7 +1810,13 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       numSubjectsNormal, numSubjectsTotal);
   writeConfiguration();
   return result;
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createSPOAndSOPPublic(size_t numColumns,
+                                      BlocksOfTriples sortedTriples) {
+  createSPOAndSOP(numColumns, std::move(sortedTriples));
+}
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(
@@ -1841,7 +1835,13 @@ CPP_template_def(typename... NextSorter)(
       numObjectsNormal, numObjectsTotal);
   configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
-};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createOSPAndOPSPublic(size_t numColumns,
+                                      BlocksOfTriples sortedTriples) {
+  createOSPAndOPS(numColumns, std::move(sortedTriples));
+}
 
 // _____________________________________________________________________________
 template <typename Comparator, size_t I, bool returnPtr>
@@ -1892,4 +1892,5 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   setKbName(other.getKbName());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
   configurationJson_ = other.configurationJson_;
+  usePatterns_ = other.usePatterns_;
 }

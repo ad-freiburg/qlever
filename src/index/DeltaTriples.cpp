@@ -14,8 +14,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <filesystem>
-
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
@@ -523,6 +521,18 @@ void DeltaTriples::materializeToIndex() {
   IndexImpl newIndex{index_.allocator(), false};
   newIndex.loadConfigFromOldIndex("tmp_index", index_);
 
+  if (index_.hasAllPermutations()) {
+    // TODO<RobinTF> Figure out how to respect patterns here properly.
+    newIndex.createSPOAndSOPPublic(
+        4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::SPO),
+                             scanSpec, *snapshot, localVocabMapping, insertInfo,
+                             cancellationHandle));
+    newIndex.createOSPAndOPSPublic(
+        4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::OPS),
+                             scanSpec, *snapshot, localVocabMapping, insertInfo,
+                             cancellationHandle));
+  }
+
   auto [numTriplesInternal, numPredicatesInternal] =
       newIndex.createInternalPSOandPOSFromRange(readIndexAndRemap(
           index_.getPermutation(Permutation::Enum::PSO).internalPermutation(),
@@ -548,21 +558,11 @@ void DeltaTriples::materializeToIndex() {
                                     std::move(blockMetadataRanges), *snapshot,
                                     localVocabMapping, insertInfo,
                                     cancellationHandle, additionalColumns));
-  for (auto permutation : {Permutation::Enum::SPO, Permutation::Enum::OPS}) {
-    newIndex.createPermutationPairPublic(
-        4,
-        readIndexAndRemap(index_.getPermutation(permutation), scanSpec,
-                          *snapshot, localVocabMapping, insertInfo,
-                          cancellationHandle),
-        newIndex.getPermutation(permutation),
-        newIndex.getPermutation(
-            static_cast<Permutation::Enum>(static_cast<int>(permutation) + 1)));
-  }
+
+  // TODO<RobinTF> explicitly set these two
+  // newIndex.configurationJson_["has-all-permutations"] =
+  // index_.hasAllPermutations();
+  // newIndex.configurationJson_["num-blank-nodes-total"] = TBD;
   newIndex.addInternalStatisticsToConfiguration(numTriplesInternal,
                                                 numPredicatesInternal);
-  if (index_.usePatterns()) {
-    std::filesystem::copy(index_.getOnDiskBase() + ".index.patterns",
-                          newIndex.getOnDiskBase() + ".index.patterns",
-                          std::filesystem::copy_options::overwrite_existing);
-  }
 }
