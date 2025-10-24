@@ -383,6 +383,13 @@ TEST(SparqlParser, FunctionCall) {
                          variableExpressionMatcher(Variable{"?b"}),
                          variableExpressionMatcher(Variable{"?unit"})));
 
+  // Length functions
+  expectFunctionCall(absl::StrCat(geof, "metricLength>(?x)"),
+                     matchUnary(&makeMetricLengthExpression));
+  expectFunctionCall(
+      absl::StrCat(geof, "length>(?a, ?b)"),
+      matchNary(&makeLengthExpression, Variable{"?a"}, Variable{"?b"}));
+
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
@@ -457,8 +464,8 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
-      "centroid", "envelope", "geometryType", "minX",
-      "minY",     "maxX",     "maxY",         "numGeometries",
+      "centroid", "envelope", "geometryType",  "minX",         "minY",
+      "maxX",     "maxY",     "numGeometries", "metricLength",
   };
   for (const auto& func : unaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
@@ -467,8 +474,8 @@ TEST(SparqlParser, FunctionCall) {
   }
 
   const std::vector<std::string> binaryGeofFunctionNames = {
-      "sfIntersects", "sfContains", "sfCovers",   "sfCrosses",
-      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin"};
+      "sfIntersects", "sfContains", "sfCovers", "sfCrosses", "sfTouches",
+      "sfEquals",     "sfOverlaps", "sfWithin", "length"};
   for (const auto& func : binaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
     expectFunctionCallFails(absl::StrCat(geof, func, ">(?a)"));
