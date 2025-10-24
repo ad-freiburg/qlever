@@ -119,7 +119,7 @@ inline GeneratorWithDetails convertGenerator(
 CPP_template_2(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
+        std::function<void(IdTable&, LocalVocab&)>>) Result::LazyResult
     runLazyJoinAndConvertToGenerator(ActionT runLazyJoin,
                                      OptionalPermutation permutation) {
   return generatorFromActionWithCallback<Result::IdTableVocabPair>(
