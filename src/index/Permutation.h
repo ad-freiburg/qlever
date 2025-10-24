@@ -185,6 +185,11 @@ class Permutation {
 
   Enum permutation() const { return permutation_; }
 
+  const Permutation& internalPermutation() const {
+    AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
+    return *internalPermutation_;
+  }
+
  private:
   // Readable name for this permutation, e.g., `POS`.
   std::string readableName_;
