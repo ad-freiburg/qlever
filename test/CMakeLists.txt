@@ -167,6 +167,8 @@ addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
 addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
+addLinkAndDiscoverTestSerial(QueryPlannerSpatialJoinTest engine)
+
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
