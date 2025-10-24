@@ -444,6 +444,19 @@ DeltaTriples::materializeLocalVocab() const {
 }
 
 namespace {
+Id remapVocabId(Id original,
+                const std::vector<std::tuple<VocabIndex, std::string_view, Id>>&
+                    insertInfo) {
+  AD_CONTRACT_CHECK(original.getDatatype() == Datatype::VocabIndex);
+  size_t offset = ql::ranges::distance(
+      insertInfo.begin(),
+      ql::ranges::upper_bound(
+          insertInfo, original.getVocabIndex(), std::less{},
+          [](const auto& tuple) { return std::get<0>(tuple); }));
+  return Id::makeFromVocabIndex(
+      VocabIndex::make(original.getVocabIndex().get() + offset));
+}
+
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation, ScanSpecification scanSpec,
     BlockMetadataRanges blockMetadataRanges,
@@ -476,15 +489,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
                     if (id.getDatatype() == Datatype::LocalVocabIndex) {
                       id = localVocabMapping.at(id);
                     } else if (id.getDatatype() == Datatype::VocabIndex) {
-                      size_t offset = ql::ranges::distance(
-                          insertInfo.begin(),
-                          ql::ranges::upper_bound(
-                              insertInfo, id.getVocabIndex(), std::less{},
-                              [](const auto& tuple) {
-                                return std::get<0>(tuple);
-                              }));
-                      id = Id::makeFromVocabIndex(
-                          VocabIndex::make(id.getVocabIndex().get() + offset));
+                      id = remapVocabId(id, insertInfo);
                     }
                   });
             }
@@ -534,10 +539,14 @@ void DeltaTriples::materializeToIndex(
         4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::SPO),
                              scanSpec, *snapshot, localVocabMapping, insertInfo,
                              cancellationHandle));
-    newIndex.createOSPAndOPSPublic(
-        4, readIndexAndRemap(index_.getPermutation(Permutation::Enum::OPS),
-                             scanSpec, *snapshot, localVocabMapping, insertInfo,
-                             cancellationHandle));
+    // TODO<RobinTF> Find out why we can't use createOSPAndOPSPublic here.
+    newIndex.createPermutationPairPublic(
+        4,
+        readIndexAndRemap(index_.getPermutation(Permutation::Enum::OPS),
+                          scanSpec, *snapshot, localVocabMapping, insertInfo,
+                          cancellationHandle),
+        newIndex.getPermutation(Permutation::Enum::OPS),
+        newIndex.getPermutation(Permutation::Enum::OSP));
   }
 
   auto [numTriplesInternal, numPredicatesInternal] =

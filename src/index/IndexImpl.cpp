@@ -893,6 +893,15 @@ IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
 }
 
 // ________________________________________________________________________
+void IndexImpl::createPermutationPairPublic(
+    size_t numColumns,
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+    const Permutation& p1, const Permutation& p2) {
+  [[maybe_unused]] auto value =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), p1, p2);
+}
+
+// ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
 size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         SortedTriplesType&& sortedTriples,
@@ -1893,4 +1902,8 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
   configurationJson_ = other.configurationJson_;
   usePatterns_ = other.usePatterns_;
+  idOfHasPatternDuringIndexBuilding_ =
+      qlever::specialIds().at(HAS_PATTERN_PREDICATE);
+  idOfInternalGraphDuringIndexBuilding_ =
+      qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
 }

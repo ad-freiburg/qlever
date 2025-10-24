@@ -567,6 +567,12 @@ class IndexImpl {
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
+ public:
+  void createPermutationPairPublic(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>>&& sortedTriples,
+      const Permutation& p1, const Permutation& p2);
+
  protected:
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
