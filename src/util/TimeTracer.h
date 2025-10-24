@@ -97,6 +97,7 @@ class TimeTracer {
 
     rootTrace_.begin_ = timer_.msecs();
     rootTrace_.end_ = std::nullopt;
+    rootTrace_.children_.clear();
     activeTraces_.emplace_back(rootTrace_);
   }
 
