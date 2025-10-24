@@ -25,6 +25,8 @@
 namespace ad_utility {
 
 namespace algorithm::detail {
+// Concept implementations for the `contains` function below. Checks whether a
+// type has a member function `contains` or `find`respectively.
 template <typename T, typename U>
 CPP_requires(HasMemberContains,
              requires(const T& t, const U& u)(t.contains(u)));
@@ -34,6 +36,12 @@ CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
 
 /**
  * Checks whether an element is contained in a container.
+ *  Works on the following types of containers:
+ *  1.  `std::string_[view]`, where you also can find substrings.
+ *  2. containers that either have a member function `contains` that returns a
+ *     bool, or alternatively a member function `find` that returns an iterator.
+ *  3. For all other containers, the generic `ql::ranges::find` algorithm is
+ * used.
  *
  * @param container Container& Elements to be searched
  * @param element T Element to search for
@@ -45,7 +53,6 @@ constexpr bool contains(Container&& container, const T& element) {
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
-    // TODO<joka921> find a better solution here...
   } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberContains,
                                         const Container&, T)) {
     return container.contains(element);

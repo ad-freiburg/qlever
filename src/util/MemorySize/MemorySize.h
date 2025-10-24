@@ -443,7 +443,7 @@ namespace detail {
 // with correct rounding semantics.
 struct DivisionFunctor {
   template <typename U>
-  auto operator()(const U& a, const U& b) const {
+  constexpr auto operator()(const U& a, const U& b) const {
     if constexpr (std::is_floating_point_v<U>) {
       return a / b;
     } else {

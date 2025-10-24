@@ -100,10 +100,13 @@ class IteratorForAccessOperator {
   auto compareThreeWay(const IteratorForAccessOperator& rhs) const {
     return ql::compareThreeWay(index_, rhs.index_);
   }
+
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
+
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }
+
   bool operator!=(const IteratorForAccessOperator& rhs) const {
     return index_ != rhs.index_;
   }
@@ -112,6 +115,7 @@ class IteratorForAccessOperator {
     index_ += n;
     return *this;
   }
+
   IteratorForAccessOperator operator+(difference_type n) const {
     IteratorForAccessOperator result{*this};
     result += n;
@@ -122,6 +126,7 @@ class IteratorForAccessOperator {
     ++index_;
     return *this;
   }
+
   IteratorForAccessOperator operator++(int) & {
     IteratorForAccessOperator result{*this};
     ++index_;
@@ -132,6 +137,7 @@ class IteratorForAccessOperator {
     --index_;
     return *this;
   }
+
   IteratorForAccessOperator operator--(int) & {
     IteratorForAccessOperator result{*this};
     --index_;
@@ -160,6 +166,7 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
+
   CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
@@ -170,6 +177,7 @@ class IteratorForAccessOperator {
   operator->() {
     return &(*(*this));
   }
+
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
       requires HasValidAccessor<A, P>) auto
   operator->() const {

@@ -35,8 +35,8 @@ class TaskQueue {
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  ql::atomic_flag startedFinishing_;
-  ql::atomic_flag finishedFinishing_;
+  ql::atomic_flag startedFinishing_{false};
+  ql::atomic_flag finishedFinishing_{false};
   size_t queueMaxSize_ = 1;
   Queue queuedTasks_{queueMaxSize_};
   std::vector<ad_utility::JThread> threads_;
