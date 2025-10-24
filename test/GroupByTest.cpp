@@ -2402,6 +2402,56 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
                   Id::makeFromLocalVocabIndex(localVocabIndex2.value())}}));
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, localVocabIsProperlyCloned) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/2445
+  using Lit = ad_utility::triple_component::Literal;
+  auto* qec = getQec();
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
+  idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
+  // This issue occurs only when the vocab contains any actual values.
+  LocalVocab dummy{};
+  dummy.getIndexAndAddIfNotContained(
+      LocalVocabEntry{Lit::fromStringRepresentation("\"dummy\"")});
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{Variable{"?x"}}, true,
+      std::vector<ColumnIndex>{0}, std::move(dummy));
+
+  Alias alias{SparqlExpressionPimpl{
+                  makeStrExpression(
+                      std::make_unique<VariableExpression>(Variable{"?x"})),
+                  "STR(?x) as ?y"},
+              Variable{"?y"}};
+  GroupBy groupBy{
+      qec, {Variable{"?x"}}, {std::move(alias)}, std::move(subtree)};
+
+  auto result = groupBy.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  size_t expectedIndex = 0;
+  std::array<std::string_view, 2> expected{"\"1\"", "\"2\""};
+
+  for (const auto& [idTable, localVocab] : result.idTables()) {
+    ASSERT_EQ(idTable.size(), 1);
+    ASSERT_EQ(idTable.numColumns(), 2);
+    Id id = idTable.at(0, 1);
+    ASSERT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
+    EXPECT_EQ(id.getLocalVocabIndex()->toStringRepresentation(),
+              expected.at(expectedIndex));
+    // New value + dummy value
+    EXPECT_EQ(localVocab.size(), 2);
+    EXPECT_TRUE(
+        localVocab
+            .getIndexOrNullopt(LocalVocabEntry{Lit::fromStringRepresentation(
+                std::string{expected.at(expectedIndex)})})
+            .has_value());
+    expectedIndex++;
+  }
+  EXPECT_EQ(expectedIndex, expected.size());
+}
+
 namespace {
 class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
  protected:

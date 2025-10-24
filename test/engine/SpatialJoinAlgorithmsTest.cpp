@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
+#include <s2/s2polyline.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -882,6 +883,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
@@ -898,6 +900,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   Row columnNames{"?name1",
                   "?obj1",
@@ -921,6 +924,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   auto maxDist = std::numeric_limits<double>::max();
   MaxDistanceConfig maxDistConf{maxDist};
@@ -958,6 +962,7 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
                                         columnNames);
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   Row columnNames{"?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
@@ -976,6 +981,7 @@ TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   // expected behavior: point is skipped
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
@@ -994,6 +1000,7 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   }
 }
 
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     SpatialJoin, SpatialJoinParamTest,
     ::testing::Combine(
@@ -1134,6 +1141,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, computeBoundingBox) {
   // ASSERT_EQ("", "uncomment the part below again");
   double circ = 40075 * 1000;  // circumference of the earth (at the equator)
@@ -1150,6 +1158,7 @@ TEST(SpatialJoin, computeBoundingBox) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, isContainedInBoundingBoxes) {
   SpatialJoinAlgorithms spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting();
@@ -1250,6 +1259,7 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
   }
 }
 
+// _____________________________________________________________________________
 void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
   auto checkBoundingBox = [](Box box, double minLng, double minLat,
                              double maxLng, double maxLat) {
@@ -1301,12 +1311,15 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, BoundingBoxOfArea) { testBoundingBoxOfAreaOrMidpointOfBox(); }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, MidpointOfBoundingBox) {
   testBoundingBoxOfAreaOrMidpointOfBox(false);
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
 
@@ -1557,6 +1570,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   return qec;
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, areaFormat) {
   auto qec = getAllGeometriesQEC();
   auto leftChild =
@@ -1582,6 +1596,7 @@ TEST(SpatialJoin, areaFormat) {
   ASSERT_EQ(res->idTable().numRows(), 36);
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, trueAreaDistance) {
   auto getDist = [](QueryExecutionContext* qec, std::string nr1,
                     std::string nr2, bool useMidpointForAreas) {
@@ -1642,6 +1657,7 @@ TEST(SpatialJoin, trueAreaDistance) {
               getDist(qec, "Area6", "Area6", false));
 }
 
+// _____________________________________________________________________________
 TEST(SpatialJoin, mixedDataSet) {
   auto testDist = [](QueryExecutionContext* qec, size_t maxDist,
                      size_t nrResultRows) {
@@ -1730,5 +1746,42 @@ TEST(SpatialJoin, NumberOfThreads) {
 }
 
 }  // namespace runtimeParameters
+
+namespace parsing {
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
+  // Test that the `getPolyline` functions correctly checks the geometry type of
+  // its input literals
+
+  std::string kb =
+      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s2> <asWKT> \"POLYGON((7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942, 7.8428469 47.9995367))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s3> <asWKT> \"POINT(1 2)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
+  auto result = scan->getResult();
+  auto col = scan->getVariableColumn(Variable{"?geo"});
+
+  auto check = [&](size_t row) {
+    return SpatialJoinAlgorithms::getPolyline(result->idTable(), row, col,
+                                              qec->getIndex());
+  };
+
+  EXPECT_TRUE(check(0).has_value());
+  EXPECT_FALSE(check(1).has_value());
+  EXPECT_FALSE(check(2).has_value());
+}
+
+}  // namespace parsing
 
 }  // namespace

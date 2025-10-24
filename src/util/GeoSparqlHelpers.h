@@ -185,6 +185,17 @@ class WktGeometricRelation {
   }
 };
 
+// Get the number of geometries in a WKT literal.
+class WktNumGeometries {
+ public:
+  ValueId operator()(const std::optional<NumGeometries>& numGeom) const {
+    if (!numGeom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromInt(numGeom.value().numGeometries());
+  }
+};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_GEOSPARQLHELPERS_H
