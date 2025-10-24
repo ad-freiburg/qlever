@@ -328,6 +328,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
+  expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
+                     matchUnary(&makeNumGeometriesExpression));
 
   using enum ad_utility::BoundingCoordinate;
   expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
@@ -462,8 +464,9 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
-      "centroid", "envelope", "geometryType", "minX",
-      "minY",     "maxX",     "maxY",         "metricLength"};
+      "centroid", "envelope", "geometryType",  "minX",         "minY",
+      "maxX",     "maxY",     "numGeometries", "metricLength",
+  };
   for (const auto& func : unaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
     expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b)"));

@@ -85,6 +85,19 @@ struct GeometryType {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
+// Represents the number of child geometries inside a collection geometry type.
+struct NumGeometries {
+ private:
+  uint32_t numGeometries_;
+
+ public:
+  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {};
+
+  uint32_t numGeometries() const { return numGeometries_; }
+
+  constexpr bool operator==(const NumGeometries& other) const = default;
+};
+
 // Represents the length of the geometry in meters.
 struct MetricLength {
  private:
@@ -102,8 +115,9 @@ class GeometryInfo;
 // Concept for the `RequestedInfo` template parameter: any of these types is
 // allowed to be requested.
 template <typename T>
-CPP_concept RequestedInfoT = SameAsAny<T, GeometryInfo, Centroid, BoundingBox,
-                                       GeometryType, MetricLength>;
+CPP_concept RequestedInfoT =
+    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
+              NumGeometries, MetricLength>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
@@ -121,6 +135,7 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  uint32_t numGeometries_;
   MetricLength metricLength_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
@@ -135,7 +150,8 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid, MetricLength metricLength);
+               Centroid centroid, NumGeometries numGeometries,
+               MetricLength metricLength);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
@@ -163,6 +179,13 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
+
+  // Get the number of child geometries contained in this geometry.
+  NumGeometries getNumGeometries() const;
+
+  // Parse an arbitrary WKT literal and compute only the number of child
+  // geometries.
+  static std::optional<NumGeometries> getNumGeometries(std::string_view wkt);
 
   // Extract the length in meters.
   MetricLength getMetricLength() const;
