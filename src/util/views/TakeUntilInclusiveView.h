@@ -126,7 +126,9 @@ CPP_template(typename V, typename Pred)(
     }
   };
 
-  // Return the address of the underlying predicate.
+  // Return the address of the underlying predicate. Is required, because the
+  // `semiregular_box_t` might or might not wrap the actual predicate, which
+  // changes the required syntax.
   auto* getAddressOfPred() {
     if constexpr (ad_utility::isSimilar<decltype(pred_), Pred>) {
       return &pred_;
