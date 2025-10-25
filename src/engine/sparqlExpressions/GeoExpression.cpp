@@ -58,6 +58,14 @@ NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
+NARY_EXPRESSION(
+    LengthExpression, 2,
+    FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
+       UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(MetricLengthExpression, 1,
+                FV<ad_utility::WktMetricLength,
+                   GeometryInfoValueGetter<ad_utility::MetricLength>>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -67,6 +75,10 @@ template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
+NARY_EXPRESSION(NumGeometriesExpression, 1,
+                FV<ad_utility::WktNumGeometries,
+                   GeometryInfoValueGetter<ad_utility::NumGeometries>>);
 
 }  // namespace detail
 
@@ -136,6 +148,18 @@ SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2) {
+  return std::make_unique<LengthExpression>(std::move(child1),
+                                            std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
+  return std::make_unique<MetricLengthExpression>(std::move(child1));
+}
+
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
@@ -150,6 +174,11 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
 };
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<NumGeometriesExpression>(std::move(child));
+}
 
 namespace {
 

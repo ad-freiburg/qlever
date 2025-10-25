@@ -119,6 +119,31 @@ class WktMetricDistGeoPoints {
   }
 };
 
+// Compute the length of a WKT geometry.
+class WktLength {
+ public:
+  ValueId operator()(
+      const std::optional<MetricLength>& len,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(
+        detail::kilometerToUnit(len.value().length() / 1000.0, unit));
+  }
+};
+
+// Compute the length of a WKT geometry in meters.
+class WktMetricLength {
+ public:
+  ValueId operator()(const std::optional<MetricLength>& len) const {
+    if (!len.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(len.value().length());
+  }
+};
+
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
@@ -158,7 +183,7 @@ class WktBoundingCoordinate {
   }
 };
 
-// Compute the distance between two WKT points in meters.
+// Get the geometry type of WKT literal using `GeometryInfo`.
 class WktGeometryType {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
@@ -195,6 +220,17 @@ class WktGeometricRelation {
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
         "details on GeoSPARQL support can be found on the QLever Wiki.");
+  }
+};
+
+// Get the number of geometries in a WKT literal.
+class WktNumGeometries {
+ public:
+  ValueId operator()(const std::optional<NumGeometries>& numGeom) const {
+    if (!numGeom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromInt(numGeom.value().numGeometries());
   }
 };
 
