@@ -31,6 +31,8 @@ static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
 static constexpr double kilometerToMile = 0.62137119;
+static constexpr double squareMeterToSquareMile =
+    (kilometerToMile / 1000) * (kilometerToMile / 1000);
 
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
@@ -51,8 +53,16 @@ double kilometerToUnit(double kilometers,
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit);
 
+// Convert square meters to another supported area unit. If `unit` is
+// `std::nullopt` it is treated as square meters (value is returned unchanged).
+double squareMeterToUnit(double squareMeters,
+                         std::optional<UnitOfMeasurement> unit);
+
 // Returns `true` iff `unit` is a unit for measuring length / distance.
 bool isLengthUnit(UnitOfMeasurement unit);
+
+// Returns `true` iff `unit` is a unit for measuring area.
+bool isAreaUnit(UnitOfMeasurement unit);
 
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
@@ -221,6 +231,35 @@ class WktNumGeometries {
       return ValueId::makeUndefined();
     }
     return ValueId::makeFromInt(numGeom.value().numGeometries());
+  }
+};
+
+// Compute the area of a WKT geometry.
+class WktArea {
+ public:
+  ValueId operator()(
+      const std::optional<MetricArea>& area,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!area.has_value() ||
+        (unit.has_value() && !detail::isAreaUnit(unit.value()))) {
+      return ValueId::makeUndefined();
+    }
+    double val = detail::squareMeterToUnit(area.value().area(), unit);
+    if (std::isnan(val)) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(val);
+  }
+};
+
+// Compute the area of a WKT geometry in square meters.
+class WktMetricArea {
+ public:
+  ValueId operator()(const std::optional<MetricArea>& area) const {
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(area.value().area());
   }
 };
 

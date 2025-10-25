@@ -4,7 +4,9 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #include "rdfTypes/GeoPoint.h"
@@ -17,11 +19,12 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
-                           MetricLength metricLength)
+                           MetricLength metricLength, MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
-      metricLength_{metricLength} {
+      metricLength_{metricLength},
+      metricArea_{metricArea} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -67,8 +70,16 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
     return std::nullopt;
   }
 
-  return GeometryInfo{
-      type, boundingBox.value(), centroid.value(), {numGeom}, metricLength};
+  double area = std::numeric_limits<double>::quiet_NaN();
+  try {
+    area = computeMetricArea(parsed.value());
+  } catch (const InvalidPolygonError&) {
+    AD_LOG_WARN << "Could not compute area of WKT literal `" << wkt << "`."
+                << std::endl;
+  }
+
+  return GeometryInfo{type,      boundingBox.value(), centroid.value(),
+                      {numGeom}, metricLength,        MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -92,11 +103,10 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT,
-          {point, point},
-          Centroid{point},
-          {1},
-          MetricLength{0.0}};
+  return {
+      util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
+      MetricLength{0.0},         MetricArea{0.0},
+  };
 }
 
 // ____________________________________________________________________________
@@ -152,6 +162,22 @@ BoundingBox::BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
 };
 
 // ____________________________________________________________________________
+MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
+
+// ____________________________________________________________________________
+std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
+  auto [type, parsed] = detail::parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  try {
+    return MetricArea{detail::computeMetricArea(parsed.value())};
+  } catch (const InvalidPolygonError&) {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
@@ -168,6 +194,12 @@ std::optional<MetricLength> GeometryInfo::getMetricLength(
   }
   return {detail::computeMetricLength(parsed.value())};
 };
+
+// ____________________________________________________________________________
+MetricArea::MetricArea(double area) : area_{area} {
+  AD_CORRECTNESS_CHECK(area >= 0 || std::isnan(area),
+                       "Metric area must be positive");
+}
 
 // ____________________________________________________________________________
 template <BoundingCoordinate RequestedCoordinate>
@@ -228,6 +260,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return getNumGeometries();
   } else if constexpr (std::is_same_v<RequestedInfo, MetricLength>) {
     return getMetricLength();
+  } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
+    return getMetricArea();
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -240,6 +274,7 @@ template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
+template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
@@ -257,6 +292,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return GeometryInfo::getNumGeometries(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, MetricLength>) {
     return GeometryInfo::getMetricLength(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
+    return GeometryInfo::getMetricArea(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -275,5 +312,7 @@ template std::optional<NumGeometries>
 GeometryInfo::getRequestedInfo<NumGeometries>(std::string_view wkt);
 template std::optional<MetricLength>
 GeometryInfo::getRequestedInfo<MetricLength>(std::string_view wkt);
+template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
+    std::string_view wkt);
 
 }  // namespace ad_utility

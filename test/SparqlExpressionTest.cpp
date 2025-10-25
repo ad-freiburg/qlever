@@ -1479,6 +1479,33 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                                   kilometer, kilometer, kilometer});
   checkMetricLength(lengthInputs, Ids{U, U, D(0.0), D(expLine), D(expPolygon),
                                       D(expCollection), U});
+
+  auto expectedArea = [](std::string_view literal) -> double {
+    auto area = ad_utility::GeometryInfo::getMetricArea(
+        absl::StrCat("\"", literal,
+                     "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+    if (!area.has_value() || std::isnan(area.value().area())) {
+      return -1;
+    }
+    return area.value().area();
+  };
+
+  // Geometry area functions
+  auto checkArea = std::bind_front(testNaryExpression, &makeAreaExpression);
+  auto checkMetricArea = testUnaryExpression<&makeMetricAreaExpression>;
+  const auto squareKilometer =
+      lit("http://qudt.org/vocab/unit/KiloM2",
+          "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+
+  checkArea(
+      Ids{U, U, D(0.0), D(0.0), D(expectedArea(polygon) / 1'000'000), D(0.0),
+          U},
+      lengthInputs,
+      IdOrLiteralOrIriVec{squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer, squareKilometer, squareKilometer,
+                          squareKilometer});
+  checkMetricArea(lengthInputs, Ids{U, U, D(0.0), D(0.0),
+                                    D(expectedArea(polygon)), D(0.0), U});
 }
 
 // ________________________________________________________________________________________
