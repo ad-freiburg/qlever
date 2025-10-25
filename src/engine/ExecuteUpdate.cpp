@@ -38,6 +38,9 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
                                std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
+  tracer.beginTrace("updateMetadata");
+  deltaTriples.updateAugmentedMetadata();
+  tracer.endTrace("updateMetadata");
   return metadata;
 }
 
