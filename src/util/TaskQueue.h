@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "backports/atomic_flag.h"
 #include "util/Exception.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -34,8 +35,8 @@ class TaskQueue {
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
   using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::atomic_flag startedFinishing_ = false;
-  std::atomic_flag finishedFinishing_ = false;
+  ql::atomic_flag startedFinishing_{false};
+  ql::atomic_flag finishedFinishing_{false};
   size_t queueMaxSize_ = 1;
   Queue queuedTasks_{queueMaxSize_};
   std::vector<ad_utility::JThread> threads_;

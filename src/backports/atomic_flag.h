@@ -32,6 +32,8 @@ class atomic_flag {
  public:
   // Default constructor - initializes flag to false
   atomic_flag() = default;
+  // Initialize with an explicit value.
+  explicit atomic_flag(bool init) : flag_{init} {}
 
   // Deleted copy and move operations (same as std::atomic_flag)
   atomic_flag(const atomic_flag&) = delete;

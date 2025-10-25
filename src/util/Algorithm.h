@@ -20,8 +20,24 @@
 
 namespace ad_utility {
 
+namespace algorithm::detail {
+// Concept implementations for the `contains` function below. Checks whether a
+// type has a member function `contains` or `find`respectively.
+template <typename T, typename U>
+CPP_requires(HasMemberContains,
+             requires(const T& t, const U& u)(t.contains(u)));
+template <typename T, typename U>
+CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
+}  // namespace algorithm::detail
+
 /**
  * Checks whether an element is contained in a container.
+ *  Works on the following types of containers:
+ *  1.  `std::string_[view]`, where you also can find substrings.
+ *  2. containers that either have a member function `contains` that returns a
+ *     bool, or alternatively a member function `find` that returns an iterator.
+ *  3. For all other containers, the generic `ql::ranges::find` algorithm is
+ * used.
  *
  * @param container Container& Elements to be searched
  * @param element T Element to search for
@@ -33,6 +49,12 @@ constexpr bool contains(Container&& container, const T& element) {
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberContains,
+                                        const Container&, T)) {
+    return container.contains(element);
+  } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberFind,
+                                        const Container&, T)) {
+    return container.find(element) != container.end();
   } else {
     return ql::ranges::find(std::begin(container), std::end(container),
                             element) != std::end(container);
@@ -173,7 +195,8 @@ CPP_template(typename ForwardIterator, typename Tp,
                                ForwardIterator>) constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 
@@ -200,7 +223,8 @@ CPP_template(typename ForwardIterator, typename Tp,
                                ForwardIterator>) constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
-  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+  using DistanceType =
+      typename std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
 

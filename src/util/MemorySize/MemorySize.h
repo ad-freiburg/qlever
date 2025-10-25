@@ -438,6 +438,22 @@ CPP_template_def(typename T)(
   return *this;
 }
 
+namespace detail {
+// Helper struct that implements division for floating point and integer types
+// with correct rounding semantics.
+struct DivisionFunctor {
+  template <typename U>
+  constexpr auto operator()(const U& a, const U& b) const {
+    if constexpr (std::is_floating_point_v<U>) {
+      return a / b;
+    } else {
+      static_assert(std::is_integral_v<U>);
+      return detail::sizeTDivision(a, b);
+    }
+  }
+};
+}  // namespace detail
+
 // _____________________________________________________________________________
 CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
     MemorySize::operator/(const T c) const {
@@ -470,18 +486,7 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   the division with as much precision as possible and leave the rounding to
   `magicImpl`.
   */
-  return detail::magicImplForDivAndMul(
-      *this, c, [](const auto& a, const auto& b) {
-        static_assert(std::is_same_v<decltype(a), decltype(b)>,
-                      "Arguments shall be of the same type");
-        using DivisionType = std::decay_t<decltype(a)>;
-        if constexpr (std::is_floating_point_v<DivisionType>) {
-          return a / b;
-        } else {
-          static_assert(std::is_integral_v<DivisionType>);
-          return detail::sizeTDivision(a, b);
-        }
-      });
+  return detail::magicImplForDivAndMul(*this, c, detail::DivisionFunctor{});
 }
 
 // _____________________________________________________________________________
