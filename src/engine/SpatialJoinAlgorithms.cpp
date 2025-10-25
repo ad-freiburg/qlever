@@ -94,6 +94,16 @@ std::pair<util::geo::I32Box, size_t> SpatialJoinAlgorithms::libspatialjoinParse(
         "prefilter-disabled-by-bounding-box-area", true);
   }
 
+  // If the input is smaller than one batch for every thread, reduce the number
+  // of threads accordingly to avoid spawning threads that will never be used.
+  static constexpr auto batchSize =
+      ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
+  static_assert(batchSize > 0);
+  size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
+  numThreads = std::min(numThreads, requiredBatches);
+  spatialJoin_.value()->runtimeInfo().addDetail("wkt-parser-num-threads",
+                                                numThreads);
+
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
