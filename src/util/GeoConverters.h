@@ -82,7 +82,13 @@ inline S2Polygon makeS2Polygon(const util::geo::Polygon<CoordType>& polygon) {
   }
 
   S2Polygon s2polygon;
+  // We have to check validity of the polygon in a separate step because s2
+  // throws an uncatchable fatal error otherwise if the polygon is invalid.
+  s2polygon.set_s2debug_override(S2Debug::DISABLE);
   s2polygon.InitNested(std::move(loops));
+  if (!s2polygon.IsValid()) {
+    throw ad_utility::InvalidPolygonError();
+  }
   return s2polygon;
 }
 
