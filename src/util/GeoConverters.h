@@ -61,7 +61,9 @@ inline std::unique_ptr<S2Loop> makeS2Loop(
     points.pop_back();
   }
 
-  auto loop = std::make_unique<S2Loop>(std::move(points));
+  // We have to check validity of the polygon loop in a separate step because s2
+  // throws an uncatchable fatal error otherwise if the loop is invalid.
+  auto loop = std::make_unique<S2Loop>(std::move(points), S2Debug::DISABLE);
   loop->Normalize();
   if (!loop->IsValid()) {
     throw ad_utility::InvalidPolygonError();
@@ -81,11 +83,9 @@ inline S2Polygon makeS2Polygon(const util::geo::Polygon<CoordType>& polygon) {
     loops.push_back(makeS2Loop(hole));
   }
 
-  S2Polygon s2polygon;
   // We have to check validity of the polygon in a separate step because s2
   // throws an uncatchable fatal error otherwise if the polygon is invalid.
-  s2polygon.set_s2debug_override(S2Debug::DISABLE);
-  s2polygon.InitNested(std::move(loops));
+  S2Polygon s2polygon{std::move(loops), S2Debug::DISABLE};
   if (!s2polygon.IsValid()) {
     throw ad_utility::InvalidPolygonError();
   }

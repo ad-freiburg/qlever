@@ -24,6 +24,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
@@ -1767,7 +1768,9 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
       "<s3> <asWKT> \"POINT(1 2)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
 
-  auto qec = ad_utility::testing::getQec(kb);
+  auto vocabType =
+      ad_utility::VocabularyType::fromString("on-disk-compressed-geo-split");
+  auto qec = ad_utility::testing::getQec(kb, vocabType);
   auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
   auto result = scan->getResult();
   auto col = scan->getVariableColumn(Variable{"?geo"});
