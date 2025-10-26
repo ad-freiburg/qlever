@@ -43,8 +43,7 @@ struct BoundingBox {
   GeoPoint upperRight_;
 
  public:
-  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
-      : lowerLeft_{lowerLeft}, upperRight_{upperRight} {};
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight);
 
   GeoPoint lowerLeft() const { return lowerLeft_; }
   GeoPoint upperRight() const { return upperRight_; }
@@ -52,6 +51,8 @@ struct BoundingBox {
     return {lowerLeft_, upperRight_};
   }
 
+  // Return a `POLYGON` WKT literal without quotes or datatype representing this
+  // bounding box.
   std::string asWkt() const;
 
   // Extract the minimum or maximum coordinates
@@ -74,7 +75,7 @@ struct GeometryType {
   uint8_t type_;
 
  public:
-  explicit GeometryType(uint8_t type) : type_{type} {};
+  explicit GeometryType(uint8_t type);
 
   uint8_t type() const { return type_; };
 
@@ -97,18 +98,53 @@ struct NumGeometries {
   constexpr bool operator==(const NumGeometries& other) const = default;
 };
 
+// Represents the length of the geometry in meters.
+struct MetricLength {
+ private:
+  double length_;
+
+ public:
+  explicit MetricLength(double length);
+
+  double length() const { return length_; }
+};
+
+// Represents the area of the WKT geometry in square meters on the earth's
+// surface. The value `NaN` is allowed here to express that the given polygon
+// (or multipolygon, collection) is malformed semantically not syntactically
+// s.t. we cannot determine an area. This is allowed as such polygons may still
+// have some of the other properties of `GeometryInfo`.
+struct MetricArea {
+ private:
+  double area_;
+
+ public:
+  explicit MetricArea(double area);
+
+  double area() const { return area_; };
+};
+
+// Class for internal exception handling of errors from `s2geometry`.
+class InvalidPolygonError : public std::runtime_error {
+ public:
+  explicit InvalidPolygonError()
+      : std::runtime_error{
+            "Computation encountered an invalid polygon geometry."} {}
+};
+
 // Forward declaration for concept
 class GeometryInfo;
 
 // Concept for the `RequestedInfo` template parameter: any of these types is
 // allowed to be requested.
 template <typename T>
-CPP_concept RequestedInfoT = SameAsAny<T, GeometryInfo, Centroid, BoundingBox,
-                                       GeometryType, NumGeometries>;
+CPP_concept RequestedInfoT =
+    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
+              NumGeometries, MetricLength, MetricArea>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 2;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 5;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -123,10 +159,11 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
+  MetricLength metricLength_;
+  MetricArea metricArea_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
-  //   double metricSize_ = 0;
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
@@ -136,7 +173,8 @@ class GeometryInfo {
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
-               Centroid centroid, NumGeometries numGeometries);
+               Centroid centroid, NumGeometries numGeometries,
+               MetricLength metricLength, MetricArea metricArea);
 
   GeometryInfo(const GeometryInfo& other) = default;
 
@@ -165,12 +203,25 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
 
+  // Extract the metric area.
+  MetricArea getMetricArea() const;
+
+  // Parse an arbitrary WKT literal and compute only the metric area.
+  static std::optional<MetricArea> getMetricArea(std::string_view wkt);
+
   // Get the number of child geometries contained in this geometry.
   NumGeometries getNumGeometries() const;
 
   // Parse an arbitrary WKT literal and compute only the number of child
   // geometries.
   static std::optional<NumGeometries> getNumGeometries(std::string_view wkt);
+
+  // Extract the length in meters.
+  MetricLength getMetricLength() const;
+
+  // Parse an arbitrary WKT literal and compute only the length in meters.
+  static std::optional<MetricLength> getMetricLength(
+      const std::string_view& wkt);
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(
