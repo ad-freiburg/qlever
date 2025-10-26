@@ -7,11 +7,13 @@
 #include <util/geo/Geo.h>
 
 #include <range/v3/numeric/accumulate.hpp>
+#include <stdexcept>
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/GeoConverters.h"
 #include "util/geo/Collection.h"
 #include "util/geo/Geo.h"
 
@@ -58,6 +60,85 @@ constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
+// University building 101 in Freiburg: ca. 1611 square-meters (osmway:33903391)
+constexpr std::string_view litSmallRealWorldPolygon1 =
+    "\"POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+    "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+    "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+    "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygon1 = 1611.0;
+
+// University building 106 in Freiburg: ca. 491 square-meters (osmway:33903567)
+constexpr std::string_view litSmallRealWorldPolygon2 =
+    "\"POLYGON((7.8333378 48.0146547,7.8334932 48.0144793,7.833657 "
+    "48.0145439,7.8336726 48.01455,7.8336875 48.0145564,7.8337433 "
+    "48.0145785,7.8335879 48.0147539,7.8335143 48.0147242,7.8333378 "
+    "48.0146547))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygon2 = 491.0;
+constexpr std::string_view litSmallRealWorldPolygon2AsMulti =
+    "\"MULTIPOLYGON(((7.8333378 48.0146547,7.8334932 48.0144793,7.833657 "
+    "48.0145439,7.8336726 48.01455,7.8336875 48.0145564,7.8337433 "
+    "48.0145785,7.8335879 48.0147539,7.8335143 48.0147242,7.8333378 "
+    "48.0146547)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+// The outer boundary of this polygon is a triangle between Freiburg Central
+// Railway Station, Freiburg University Library and Freiburg Cathedral, ca.
+// 117122 square-meters. It has a hole consisting of a smaller triangle ca.
+// 15103 square-meters. Therefore the area is 117122 - 15103 = 102019 sq.-m.
+constexpr std::string_view litSmallRealWorldPolygonWithHole =
+    "\"POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918  47.995562, "
+    "7.8412948 47.9977308),(7.847796 47.995486, 7.844982 47.995615, 7.8447057 "
+    "47.9969221))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaSmallRealWorldPolygonWithHole = 102019.0;
+
+// This example multipolygon uses the same coordinates as the one with a hole
+// above. Therefore the union of them is just the first polygon with size ca.
+// 117122 square meters.
+constexpr std::string_view litRealWorldMultiPolygonFullyContained =
+    "\"MULTIPOLYGON(((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+    "47.995562, 7.8412948 47.9977308)),((7.847796 47.995486, 7.844982 "
+    "47.995615, 7.8447057 47.9969221)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonFullyContained = 117122.0;
+
+// This multipolygon contains two non-intersecting polygons (university
+// buildings 101 and 106 in Freiburg), thus its size is the sum of the member
+// polygons, that is ca. 1611 + 491 = 2102 square meters.
+constexpr std::string_view litRealWorldMultiPolygonNonIntersecting =
+    "\"MULTIPOLYGON(((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+    "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+    "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+    "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612)),((7.8333378 "
+    "48.0146547,7.8334932 48.0144793,7.833657 48.0145439,7.8336726 "
+    "48.01455,7.8336875 48.0145564,7.8337433 48.0145785,7.8335879 "
+    "48.0147539,7.8335143 48.0147242,7.8333378 48.0146547)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonNonIntersecting = 2102.0;
+
+// Two polygons which intersect each other. Their sizes are ca. 117122 and 18962
+// square meters, so their union must be smaller than the sum of these (which
+// would be 136084 square meters): it is ca. 119319 square meters.
+constexpr std::string_view litRealWorldMultiPolygonIntersecting =
+    "\"MULTIPOLYGON(((7.847796 47.995486, 7.844982 47.995615,  7.844529 "
+    "47.995205, 7.844933 47.994211)),((7.8412948 47.9977308, 7.8450491 "
+    "47.9946, 7.852918 47.995562, 7.8412948 47.9977308)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonIntersecting = 119319.0;
+const size_t numRealWorldMultiPolygonIntersecting = 2;
+
+// Two polygons which intersect each other. This is equivalent to the one above
+// but contains an additional ca. 15103 square meter hole which has to be
+// considered correctly during the computation of the polygons' union for
+// determining the area.
+constexpr std::string_view litRealWorldMultiPolygonHoleIntersection =
+    "\"MULTIPOLYGON(((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+    "47.995562, 7.8412948 47.9977308),(7.847796 47.995486, 7.844982 47.995615, "
+    "7.8447057 47.9969221)),((7.847796 47.995486, 7.844529 47.995205, 7.844933 "
+    "47.994211)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+const double areaRealWorldMultiPolygonHoleIntersection =
+    areaRealWorldMultiPolygonIntersecting - 15103.0;
+
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
       litPoint,           litLineString,   litPolygon,   litMultiPoint,
@@ -70,7 +151,8 @@ constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {2}, MetricLength{900}};
+  GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
+                 {2}, MetricLength{900}, MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -81,26 +163,37 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
+  ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1}),
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
+                   MetricArea{5}),
       ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, MetricLength{1}),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, MetricLength{1},
+                   MetricArea{0}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Zero geometries
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, MetricLength{1}),
+      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, MetricLength{1},
+                   MetricArea{5}),
       ::testing::HasSubstr("Number of geometries must be strictly positive"));
 
   // Negative length
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{-900}),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{-900},
+                   MetricArea{5}),
       ::testing::HasSubstr("Metric length must be positive"));
+
+  // Negative area
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{0},
+                   MetricArea{-900}),
+      ::testing::HasSubstr("Metric area must be positive"));
 }
 
 // ____________________________________________________________________________
@@ -108,34 +201,41 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   // To avoid hard-coding lengths for unit tests unrelated to actual length
   // computation, we compute the expected values.
   auto len = getLengthForTesting;
+  auto area = getAreaForTesting;
 
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {1}, MetricLength{0}};
+  GeometryInfo exp{1,   {{4, 3}, {4, 3}}, {4, 3},
+                   {1}, MetricLength{0},  MetricArea{0}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {1}, len(litLineString)};
+  GeometryInfo exp2{2,   {{2, 2}, {4, 4}},   {3, 3},
+                    {1}, len(litLineString), MetricArea{0}};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {1}, len(litPolygon)};
+  GeometryInfo exp3{3,   {{2, 2}, {4, 4}}, {3, 3},
+                    {1}, len(litPolygon),  area(litPolygon)};
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, {2}, MetricLength{0}};
+  GeometryInfo exp4{4,   {{2, 2}, {4, 4}}, {3, 3},
+                    {2}, MetricLength{0},  MetricArea{0}};
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{
-      5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, {2}, len(litMultiLineString)};
+  GeometryInfo exp5{5,   {{2, 2}, {8, 6}},        {4.436542, 3.718271},
+                    {2}, len(litMultiLineString), MetricArea{0}};
   checkGeoInfo(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}, {2}, len(litMultiPolygon)};
+  GeometryInfo exp6{6,   {{2, 2}, {6, 8}},     {4.5, 4.5},
+                    {2}, len(litMultiPolygon), area(litMultiPolygon)};
   checkGeoInfo(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {3}, len(litCollection)};
+  GeometryInfo exp7{7,   {{2, 2}, {6, 8}},   {5, 5},
+                    {3}, len(litCollection), area(litCollection)};
   checkGeoInfo(g7, exp7);
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
@@ -146,12 +246,13 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}, MetricLength{0}};
+  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}, MetricLength{0}, MetricArea{0}};
   checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1, {p2, p2}, Centroid{p2}, {1}, MetricLength{0}};
+  GeometryInfo exp2{1,   {p2, p2},        Centroid{p2},
+                    {1}, MetricLength{0}, MetricArea{0}};
   checkGeoInfo(g2, exp2);
 }
 
@@ -268,6 +369,9 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto parsed2 = parseRes2.second.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
+
+  EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
+  EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
 }
 
 // ____________________________________________________________________________
@@ -278,6 +382,87 @@ TEST(GeometryInfoTest, MetricLength) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       MetricLength{-500},
       ::testing::HasSubstr("Metric length must be positive"));
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
+  using namespace ad_utility::detail;
+  using Poly = Polygon<CoordType>;
+
+  testMetricArea<Poly>(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
+  testMetricArea<Poly>(litSmallRealWorldPolygon2, areaSmallRealWorldPolygon2);
+  testMetricArea<Poly>(litSmallRealWorldPolygonWithHole,
+                       areaSmallRealWorldPolygonWithHole);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
+  using namespace ad_utility::detail;
+  using MultiP = MultiPolygon<CoordType>;
+
+  testMetricArea<MultiP>(litRealWorldMultiPolygonFullyContained,
+                         areaRealWorldMultiPolygonFullyContained);
+  testMetricArea<MultiP>(litRealWorldMultiPolygonNonIntersecting,
+                         areaRealWorldMultiPolygonNonIntersecting);
+  testMetricArea<MultiP>(litRealWorldMultiPolygonIntersecting,
+                         areaRealWorldMultiPolygonIntersecting);
+  testMetricArea<MultiP>(litRealWorldMultiPolygonHoleIntersection,
+                         areaRealWorldMultiPolygonHoleIntersection);
+
+  // Edge case: empty multipolygon
+  EXPECT_EQ(computeMetricArea(MultiP{}), 0);
+
+  // Edge case: multipolygon with only one member
+  testMetricArea<MultiP>(litSmallRealWorldPolygon2AsMulti,
+                         areaSmallRealWorldPolygon2);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
+  using namespace ad_utility::detail;
+  using Coll = Collection<CoordType>;
+
+  // Join two polygons and a line (no area) to a geometry collection literal
+  auto collection1 = absl::StrCat(
+      "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ", ",
+      removeDatatype(litLineString), ", ",
+      removeDatatype(litSmallRealWorldPolygon2), ")");
+  const double expectedCollection1 =
+      areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
+  testMetricArea<Coll>(addDatatype(collection1), expectedCollection1, 2);
+
+  // Collection with only one member (polygon)
+  auto collection2 = absl::StrCat(
+      "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ")");
+  testMetricArea<Coll>(addDatatype(collection2), areaSmallRealWorldPolygon1, 1);
+
+  // Collection with only one member (non-polygon)
+  auto collection3 =
+      absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
+  testMetricArea<Coll>(addDatatype(collection3), 0, 0);
+
+  // Collection containing a multipolygon
+  auto collection4 =
+      absl::StrCat("GEOMETRYCOLLECTION(",
+                   removeDatatype(litRealWorldMultiPolygonIntersecting), ")");
+  testMetricArea<Coll>(addDatatype(collection4),
+                       areaRealWorldMultiPolygonIntersecting,
+                       numRealWorldMultiPolygonIntersecting);
+
+  // Collection containing a nested collection
+  auto collection5 = absl::StrCat("GEOMETRYCOLLECTION(", collection4, ")");
+  testMetricArea<Coll>(addDatatype(collection5),
+                       areaRealWorldMultiPolygonIntersecting,
+                       numRealWorldMultiPolygonIntersecting);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, MetricArea) {
+  MetricArea a1{500};
+  EXPECT_EQ(a1.area(), 500);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      MetricArea{-1}, ::testing::HasSubstr("Metric area must be positive"));
 }
 
 // ____________________________________________________________________________
@@ -373,13 +558,14 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(GeometryType) == 1);
   static_assert(sizeof(MetricLength) == sizeof(double));
   static_assert(sizeof(NumGeometries) == 4);
+  static_assert(sizeof(MetricArea) == sizeof(double));
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
                 4 +  // Currently we need 4 B alignment
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(MetricLength));
+                    sizeof(MetricLength) + sizeof(MetricArea));
 }
 
 }  // namespace
