@@ -827,15 +827,9 @@ class CompressedExternalIdTableSorter
                     << "; numElementsPushed: " << this->numElementsPushed_
                     << std::endl;
       };
-      // auto throwInsufficientMemory = [numBlocksToMerge]() {
-      //   throw std::runtime_error{
-      //       absl::StrCat("Insufficient memory for merging ", numBlocksToMerge,
-      //                    " blocks. Please increase the memory settings")};
-      // };
       if (requiredMemoryForInputBlocks >= this->memory_) {
         logInsufficientMemory();
         return 10'000;
-        // throwInsufficientMemory();
       }
       using namespace ad_utility::memory_literals;
       // Don't use a too large output size.
@@ -851,7 +845,6 @@ class CompressedExternalIdTableSorter
       if (blockSizeForOutput <= 10'000) {
         logInsufficientMemory();
         return 10'000;
-        // throwInsufficientMemory();
       }
       return blockSizeForOutput;
     }
