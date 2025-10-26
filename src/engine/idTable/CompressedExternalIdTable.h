@@ -819,10 +819,12 @@ class CompressedExternalIdTableSorter
         AD_LOG_INFO << std::endl
                     << "Insufficient memory for merging"
                     << "; num blocks to merge: " << numBlocksToMerge
-                    << "; required memory: " << requiredMemoryForInputBlocks.asString()
+                    << "; required memory: "
+                    << requiredMemoryForInputBlocks.asString()
                     << "; total memory: " << this->memory_.asString()
                     << "; num columns: " << numColumns
-                    << "; blockSizeUncompressed: " << this->writer_.blockSizeUncompressed().asString()
+                    << "; blockSizeUncompressed: "
+                    << this->writer_.blockSizeUncompressed().asString()
                     << "; numBlocksPushed: " << this->numBlocksPushed_
                     << "; numElementsPushed: " << this->numElementsPushed_
                     << std::endl;
