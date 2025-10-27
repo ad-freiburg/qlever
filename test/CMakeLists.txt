@@ -131,6 +131,8 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(StringUtilsTest util)
 
+addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
+
 addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)

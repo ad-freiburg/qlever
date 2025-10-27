@@ -11,6 +11,7 @@
 #include <condition_variable>
 #include <shared_mutex>
 
+#include "backports/atomic_flag.h"
 #include "backports/keywords.h"
 #include "util/Forward.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -47,7 +48,7 @@ struct AllowsSharedLocking<
 /// serializing simple and fast concurrent accesses to an object.
 class SpinLock {
  private:
-  std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+  ql::atomic_flag lock_{false};
 
  public:
   void lock() {
@@ -92,7 +93,8 @@ class Synchronized {
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
 
-  Synchronized() requires ql::concepts::default_initializable<T> = default;
+  Synchronized() QL_CONCEPT_OR_NOTHING(
+      requires ql::concepts::default_initializable<T>) = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
