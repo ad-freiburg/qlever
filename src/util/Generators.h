@@ -17,7 +17,6 @@
 
 namespace ad_utility {
 
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // Wrap the given `generator` inside another generator that aggregates a cache
 // by calling `aggregator` on every iteration of the inner `generator` until it
 // returns false. If the `aggregator` returns false, the cached value is
@@ -211,31 +210,6 @@ InputRangeTypeErased<T> generatorFromActionWithCallback(F functionWithCallback)
   return InputRangeTypeErased{std::make_unique<CallbackToRangeAdapter>(
       std::move(functionWithCallback))};
 }
-#else
-
-// Dummy implementations that do nothing useful, just for the sake of
-// getting QLever to compile on C++17
-CPP_template(typename InputRange, typename AggregatorT,
-             typename T = ql::ranges::range_value_t<InputRange>,
-             typename FullyCachedFuncT = int)(
-    requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
-                                          const T&>
-        CPP_and InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
-    ad_utility::InputRangeTypeErased<T> wrapGeneratorWithCache(
-        InputRange, AggregatorT, FullyCachedFuncT) {
-  return ad_utility::InputRangeTypeErased<T>{};
-}
-
-// Convert a callback-based `functionWithCallback` into a generator by spawning
-// a thread that runs the functionWithCallback. The `functionWithCallback` is a
-// callable that takes a `callback` with signature `void(T)`. The arguments with
-// which this callback is called when running the `functionWithCallback` become
-// the elements that are yielded by the created `generator`.
-template <typename T, typename F>
-ad_utility::InputRangeTypeErased<T> generatorFromActionWithCallback(F) {
-  return ad_utility::InputRangeTypeErased<T>{};
-}
-#endif
 };  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_GENERATORS_H
+#endif
