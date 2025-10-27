@@ -7,8 +7,10 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Union.h"
 
 using namespace ad_utility::testing;
@@ -88,4 +90,46 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
     ASSERT_TRUE(castTree);
     EXPECT_EQ(castTree->getResultSortedOn(), (SC{0, 1}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
+  using Vars = std::vector<std::optional<Variable>>;
+  Vars vars{std::nullopt, std::nullopt, std::nullopt};
+  using TC = TripleComponent;
+  auto* qec = getQec();
+
+  LimitOffsetClause limitOffset{2, 3};
+
+  // `IndexScan` natively supports stripping columns.
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  indexScan->applyLimit(limitOffset);
+
+  // `ValuesForTesting` doesn't support stripping columns natively.
+  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1, 2}}),
+      Vars{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
+  valuesForTesting->applyLimit(limitOffset);
+
+  auto strippedIndex = QueryExecutionTree::makeTreeWithStrippedColumns(
+      indexScan, {Variable{"?s"}});
+  EXPECT_EQ(strippedIndex->getRootOperation()->getLimitOffset(), limitOffset);
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(strippedIndex->getRootOperation()));
+
+  auto strippedValues = QueryExecutionTree::makeTreeWithStrippedColumns(
+      valuesForTesting, {Variable{"?s"}});
+  EXPECT_TRUE(
+      strippedValues->getRootOperation()->getLimitOffset().isUnconstrained());
+  ASSERT_TRUE(std::dynamic_pointer_cast<StripColumns>(
+      strippedValues->getRootOperation()));
+  EXPECT_EQ(strippedValues->getRootOperation()
+                ->getChildren()
+                .at(0)
+                ->getRootOperation()
+                ->getLimitOffset(),
+            limitOffset);
 }
