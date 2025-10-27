@@ -45,8 +45,8 @@ class Server {
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  ad_utility::MemorySize maxMem, std::string accessToken, bool noAccessCheck = false,
-                  bool usePatternTrick = true);
+                  ad_utility::MemorySize maxMem, std::string accessToken,
+                  bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 

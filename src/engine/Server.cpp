@@ -45,8 +45,8 @@ using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
-               ad_utility::MemorySize maxMem, std::string accessToken, bool noAccessCheck,
-               bool usePatternTrick)
+               ad_utility::MemorySize maxMem, std::string accessToken,
+               bool noAccessCheck, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
