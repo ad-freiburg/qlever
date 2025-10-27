@@ -86,9 +86,10 @@ struct ConstexprSmallString {
 namespace std {
 template <size_t MaxSize>
 struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
-  auto operator()(const ad_utility::ConstexprSmallString<MaxSize>& string) {
+  auto operator()(
+      const ad_utility::ConstexprSmallString<MaxSize>& string) const {
     return std::hash<std::string_view>{}(
-        std::string_view{string._characters, string._size});
+        std::string_view{string._characters.data(), string._size});
   }
 };
 }  // namespace std
