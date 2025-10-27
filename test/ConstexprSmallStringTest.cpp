@@ -35,7 +35,7 @@ static_assert(compileTimeString[4] == 'o');
 // Test compile-time comparison
 static constexpr ConstexprSmallString<10> str1 = "abc";
 static constexpr ConstexprSmallString<10> str2 = "abc";
-static constexpr ConstexprSmallString<10> str3 = "abd";
+static constexpr ConstexprSmallString<10> str3 = "abd";  // codespell-ignore
 static_assert(str1 == str2);
 static_assert(!(str1 == str3));
 static_assert(str1 < str3);
@@ -140,7 +140,7 @@ TEST(ConstexprSmallString, EqualityDifferentMaxSize) {
 // Test less-than operator
 TEST(ConstexprSmallString, LessThanOperator) {
   ConstexprSmallString<10> str1 = "abc";
-  ConstexprSmallString<10> str2 = "abd";
+  ConstexprSmallString<10> str2 = "abd";  // codespell-ignore
   ConstexprSmallString<10> str3 = "ab";
   ConstexprSmallString<10> str4 = "abc";
 
