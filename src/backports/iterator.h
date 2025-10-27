@@ -78,19 +78,18 @@ CPP_template(typename Sent)(
     return it.base() != sent.base();
   }
 
-  // Compare with a compatible iterator (typically obtained via
-  // `std::make_move_iterator`.
+  // The same operators as above, but with the argument order switched (sentinel
+  // first). They are required by the C++17 mode of `range-v3`.
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
   operator==(move_sentinel sent, const std::move_iterator<It> it) {
-    return it.base() == sent.base();
+    return it == sent;
   }
 
-  // Operator != (details same as for `operator==` above).
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
   operator!=(move_sentinel sent, const std::move_iterator<It> it) {
-    return it.base() != sent.base();
+    return it != sent;
   }
 
  private:

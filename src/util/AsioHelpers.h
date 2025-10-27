@@ -133,8 +133,7 @@ inline net::awaitable<T> interruptible(
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
-  auto running = std::make_shared<ql::atomic_flag>();
-  running->test_and_set();
+  auto running = std::make_shared<ql::atomic_flag>(true);
   auto cancelTimer = [timer, running]() mutable {
     auto strand = timer->get_executor();
     running->clear();

@@ -48,7 +48,7 @@ struct AllowsSharedLocking<
 /// serializing simple and fast concurrent accesses to an object.
 class SpinLock {
  private:
-  ql::atomic_flag lock_;
+  ql::atomic_flag lock_{false};
 
  public:
   void lock() {

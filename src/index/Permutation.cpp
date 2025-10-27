@@ -193,7 +193,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
-  auto firstAndLastTriple = p.reader().getFirstAndLastTriple(
+  auto firstAndLastTriple = p.reader().getFirstAndLastTripleIgnoringGraph(
       scanSpecAndBlocks,
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
   if (!firstAndLastTriple.has_value()) {

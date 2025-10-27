@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
@@ -70,10 +71,18 @@ SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeAreaExpression(SparqlExpression::Ptr child1,
+                                         SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMetricAreaExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);

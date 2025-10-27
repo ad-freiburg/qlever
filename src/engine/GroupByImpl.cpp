@@ -168,8 +168,9 @@ class LazyGroupByRange
       currentLocalVocab_.mergeWith(storedLocalVocabs_);
       auto result = Result::IdTableVocabPair{std::move(resultTable_),
                                              std::move(currentLocalVocab_)};
-      // Keep last local vocab for next commit.
-      currentLocalVocab_ = std::move(storedLocalVocabs_.back());
+      // Keep last local vocab for next commit, since we might write to
+      // `currentLocalVocab_`, we need to clone it.
+      currentLocalVocab_ = storedLocalVocabs_.back().clone();
       storedLocalVocabs_.clear();
 
       return LoopControl::yieldValue(std::move(result));

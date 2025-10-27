@@ -19,7 +19,7 @@ namespace ad_utility {
 // function from openssl over the provided `openssl/evp.h` high level interface.
 template <auto HashEvpFunc, size_t DigestLength>
 struct HashImpl {
-  std::vector<unsigned char> operator()(const std::string_view& str) const {
+  std::vector<unsigned char> operator()(std::string_view str) const {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     auto md = HashEvpFunc();
     std::vector<unsigned char> hexHash(DigestLength);

@@ -9,7 +9,7 @@ on:
 jobs:
   upload:
     env:
-          SERVER_URL: https://qlever.cs.uni-freiburg.de/sparql-conformance-uploader
+          SERVER_URL: https://qlever.dev/sparql-conformance-uploader
           API_KEY: ${{ secrets.SPARQL_CONFORMANCE_TOKEN }}
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
@@ -48,7 +48,7 @@ jobs:
         run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
       - name: "Submit data to server"
         run: |
-            response=$(curl -s -o temp_response.txt -w "%{http_code}" \
+            response=$(curl -L -s -o temp_response.txt -w "%{http_code}" \
               -H "x-api-key: $API_KEY" \
               -H "event: ${{ env.github_event }}" \
               -H "sha: ${{ env.commit_sha }}" \

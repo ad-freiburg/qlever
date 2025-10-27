@@ -1295,7 +1295,7 @@ ExportQueryExecutionTrees::computeResult(
   compensateForLimitOffsetClause(limit, qet);
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
-      return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
+      return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
                                        std::move(cancellationHandle),
                                        streamableYielder);
     } else {
@@ -1350,7 +1350,7 @@ ExportQueryExecutionTrees::computeResult(
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    const ad_utility::Timer& requestTimer,
+    const LimitOffsetClause& limitOffset, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   auto timeUntilFunctionCall = requestTimer.msecs();
@@ -1383,12 +1383,12 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   auto bindings = [&]() {
     if (query.hasSelectClause()) {
       return selectQueryResultBindingsToQLeverJSON(
-          qet, query.selectClause(), query._limitOffset, std::move(result),
-          resultSize, std::move(cancellationHandle));
+          qet, query.selectClause(), limitOffset, std::move(result), resultSize,
+          std::move(cancellationHandle));
     } else if (query.hasConstructClause()) {
       return constructQueryResultBindingsToQLeverJSON(
-          qet, query.constructClause().triples_, query._limitOffset,
-          std::move(result), resultSize, std::move(cancellationHandle));
+          qet, query.constructClause().triples_, limitOffset, std::move(result),
+          resultSize, std::move(cancellationHandle));
     } else {
       // TODO<joka921>: Refactor this to use std::visit.
       return askQueryResultToQLeverJSON(std::move(result));
