@@ -7,7 +7,6 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "global/Constants.h"
 #include "rdfTypes/Variable.h"
 #include "util/UnitOfMeasurement.h"
 

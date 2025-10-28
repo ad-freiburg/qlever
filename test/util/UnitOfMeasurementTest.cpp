@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../printers/UnitOfMeasurementPrinters.h"
 #include "GTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/UnitOfMeasurement.h"
