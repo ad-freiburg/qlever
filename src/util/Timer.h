@@ -194,7 +194,6 @@ struct DefaultLogger {
   }
 };
 
-[[maybe_unused]] inline constexpr DefaultLogger defaultLogger{};
 template <typename Callback = DefaultLogger>
 struct QL_NODISCARD(
     "TimeBlockAndLog objects are RAII types that always have to be bound to a "

@@ -438,6 +438,22 @@ CPP_template_def(typename T)(
   return *this;
 }
 
+namespace detail {
+// Helper struct that implements division for floating point and integer types
+// with correct rounding semantics.
+struct DivisionFunctor {
+  template <typename U>
+  constexpr auto operator()(const U& a, const U& b) const {
+    if constexpr (std::is_floating_point_v<U>) {
+      return a / b;
+    } else {
+      static_assert(std::is_integral_v<U>);
+      return detail::sizeTDivision(a, b);
+    }
+  }
+};
+}  // namespace detail
+
 // _____________________________________________________________________________
 namespace detail {
 struct DivisionFunctor {

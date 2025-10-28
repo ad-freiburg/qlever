@@ -12,6 +12,7 @@
 #include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 
+#include <ctre-unicode.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -51,6 +52,11 @@
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
+
+namespace {
+// CTRE regex pattern for C++17 compatibility
+constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
+}  // namespace
 
 using namespace ad_utility::sparql_types;
 using namespace ad_utility::use_type_identity;
@@ -219,10 +225,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
-      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
+      {"metricArea", &makeMetricAreaExpression},
+      {"numGeometries", &makeNumGeometriesExpression},
+      {"metricLength", &makeMetricLengthExpression},
+  };
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
+      {"length", &makeLengthExpression},
+      {"area", &makeAreaExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
@@ -1532,7 +1544,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::BaseDeclContext* ctx) {
   auto rawIri = ctx->iriref()->getText();
-  bool hasScheme = ctre::starts_with<"<[A-Za-z]*[A-Za-z0-9+-.]:">(rawIri);
+  bool hasScheme = ctre::starts_with<iriSchemeRegex>(rawIri);
   if (!hasScheme) {
     reportError(
         ctx,

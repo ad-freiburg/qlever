@@ -1,6 +1,8 @@
-// Copyright 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_SRC_BACKPORTS_ATOMIC_FLAG_H
 #define QLEVER_SRC_BACKPORTS_ATOMIC_FLAG_H
@@ -13,10 +15,14 @@
 
 namespace ql::backports {
 
-// C++17 backport of C++20's std::atomic_flag with wait/notify functionality.
+// C++17 backport of C++20's `std::atomic_flag` with wait/notify functionality.
 // This implementation uses std::atomic<bool>, std::mutex, and
 // std::condition_variable to provide the same interface as C++20's
 // std::atomic_flag including wait(), notify_one(), and notify_all().
+// Note: Same as `std::atomic_flag`, this implementation is prone to the ABA
+// problem, i.e. if the value of the flag is changed, and then immediately
+// changed back, threads waiting for that change might miss it. This allows to
+// implement many operations without acquiring a lock.
 class atomic_flag {
  private:
   std::atomic<bool> flag_{false};
@@ -25,7 +31,9 @@ class atomic_flag {
 
  public:
   // Default constructor - initializes flag to false
-  atomic_flag() noexcept = default;
+  atomic_flag() = default;
+  // Initialize with an explicit value.
+  explicit atomic_flag(bool init) : flag_{init} {}
 
   // Deleted copy and move operations (same as std::atomic_flag)
   atomic_flag(const atomic_flag&) = delete;
