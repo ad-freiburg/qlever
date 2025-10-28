@@ -9,6 +9,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
 #include "rdfTypes/Variable.h"
+#include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
 // parts of queries. The implementation of the
