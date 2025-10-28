@@ -291,7 +291,18 @@ struct MetricLengthVisitor {
   CPP_template(typename T)(
       requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
   operator()(const T& geom) const {
-    using enum AnyGeometryMember;
+    static constexpr auto POINT = ad_utility::detail::AnyGeometryMember::POINT;
+    static constexpr auto LINE = ad_utility::detail::AnyGeometryMember::LINE;
+    static constexpr auto POLYGON =
+        ad_utility::detail::AnyGeometryMember::POLYGON;
+    static constexpr auto MULTILINE =
+        ad_utility::detail::AnyGeometryMember::MULTILINE;
+    static constexpr auto MULTIPOLYGON =
+        ad_utility::detail::AnyGeometryMember::MULTIPOLYGON;
+    static constexpr auto COLLECTION =
+        ad_utility::detail::AnyGeometryMember::COLLECTION;
+    static constexpr auto MULTIPOINT =
+        ad_utility::detail::AnyGeometryMember::MULTIPOINT;
     // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
     // this is why we use our own enum here. The correct matching of the integer
     // identifiers for the geometry types with this enum is tested in
