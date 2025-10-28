@@ -29,8 +29,6 @@ struct TableColumnWithVocab {
   ColumnType startNodes_;
   LocalVocab vocab_;
 
-  using column_type = ColumnType;
-
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(std::optional<IdTableView<0>> payload,
