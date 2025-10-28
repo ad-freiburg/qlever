@@ -76,7 +76,7 @@ class NaryExpression : public SparqlExpression {
         applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
 
     // Compute the result.
-    using ResultType = typename decltype(resultGenerator)::value_type;
+    using ResultType = ql::ranges::range_value_t<decltype(resultGenerator)>;
     VectorWithMemoryLimit<ResultType> result{context->_allocator};
     result.reserve(targetSize);
     ql::ranges::move(resultGenerator, std::back_inserter(result));
