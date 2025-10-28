@@ -38,14 +38,17 @@ CPP_template(typename NaryOperation)(
 };
 
 //______________________________________________________________________________
-inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
-  if (!optLangTag.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return LiteralOrIri{Lit::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+struct GetLanguageTag {
+  IdOrLiteralOrIri operator()(OptValue optLangTag) const {
+    if (!optLangTag.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return LiteralOrIri{Lit::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+    }
   }
 };
+inline constexpr GetLanguageTag getLanguageTag{};
 
 //______________________________________________________________________________
 using LangExpression = detail::langImpl::LangExpressionImpl<

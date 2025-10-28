@@ -7,15 +7,17 @@
 namespace sparqlExpression {
 namespace detail::rdfExpressions {
 
-inline auto getDatatype = [](OptIri input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return LiteralOrIri{std::move(input.value())};
+struct GetDatatypeImpl {
+  IdOrLiteralOrIri operator()(OptIri input) const {
+    if (!input.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return LiteralOrIri{std::move(input.value())};
+    }
   }
 };
 
-using GetDatatype = NARY<1, FV<decltype(getDatatype), DatatypeValueGetter>>;
+using GetDatatype = NARY<1, FV<GetDatatypeImpl, DatatypeValueGetter>>;
 
 }  //  namespace detail::rdfExpressions
 

@@ -74,8 +74,10 @@ using isGeoPointExpression =
 //______________________________________________________________________________
 // The expression for `bound` is slightly different as `IsValidValueGetter`
 // returns a `bool` and not an `Id`.
-inline auto boolToId = [](bool b) { return Id::makeFromBool(b); };
-using boundExpression = NARY<1, FV<decltype(boolToId), IsValidValueGetter>>;
+struct BoolToId {
+  Id operator()(bool b) const { return Id::makeFromBool(b); }
+};
+using boundExpression = NARY<1, FV<BoolToId, IsValidValueGetter>>;
 
 }  // namespace detail
 
