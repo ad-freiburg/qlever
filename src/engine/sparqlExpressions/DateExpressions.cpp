@@ -23,7 +23,6 @@ struct ExtractYear {
     }
   }
 };
-inline constexpr ExtractYear extractYear{};
 
 //______________________________________________________________________________
 struct ExtractMonth {
@@ -39,7 +38,6 @@ struct ExtractMonth {
     return Id::makeFromInt(optionalMonth.value());
   }
 };
-inline constexpr ExtractMonth extractMonth{};
 
 //______________________________________________________________________________
 struct ExtractDay {
@@ -55,7 +53,6 @@ struct ExtractDay {
     return Id::makeFromInt(optionalDay.value());
   }
 };
-inline constexpr ExtractDay extractDay{};
 
 //______________________________________________________________________________
 struct ExtractStrTimezone {
@@ -69,7 +66,6 @@ struct ExtractStrTimezone {
         asNormalizedStringViewUnsafe(timezoneStr))};
   }
 };
-inline constexpr ExtractStrTimezone extractStrTimezone{};
 
 //______________________________________________________________________________
 struct ExtractTimezoneDurationFormat {
@@ -85,7 +81,6 @@ struct ExtractTimezoneDurationFormat {
                : Id::makeUndefined();
   }
 };
-inline constexpr ExtractTimezoneDurationFormat extractTimezoneDurationFormat{};
 
 //______________________________________________________________________________
 template <auto dateMember, auto makeId>
@@ -103,27 +98,22 @@ struct ExtractTimeComponentImpl {
 };
 
 //______________________________________________________________________________
-inline constexpr ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>
-    extractHours{};
-inline constexpr ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>
-    extractMinutes{};
-inline constexpr ExtractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>
-    extractSeconds{};
+using ExtractHours = ExtractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
+using ExtractMinutes =
+    ExtractTimeComponentImpl<&Date::getMinute, &Id::makeFromInt>;
+using ExtractSeconds =
+    ExtractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 //______________________________________________________________________________
-NARY_EXPRESSION(MonthExpression, 1,
-                FV<decltype(extractMonth), DateValueGetter>);
-NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
+NARY_EXPRESSION(MonthExpression, 1, FV<ExtractMonth, DateValueGetter>);
+NARY_EXPRESSION(DayExpression, 1, FV<ExtractDay, DateValueGetter>);
 NARY_EXPRESSION(TimezoneStrExpression, 1,
-                FV<decltype(extractStrTimezone), DateValueGetter>);
+                FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
-                FV<decltype(extractTimezoneDurationFormat), DateValueGetter>);
-NARY_EXPRESSION(HoursExpression, 1,
-                FV<decltype(extractHours), DateValueGetter>);
-NARY_EXPRESSION(MinutesExpression, 1,
-                FV<decltype(extractMinutes), DateValueGetter>);
-NARY_EXPRESSION(SecondsExpression, 1,
-                FV<decltype(extractSeconds), DateValueGetter>);
+                FV<ExtractTimezoneDurationFormat, DateValueGetter>);
+NARY_EXPRESSION(HoursExpression, 1, FV<ExtractHours, DateValueGetter>);
+NARY_EXPRESSION(MinutesExpression, 1, FV<ExtractMinutes, DateValueGetter>);
+NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
 
 //______________________________________________________________________________
 // `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
@@ -136,8 +126,8 @@ CPP_class_template(typename NaryOperation)(
   bool isYearExpression() const override { return true; }
 };
 
-using YearExpression = YearExpressionImpl<
-    Operation<1, FV<decltype(extractYear), DateValueGetter>>>;
+using YearExpression =
+    YearExpressionImpl<Operation<1, FV<ExtractYear, DateValueGetter>>>;
 
 }  // namespace detail
 using namespace detail;
