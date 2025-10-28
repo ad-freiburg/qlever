@@ -83,6 +83,10 @@ class VectorWithMemoryLimit
 
  private:
   // Constructor for copying, used to implement the `clone` function.
+  // We use the explicit tag, s.t. this constructor doesn't match the signature
+  // of a copy constructor, because otherwise type traits like `copyable` or
+  // `constructible_form` would be misled (they might return true for certain
+  // compilers in C++17 if the copy constructor is present but private.
   VectorWithMemoryLimit(CloneTag, const VectorWithMemoryLimit& other)
       : Base{static_cast<const Base&>(other)} {}
 };

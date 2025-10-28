@@ -633,16 +633,11 @@ struct Hash {
   }
 };
 
-using MD5Expression =
-    StringExpressionImpl<1, Hash<decltype(ad_utility::hashMd5)>>;
-using SHA1Expression =
-    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha1)>>;
-using SHA256Expression =
-    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha256)>>;
-using SHA384Expression =
-    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha384)>>;
-using SHA512Expression =
-    StringExpressionImpl<1, Hash<decltype(ad_utility::hashSha512)>>;
+using MD5Expression = StringExpressionImpl<1, Hash<ad_utility::HashMd5>>;
+using SHA1Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha1>>;
+using SHA256Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha256>>;
+using SHA384Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha384>>;
+using SHA512Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha512>>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
