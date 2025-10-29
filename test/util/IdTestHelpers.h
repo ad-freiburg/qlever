@@ -9,6 +9,11 @@
 #include "global/Id.h"
 #include "util/Synchronized.h"
 
+// Forward declaration for test helper
+namespace ad_utility::testing {
+const IndexImpl*& getTestIndexImpl();
+}
+
 // Lambdas to simply create an `Id` with a given value and type during unit
 // tests.
 namespace ad_utility::testing {
@@ -31,11 +36,15 @@ inline auto BlankNodeId = [](const auto& v) {
 };
 
 inline auto LocalVocabId = [](std::integral auto v) {
-  static ad_utility::Synchronized<LocalVocab> localVocab;
+  const IndexImpl* index = getTestIndexImpl();
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "Test index must be set before using LocalVocabId. "
+                    "Call getQec() in your test first.");
+  static ad_utility::Synchronized<LocalVocab> localVocab{index};
   using namespace ad_utility::triple_component;
   return Id::makeFromLocalVocabIndex(
       localVocab.wlock()->getIndexAndAddIfNotContained(
-          LiteralOrIri::literalWithoutQuotes(std::to_string(v))));
+          LiteralOrIri::literalWithoutQuotes(std::to_string(v), index)));
 };
 
 inline auto TextRecordId = [](const auto& t) {
