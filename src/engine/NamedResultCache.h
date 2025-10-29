@@ -9,6 +9,7 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/LocalVocab.h"
+#include "engine/SpatialJoinCachedIndex.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
 
@@ -21,11 +22,17 @@ class NamedResultCache {
  public:
   // The cached result. In addition to the `IdTable` of the result, also
   // store all the information required to construct a `QueryExecutionTree`.
+  // The cache key of the root operation used to generate this result is kept to
+  // be included in the cache key of operations using this result. Optionally, a
+  // geometry index `cachedGeoIndex_` can be precomputed on a column of the
+  // result table for spatial joins with a constant (right) child.
   struct Value {
     std::shared_ptr<const IdTable> result_;
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
+    std::string cacheKey_;
+    std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
   };
 
   // The size of a cached result, which currently is just a dummy value of 1,

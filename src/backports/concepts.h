@@ -128,6 +128,7 @@ using ::ranges::contiguous_iterator;
 using ::ranges::derived_from;
 using ::ranges::equality_comparable_with;
 using ::ranges::forward_iterator;
+using ::ranges::indirect_unary_predicate;
 using ::ranges::indirectly_copyable;
 using ::ranges::input_iterator;
 using ::ranges::integral;

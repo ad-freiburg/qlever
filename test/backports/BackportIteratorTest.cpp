@@ -65,6 +65,7 @@ TYPED_TEST(MoveSentinelTest, basicFunctions) {
     EXPECT_EQ(empty.begin(), empty.end());
     auto emptySent = ql::move_sentinel{empty.end()};
     EXPECT_EQ(std::make_move_iterator(empty.begin()), emptySent);
+    EXPECT_EQ(emptySent, std::make_move_iterator(empty.begin()));
     EXPECT_EQ(emptySent.base(), empty.end());
     EXPECT_EQ(emptySent.base(), empty.begin());
   }
@@ -75,8 +76,10 @@ TYPED_TEST(MoveSentinelTest, basicFunctions) {
     auto sent = ql::move_sentinel{cont.end()};
     EXPECT_NE(cont.begin(), cont.end());
     EXPECT_NE(std::make_move_iterator(cont.begin()), sent);
+    EXPECT_NE(sent, std::make_move_iterator(cont.begin()));
     EXPECT_EQ(sent.base(), cont.end());
     EXPECT_NE(sent.base(), cont.begin());
   }
 }
+
 }  // namespace
