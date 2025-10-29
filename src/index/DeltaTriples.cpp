@@ -279,11 +279,15 @@ ReturnType DeltaTriplesManager::modify(
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
       function(deltaTriples);
+      tracer.beginTrace("updateMetadata");
       deltaTriples.updateAugmentedMetadata();
+      tracer.endTrace("updateMetadata");
       writeAndUpdateSnapshot();
     } else {
       ReturnType returnValue = function(deltaTriples);
+      tracer.beginTrace("updateMetadata");
       deltaTriples.updateAugmentedMetadata();
+      tracer.endTrace("updateMetadata");
       writeAndUpdateSnapshot();
       return returnValue;
     }
