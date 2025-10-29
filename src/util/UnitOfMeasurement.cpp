@@ -6,6 +6,8 @@
 
 #include "util/UnitOfMeasurement.h"
 
+#include "util/Algorithm.h"
+
 namespace ad_utility::detail {
 
 // ____________________________________________________________________________
@@ -77,32 +79,23 @@ double squareMeterToUnit(double squareMeters,
 // ____________________________________________________________________________
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
   using enum UnitOfMeasurement;
-  if (iri == UNIT_METER_IRI) {
-    return METERS;
-  } else if (iri == UNIT_KILOMETER_IRI) {
-    return KILOMETERS;
-  } else if (iri == UNIT_MILE_IRI) {
-    return MILES;
-  } else if (iri == UNIT_FEET_IRI) {
-    return FEET;
-  } else if (iri == UNIT_YARDS_IRI) {
-    return YARDS;
-  } else if (iri == UNIT_SQUARE_METER_IRI) {
-    return SQUARE_METERS;
-  } else if (iri == UNIT_SQUARE_KILOMETER_IRI) {
-    return SQUARE_KILOMETERS;
-  } else if (iri == UNIT_SQUARE_MILE_IRI) {
-    return SQUARE_MILES;
-  } else if (iri == UNIT_SQUARE_FEET_IRI) {
-    return SQUARE_FEET;
-  } else if (iri == UNIT_SQUARE_YARDS_IRI) {
-    return SQUARE_YARDS;
-  } else if (iri == UNIT_ACRE_IRI) {
-    return ACRE;
-  } else if (iri == UNIT_ARE_IRI) {
-    return ARE;
-  } else if (iri == UNIT_HECTARE_IRI) {
-    return HECTARE;
+  static const std::unordered_map<std::string_view, UnitOfMeasurement> iriMap{
+      {UNIT_METER_IRI, METERS},
+      {UNIT_KILOMETER_IRI, KILOMETERS},
+      {UNIT_MILE_IRI, MILES},
+      {UNIT_FEET_IRI, FEET},
+      {UNIT_YARDS_IRI, YARDS},
+      {UNIT_SQUARE_METER_IRI, SQUARE_METERS},
+      {UNIT_SQUARE_KILOMETER_IRI, SQUARE_KILOMETERS},
+      {UNIT_SQUARE_MILE_IRI, SQUARE_MILES},
+      {UNIT_SQUARE_FEET_IRI, SQUARE_FEET},
+      {UNIT_SQUARE_YARDS_IRI, SQUARE_YARDS},
+      {UNIT_ACRE_IRI, ACRE},
+      {UNIT_ARE_IRI, ARE},
+      {UNIT_HECTARE_IRI, HECTARE},
+  };
+  if (ad_utility::contains(iriMap, iri)) {
+    return iriMap.at(iri);
   }
   return UNKNOWN;
 }
