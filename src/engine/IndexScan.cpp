@@ -642,12 +642,14 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         while (pendingBlocks.empty()) {
           if (state->doneFetching_) {
-            metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-            updateRuntimeInfoForLazyScan(metadata);
+            // metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+            // updateRuntimeInfoForLazyScan(metadata);
             return LoopControl::makeBreak();
           }
           state->fetch();
         }
+        metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+        updateRuntimeInfoForLazyScan(metadata);
 
         // We now have non-empty pending blocks
         auto scan = getLazyScan(std::move(pendingBlocks));
@@ -658,14 +660,15 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
-            std::move(scan), [](auto& table) {
+            std::move(scan), [&metadata, &scanDetails](auto& table) mutable {
+              metadata.aggregate(scanDetails);
               return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
             });
 
         // Use CallbackOnEndView to aggregate metadata after scan is consumed
         auto callback = ad_utility::makeAssignableLambda(
             [&metadata, &scanDetails]() mutable {
-              metadata.aggregate(scanDetails);
+              // metadata.aggregate(scanDetails);
             });
 
         auto scanWithCallback = ad_utility::CallbackOnEndView{
