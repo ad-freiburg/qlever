@@ -10,6 +10,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/Exception.h"
 
 // Forward declaration
 class IndexImpl;
