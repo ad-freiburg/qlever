@@ -315,8 +315,8 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
-      keepJoinColumn_);
+      1, aPermuted, bPermuted, std::move(*result), &getIndex().getImpl(),
+      cancellationHandle_, keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {

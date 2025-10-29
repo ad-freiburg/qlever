@@ -50,7 +50,7 @@ class ScanSpecification {
   void validate() const;
 
  public:
-  ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab = {},
+  ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab,
                     GraphFilter graphFilter = GraphFilter::All())
       : col0Id_{col0Id},
         col1Id_{col1Id},

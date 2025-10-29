@@ -250,11 +250,12 @@ class TripleComponent {
       // look up in (and potentially add to) our local vocabulary.
       AD_CORRECTNESS_CHECK(isLiteral() || isIri());
       using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-      auto moveWord = [&]() -> LiteralOrIri {
+      const IndexImpl* index = localVocab.index_;
+      auto moveWord = [&, index]() -> LiteralOrIri {
         if (isLiteral()) {
-          return LiteralOrIri{std::move(getLiteral())};
+          return LiteralOrIri{std::move(getLiteral()), index};
         } else {
-          return LiteralOrIri{std::move(getIri())};
+          return LiteralOrIri{std::move(getIri()), index};
         }
       };
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
