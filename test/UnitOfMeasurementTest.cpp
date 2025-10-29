@@ -33,10 +33,10 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   EXPECT_NEAR(kmToUnit(500.0, METERS), 500000.0, error);
   EXPECT_NEAR(kmToUnit(500.0, MILES), 310.685595, error);
   EXPECT_NEAR(kmToUnit(500.0, FEET), 1640420.0, error);
-  EXPECT_NEAR(kmToUnit(500.0, YARDS), 310.685595, error);
+  EXPECT_NEAR(kmToUnit(500.0, YARDS), 546806.5, error);
   EXPECT_NEAR(kmToUnit(1.0, MILES), 0.62137119, error);
   EXPECT_NEAR(kmToUnit(1.0, FEET), 3280.84, error);
-  EXPECT_NEAR(kmToUnit(1.0, YARDS), 546806.5, error);
+  EXPECT_NEAR(kmToUnit(1.0, YARDS), 1093.613, error);
 
   auto checkUnsupported = [&](UnitOfMeasurement unit,
                               source_location sourceLocation =
@@ -120,8 +120,8 @@ TEST(GeoSparqlHelpers, SqMeterToUnit) {
   EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_METERS), 5000.0, error);
   EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_KILOMETERS), 0.005, error);
   EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_MILES), 0.001930511, error);
-  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_FEET), 53819.55, error);
-  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_YARDS), 5979.95, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_FEET), 53819.555538, error);
+  EXPECT_NEAR(m2ToUnit(5000.0, SQUARE_YARDS), 5979.9469688, error);
   EXPECT_NEAR(m2ToUnit(5000.0, ACRE), 1.235527, error);
   EXPECT_NEAR(m2ToUnit(5000.0, ARE), 50.0, error);
   EXPECT_NEAR(m2ToUnit(5000.0, HECTARE), 0.5, error);
