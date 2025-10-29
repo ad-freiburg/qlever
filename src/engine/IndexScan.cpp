@@ -641,8 +641,6 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         while (pendingBlocks.empty()) {
           if (state->doneFetching_) {
-            // metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-            // updateRuntimeInfoForLazyScan(metadata);
             return LoopControl::makeBreak();
           }
           state->fetch();
@@ -659,7 +657,11 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
-            std::move(scan), [&metadata, &scanDetails](auto& table) mutable {
+            std::move(scan),
+            [&metadata, &scanDetails,
+             originalMetadata = metadata](auto& table) mutable {
+              // Make sure we don't add everything more than once.
+              metadata = originalMetadata;
               metadata.aggregate(scanDetails);
               return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
             });
