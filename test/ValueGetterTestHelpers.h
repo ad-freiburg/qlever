@@ -35,7 +35,7 @@ struct TestContextWithGivenTTl {
   QueryExecutionContext* qec =
       ad_utility::testing::getQec(turtleInput, vocabularyType);
   VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  LocalVocab localVocab{&qec->getIndex().getImpl()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
@@ -106,13 +106,15 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
   using Literal = ad_utility::triple_component::Literal;
   TestContextWithGivenTTl testContext{ttl};
 
-  auto toLiteralOrIri = [](std::string_view content, auto descriptor,
-                           bool isIri) {
+  const IndexImpl* index = &testContext.qec->getIndex().getImpl();
+  auto toLiteralOrIri = [index](std::string_view content, auto descriptor,
+                                bool isIri) {
     if (isIri) {
-      return LiteralOrIri::iriref(std::string(content));
+      return LiteralOrIri::iriref(std::string(content), index);
     } else {
       return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(content), descriptor)};
+                              asNormalizedStringViewUnsafe(content), descriptor),
+                          index};
     }
   };
   LiteralOrIri literalOrIri =
@@ -180,9 +182,12 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   };
 
   // Test xsd:anyURI literal method
-  auto litTest = [&](const std::string& lit, const std::optional<Iri>& datatype,
-                     bool expectSuccess) {
-    doTest(LiteralOrIri::literalWithoutQuotes(lit, datatype), expectSuccess);
+  const IndexImpl* index = &testContext.qec->getIndex().getImpl();
+  auto litTest = [&, index](const std::string& lit,
+                            const std::optional<Iri>& datatype,
+                            bool expectSuccess) {
+    doTest(LiteralOrIri::literalWithoutQuotes(lit, index, datatype),
+           expectSuccess);
   };
 
   litTest(
@@ -194,7 +199,8 @@ inline void checkUnitValueGetterFromLiteralOrIri(
           Iri::fromIrirefWithoutBrackets("http://example.com/"), false);
 
   // Test IRI method
-  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets)},
+  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets),
+                      index},
          true);
 };
 
@@ -214,11 +220,13 @@ inline void checkGeoInfoFromLocalVocab(
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   // Not the geoInfoTtl here because the literals should not be contained
   TestContextWithGivenTTl testContext{ttl};
-  LocalVocab localVocab;
+  const IndexImpl* index = &testContext.qec->getIndex().getImpl();
+  LocalVocab localVocab{index};
   auto litOrIri =
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          wktInput);
-  auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
+          wktInput, index);
+  auto idx = localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{litOrIri, index});
   auto id = ValueId::makeFromLocalVocabIndex(idx);
   auto res = getter(id, &testContext.context);
   checkGeoInfo(res, expected);
@@ -273,9 +281,10 @@ inline void checkGeoInfoFromLiteral(
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
+  const IndexImpl* index = &testContext.qec->getIndex().getImpl();
   auto litOrIri =
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          wktInput);
+          wktInput, index);
   auto res = getter(litOrIri, &testContext.context);
   checkGeoInfo(res, expected);
 }
