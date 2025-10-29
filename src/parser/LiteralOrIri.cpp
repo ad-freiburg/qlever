@@ -12,10 +12,12 @@
 
 namespace ad_utility::triple_component {
 // __________________________________________
-LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
+LiteralOrIri::LiteralOrIri(Iri iri, const IndexImpl* index)
+    : data_{std::move(iri)}, index_{index} {}
 
 // __________________________________________
-LiteralOrIri::LiteralOrIri(Literal literal) : data_{std::move(literal)} {}
+LiteralOrIri::LiteralOrIri(Literal literal, const IndexImpl* index)
+    : data_{std::move(literal)}, index_{index} {}
 
 // __________________________________________
 bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
@@ -100,36 +102,48 @@ NormalizedStringView LiteralOrIri::getContent() const {
 }
 
 // __________________________________________
-LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
-  return LiteralOrIri{Iri::fromIriref(stringWithBrackets)};
+LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets,
+                                  const IndexImpl* index) {
+  return LiteralOrIri{Iri::fromIriref(stringWithBrackets), index};
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
-                                       std::string_view suffix) {
-  return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix)};
+                                       std::string_view suffix,
+                                       const IndexImpl* index) {
+  return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix), index};
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithQuotes(
     std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor,
+    const IndexImpl* index) {
   return LiteralOrIri(Literal::fromEscapedRdfLiteral(rdfContentWithQuotes,
-                                                     std::move(descriptor)));
+                                                     std::move(descriptor)),
+                     index);
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithoutQuotes(
     std::string_view rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor,
+    const IndexImpl* index) {
   return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
-                                                    std::move(descriptor)));
+                                                    std::move(descriptor)),
+                     index);
 }
 
 // ___________________________________________
 ql::strong_ordering LiteralOrIri::compareThreeWay(
     const LiteralOrIri& rhs) const {
-  int i = IndexImpl::staticGlobalSingletonComparator().compare(
+  // Use the index from either this or rhs (they should be the same or one
+  // might be null). Prefer this->index_ if available.
+  const IndexImpl* index = index_ ? index_ : rhs.index_;
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LiteralOrIri must have an associated IndexImpl for "
+                    "three-way comparison");
+  int i = index->getVocab().getCaseComparator().compare(
       toStringRepresentation(), rhs.toStringRepresentation(),
       LocaleManager::Level::TOTAL);
   if (i < 0) {

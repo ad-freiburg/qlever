@@ -20,6 +20,9 @@
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
+// Forward declaration
+class IndexImpl;
+
 // A class for maintaining a local vocabulary, which conceptually is a set of
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
 // from the input data). The implementation is subtle and quite clever:
@@ -58,9 +61,21 @@ class LocalVocab {
   std::unique_ptr<std::atomic_bool> copied_ =
       std::make_unique<std::atomic_bool>(false);
 
+  // Pointer to the IndexImpl that this LocalVocab is associated with.
+  // Used for looking up positions in the global vocabulary.
+  const IndexImpl* index_ = nullptr;
+
  public:
   // Create a new, empty local vocabulary.
-  LocalVocab() = default;
+  // Note: This is not explicit so it can be used with default arguments like
+  // `LocalVocab localVocab = {}`
+  LocalVocab(const IndexImpl* index = nullptr) : index_{index} {}
+
+  // Get the associated IndexImpl pointer
+  const IndexImpl* getIndex() const { return index_; }
+
+  // Set the associated IndexImpl pointer
+  void setIndex(const IndexImpl* index) { index_ = index; }
 
   // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;

@@ -12,16 +12,18 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // Lookup the lower and upper bound from the vocabulary of the index,
   // cache and return them. This represents the place in the vocabulary where
   // this word would be stored if it were present.
-  const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
+  const IndexImpl* index = getIndex();
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LocalVocabEntry must have an associated IndexImpl");
   PositionInVocab positionInVocab;
 
-  const auto& vocab = index.getVocab();
+  const auto& vocab = index->getVocab();
 
   // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
   // give us a consistent ordering, which is important for determining equality
   // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
   auto [lower, upper] = [&]() {
-    if (auto opt = index.encodedIriManager().encode(toStringRepresentation());
+    if (auto opt = index->encodedIriManager().encode(toStringRepresentation());
         opt.has_value()) {
       return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }
@@ -36,6 +38,10 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
                            std::memory_order_relaxed);
   upperBoundInVocab_.store(positionInVocab.upperBound_,
                            std::memory_order_relaxed);
-  positionInVocabKnown_.store(true, std::memory_order_release);
+  // Set the known flag to true
+  auto currentPtr = indexAndKnownFlag_.load(std::memory_order_relaxed);
+  indexAndKnownFlag_.store(
+      CompressedIndexPtr{currentPtr.getPointer(), true},
+      std::memory_order_release);
   return positionInVocab;
 }

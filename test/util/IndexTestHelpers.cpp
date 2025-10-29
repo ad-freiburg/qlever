@@ -340,7 +340,8 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  // Note: The global singleton has been removed. Tests that need an IndexImpl*
+  // should get it from the QueryExecutionContext via qec->getIndex().getImpl()
   return qec;
 }
 

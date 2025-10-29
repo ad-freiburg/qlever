@@ -13,7 +13,11 @@
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
+#include "util/CompressedPointer.h"
 #include "util/CopyableSynchronization.h"
+
+// Forward declaration
+class IndexImpl;
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -41,16 +45,38 @@ class alignas(16) LocalVocabEntry
   // a bit of resources. However, we don't consider this case to be likely.
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
-  mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
+
+  // Compressed pointer that packs the IndexImpl* (aligned to 64 bytes, so lower
+  // 6 bits are zero) with the positionInVocabKnown_ flag in the LSB.
+  // This saves 8 bytes compared to storing them separately.
+  using CompressedIndexPtr =
+      ad_utility::CompressedPointer<const IndexImpl, 64>;
+  mutable ad_utility::CopyableAtomic<CompressedIndexPtr> indexAndKnownFlag_;
 
  public:
   // Inherit the constructors from `LiteralOrIri`
   using Base::Base;
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
   QL_EXPLICIT(false)
-  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  LocalVocabEntry(const Base& base, const IndexImpl* index = nullptr)
+      : Base{base}, indexAndKnownFlag_{CompressedIndexPtr{index, false}} {}
+  QL_EXPLICIT(false)
+  LocalVocabEntry(Base&& base, const IndexImpl* index = nullptr) noexcept
+      : Base{std::move(base)},
+        indexAndKnownFlag_{CompressedIndexPtr{index, false}} {}
+
+  // Set the index pointer (used when adding to LocalVocab)
+  void setIndex(const IndexImpl* index) const {
+    auto current = indexAndKnownFlag_.load(std::memory_order_relaxed);
+    indexAndKnownFlag_.store(CompressedIndexPtr{index, current.getFlag()},
+                             std::memory_order_relaxed);
+  }
+
+  // Get the index pointer
+  const IndexImpl* getIndex() const {
+    return indexAndKnownFlag_.load(std::memory_order_relaxed).getPointer();
+  }
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
@@ -70,7 +96,7 @@ class alignas(16) LocalVocabEntry
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
     // position.
-    if (positionInVocabKnown_.load(std::memory_order_acquire)) {
+    if (indexAndKnownFlag_.load(std::memory_order_acquire).getFlag()) {
       return {lowerBoundInVocab_.load(std::memory_order_relaxed),
               upperBoundInVocab_.load(std::memory_order_relaxed)};
     }
@@ -85,13 +111,17 @@ class alignas(16) LocalVocabEntry
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
-  // Comparison between two entries could in theory also be sped up using the
-  // cached `position` if it has previously been computed for both of the
-  // entries, but it is currently questionable whether this gains much
-  // performance.
+  // Comparison between two entries. We need to ensure the IndexImpl* from
+  // LocalVocabEntry is used for the comparison.
   auto compareThreeWay(const LocalVocabEntry& rhs) const {
-    return ql::compareThreeWay(static_cast<const Base&>(*this),
-                               static_cast<const Base&>(rhs));
+    // Temporarily set the index on the base LiteralOrIri for comparison
+    const IndexImpl* index = getIndex() ? getIndex() : rhs.getIndex();
+    // Create temporary copies with the index set
+    Base lhsWithIndex = static_cast<const Base&>(*this);
+    Base rhsWithIndex = static_cast<const Base&>(rhs);
+    const_cast<Base&>(lhsWithIndex).setIndexImpl(index);
+    const_cast<Base&>(rhsWithIndex).setIndexImpl(index);
+    return ql::compareThreeWay(lhsWithIndex, rhsWithIndex);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 

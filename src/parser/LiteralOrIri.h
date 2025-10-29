@@ -11,6 +11,9 @@
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 
+// Forward declaration
+class IndexImpl;
+
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';
 static constexpr char iriPrefixChar = '<';
@@ -21,6 +24,8 @@ class alignas(16) LiteralOrIri {
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
+  // Pointer to the IndexImpl for accessing the comparator
+  const IndexImpl* index_ = nullptr;
 
  public:
   // Return contained Iri object if available, throw exception otherwise
@@ -41,10 +46,16 @@ class alignas(16) LiteralOrIri {
   Literal& getLiteral();
 
   // Create a new LiteralOrIri based on a Literal object
-  explicit LiteralOrIri(Literal literal);
+  explicit LiteralOrIri(Literal literal, const IndexImpl* index = nullptr);
 
   // Create a new LiteralOrIri based on an Iri object
-  explicit LiteralOrIri(Iri iri);
+  explicit LiteralOrIri(Iri iri, const IndexImpl* index = nullptr);
+
+  // Get the associated IndexImpl pointer
+  const IndexImpl* getIndexImpl() const { return index_; }
+
+  // Set the associated IndexImpl pointer
+  void setIndexImpl(const IndexImpl* index) { index_ = index; }
 
   const std::string& toStringRepresentation() const {
     auto impl = [](const auto& val) -> decltype(auto) {
@@ -53,21 +64,25 @@ class alignas(16) LiteralOrIri {
     return std::visit(impl, data_);
   }
 
-  static LiteralOrIri fromStringRepresentation(std::string internal) {
+  static LiteralOrIri fromStringRepresentation(std::string internal,
+                                               const IndexImpl* index = nullptr) {
     char tag = internal.front();
     if (tag == literalPrefixChar) {
-      return LiteralOrIri{
-          Literal::fromStringRepresentation(std::move(internal))};
+      return LiteralOrIri{Literal::fromStringRepresentation(std::move(internal)),
+                          index};
     } else {
-      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
+      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal)),
+                          index};
     }
   }
   CPP_template(typename H, typename L)(
       requires ql::concepts::same_as<L, LiteralOrIri>) friend H
       AbslHashValue(H h, const L& literalOrIri) {
+    // Only hash the data, not the index pointer
     return H::combine(std::move(h), literalOrIri.data_);
   }
 
+  // Equality only depends on data_, not on index_
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LiteralOrIri, data_)
 
   ql::strong_ordering compareThreeWay(const LiteralOrIri& rhs) const;
@@ -120,19 +135,23 @@ class alignas(16) LiteralOrIri {
   //   without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt,
+      const IndexImpl* index = nullptr);
 
   // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
   // NOT BE surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt,
+      const IndexImpl* index = nullptr);
 
   // Create a new iri given an iri with surrounding brackets
-  static LiteralOrIri iriref(const std::string& stringWithBrackets);
+  static LiteralOrIri iriref(const std::string& stringWithBrackets,
+                             const IndexImpl* index = nullptr);
 
   // Create a new iri given a prefix iri and its suffix
-  static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix);
+  static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix,
+                                  const IndexImpl* index = nullptr);
 
   // Printing for GTest
   friend void PrintTo(const LiteralOrIri& literalOrIri, std::ostream* os) {
