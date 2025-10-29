@@ -42,7 +42,8 @@ class ExecuteUpdate {
   transformTriplesTemplate(const EncodedIriManager& encodedIriManager,
                            const Index::Vocab& vocab,
                            const VariableToColumnMap& variableColumns,
-                           std::vector<SparqlTripleSimpleWithGraph>&& triples);
+                           const std::vector<SparqlTripleSimpleWithGraph>& triples);
+  FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the

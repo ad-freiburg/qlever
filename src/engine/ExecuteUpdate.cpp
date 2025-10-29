@@ -46,61 +46,101 @@ std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
     const VariableToColumnMap& variableColumns,
-    std::vector<SparqlTripleSimpleWithGraph>&& triples) {
+    const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+  // - collect all TripleComponents that live in the Vocabulary (literals and
+  // IRIs)
+  // - deduplicate and sort them according to the order in the Vocabulary
+  // - create a map with the TC and their respective Id
+  // - transform the triples using the map and the variableColumns to
+  // `IdOrVariableIndex`
+  // We do this to access the disk in an optimal pattern. The vocabulary does a
+  // scan with jumps over the disk for lookups instead of random accesses.
+  ad_utility::HashSet<TripleComponent> lookupItems;
+  // Collect the Literals and Iri for the Vocab lookup.
+  auto addTCToLookup = [&lookupItems](const TripleComponent& tc) {
+    if (tc.isLiteral() || tc.isIri()) {
+      lookupItems.insert(tc);
+    }
+  };
+  auto addGraphToLookup =
+      [&lookupItems](const SparqlTripleSimpleWithGraph::Graph& g) {
+        // Ignore the default graph (std::monostate) here, because it is always
+        // added.
+        if (const auto* iri = std::get_if<TripleComponent::Iri>(&g)) {
+          lookupItems.insert(TripleComponent(*iri));
+        }
+      };
+  for (const auto& triple : triples) {
+    addTCToLookup(triple.s_);
+    addTCToLookup(triple.p_);
+    addTCToLookup(triple.o_);
+    addGraphToLookup(triple.g_);
+  }
+  // Always adding the default graph is no overhead and we need it for
+  // `defaultGraphIri`.
+  lookupItems.insert(TripleComponent(
+      ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
+  std::vector lookupVec(lookupItems.begin(), lookupItems.end());
+  ql::ranges::sort(
+      lookupVec, vocab.getCaseComparator(), [](const TripleComponent& tc) {
+        AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
+        return tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
+                              : tc.getIri().toStringRepresentation();
+      });
   // This LocalVocab only contains IDs that are related to the
   // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
   // ID will only not be added if it belongs to a Quad with a variable that has
   // no solutions.
   LocalVocab localVocab{};
-
-  auto transformSparqlTripleComponent =
-      [&vocab, &localVocab, &encodedIriManager,
-       &variableColumns](TripleComponent component) -> IdOrVariableIndex {
-    if (component.isVariable()) {
-      AD_CORRECTNESS_CHECK(variableColumns.contains(component.getVariable()));
-      return variableColumns.at(component.getVariable()).columnIndex_;
-    } else {
-      return std::move(component).toValueId(vocab, localVocab,
-                                            encodedIriManager);
+  ad_utility::HashMap<TripleComponent, Id> lookupMap;
+  for (const auto& tc : lookupVec) {
+    // Explicit copy because `toValueId` is `&&`.
+    lookupMap.emplace(tc, TripleComponent(tc).toValueId(vocab, localVocab,
+                                                        encodedIriManager));
+  }
+  auto lookupTc = [&encodedIriManager, &lookupMap, &variableColumns](
+                      const TripleComponent& tc) -> IdOrVariableIndex {
+    // Everything except for Literals and Iris can directly be converted to Ids.
+    if (tc.isVariable()) {
+      AD_CORRECTNESS_CHECK(variableColumns.contains(tc.getVariable()));
+      return variableColumns.at(tc.getVariable()).columnIndex_;
     }
+    if (!(tc.isLiteral() || tc.isIri())) {
+      return tc.toValueIdIfNotString(&encodedIriManager).value();
+    }
+    auto found = lookupMap.find(tc);
+    AD_CORRECTNESS_CHECK(found != lookupMap.end());
+    return found->second;
   };
-  Id defaultGraphIri = [&transformSparqlTripleComponent] {
-    IdOrVariableIndex defaultGraph = transformSparqlTripleComponent(
+  Id defaultGraphIri = [&lookupTc] {
+    const IdOrVariableIndex defaultGraph = lookupTc(
         ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
-  auto transformGraph = [&vocab, &localVocab, &defaultGraphIri,
-                         &variableColumns, &encodedIriManager](
-                            SparqlTripleSimpleWithGraph::Graph graph) {
+  auto lookupGraph = [&defaultGraphIri, &variableColumns, &lookupTc](
+                         const SparqlTripleSimpleWithGraph::Graph& graph)
+      -> IdOrVariableIndex {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
               return defaultGraphIri;
             },
-            [&vocab, &localVocab,
-             &encodedIriManager](const ad_utility::triple_component::Iri& iri)
-                -> IdOrVariableIndex {
-              return TripleComponent(iri).toValueId(vocab, localVocab,
-                                                    encodedIriManager);
-            },
+            [&lookupTc](const ad_utility::triple_component::Iri& iri)
+                -> IdOrVariableIndex { return lookupTc(TripleComponent(iri)); },
             [&variableColumns](const Variable& var) -> IdOrVariableIndex {
               AD_CORRECTNESS_CHECK(variableColumns.contains(var));
               return variableColumns.at(var).columnIndex_;
             }},
         graph);
   };
-  auto transformSparqlTripleSimple =
-      [&transformSparqlTripleComponent,
-       &transformGraph](SparqlTripleSimpleWithGraph triple) {
-        return std::array{transformSparqlTripleComponent(std::move(triple.s_)),
-                          transformSparqlTripleComponent(std::move(triple.p_)),
-                          transformSparqlTripleComponent(std::move(triple.o_)),
-                          transformGraph(std::move(triple.g_))};
+  auto transformTriple =
+      [&lookupTc, &lookupGraph](const SparqlTripleSimpleWithGraph& triple) {
+        return std::array{lookupTc(triple.s_), lookupTc(triple.p_),
+                          lookupTc(triple.o_), lookupGraph(triple.g_)};
       };
-  return {
-      ad_utility::transform(std::move(triples), transformSparqlTripleSimple),
-      std::move(localVocab)};
+  return {ad_utility::transform(triples, transformTriple),
+          std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
@@ -161,7 +201,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
        &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
-                                     std::move(tripleTemplates));
+                                     tripleTemplates);
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with
@@ -173,13 +213,22 @@ ExecuteUpdate::computeGraphUpdateQuads(
                           std::move(updateTriples), std::move(localVocab)};
       };
 
+  tracer.beginTrace("transforming");
   auto [toInsertTemplates, toInsert, localVocabInsert] =
       prepareTemplateAndResultContainer(
           std::move(graphUpdate.toInsert_.triples_));
+  AD_LOG_INFO << "Transformed insert triples template size: "
+              << toInsertTemplates.size()
+              << ", local vocab size: " << localVocabInsert.size() << std::endl;
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
       prepareTemplateAndResultContainer(
           std::move(graphUpdate.toDelete_.triples_));
+  AD_LOG_INFO << "Transformed delete triples template size: "
+              << toDeleteTemplates.size()
+              << ", local vocab size: " << localVocabDelete.size() << std::endl;
+  tracer.endTrace("transforming");
 
+  tracer.beginTrace("resultInterpolation");
   uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
            query._limitOffset, result, resultSize)) {
@@ -192,11 +241,14 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  tracer.endTrace("resultInterpolation");
+  tracer.beginTrace("deduplication");
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
   metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
+  tracer.endTrace("deduplication");
   tracer.endTrace("preparation");
 
   return {

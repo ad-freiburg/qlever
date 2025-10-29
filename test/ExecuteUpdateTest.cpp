@@ -453,11 +453,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
-              expectedTransformedTriples) {
+              expectedTransformedTriples,
+          ad_utility::source_location sourceLocation =
+              AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
             ExecuteUpdate::transformTriplesTemplate(*encodedIriManager(), vocab,
-                                                    variableColumns,
-                                                    std::move(triples));
+                                                    variableColumns, triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -473,7 +475,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   auto expectTransformTriplesTemplateFails =
       [&vocab](const VariableToColumnMap& variableColumns,
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
-               const Matcher<const std::string&>& messageMatcher) {
+               const Matcher<const std::string&>& messageMatcher,
+               ad_utility::source_location sourceLocation =
+                   AD_CURRENT_SOURCE_LOC()) {
+        auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(ExecuteUpdate::transformTriplesTemplate(
                                          *encodedIriManager(), vocab,
                                          variableColumns, std::move(triples)),
@@ -501,7 +506,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      HasSubstr("Assertion `variableColumns.contains(component.getVariable())` "
+      HasSubstr("Assertion `variableColumns.contains(tc.getVariable())` "
                 "failed."));
   expectTransformTriplesTemplateFails(
       {},
