@@ -482,3 +482,5 @@ addLinkAndDiscoverTestSerial(HttpErrorTest engine)
 addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
+
+addLinkAndDiscoverTest(MatView qlever engine index util)
