@@ -38,11 +38,11 @@ constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
 // is specified via the `expectedRows`, for example {{1, 3}, {7, 8}} means that
 // the partialLazyScanResult shall contain the rows number `1, 2, 7` of the full
 // scan (upper bounds are not included).
-void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
-                  IndexScan& fullScan,
-                  const std::vector<IndexPair>& expectedRows,
-                  const LimitOffsetClause& limitOffset = {},
-                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+void testLazyScan(
+    CompressedRelationReader::IdTableGeneratorInputRange partialLazyScanResult,
+    IndexScan& fullScan, const std::vector<IndexPair>& expectedRows,
+    const LimitOffsetClause& limitOffset = {},
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
