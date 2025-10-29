@@ -39,7 +39,6 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   }
   tracer.endTrace("insertTriples");
   tracer.beginTrace("updateMetadata");
-  deltaTriples.updateAugmentedMetadata();
   tracer.endTrace("updateMetadata");
   return metadata;
 }

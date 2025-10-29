@@ -279,9 +279,11 @@ ReturnType DeltaTriplesManager::modify(
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
       function(deltaTriples);
+      deltaTriples.updateAugmentedMetadata();
       writeAndUpdateSnapshot();
     } else {
       ReturnType returnValue = function(deltaTriples);
+      deltaTriples.updateAugmentedMetadata();
       writeAndUpdateSnapshot();
       return returnValue;
     }
@@ -370,7 +372,6 @@ void DeltaTriples::readFromDisk() {
       std::make_shared<CancellationHandle::element_type>();
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
-  updateAugmentedMetadata();
   AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
               << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
 }

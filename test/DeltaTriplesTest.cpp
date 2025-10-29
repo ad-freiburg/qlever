@@ -378,7 +378,6 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
       // Insert the `triplesToInsert`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
-        deltaTriples.updateAugmentedMetadata();
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.

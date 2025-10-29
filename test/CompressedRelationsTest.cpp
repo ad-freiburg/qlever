@@ -979,7 +979,6 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
                               IdTriple{{V(0), V(4), V(5), V(3)}}});
-    dt.updateAugmentedMetadata();
   });
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
