@@ -8,7 +8,6 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
-#include "util/GeneratorConverter.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________

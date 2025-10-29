@@ -13,8 +13,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
-#include "util/Generator.h"
-#include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
