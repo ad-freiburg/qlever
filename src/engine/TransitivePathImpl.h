@@ -147,7 +147,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
     detail::TableColumnWithVocab<const decltype(nodes)&> tableInfo{
-        std::nullopt, nodes, LocalVocab{}};
+        std::nullopt, nodes, makeLocalVocab()};
 
     NodeGenerator hull = transitiveHull(
         std::move(edges), sub->getCopyOfLocalVocab(), ql::span{&tableInfo, 1},
@@ -310,7 +310,7 @@ class TransitivePathImpl : public TransitivePathBase {
             // Reset vocab to prevent merging the same vocab over and over
             // again.
             if (yieldOnce) {
-              mergedVocab = LocalVocab{};
+              mergedVocab = makeLocalVocab();
             }
           }
         }

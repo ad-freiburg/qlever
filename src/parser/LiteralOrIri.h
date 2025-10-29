@@ -46,15 +46,17 @@ class alignas(16) LiteralOrIri {
   Literal& getLiteral();
 
   // Create a new LiteralOrIri based on a Literal object
-  explicit LiteralOrIri(Literal literal, const IndexImpl* index = nullptr);
+  // The index parameter is required for proper comparison operations.
+  explicit LiteralOrIri(Literal literal, const IndexImpl* index);
 
   // Create a new LiteralOrIri based on an Iri object
-  explicit LiteralOrIri(Iri iri, const IndexImpl* index = nullptr);
+  // The index parameter is required for proper comparison operations.
+  explicit LiteralOrIri(Iri iri, const IndexImpl* index);
 
   // Get the associated IndexImpl pointer
   const IndexImpl* getIndexImpl() const { return index_; }
 
-  // Set the associated IndexImpl pointer
+  // Set the associated IndexImpl pointer (used internally for comparison)
   void setIndexImpl(const IndexImpl* index) { index_ = index; }
 
   const std::string& toStringRepresentation() const {
@@ -65,7 +67,9 @@ class alignas(16) LiteralOrIri {
   }
 
   static LiteralOrIri fromStringRepresentation(std::string internal,
-                                               const IndexImpl* index = nullptr) {
+                                               const IndexImpl* index) {
+    AD_CONTRACT_CHECK(index != nullptr,
+                      "LiteralOrIri requires a non-null IndexImpl pointer");
     char tag = internal.front();
     if (tag == literalPrefixChar) {
       return LiteralOrIri{Literal::fromStringRepresentation(std::move(internal)),
@@ -135,23 +139,23 @@ class alignas(16) LiteralOrIri {
   //   without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt,
-      const IndexImpl* index = nullptr);
+      const IndexImpl* index,
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
   // NOT BE surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt,
-      const IndexImpl* index = nullptr);
+      const IndexImpl* index,
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets
   static LiteralOrIri iriref(const std::string& stringWithBrackets,
-                             const IndexImpl* index = nullptr);
+                             const IndexImpl* index);
 
   // Create a new iri given a prefix iri and its suffix
   static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix,
-                                  const IndexImpl* index = nullptr);
+                                  const IndexImpl* index);
 
   // Printing for GTest
   friend void PrintTo(const LiteralOrIri& literalOrIri, std::ostream* os) {

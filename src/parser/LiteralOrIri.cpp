@@ -13,11 +13,17 @@
 namespace ad_utility::triple_component {
 // __________________________________________
 LiteralOrIri::LiteralOrIri(Iri iri, const IndexImpl* index)
-    : data_{std::move(iri)}, index_{index} {}
+    : data_{std::move(iri)}, index_{index} {
+  AD_CONTRACT_CHECK(index_ != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
+}
 
 // __________________________________________
 LiteralOrIri::LiteralOrIri(Literal literal, const IndexImpl* index)
-    : data_{std::move(literal)}, index_{index} {}
+    : data_{std::move(literal)}, index_{index} {
+  AD_CONTRACT_CHECK(index_ != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
+}
 
 // __________________________________________
 bool LiteralOrIri::isIri() const { return std::holds_alternative<Iri>(data_); }
@@ -104,6 +110,8 @@ NormalizedStringView LiteralOrIri::getContent() const {
 // __________________________________________
 LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets,
                                   const IndexImpl* index) {
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
   return LiteralOrIri{Iri::fromIriref(stringWithBrackets), index};
 }
 
@@ -111,14 +119,18 @@ LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets,
 LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
                                        std::string_view suffix,
                                        const IndexImpl* index) {
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
   return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix), index};
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithQuotes(
     std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor,
-    const IndexImpl* index) {
+    const IndexImpl* index,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
   return LiteralOrIri(Literal::fromEscapedRdfLiteral(rdfContentWithQuotes,
                                                      std::move(descriptor)),
                      index);
@@ -127,8 +139,10 @@ LiteralOrIri LiteralOrIri::literalWithQuotes(
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithoutQuotes(
     std::string_view rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor,
-    const IndexImpl* index) {
+    const IndexImpl* index,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LiteralOrIri requires a non-null IndexImpl pointer");
   return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
                                                     std::move(descriptor)),
                      index);

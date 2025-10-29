@@ -18,14 +18,20 @@ LocalVocab LocalVocab::clone() const {
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs) {
-  // Get the index from the first non-empty vocab
-  const IndexImpl* index = nullptr;
+  // Get the index from the first vocab and verify all have the same index
+  AD_CONTRACT_CHECK(!vocabs.empty(),
+                    "Cannot merge empty list of LocalVocabs");
+  const IndexImpl* index = vocabs[0]->index_;
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LocalVocab index must not be nullptr");
+
+  // Verify all vocabs have the same index
   for (const auto* vocab : vocabs) {
-    if (vocab && vocab->index_) {
-      index = vocab->index_;
-      break;
-    }
+    AD_CONTRACT_CHECK(
+        vocab->index_ == index,
+        "All LocalVocabs being merged must have the same IndexImpl pointer");
   }
+
   LocalVocab result{index};
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;

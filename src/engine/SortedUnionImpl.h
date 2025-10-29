@@ -182,7 +182,7 @@ struct SortedUnionImpl
                                            std::move(localVocab_)};
     resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
     resultTable_.reserve(Union::chunkSize);
-    localVocab_ = LocalVocab{};
+    localVocab_ = makeLocalVocab();
     return result;
   }
 

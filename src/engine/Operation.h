@@ -144,6 +144,11 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
+  // Create a new LocalVocab associated with this operation's index
+  LocalVocab makeLocalVocab() const {
+    return LocalVocab{&getIndex().getImpl()};
+  }
+
   const auto& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }

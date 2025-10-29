@@ -728,7 +728,7 @@ Result Join::computeResultForTwoMaterializedInputs(
 // _____________________________________________________________________________
 Result Join::createEmptyResult() const {
   return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
-          LocalVocab{}};
+          makeLocalVocab()};
 }
 
 // _____________________________________________________________________________

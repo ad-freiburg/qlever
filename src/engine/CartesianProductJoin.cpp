@@ -142,7 +142,7 @@ void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
 Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (knownEmptyResult()) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), makeLocalVocab()};
   }
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 

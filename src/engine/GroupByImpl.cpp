@@ -538,7 +538,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
-    return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable).value(), resultSortedOn(), makeLocalVocab()};
   }
 
   std::vector<Aggregate> aggregates;

@@ -50,7 +50,7 @@ class NeutralElementOperation : public Operation {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
   }
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()

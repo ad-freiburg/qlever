@@ -198,7 +198,7 @@ class AddCombinedRowToIdTable {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = makeLocalVocab();
     }
   }
 
@@ -398,7 +398,7 @@ class AddCombinedRowToIdTable {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = makeLocalVocab();
       // Only merge non-null vocabs.
       auto range = currentVocabs_ | ql::views::filter(toBool) |
                    ql::views::transform(dereference);

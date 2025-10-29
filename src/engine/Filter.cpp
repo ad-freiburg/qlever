@@ -97,7 +97,7 @@ Result Filter::computeResult(bool requestLaziness) {
   size_t width = getSubtree().get()->getResultWidth();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
-  LocalVocab resultLocalVocab{};
+  LocalVocab resultmakeLocalVocab();
   ad_utility::callFixedSizeVi(
       width, [this, &subRes, &result, &resultLocalVocab](auto WIDTH) {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
@@ -132,7 +132,7 @@ CPP_template_def(int WIDTH, typename Table)(
     requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       std::vector<ColumnIndex> sortedBy) const {
-  LocalVocab dummyLocalVocab{};
+  LocalVocab dummymakeLocalVocab();
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();

@@ -54,17 +54,19 @@ class alignas(16) LocalVocabEntry
   mutable ad_utility::CopyableAtomic<CompressedIndexPtr> indexAndKnownFlag_;
 
  public:
-  // Inherit the constructors from `LiteralOrIri`
-  using Base::Base;
-
-  // Deliberately allow implicit conversion from `LiteralOrIri`.
-  QL_EXPLICIT(false)
-  LocalVocabEntry(const Base& base, const IndexImpl* index = nullptr)
-      : Base{base}, indexAndKnownFlag_{CompressedIndexPtr{index, false}} {}
-  QL_EXPLICIT(false)
-  LocalVocabEntry(Base&& base, const IndexImpl* index = nullptr) noexcept
+  // Constructors that require an IndexImpl pointer.
+  // The index must not be nullptr.
+  LocalVocabEntry(const Base& base, const IndexImpl* index)
+      : Base{base}, indexAndKnownFlag_{CompressedIndexPtr{index, false}} {
+    AD_CONTRACT_CHECK(index != nullptr,
+                      "LocalVocabEntry requires a non-null IndexImpl pointer");
+  }
+  LocalVocabEntry(Base&& base, const IndexImpl* index) noexcept
       : Base{std::move(base)},
-        indexAndKnownFlag_{CompressedIndexPtr{index, false}} {}
+        indexAndKnownFlag_{CompressedIndexPtr{index, false}} {
+    AD_CONTRACT_CHECK(index != nullptr,
+                      "LocalVocabEntry requires a non-null IndexImpl pointer");
+  }
 
   // Set the index pointer (used when adding to LocalVocab)
   void setIndex(const IndexImpl* index) const {

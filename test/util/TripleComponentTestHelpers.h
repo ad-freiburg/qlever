@@ -6,9 +6,20 @@
 #define QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/TripleComponent.h"
 
+// Forward declaration
+class IndexImpl;
+
 namespace ad_utility::testing {
+
+// Get a default IndexImpl pointer for tests. This should be set by test
+// infrastructure (e.g., from getQec()) before creating LiteralOrIri objects.
+inline const IndexImpl*& getTestIndexImpl() {
+  static const IndexImpl* testIndex = nullptr;
+  return testIndex;
+}
 
 // Create a valid `TripleComponent::Literal` that can then be stored in a
 // `TripleComponent`. The contents of the literal are obtained by normalizing
@@ -39,6 +50,21 @@ constexpr auto tripleComponentLiteral =
 constexpr auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+
+// Helper to create LiteralOrIri objects in tests with the test index
+inline auto literalOrIriForTesting(std::string_view content) {
+  using namespace ad_utility::triple_component;
+  const IndexImpl* index = getTestIndexImpl();
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "Test index must be set before creating LiteralOrIri. "
+                    "Use getTestIndexImpl() = &index; in test setup.");
+  if (ql::starts_with(content, '<')) {
+    return LiteralOrIri::iriref(std::string(content), index);
+  } else {
+    return LiteralOrIri::literalWithoutQuotes(content, index);
+  }
+}
+
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
