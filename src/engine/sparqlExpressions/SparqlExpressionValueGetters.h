@@ -368,6 +368,10 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   // `EvaluationContext` is available. Currently used for `geof:distance` filter
   // substitution during query planning.
   static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+
+  // Overloads for Iri and Literal that don't require constructing a LiteralOrIri
+  static UnitOfMeasurement litOrIriToUnit(const ad_utility::triple_component::Iri& iri);
+  static UnitOfMeasurement litOrIriToUnit(const ad_utility::triple_component::Literal& literal);
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object

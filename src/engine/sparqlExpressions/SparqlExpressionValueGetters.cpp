@@ -398,6 +398,24 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 }
 
 //______________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const ad_utility::triple_component::Iri& iri) {
+  return ad_utility::detail::iriToUnitOfMeasurement(
+      asStringViewUnsafe(iri.getContent()));
+}
+
+//______________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const ad_utility::triple_component::Literal& literal) {
+  if (literal.hasDatatype() &&
+      asStringViewUnsafe(literal.getDatatype()) == XSD_ANYURI_TYPE) {
+    return ad_utility::detail::iriToUnitOfMeasurement(
+        asStringViewUnsafe(literal.getContent()));
+  }
+  return UnitOfMeasurement::UNKNOWN;
+}
+
+//______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
              concepts::same_as<std::optional<std::string>, T>)) T
