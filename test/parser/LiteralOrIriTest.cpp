@@ -126,8 +126,11 @@ TEST(LiteralTest, LiteralTestWithLanguagetag) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithIri) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri iri =
-      LiteralOrIri::iriref("<http://www.wikidata.org/entity/Q3138>");
+      LiteralOrIri::iriref("<http://www.wikidata.org/entity/Q3138>", index);
 
   EXPECT_TRUE(iri.isIri());
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
@@ -141,8 +144,11 @@ TEST(LiteralOrIri, LiteralOrIriWithIri) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithPrefixedIri) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri iri = LiteralOrIri::prefixedIri(
-      Iri::fromIriref("<http://www.wikidata.org/entity/>"), "Q3138");
+      Iri::fromIriref("<http://www.wikidata.org/entity/>"), "Q3138", index);
 
   EXPECT_TRUE(iri.isIri());
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
@@ -156,7 +162,10 @@ TEST(LiteralOrIri, LiteralOrIriWithPrefixedIri) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteral) {
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World", index);
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -169,7 +178,10 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteral) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
-  LiteralOrIri literal = LiteralOrIri::literalWithQuotes("\"Hello World\"");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri literal = LiteralOrIri::literalWithQuotes("\"Hello World\"", index);
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -182,9 +194,11 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -198,9 +212,11 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal = LiteralOrIri::literalWithQuotes(
-      "\"Hello World\"",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "\"Hello World\"", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -214,8 +230,11 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal =
-      LiteralOrIri::literalWithoutQuotes("Hej världen", "@se");
+      LiteralOrIri::literalWithoutQuotes("Hej världen", index, "@se");
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -228,8 +247,11 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal =
-      LiteralOrIri::literalWithQuotes("'''Hej världen'''", "@se");
+      LiteralOrIri::literalWithQuotes("'''Hej världen'''", index, "@se");
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -242,11 +264,14 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
 }
 
 TEST(LiteralOrIri, GetContent) {
-  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>", index);
   LiteralOrIri literalWithLanguageTag =
-      LiteralOrIri::literalWithoutQuotes("Hello World", "@de");
+      LiteralOrIri::literalWithoutQuotes("Hello World", index, "@de");
   LiteralOrIri literalWithDatatype = LiteralOrIri::literalWithoutQuotes(
-      "ABC", Iri::fromIriref("<https://example.org>"));
+      "ABC", index, Iri::fromIriref("<https://example.org>"));
 
   EXPECT_THAT("https://example.org/books/book1",
               asStringViewUnsafe(iri.getContent()));
@@ -256,108 +281,127 @@ TEST(LiteralOrIri, GetContent) {
 }
 
 TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal1 =
-      LiteralOrIri::literalWithQuotes(R"("This is to be \"\\ encoded")");
+      LiteralOrIri::literalWithQuotes(R"("This is to be \"\\ encoded")", index);
   EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal1.getContent()));
 
   LiteralOrIri literal2 =
-      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\\ encoded)");
+      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\\ encoded)", index);
   EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal2.getContent()));
 }
 
 TEST(LiteralOrIri, Printing) {
-  LiteralOrIri literal1 = LiteralOrIri::literalWithoutQuotes("hallo");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri literal1 = LiteralOrIri::literalWithoutQuotes("hallo", index);
   std::stringstream str;
   PrintTo(literal1, &str);
   EXPECT_EQ(str.str(), "\"hallo\"");
 }
 
 TEST(LiteralOrIri, Hashing) {
-  auto lit = LiteralOrIri::literalWithoutQuotes("bimbamm");
-  auto iri = LiteralOrIri::iriref("<bimbamm>");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  auto lit = LiteralOrIri::literalWithoutQuotes("bimbamm", index);
+  auto iri = LiteralOrIri::iriref("<bimbamm>", index);
   ad_utility::HashSet<LiteralOrIri> set{lit, iri};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(lit, iri));
 }
 
 // _______________________________________________________________________
 TEST(LiteralTest, isPlain) {
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index);
   EXPECT_TRUE(literal.getLiteral().isPlain());
   literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   EXPECT_FALSE(literal.getLiteral().isPlain());
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index, "@en");
   EXPECT_FALSE(literal.getLiteral().isPlain());
 }
 
 // _______________________________________________________________________
 TEST(LiteralTest, SetSubstr) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literal.getLiteral().setSubstr(0, 5);
   EXPECT_THAT("Hello", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
 
   literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literal.getLiteral().setSubstr(6, 5);
   EXPECT_THAT("World", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
 
   // Substring works at the byte level (not the UTF-8 character level).
-  literal = LiteralOrIri::literalWithoutQuotes("Äpfel");
+  literal = LiteralOrIri::literalWithoutQuotes("Äpfel", index);
   literal.getLiteral().setSubstr(0, 2);
   EXPECT_THAT("Ä", asStringViewUnsafe(literal.getContent()));
 
   // Test with invalid values.
   literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   EXPECT_THROW(literal.getLiteral().setSubstr(12, 1), ad_utility::Exception);
   EXPECT_THROW(literal.getLiteral().setSubstr(6, 7), ad_utility::Exception);
 }
 
 TEST(LiteralOrIriTest, GetIri) {
-  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>", index);
   EXPECT_THAT("https://example.org/books/book1",
               asStringViewUnsafe(iri.getIriContent()));
 
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index);
   EXPECT_THROW(literal.getIri(), ad_utility::Exception);
 }
 
 // _______________________________________________________________________
 TEST(LiteralTest, removeDatatypeOrLanguageTag) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literal.getLiteral().removeDatatypeOrLanguageTag();
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasDatatype());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index, "@en");
   literal.getLiteral().removeDatatypeOrLanguageTag();
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
 
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index);
   literal.getLiteral().removeDatatypeOrLanguageTag();
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
 }
 
 // _______________________________________________________________________
 TEST(LiteralTest, replaceContent) {
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello!", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literal.getLiteral().replaceContent("Thüss!");
   EXPECT_THAT("Thüss!", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
@@ -370,7 +414,7 @@ TEST(LiteralTest, replaceContent) {
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
-  literal = LiteralOrIri::literalWithoutQuotes("Hello!");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello!", index);
   literal.getLiteral().replaceContent("Hi!");
   EXPECT_THAT("Hi!", asStringViewUnsafe(literal.getContent()));
   literal.getLiteral().replaceContent("Hello World!");
@@ -378,44 +422,47 @@ TEST(LiteralTest, replaceContent) {
 }
 // _______________________________________________________________________
 TEST(LiteralTest, concat) {
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello ");
-  LiteralOrIri literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+  auto* qec = ad_utility::testing::getQec();
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello ", index);
+  LiteralOrIri literalOther = LiteralOrIri::literalWithoutQuotes("World!", index);
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
   literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello ", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello ", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literalOther = LiteralOrIri::literalWithoutQuotes(
-      "World!", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "World!", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
-  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", "@en");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index, "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", index, "@en");
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
   EXPECT_THAT("en", asStringViewUnsafe(literal.getLanguageTag()));
   literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello ", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+      "Hello ", index, Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literalOther = LiteralOrIri::literalWithoutQuotes("World!", index);
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
-  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index, "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", index);
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
-  literalOther = LiteralOrIri::literalWithoutQuotes("Thüss!", "@de");
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", index, "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Thüss!", index, "@de");
   literal.getLiteral().concat(literalOther.getLiteral());
   EXPECT_THAT("Hello World!Thüss!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasLanguageTag());
@@ -423,19 +470,18 @@ TEST(LiteralTest, concat) {
 }
 
 TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec(TestIndexConfig{});
+  const IndexImpl* index = &qec->getIndex().getImpl();
+
   LiteralOrIri l1 = LiteralOrIri::fromStringRepresentation(
       "\"Comparative evaluation of the protective effect of sodium "
       "valproate, phenazepam and ionol in stress-induced liver damage in "
-      "rats\"@nl");
+      "rats\"@nl", index);
   LiteralOrIri l2 = LiteralOrIri::fromStringRepresentation(
       "\"Comparative evaluation of the protective effect of sodium "
       "valproate, phenazepam and ionol in stress-induced liver damage in "
-      "rats\"@en");
-  using namespace ad_utility::testing;
-  // Ensure that the global singleton comparator (which is used for the <=>
-  // comparison) is available. Creating a QEC sets this comparator.
-  getQec(TestIndexConfig{});
-  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
+      "rats\"@en", index);
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
   EXPECT_THAT(ql::compareThreeWay(l1, l2),
               testing::Not(testing::Eq(ql::strong_ordering::equal)));
