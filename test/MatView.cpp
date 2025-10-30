@@ -5,6 +5,7 @@
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/ValueId.h"
+#include "gmock/gmock.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "rdfTypes/Variable.h"
@@ -14,6 +15,39 @@
 #include "util/ProgressBar.h"
 
 namespace {
+
+static constexpr std::string_view LlacDEngolasters =
+    "\"POLYGON((1.565688 42.5186623,1.5661338 42.5182027,1.5663576 "
+    "42.5179785,1.5664138 42.5179865,1.5664705 42.5180128,1.5667617 "
+    "42.5181478,1.566954 42.5182088,1.5672636 42.5182493,1.5674062 "
+    "42.5182732,1.5675577 42.5182992,1.5675701 42.5183013,1.5678669 "
+    "42.518455,1.5681637 42.5186286,1.568665 42.5189332,1.568852 "
+    "42.5190495,1.5690621 42.5191871,1.5691127 42.519272,1.569233 "
+    "42.5193142,1.5693351 42.5193446,1.5695777 42.5195104,1.5696504 "
+    "42.5195638,1.5697548 42.5196404,1.5699242 42.5197572,1.5700667 "
+    "42.5198867,1.5701905 42.5200199,1.5703702 42.5202766,1.5705206 "
+    "42.5204751,1.5707193 42.520763,1.5707791 42.5208843,1.5707822 "
+    "42.5208906,1.5708125 42.5210452,1.5708318 42.5211242,1.5708511 "
+    "42.5212285,1.5709177 42.5212841,1.5709855 42.5213482,1.5710119 "
+    "42.5214258,1.5710063 42.5214948,1.5709825 42.5215449,1.5709303 "
+    "42.5215831,1.5708868 42.521559,1.5708732 42.5215706,1.570861 "
+    "42.5215821,1.5708845 42.5215986,1.570812 42.521631,1.570716 "
+    "42.5216543,1.5706377 42.5216514,1.5705614 42.5216513,1.5704713 "
+    "42.5216378,1.570403 42.5216281,1.5703397 42.5216166,1.5702273 "
+    "42.5215941,1.5701085 42.5215799,1.5699714 42.5215719,1.5698981 "
+    "42.5215625,1.5698363 42.5215463,1.5697602 42.521524,1.5696768 "
+    "42.5214852,1.5696101 42.5214381,1.5695306 42.5213436,1.5694539 "
+    "42.5212441,1.5692922 42.521091,1.5691597 42.5209889,1.569066 "
+    "42.5209277,1.5689973 42.5208867,1.5687751 42.5207655,1.5686955 "
+    "42.5207345,1.5685358 42.5206761,1.5684397 42.520637,1.5683306 "
+    "42.5205725,1.5681799 42.5204791,1.568085 42.520424,1.5679194 "
+    "42.5203323,1.5677271 42.5202674,1.5676224 42.5201892,1.5675409 "
+    "42.5201152,1.5674484 42.5200467,1.5673622 42.5200081,1.5672228 "
+    "42.5199284,1.5670023 42.5198247,1.5667776 42.5197182,1.5666388 "
+    "42.5196381,1.5665155 42.519531,1.5664183 42.5194184,1.5662371 "
+    "42.5191672,1.566099 42.5189767,1.5659643 42.518831,1.5658353 "
+    "42.5187105,1.565792 42.5186963,1.565688 "
+    "42.5186623))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 TEST(MatView, Writer) {
   std::string indexBasename = "osm-andorra";
@@ -28,7 +62,7 @@ TEST(MatView, Writer) {
 
   AD_LOG_INFO << "Plan " << std::endl;
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(
-      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT * "
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
       "WHERE { ?a "
       "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (0 AS ?g) }");
   AD_LOG_INFO << "Run hasGeom/asWKT " << std::endl;
@@ -47,33 +81,47 @@ TEST(MatView, Writer) {
   constexpr size_t NumStaticCols =
       0;  // ---> change to "dynamic table" (NumStaticCols == 0) -> then Sorter
   // needs gets num cols only in constructor but templated is 0
-  size_t numCols = 4;
-  using Sorter = ad_utility::CompressedExternalIdTableSorter<
-      SortTriple<0, 1, 2>,  // TODO non-3-col input?
-      NumStaticCols>;
+  auto targetVars = parsed.getVisibleVariables();
+  AD_CONTRACT_CHECK(targetVars.size() >=
+                    4);  // Fill with zeroes or something ...
+  // EXPECT_THAT(targetVars,
+  //             ::testing::ElementsAreArray({Variable{"?a"}, Variable{"?b"},
+  //                                          Variable{"?c"}, Variable{"?g"}}));
+  // size_t numCols = 4;
+  size_t numCols = targetVars.size();
+  using Sorter =
+      ad_utility::CompressedExternalIdTableSorter<SortTriple<0, 1, 2>,
+                                                  NumStaticCols>;
   Sorter spoSorter{indexBasename + ".mv-spo-sorter.dat", numCols, memoryLimit,
                    allocator};
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
   ///
-  auto idxS = qet->getVariableColumn(
-      Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
-  auto idxP = qet->getVariableColumn(Variable{"?b"});
-  auto idxO = qet->getVariableColumn(Variable{"?c"});
-  auto idxG = qet->getVariableColumn(Variable{"?g"});
+  // auto idxS = qet->getVariableColumn(
+  //     Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
+  // auto idxP = qet->getVariableColumn(Variable{"?b"});
+  // auto idxO = qet->getVariableColumn(Variable{"?c"});
+  // auto idxG = qet->getVariableColumn(Variable{"?g"});
 
   // std::array<ColumnIndex, NumStaticCols> columnPermutationBeforeSorting{
   //     idxS, idxP, idxO, idxG};
-  std::vector<ColumnIndex> columnPermutationBeforeSorting{idxS, idxP, idxO,
-                                                          idxG};
-
+  // std::vector<ColumnIndex> columnPermutationBeforeSorting{idxS, idxP, idxO,
+  //                                                         idxG};
+  std::vector<ColumnIndex> columnPermutationBeforeSorting;
+  columnPermutationBeforeSorting.reserve(numCols);
+  for (const auto& var : targetVars) {
+    columnPermutationBeforeSorting.push_back(qet->getVariableColumn(var));
+  }
   ///
 
   for (auto& [block, vocab] : generator) {
     AD_CORRECTNESS_CHECK(vocab.empty());
     totalTriples += block.numRows();
-    // Permute this block to SPO column order for sorting.
+    // Permute this block to SPO column order for sorting. ---> the IdTable may
+    // have a different column ordering from the SELECT statement, thus we must
+    // permute this to the right col ordering how our view should look (and for
+    // sorting)
     block.setColumnSubset(columnPermutationBeforeSorting);
     // columnBasedIdTable::IdTable blockNew{4};
     // blockNew.reserve(block.numRows());
@@ -252,7 +300,10 @@ TEST(MatView, Reader) {
   AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
   auto v = scan.at(0, 1);
   EXPECT_EQ(v.getDatatype(), Datatype::VocabIndex);
-  AD_LOG_INFO << tmpqec->getIndex().getVocab()[v.getVocabIndex()] << std::endl;
+  // AD_LOG_INFO << tmpqec->getIndex().getVocab()[v.getVocabIndex()] <<
+  // std::endl;
+  auto string = tmpqec->getIndex().getVocab()[v.getVocabIndex()];
+  EXPECT_EQ(string, LlacDEngolasters);
 }
 
 }  // namespace
