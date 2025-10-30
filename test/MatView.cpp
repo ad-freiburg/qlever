@@ -45,13 +45,14 @@ TEST(MatView, Writer) {
   // EXPECT_EQ(vc[Variable{"?g"}].columnIndex_, 3);
 
   constexpr size_t NumStaticCols =
-      4;  // ---> change to "dynamic table" (NumStaticCols == 0) -> then Sorter
-          // needs gets num cols only in constructor but templated is 0
+      0;  // ---> change to "dynamic table" (NumStaticCols == 0) -> then Sorter
+  // needs gets num cols only in constructor but templated is 0
+  size_t numCols = 4;
   using Sorter = ad_utility::CompressedExternalIdTableSorter<
       SortTriple<0, 1, 2>,  // TODO non-3-col input?
       NumStaticCols>;
-  Sorter spoSorter{indexBasename + ".mv-spo-sorter.dat", NumStaticCols,
-                   memoryLimit, allocator};
+  Sorter spoSorter{indexBasename + ".mv-spo-sorter.dat", numCols, memoryLimit,
+                   allocator};
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
@@ -88,8 +89,14 @@ TEST(MatView, Writer) {
   // Write .
   AD_LOG_INFO << "Creating permutation..." << std::endl;
   auto sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
-  std::array<ColumnIndex, NumStaticCols> columnPermutation{
-      ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}, ColumnIndex{3}};
+  // std::array<ColumnIndex, NumStaticCols> columnPermutation{
+  //     ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}, ColumnIndex{3}};
+  // AD_CORRECTNESS_CHECK(columnPermutation.size() == numCols);
+  std::vector<ColumnIndex> columnPermutation;
+  columnPermutation.reserve(numCols);
+  for (size_t i = 0; i < numCols; ++i) {
+    columnPermutation.push_back(i);
+  }
 
   // auto idxS = qet->getVariableColumn(
   //     Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
@@ -108,7 +115,7 @@ TEST(MatView, Writer) {
       ad_utility::OwningView{std::move(sortedBlocksSPO)}, permuteBlock};
   std::string spoFilename = indexBasename + ".mv.index.spo";
   CompressedRelationWriter spoWriter{
-      NumStaticCols,
+      numCols,
       ad_utility::File(spoFilename, "w"),
       // ad_utility::MemorySize::kilobytes(0)
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
@@ -117,7 +124,7 @@ TEST(MatView, Writer) {
   // ----
   std::string sopFilename = indexBasename + ".mv.index.sop";
   CompressedRelationWriter sopWriter{
-      NumStaticCols,
+      numCols,
       ad_utility::File(sopFilename, "w"),
       // ad_utility::MemorySize::kilobytes(0)
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
