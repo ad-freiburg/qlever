@@ -207,7 +207,7 @@ IndexImpl::buildOspWithPatterns(
   // so that we can consume it asynchronously.
   ad_utility::JThread joinWithPatternThread{
       [&queue, &ospAsBlocksTransformed,
-       lazyPatternScan = getLazyPatternScan()] mutable {
+       lazyPatternScan = getLazyPatternScan()]() mutable {
         // Setup the callback for the join that will buffer the results and push
         // them to the queue.
         IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
