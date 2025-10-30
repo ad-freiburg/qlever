@@ -304,7 +304,7 @@ CPP_class_template(size_t NumStaticCols,
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
-  // If the `compressAndWritFuture` is currently active, wait for its
+  // If the `compressAndWriteFuture_` is currently active, wait for its
   // computation to be completed, else do nothing.
   void waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
@@ -312,9 +312,9 @@ CPP_class_template(size_t NumStaticCols,
     }
   }
 
-  // Store the `future`inside the `compressAndWriteFuture`. This trivial wrapper
-  // can be used to inject more detailed logging when analyzing the control flow
-  // of this class or when fixing bugs.
+  // Store the `future` inside the `compressAndWriteFuture_`. This trivial
+  // wrapper can be used to inject more detailed logging when analyzing the
+  // control flow of this class or when fixing bugs.
   void setFuture(std::future<void> future) {
     AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
