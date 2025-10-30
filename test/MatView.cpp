@@ -8,6 +8,7 @@
 #include "libqlever/Qlever.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 
 namespace {
@@ -65,66 +66,72 @@ TEST(MatView, Writer) {
       ad_utility::OwningView{std::move(sortedBlocksSPO)}, permuteBlock};
   std::string spoFilename = indexBasename + ".mv.index.spo";
   CompressedRelationWriter spoWriter{
-      NumStaticCols, ad_utility::File(spoFilename, "w"),
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN};
+      NumStaticCols,
+      ad_utility::File(spoFilename, "w"),
+      // ad_utility::MemorySize::kilobytes(0)
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
+  };
 
   // ----
   std::string sopFilename = indexBasename + ".mv.index.sop";
   CompressedRelationWriter sopWriter{
-      NumStaticCols, ad_utility::File(sopFilename, "w"),
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN};
+      NumStaticCols,
+      ad_utility::File(sopFilename, "w"),
+      // ad_utility::MemorySize::kilobytes(0)
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
+  };
   // ---/---
 
   // Write the metadata for PSO and POS.
   AD_LOG_DEBUG << "Writing metadata ..." << std::endl;
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   using MetaData = IndexMetaDataMmap;
-  MetaData psoMetaData;
-  psoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
-  auto psoCallback =
-      [&psoMetaData](ql::span<const CompressedRelationMetadata> md) {
+  MetaData spoMetaData;
+  spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
+  auto spoCallback =
+      [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
         AD_LOG_INFO << "cb0 " << md.size() << std::endl;
         for (const auto& m : md) {
-          psoMetaData.add(m);
+          spoMetaData.add(m);
         }
       };
   // ----
-  MetaData posMetaData;
-  posMetaData.setup(sopFilename + ".meta", ad_utility::CreateTag{});
-  auto posCallback =
-      [&posMetaData](ql::span<const CompressedRelationMetadata> md) {
+  MetaData sopMetaData;
+  sopMetaData.setup(sopFilename + ".meta", ad_utility::CreateTag{});
+  auto sopCallback =
+      [&sopMetaData](ql::span<const CompressedRelationMetadata> md) {
         AD_LOG_INFO << "cb1 " << md.size() << std::endl;
         for (const auto& m : md) {
-          posMetaData.add(m);
+          sopMetaData.add(m);
         }
       };
   // ---/---
   auto [numDistinctPredicates, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
-          spoFilename, {spoWriter, psoCallback}, {sopWriter, posCallback},
+          spoFilename + ".sorter", {spoWriter, spoCallback},
+          {sopWriter, sopCallback},
           ad_utility::InputRangeTypeErased{std::move(sortedBlocks)},
-          spoKeyOrder,
-          std::vector<std::function<void(const IdTableStatic<0>&)>>{});
+          spoKeyOrder, {});
 
-  psoMetaData.blockData() = std::move(blockData1);
-  psoMetaData.calculateStatistics(numDistinctPredicates);
-  psoMetaData.setName(indexBasename + ".mv");
+  spoMetaData.blockData() = std::move(blockData1);
+  spoMetaData.calculateStatistics(numDistinctPredicates);
+  spoMetaData.setName(indexBasename + ".mv");
   {
     ad_utility::File psoFile(spoFilename, "r+");
-    psoMetaData.appendToFile(&psoFile);
+    spoMetaData.appendToFile(&psoFile);
   }
-  AD_LOG_INFO << "Statistics for PSO: " << psoMetaData.statistics()
+  AD_LOG_INFO << "Statistics for PSO: " << spoMetaData.statistics()
               << std::endl;
 
   // ----
-  posMetaData.blockData() = std::move(blockData2);
-  posMetaData.calculateStatistics(numDistinctPredicates);
-  posMetaData.setName(indexBasename + ".mv");
+  sopMetaData.blockData() = std::move(blockData2);
+  sopMetaData.calculateStatistics(numDistinctPredicates);
+  sopMetaData.setName(indexBasename + ".mv");
   {
     ad_utility::File posFile(sopFilename, "r+");
-    posMetaData.appendToFile(&posFile);
+    sopMetaData.appendToFile(&posFile);
   }
-  AD_LOG_INFO << "Statistics for POS: " << posMetaData.statistics()
+  AD_LOG_INFO << "Statistics for POS: " << sopMetaData.statistics()
               << std::endl;
   // ---/---
 }
@@ -164,23 +171,34 @@ TEST(MatView, Reader) {
   p.loadFromDisk(onDiskBaseP, [](Id) { return false; }, false);
   EXPECT_TRUE(p.isLoaded());
   AD_LOG_INFO << "get snapshot" << std::endl;
-  auto snapshot = tmpqec->locatedTriplesSnapshot();
+  // auto snapshot = tmpqec->locatedTriplesSnapshot();
   // static const LocatedTriplesSnapshot emptySnapshot{
   //     {}, LocalVocab{}.getLifetimeExtender(), 0};
+
+  LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
+  emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
+      .setOriginalMetadata(p.metaData().blockDataShared());
+  LocalVocab emptyVocab;
+  LocatedTriplesSnapshot emptySnapshot{emptyLocatedTriples,
+                                       emptyVocab.getLifetimeExtender(), 0};
 
   AD_LOG_INFO << "get scan spec and blocks" << std::endl;
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // {osmId, std::nullopt, std::nullopt}
-  scanSpec = {std::nullopt, std::nullopt, std::nullopt};
-  auto scanSpecAndBlocks = p.getScanSpecAndBlocks(scanSpec, snapshot);
+  // scanSpec = {std::nullopt, std::nullopt, std::nullopt};
+  auto scanSpecAndBlocks = p.getScanSpecAndBlocks(scanSpec, emptySnapshot);
+  // auto scanSpecAndBlocks = p.getScanSpecAndBlocks(scanSpec, snapshot);
 
-  auto [lb, ub] = p.getSizeEstimateForScan(scanSpecAndBlocks, snapshot);
+  auto [lb, ub] = p.getSizeEstimateForScan(scanSpecAndBlocks, emptySnapshot);
+  // auto [lb, ub] = p.getSizeEstimateForScan(scanSpecAndBlocks, snapshot);
   AD_LOG_INFO << "scan size est " << lb << " - " << ub << std::endl;
   AD_LOG_INFO << "scan size "
-              << p.getResultSizeOfScan(scanSpecAndBlocks, snapshot)
+              << p.getResultSizeOfScan(scanSpecAndBlocks, emptySnapshot)
+              // << p.getResultSizeOfScan(scanSpecAndBlocks, snapshot)
               << std::endl;
-  auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
+  auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, emptySnapshot);
+  // auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
   AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
 }
 
