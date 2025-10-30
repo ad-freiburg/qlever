@@ -32,11 +32,10 @@ class PrefixRegexExpression : public SparqlExpression {
   PrefixRegexExpression(Ptr child, std::string prefixRegex, Variable variable);
 
  public:
-  PrefixRegexExpression(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression& operator=(PrefixRegexExpression&&) noexcept = default;
-  PrefixRegexExpression(const PrefixRegexExpression&) noexcept = delete;
-  PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
-      delete;
+  PrefixRegexExpression(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression& operator=(PrefixRegexExpression&&) = default;
+  PrefixRegexExpression(const PrefixRegexExpression&) = delete;
+  PrefixRegexExpression& operator=(const PrefixRegexExpression&) = delete;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       bool isNegated) const override;

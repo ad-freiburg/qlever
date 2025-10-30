@@ -178,10 +178,16 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
 namespace detail {
 template <typename T, T... values>
 struct ValueSequenceImpl {};
+
+template <typename T, const T&... values>
+struct ValueSequenceRefImpl {};
 };  // namespace detail
 
 template <typename T, T... values>
 using ValueSequence = detail::ValueSequenceImpl<T, values...>;
+
+template <typename T, const T&... values>
+using ValueSequenceRef = detail::ValueSequenceRefImpl<T, values...>;
 
 namespace detail {
 // The implementation for the `toIntegerSequence` function (see below).
@@ -190,6 +196,11 @@ namespace detail {
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename decltype(Array)::value_type,
+                       std::get<indexes>(Array)...>{};
+}
+template <const auto& Array, size_t... indexes>
+constexpr auto toIntegerSequenceRefHelper(std::index_sequence<indexes...>) {
+  return ValueSequence<typename std::decay_t<decltype(Array)>::value_type,
                        std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
@@ -204,6 +215,11 @@ auto toIntegerSequence() {
   return detail::toIntegerSequenceHelper<Array>(
       std::make_index_sequence<Array.size()>{});
 }
+template <const auto& Array>
+auto toIntegerSequenceRef() {
+  return detail::toIntegerSequenceRefHelper<Array>(
+      std::make_index_sequence<Array.size()>{});
+}
 
 // Map a single integer `value` that is in the range `[0, ..., (maxValue + 1) ^
 // NumIntegers - 1 to an array of `NumIntegers` many integers that are each in
@@ -212,13 +228,17 @@ auto toIntegerSequence() {
 CPP_template(typename Int, size_t NumIntegers)(
     requires ql::concepts::integral<Int>) constexpr std::
     array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
-  std::array<Int, NumIntegers> res;
+  std::array<Int, NumIntegers> res{};
   for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
     value /= numValues;
   }
   return res;
 };
+
+template <typename Int, size_t NumIntegers, Int value, Int numValues>
+constexpr std::array<Int, NumIntegers> integerToArrayStaticVar =
+    integerToArray<Int, NumIntegers>(value, numValues);
 
 // Return a `std::array<std::array<Int, Num>, pow(Upper, Num)>` (where `Int` is
 // the type of `Upper`) that contains each
@@ -229,12 +249,24 @@ CPP_template(auto Upper, size_t Num)(
         decltype(Upper)>) constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
-  std::array<std::array<Int, Num>, numValues> arr;
+  std::array<std::array<Int, Num>, numValues> arr{};
   for (Int i = 0; i < numValues; ++i) {
     arr[i] = integerToArray<Int, Num>(i, Upper);
   }
   return arr;
 }
+
+CPP_template(auto Upper, size_t Num)(
+    requires ql::concepts::integral<
+        decltype(Upper)>) constexpr auto cartesianPowerAsArrayVal = []() {
+  using Int = decltype(Upper);
+  constexpr auto numValues = pow(Upper, Num);
+  std::array<std::array<Int, Num>, numValues> arr{};
+  for (Int i = 0; i < numValues; ++i) {
+    arr[i] = integerToArray<Int, Num>(i, Upper);
+  }
+  return arr;
+}();
 
 // Return a `std::integer_sequence<Int,...>` that contains each
 // value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
@@ -243,7 +275,7 @@ CPP_template(auto Upper, size_t Num)(
 CPP_template(auto Upper,
              size_t Num)(requires ql::concepts::integral<
                          decltype(Upper)>) auto cartesianPowerAsIntegerArray() {
-  return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
+  return toIntegerSequenceRef<cartesianPowerAsArrayVal<Upper, Num>>();
 }
 
 /*
@@ -310,6 +342,11 @@ constexpr void forEachTypeInTemplateTypeWithTI(
 
 template <typename T, T... values, typename F>
 constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
+                                           F&& lambda) {
+  (lambda.template operator()<values>(), ...);
+}
+template <typename T, T... values, typename F>
+constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
                                            F&& lambda) {
   (lambda.template operator()<values>(), ...);
 }

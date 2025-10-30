@@ -16,7 +16,16 @@ using std::string;
 namespace ad_utility {
 
 namespace detail {
-using enum MediaType;
+static constexpr auto textPlain = ad_utility::MediaType::textPlain;
+static constexpr auto json = ad_utility::MediaType::json;
+static constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson;
+static constexpr auto sparqlXml = ad_utility::MediaType::sparqlXml;
+static constexpr auto qleverJson = ad_utility::MediaType::qleverJson;
+static constexpr auto tsv = ad_utility::MediaType::tsv;
+static constexpr auto csv = ad_utility::MediaType::csv;
+static constexpr auto turtle = ad_utility::MediaType::turtle;
+static constexpr auto ntriples = ad_utility::MediaType::ntriples;
+static constexpr auto octetStream = ad_utility::MediaType::octetStream;
 // The first media type in this list is the default, if no other type is
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
@@ -34,7 +43,16 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
           type, MediaTypeImpl(type, std::move(typeString),
                               std::move(subtypeString), std::move(v))));
     };
-    using enum MediaType;
+    static constexpr auto textPlain = ad_utility::MediaType::textPlain;
+    static constexpr auto json = ad_utility::MediaType::json;
+    static constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson;
+    static constexpr auto sparqlXml = ad_utility::MediaType::sparqlXml;
+    static constexpr auto qleverJson = ad_utility::MediaType::qleverJson;
+    static constexpr auto tsv = ad_utility::MediaType::tsv;
+    static constexpr auto csv = ad_utility::MediaType::csv;
+    static constexpr auto turtle = ad_utility::MediaType::turtle;
+    static constexpr auto ntriples = ad_utility::MediaType::ntriples;
+    static constexpr auto octetStream = ad_utility::MediaType::octetStream;
     add(textPlain, "text", "plain", {".txt"});
     add(json, "application", "json", {".json"});
     add(tsv, "text", "tab-separated-values", {".tsv"});

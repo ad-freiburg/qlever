@@ -288,8 +288,10 @@ Result::LazyResult Service::computeResultLazily(
           varsChecked = true;
         }
 
-        CALL_FIXED_SIZE(service->getResultWidth(), &Service::writeJsonResult,
-                        service, vars, partJson, &idTable, &localVocab, rowIdx);
+        ad_utility::callFixedSizeVi(service->getResultWidth(), [&](auto width) {
+          return service->writeJsonResult<width>(vars, partJson, &idTable,
+                                                 &localVocab, rowIdx);
+        });
         resultExists = true;
         if (!singleIdTable) {
           Result::IdTableVocabPair pair{std::move(idTable),
@@ -509,7 +511,19 @@ void Service::throwErrorWithContext(std::string_view msg,
 // ____________________________________________________________________________
 std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using enum Datatype;
+  static constexpr auto Undefined = Datatype::Undefined;
+  static constexpr auto Bool = Datatype::Bool;
+  static constexpr auto Int = Datatype::Int;
+  static constexpr auto Double = Datatype::Double;
+  static constexpr auto VocabIndex = Datatype::VocabIndex;
+  static constexpr auto LocalVocabIndex = Datatype::LocalVocabIndex;
+  static constexpr auto TextRecordIndex = Datatype::TextRecordIndex;
+  static constexpr auto Date = Datatype::Date;
+  static constexpr auto GeoPoint = Datatype::GeoPoint;
+  static constexpr auto WordVocabIndex = Datatype::WordVocabIndex;
+  static constexpr auto BlankNodeIndex = Datatype::BlankNodeIndex;
+  static constexpr auto EncodedVal = Datatype::EncodedVal;
+  static constexpr auto MaxValue = Datatype::MaxValue;
   const auto& optionalStringAndXsdType =
       ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {

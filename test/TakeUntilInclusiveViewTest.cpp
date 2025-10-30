@@ -10,11 +10,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <concepts>
-#include <ranges>
 #include <type_traits>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
 using namespace ad_utility;
@@ -30,19 +29,19 @@ auto alwaysFalseLocal = [](auto) { return false; };
 
 // Test concept compliance
 template <typename T>
-concept IsView = ql::ranges::view<T>;
+CPP_concept IsView = ql::ranges::view<T>;
 
 template <typename T>
-concept IsInputRange = ql::ranges::input_range<T>;
+CPP_concept IsInputRange = ql::ranges::input_range<T>;
 
 template <typename T>
-concept IsForwardRange = ql::ranges::forward_range<T>;
+CPP_concept IsForwardRange = ql::ranges::forward_range<T>;
 
 template <typename T>
-concept IsBidirectionalRange = ql::ranges::bidirectional_range<T>;
+CPP_concept IsBidirectionalRange = ql::ranges::bidirectional_range<T>;
 
 template <typename T>
-concept IsRandomAccessRange = ql::ranges::random_access_range<T>;
+CPP_concept IsRandomAccessRange = ql::ranges::random_access_range<T>;
 
 // Helper function to test TakeUntilInclusiveView with a vector<int> and
 // predicate
@@ -297,7 +296,7 @@ TEST(TakeUntilInclusiveViewTest, SkippingElements) {
   };
 
   auto takeUntilView = data | views::takeUntilInclusive(counting_predicate);
-  auto view = takeUntilView | std::views::drop(2);  // Skip first 2 elements
+  auto view = takeUntilView | ql::views::drop(2);  // Skip first 2 elements
 
   std::vector<int> result;
   for (auto&& element : view) {

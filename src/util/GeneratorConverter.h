@@ -9,6 +9,7 @@
 #ifndef CPPCORO_GENERATOR_CONVERTER_HPP_INCLUDED
 #define CPPCORO_GENERATOR_CONVERTER_HPP_INCLUDED
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/Generator.h"
 #include "util/Iterators.h"
 
@@ -34,4 +35,5 @@ generator<T, D> fromInputRange(ad_utility::InputRangeTypeErased<T, D> range) {
 }
 }  // namespace cppcoro
 
+#endif
 #endif

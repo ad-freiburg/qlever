@@ -59,7 +59,14 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 // ____________________________________________________________________________
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
@@ -88,7 +95,14 @@ double valueInUnitToKilometer(double valueInUnit,
 // ____________________________________________________________________________
 double squareMeterToUnit(double squareMeters,
                          std::optional<UnitOfMeasurement> unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
@@ -110,7 +124,14 @@ double squareMeterToUnit(double squareMeters,
 
 // ____________________________________________________________________________
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   if (iri == UNIT_METER_IRI) {
     return METERS;
   } else if (iri == UNIT_KILOMETER_IRI) {
@@ -129,13 +150,27 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
 
 // ____________________________________________________________________________
 bool isLengthUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   return unit == METERS || unit == KILOMETERS || unit == MILES;
 }
 
 // ____________________________________________________________________________
 bool isAreaUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  static constexpr auto METERS = UnitOfMeasurement::METERS;
+  static constexpr auto KILOMETERS = UnitOfMeasurement::KILOMETERS;
+  static constexpr auto MILES = UnitOfMeasurement::MILES;
+  static constexpr auto SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS;
+  static constexpr auto SQUARE_KILOMETERS =
+      UnitOfMeasurement::SQUARE_KILOMETERS;
+  static constexpr auto SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES;
+  static constexpr auto UNKNOWN = UnitOfMeasurement::UNKNOWN;
   return unit == SQUARE_METERS || unit == SQUARE_KILOMETERS ||
          unit == SQUARE_MILES;
 }

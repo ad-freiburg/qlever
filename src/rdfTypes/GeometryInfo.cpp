@@ -204,7 +204,10 @@ MetricArea::MetricArea(double area) : area_{area} {
 // ____________________________________________________________________________
 template <BoundingCoordinate RequestedCoordinate>
 double BoundingBox::getBoundingCoordinate() const {
-  using enum BoundingCoordinate;
+  static constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X;
+  static constexpr auto MIN_Y = ad_utility::BoundingCoordinate::MIN_Y;
+  static constexpr auto MAX_X = ad_utility::BoundingCoordinate::MAX_X;
+  static constexpr auto MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   if constexpr (RequestedCoordinate == MIN_X) {
     return lowerLeft_.getLng();
   } else if constexpr (RequestedCoordinate == MIN_Y) {

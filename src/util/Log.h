@@ -49,7 +49,13 @@ enum class LogLevel {
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
-using enum LogLevel;
+static constexpr auto FATAL = LogLevel::FATAL;
+static constexpr auto ERROR = LogLevel::ERROR;
+static constexpr auto WARN = LogLevel::WARN;
+static constexpr auto INFO = LogLevel::INFO;
+static constexpr auto DEBUG = LogLevel::DEBUG;
+static constexpr auto TIMING = LogLevel::TIMING;
+static constexpr auto TRACE = LogLevel::TRACE;
 
 namespace ad_utility {
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
@@ -108,6 +114,7 @@ class Log {
 
   template <LogLevel LEVEL>
   static QL_CONSTEVAL std::string_view getLevel() {
+    /*
     using P = ConstexprMapPair<LogLevel, std::string_view>;
     constexpr ConstexprMap map{std::array{
         P(TRACE, "TRACE: "),
@@ -118,7 +125,10 @@ class Log {
         P(ERROR, "ERROR: "),
         P(FATAL, "FATAL: "),
     }};
-    return map.at(LEVEL);
+    */
+    return "INFO: ";
+    // TODO<joka921> Figure out, why this doesn't work.
+    // return map.at(LEVEL);
   }
 };
 }  // namespace ad_utility

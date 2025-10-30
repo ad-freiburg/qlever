@@ -47,6 +47,7 @@
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
@@ -214,7 +215,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
-  using enum ad_utility::BoundingCoordinate;
+  static constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X;
+  static constexpr auto MIN_Y = ad_utility::BoundingCoordinate::MIN_Y;
+  static constexpr auto MAX_X = ad_utility::BoundingCoordinate::MAX_X;
+  static constexpr auto MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
@@ -229,7 +233,15 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
   };
-  using enum SpatialJoinType;
+  static constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS;
+  static constexpr auto CONTAINS = SpatialJoinType::CONTAINS;
+  static constexpr auto COVERS = SpatialJoinType::COVERS;
+  static constexpr auto CROSSES = SpatialJoinType::CROSSES;
+  static constexpr auto TOUCHES = SpatialJoinType::TOUCHES;
+  static constexpr auto EQUALS = SpatialJoinType::EQUALS;
+  static constexpr auto OVERLAPS = SpatialJoinType::OVERLAPS;
+  static constexpr auto WITHIN = SpatialJoinType::WITHIN;
+  static constexpr auto WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},
@@ -246,9 +258,9 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
-    } else if (geoUnaryFuncs.contains(functionName)) {
+    } else if (ad_utility::contains(geoUnaryFuncs, functionName)) {
       return createUnary(geoUnaryFuncs.at(functionName));
-    } else if (geoBinaryFuncs.contains(functionName)) {
+    } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {
       return createBinary(geoBinaryFuncs.at(functionName));
     }
   }
@@ -260,7 +272,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
   };
   if (checkPrefix(MATH_PREFIX)) {
-    if (mathFuncs.contains(functionName)) {
+    if (ad_utility::contains(mathFuncs, functionName)) {
       return createUnary(mathFuncs.at(functionName));
     } else if (functionName == "pow") {
       return createBinary(&makePowExpression);
@@ -280,7 +292,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"dateTime", &makeConvertToDateTimeExpression},
       {"date", &makeConvertToDateExpression},
   };
-  if (checkPrefix(XSD_PREFIX) && convertFuncs.contains(functionName)) {
+  if (checkPrefix(XSD_PREFIX) &&
+      ad_utility::contains(convertFuncs, functionName)) {
     return createUnary(convertFuncs.at(functionName));
   }
 
@@ -439,9 +452,9 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     }
   };
   for (const auto& triple : triples) {
-    auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPredicate, triple.at(1));
-    auto object = std::visit(toTripleComponent, triple.at(2));
+    auto subject = triple.at(0).visit(toTripleComponent);
+    auto predicate = triple.at(1).visit(toPredicate);
+    auto object = triple.at(2).visit(toTripleComponent);
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
   }
@@ -1164,7 +1177,7 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   auto registerIfVariable = [this](const auto& variant) {
-    if (holds_alternative<Variable>(variant)) {
+    if (std::holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
@@ -2005,7 +2018,7 @@ std::vector<TripleWithPropertyPath> Visitor::visit(
                                     PathObjectPairs predicateObjectPairs,
                                     TripleVec additionalTriples) {
     for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
-      triples.emplace_back(subject, std::move(predicate), std::move(object));
+      triples.push_back({subject, std::move(predicate), std::move(object)});
     }
     ql::ranges::copy(additionalTriples, std::back_inserter(triples));
     for (const auto& triple : triples) {
@@ -2078,7 +2091,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     }
   };
   for (auto& triple : objectList.second) {
-    triples.emplace_back(triple[0], toVarOrPath(triple[1]), triple[2]);
+    triples.push_back({triple[0], toVarOrPath(triple[1]), triple[2]});
   }
   return {std::move(predicateObjectPairs), std::move(triples)};
 }
@@ -2262,7 +2275,7 @@ SubjectOrObjectAndPathTriples Visitor::visit(
   auto subject = getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
-    triples.emplace_back(subject, std::move(predicate), std::move(object));
+    triples.push_back({subject, std::move(predicate), std::move(object)});
   }
   return {std::move(subject), triples};
 }
@@ -2982,7 +2995,7 @@ template <typename Ctx>
 std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
   try {
     if (parseAsInt) {
-      return std::stoll(ctx->getText());
+      return static_cast<int64_t>(std::stoll(ctx->getText()));
     } else {
       return std::stod(ctx->getText());
     }

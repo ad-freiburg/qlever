@@ -126,7 +126,12 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
 
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return {1, 2, 0, 3};
@@ -146,7 +151,12 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 
 // _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
-  using enum Permutation::Enum;
+  static constexpr auto PSO = Permutation::Enum::PSO;
+  static constexpr auto POS = Permutation::Enum::POS;
+  static constexpr auto SPO = Permutation::Enum::SPO;
+  static constexpr auto SOP = Permutation::Enum::SOP;
+  static constexpr auto OPS = Permutation::Enum::OPS;
+  static constexpr auto OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return "POS";
@@ -207,14 +217,10 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  auto lazyScan{p.reader().lazyScan(
+  return p.reader().lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
       std::move(columns), cancellationHandle,
-      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset)};
-
-  return cppcoro::fromInputRange<IdTable,
-                                 CompressedRelationReader::LazyScanMetadata>(
-      std::move(lazyScan));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ______________________________________________________________________
