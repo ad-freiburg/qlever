@@ -9,7 +9,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <boost/circular_buffer.hpp>
 #include <future>
 
 #include "backports/algorithm.h"
@@ -304,33 +303,27 @@ CPP_class_template(size_t NumStaticCols,
   size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
-  boost::circular_buffer<std::tuple<bool, bool, ad_utility::source_location>>
-      lastGetLocations_{10};
 
-  void waitForFuture(ad_utility::source_location location =
-                         ad_utility::source_location::current()) {
-    bool b = false;
+  // If the `compressAndWritFuture` is currently active, wait for its
+  // computation to be completed, else do nothing.
+  void waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
-      b = true;
       compressAndWriteFuture_.get();
     }
-    lastGetLocations_.push_back({false, b, location});
   }
-  void setFuture(std::future<void> future,
-                 ad_utility::source_location location =
-                     ad_utility::source_location::current()) {
-    bool b = compressAndWriteFuture_.valid();
-    lastGetLocations_.push_back({true, b, location});
+
+  // Store the `future`inside the `compressAndWriteFuture`. This trivial wrapper
+  // can be used to inject more detailed logging when analyzing the control flow
+  // of this class or when fixing bugs.
+  void setFuture(std::future<void> future) {
+    AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
   }
 
   // Store whether this table has previously already been iterated over (in
   // which case this member becomes `false`).
   std::atomic<bool> isFirstIteration_ = true;
-  // std::atomic<size_t> transformAndPushWasCalled = 0;
-  std::string timeOfCreation = ad_utility::Log::getTimeStamp();
-  static inline size_t numInstances = 0;
-  size_t instanceNumber = absl::bit_cast<size_t>(this);
+  std::atomic<bool> transformAndPushWasCalled_ = false;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -380,6 +373,7 @@ CPP_class_template(size_t NumStaticCols,
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
+    transformAndPushWasCalled_ = false;
   }
 
  protected:
@@ -423,26 +417,16 @@ CPP_class_template(size_t NumStaticCols,
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
-
-    // AD_LOG_INFO
-    //     << "calling transformAndPushLastBlock for an external idTable with "
-    //     << this->size() << "elements that was created at "
-    //     << this->timeOfCreation << "and instance number " << instanceNumber
-    //     << std::endl;
+    AD_CORRECTNESS_CHECK(!transformAndPushWasCalled_.exchange(true));
 
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
     AD_CORRECTNESS_CHECK(
         (numBlocksPushed_ == 0) != compressAndWriteFuture_.valid(), [this]() {
-          std::string s = absl::StrCat(
+          return absl::StrCat(
               "numBlocksPushed: ", numBlocksPushed_,
-              ", futureIsValid: ", compressAndWriteFuture_.valid(),
-              "\nLast access locations ([isWrite, wasValidBefore, lineNumber]");
-          for (const auto& [isWrite, validBefore, loc] : lastGetLocations_) {
-            absl::StrAppend(&s, isWrite, " ", validBefore, " ", loc.line());
-          }
-          return s;
+              ", futureIsValid: ", compressAndWriteFuture_.valid());
         });
     // Optimization for inputs that are smaller than the blocksize, do not use
     // the external file, but simply sort and return the single block.
