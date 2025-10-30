@@ -63,8 +63,11 @@ TEST(MatView, Writer) {
   AD_LOG_INFO << "Plan " << std::endl;
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
+      "?x "
       "WHERE { ?a "
-      "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (0 AS ?g) }");
+      "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (42 AS ?g)   BIND (RAND() "
+      "AS "
+      "?x) }");
   AD_LOG_INFO << "Run hasGeom/asWKT " << std::endl;
   auto res = qet->getResult(true);
   // AD_LOG_INFO << res->idTable().numRows() << " rows x "
@@ -295,7 +298,10 @@ TEST(MatView, Reader) {
               << p.getResultSizeOfScan(scanSpecAndBlocks, emptySnapshot)
               // << p.getResultSizeOfScan(scanSpecAndBlocks, snapshot)
               << std::endl;
-  auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, emptySnapshot);
+  std::vector<ColumnIndex> additionalColumns{
+      3, 4};  // Col 3 = 42, Col 4 should contain RAND()
+  auto scan = p.scan(scanSpecAndBlocks, additionalColumns, cancellationHandle,
+                     emptySnapshot);
   // auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
   AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
   auto v = scan.at(0, 1);
@@ -304,6 +310,14 @@ TEST(MatView, Reader) {
   // std::endl;
   auto string = tmpqec->getIndex().getVocab()[v.getVocabIndex()];
   EXPECT_EQ(string, LlacDEngolasters);
+
+  auto c = scan.at(0, 2);
+  EXPECT_EQ(c.getDatatype(), Datatype::Int);
+  AD_LOG_INFO << c.getInt() << std::endl;
+
+  auto r = scan.at(0, 3);
+  EXPECT_EQ(r.getDatatype(), Datatype::Double);
+  AD_LOG_INFO << r.getDouble() << std::endl;
 }
 
 }  // namespace
