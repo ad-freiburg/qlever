@@ -92,11 +92,11 @@ TEST(MatView, Writer) {
   // std::array<ColumnIndex, NumStaticCols> columnPermutation{
   //     ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}, ColumnIndex{3}};
   // AD_CORRECTNESS_CHECK(columnPermutation.size() == numCols);
-  std::vector<ColumnIndex> columnPermutation;
-  columnPermutation.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    columnPermutation.push_back(i);
-  }
+  // std::vector<ColumnIndex> columnPermutation;
+  // columnPermutation.reserve(numCols);
+  // for (size_t i = 0; i < numCols; ++i) {
+  //   columnPermutation.push_back(i);
+  // }
 
   // auto idxS = qet->getVariableColumn(
   //     Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
@@ -107,12 +107,12 @@ TEST(MatView, Writer) {
   // std::array<ColumnIndex, NumStaticCols> columnPermutation{idxS, idxP, idxO,
   //                                                          idxG};
 
-  auto permuteBlock = [&columnPermutation](auto&& block) {
-    block.setColumnSubset(columnPermutation);
-    return std::move(block);
-  };
-  auto sortedBlocks = ad_utility::CachingTransformInputRange{
-      ad_utility::OwningView{std::move(sortedBlocksSPO)}, permuteBlock};
+  // auto permuteBlock = [&columnPermutation](auto&& block) {
+  //   block.setColumnSubset(columnPermutation);
+  //   return std::move(block);
+  // };
+  // auto sortedBlocks = ad_utility::CachingTransformInputRange{
+  //     ad_utility::OwningView{std::move(sortedBlocksSPO)}, permuteBlock};
   std::string spoFilename = indexBasename + ".mv.index.spo";
   CompressedRelationWriter spoWriter{
       numCols,
@@ -159,7 +159,8 @@ TEST(MatView, Writer) {
       CompressedRelationWriter::createPermutationPair(
           spoFilename + ".sorter", {spoWriter, spoCallback},
           {sopWriter, sopCallback},
-          ad_utility::InputRangeTypeErased{std::move(sortedBlocks)},
+          // ad_utility::InputRangeTypeErased{std::move(sortedBlocks)},
+          ad_utility::InputRangeTypeErased{std::move(sortedBlocksSPO)},
           spoKeyOrder, {});
 
   spoMetaData.blockData() = std::move(blockData1);
