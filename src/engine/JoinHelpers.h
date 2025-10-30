@@ -103,7 +103,7 @@ inline GeneratorWithDetails convertGenerator(
           *generatorStorage, [generatorStorage](auto& table) {
             (void)generatorStorage;  // Only captured for lifetime reasons.
             // IndexScans don't have a local vocabulary, so we can just use an
-            return IdTableAndFirstCol{std::move(table), LocalVocab{}};
+            return IdTableAndFirstCol{std::move(table), makeLocalVocab()};
           }));
 
   return GeneratorWithDetails{std::move(range), generatorStorage->details()};

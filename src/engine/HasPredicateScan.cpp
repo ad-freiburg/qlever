@@ -287,17 +287,17 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
     case ScanType::FREE_S: {
       HasPredicateScan::computeFreeS(&idTable, getId(object_), hasPattern,
                                      patterns);
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
     };
     case ScanType::FREE_O: {
       HasPredicateScan::computeFreeO(&idTable, getId(subject_), patterns);
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
     };
     case ScanType::FULL_SCAN:
       HasPredicateScan::computeFullScan(
           &idTable, hasPattern, patterns,
           getIndex().getNumDistinctSubjectPredicatePairs());
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
     case ScanType::SUBQUERY_S:
 
       auto width = static_cast<int>(idTable.numColumns());

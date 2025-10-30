@@ -88,7 +88,7 @@ class MinusRowHandler {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = makeLocalVocab();
     }
   }
 
@@ -158,7 +158,7 @@ class MinusRowHandler {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = makeLocalVocab();
       // Only merge non-null vocabs.
       if (currentVocab_) {
         mergedVocab_.mergeWith(*currentVocab_);

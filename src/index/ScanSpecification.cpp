@@ -21,7 +21,7 @@ Id getNonOptionalId(TripleComponent tripleComponent, const IndexImpl& index,
 // ____________________________________________________________________________
 ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     const IndexImpl& index) const {
-  LocalVocab localVocab;
+  LocalVocab localVocab{&index};
   auto getId =
       [&index, &localVocab](
           const std::optional<TripleComponent>& tc) -> std::optional<Id> {

@@ -88,14 +88,16 @@ class AddCombinedRowToIdTable {
   // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
-      IdTable output, CancellationHandle cancellationHandle,
-      bool keepJoinColumns = true, size_t bufferSize = 100'000,
+      IdTable output, const IndexImpl* index,
+      CancellationHandle cancellationHandle, bool keepJoinColumns = true,
+      size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
+        mergedVocab_{index},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)},
         cancellationHandle_{std::move(cancellationHandle)} {
@@ -109,7 +111,7 @@ class AddCombinedRowToIdTable {
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
-      size_t numJoinColumns, IdTable output,
+      size_t numJoinColumns, IdTable output, const IndexImpl* index,
       CancellationHandle cancellationHandle, bool keepJoinColumns = true,
       size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
@@ -118,6 +120,7 @@ class AddCombinedRowToIdTable {
         keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
+        mergedVocab_{index},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)},
         cancellationHandle_{std::move(cancellationHandle)} {
@@ -198,7 +201,7 @@ class AddCombinedRowToIdTable {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_.clear();
     }
   }
 
@@ -398,7 +401,7 @@ class AddCombinedRowToIdTable {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_.clear();
       // Only merge non-null vocabs.
       auto range = currentVocabs_ | ql::views::filter(toBool) |
                    ql::views::transform(dereference);

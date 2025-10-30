@@ -242,7 +242,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 Result::LazyResult IndexScan::chunkedIndexScan() const {
   return Result::LazyResult{
       ad_utility::CachingTransformInputRange(getLazyScan(), [](auto& table) {
-        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+        return Result::IdTableVocabPair{std::move(table), makeLocalVocab()};
       })};
 }
 
@@ -264,7 +264,7 @@ Result IndexScan::computeResult(bool requestLaziness) {
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
-  return {materializedIndexScan(), getResultSortedOn(), LocalVocab{}};
+  return {materializedIndexScan(), getResultSortedOn(), makeLocalVocab()};
 }
 
 // _____________________________________________________________________________
@@ -659,7 +659,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
             std::move(scan), [](auto& table) {
-              return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+              return Result::IdTableVocabPair{std::move(table), makeLocalVocab()};
             });
 
         // Use CallbackOnEndView to aggregate metadata after scan is consumed

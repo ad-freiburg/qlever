@@ -137,7 +137,8 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
+  explicit DeltaTriples(const IndexImpl& index)
+      : index_{index}, localVocab_{&index} {}
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;

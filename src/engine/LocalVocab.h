@@ -20,6 +20,9 @@
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
+// Forward declaration
+class IndexImpl;
+
 // A class for maintaining a local vocabulary, which conceptually is a set of
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
 // from the input data). The implementation is subtle and quite clever:
@@ -58,9 +61,20 @@ class LocalVocab {
   std::unique_ptr<std::atomic_bool> copied_ =
       std::make_unique<std::atomic_bool>(false);
 
+  // Pointer to the IndexImpl that this LocalVocab is associated with.
+  // Used for looking up positions in the global vocabulary.
+  const IndexImpl* index_ = nullptr;
+
  public:
   // Create a new, empty local vocabulary.
-  LocalVocab() = default;
+  // The index parameter is required and must not be nullptr.
+  explicit LocalVocab(const IndexImpl* index) : index_{index} {
+    AD_CONTRACT_CHECK(index_ != nullptr,
+                      "LocalVocab requires a non-null IndexImpl pointer");
+  }
+
+  // Get the associated IndexImpl pointer
+  const IndexImpl* getIndex() const { return index_; }
 
   // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;
@@ -69,7 +83,7 @@ class LocalVocab {
   // Make a logical copy, where all sets of `LocalVocabEntry`s become "other"
   // sets, that is, they cannot be modified by the copy. The primary set becomes
   // empty. This only copies shared pointers and takes time linear in the number
-  // of sets.
+  // of sets. The cloned LocalVocab will have the same index as the original.
   LocalVocab clone() const;
 
   // Moving a local vocabulary is not problematic (though the typical use case
@@ -117,6 +131,7 @@ class LocalVocab {
   // to this local vocab. The purpose is to keep all the contained
   // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
   // primary set of this `LocalVocab` remains unchanged.
+  // All vocabs must have the same IndexImpl* as this LocalVocab.
   CPP_template(typename R)(requires ql::ranges::range<R>) void mergeWith(
       const R& vocabs) {
     using ql::views::filter;
@@ -132,6 +147,10 @@ class LocalVocab {
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
+      // Verify that all vocabs have the same index
+      AD_CONTRACT_CHECK(
+          vocab.index_ == index_,
+          "All LocalVocabs being merged must have the same IndexImpl pointer");
       // Mark vocab as copied
       vocab.copied_->store(true);
       ql::ranges::for_each(vocab.otherWordSets_, addWordSet);

@@ -273,7 +273,7 @@ Result::LazyResult Service::computeResultLazily(
   using LC = Result::IdTableLoopControl;
   auto get = [service = this, vars = std::move(vars), singleIdTable,
               inputRange = moveToCachingInputRange(std::move(body)),
-              localVocab = LocalVocab{},
+              localVocab = makeLocalVocab(),
               idTable = IdTable{getResultWidth(),
                                 getExecutionContext()->getAllocator()},
               rowIdx = size_t{0}, varsChecked = false,
@@ -295,7 +295,7 @@ Result::LazyResult Service::computeResultLazily(
           Result::IdTableVocabPair pair{std::move(idTable),
                                         std::move(localVocab)};
           idTable.clear();
-          localVocab = LocalVocab{};
+          localVocab = makeLocalVocab();
           rowIdx = 0;
           return LC::yieldValue(std::move(pair));
         }
@@ -453,7 +453,7 @@ Result Service::makeNeutralElementResultForSilentFail() const {
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
     idTable(0, colIdx) = Id::makeUndefined();
   }
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
 }
 
 // ____________________________________________________________________________
@@ -652,7 +652,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   Result::IdTableVocabPair siblingPair(
       IdTable{sibling->getResultWidth(),
               sibling->getExecutionContext()->getAllocator()},
-      LocalVocab{});
+      makeLocalVocab());
   siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {

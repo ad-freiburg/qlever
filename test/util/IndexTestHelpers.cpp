@@ -340,7 +340,8 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
                    std::make_unique<NamedResultCache>()});
   }
   auto* qec = contextMap.at(c).qec_.get();
-  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  // Set the test index for helper functions that create LiteralOrIri objects
+  ad_utility::testing::getTestIndexImpl() = &qec->getIndex().getImpl();
   return qec;
 }
 

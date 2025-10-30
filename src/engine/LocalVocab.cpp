@@ -10,7 +10,7 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab result;
+  LocalVocab result{index_};
   result.mergeWith(*this);
   AD_CORRECTNESS_CHECK(result.size_ == size_);
   return result;
@@ -18,7 +18,21 @@ LocalVocab LocalVocab::clone() const {
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs) {
-  LocalVocab result;
+  // Get the index from the first vocab and verify all have the same index
+  AD_CONTRACT_CHECK(!vocabs.empty(),
+                    "Cannot merge empty list of LocalVocabs");
+  const IndexImpl* index = vocabs[0]->index_;
+  AD_CONTRACT_CHECK(index != nullptr,
+                    "LocalVocab index must not be nullptr");
+
+  // Verify all vocabs have the same index
+  for (const auto* vocab : vocabs) {
+    AD_CONTRACT_CHECK(
+        vocab->index_ == index,
+        "All LocalVocabs being merged must have the same IndexImpl pointer");
+  }
+
+  LocalVocab result{index};
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;
 }
@@ -39,6 +53,8 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // implementations.
   AD_CORRECTNESS_CHECK(!copied_->load());
   auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
+  // Set the index pointer on the entry (whether new or existing)
+  wordIterator->setIndex(index_);
   size_ += static_cast<size_t>(isNewWord);
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.
