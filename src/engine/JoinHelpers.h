@@ -1,6 +1,6 @@
-//   Copyright 2025, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2025, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
@@ -107,6 +107,8 @@ inline GeneratorWithDetails convertGenerator(
             return IdTableAndFirstCol{std::move(table), LocalVocab{}};
           }));
 
+  // TODO: This returns a copy of the details, which is why `num-blocks-read`
+  // and `num-elements-read` are not updated correctly.
   return GeneratorWithDetails{std::move(range), generatorStorage->details()};
 }
 
