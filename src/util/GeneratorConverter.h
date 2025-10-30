@@ -10,6 +10,7 @@
 #define CPPCORO_GENERATOR_CONVERTER_HPP_INCLUDED
 
 #include "util/Generator.h"
+#include "util/Iterators.h"
 
 namespace cppcoro {
 
