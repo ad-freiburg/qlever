@@ -97,15 +97,15 @@ class IndexScan final : public Operation {
   // blocks, but only the blocks that can theoretically contain matching rows
   // when performing a join on the first column of the result of `s1` with the
   // first column of the result of `s2`.
-  static std::array<Permutation::IdTableGenerator, 2> lazyScanForJoinOfTwoScans(
-      const IndexScan& s1, const IndexScan& s2);
+  static std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
+  lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2);
 
   // Return a generator that lazily yields the result in blocks, but only
   // the blocks that can theoretically contain matching rows when performing a
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
-  Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
-      ql::span<const Id> joinColumn) const;
+  CompressedRelationReader::IdTableGeneratorInputRange
+  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
@@ -237,7 +237,7 @@ class IndexScan final : public Operation {
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
-  Permutation::IdTableGenerator getLazyScan(
+  CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
