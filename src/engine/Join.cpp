@@ -588,17 +588,11 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
         auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-        auto updateStatsOnYield = [](auto& blocks, IndexScan& scan) {
-          return ql::views::transform(
-              blocks, [&scan, &blocks](auto& value) -> auto& {
-                scan.updateRuntimeInfoForLazyScan(blocks.details());
-                return value;
-              });
-        };
+        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
+                                                    std::less{}, rowAdder);
 
-        ad_utility::zipperJoinForBlocksWithoutUndef(
-            updateStatsOnYield(leftBlocks, *leftScan),
-            updateStatsOnYield(rightBlocks, *rightScan), std::less{}, rowAdder);
+        leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
+        rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
