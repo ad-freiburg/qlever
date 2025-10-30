@@ -244,7 +244,7 @@ inline void testMetricArea(const std::string_view wkt, double expectedArea,
   const double allowedError = 0.01 * expectedArea;
 
   if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-    EXPECT_EQ(collectionToMultiPolygon(parsed).size(), expectedNumPolygons);
+    EXPECT_EQ(collectionToS2Polygons(parsed).size(), expectedNumPolygons);
   }
   EXPECT_NEAR(computeMetricArea(parsed), expectedArea, allowedError);
   EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
