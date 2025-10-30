@@ -319,23 +319,23 @@ static constexpr MetricLengthVisitor computeMetricLength;
 // Extract all (potentially nested) polygons from a geometry collection. This is
 // used to calculate area as points and lines have no area and are therefore
 // neutral to the area of a collection.
-inline MultiPolygon<CoordType> collectionToMultiPolygon(
+using S2PolygonVec = std::vector<std::unique_ptr<S2Polygon>>;
+inline S2PolygonVec collectionToS2Polygons(
     const Collection<CoordType>& collection) {
-  MultiPolygon<CoordType> polygons;
+  S2PolygonVec polygons;
   for (const auto& anyGeom : collection) {
     if (anyGeom.getType() == 2) {
       // Member is single polygon
-      polygons.push_back(anyGeom.getPolygon());
+      polygons.push_back(makeS2Polygon(anyGeom.getPolygon()));
     } else if (anyGeom.getType() == 4) {
       // Member is multipolygon
       for (const auto& polygon : anyGeom.getMultiPolygon()) {
-        polygons.push_back(polygon);
+        polygons.push_back(makeS2Polygon(polygon));
       }
     } else if (anyGeom.getType() == 5) {
       // Member is a nested collection
-      for (const auto& polygon :
-           collectionToMultiPolygon(anyGeom.getCollection())) {
-        polygons.push_back(polygon);
+      for (auto& polygon : collectionToS2Polygons(anyGeom.getCollection())) {
+        polygons.push_back(std::move(polygon));
       }
     }
   }
@@ -347,12 +347,18 @@ inline MultiPolygon<CoordType> collectionToMultiPolygon(
 struct MetricAreaVisitor {
   // Given an `S2Polygon` compute the area and convert it to approximated
   // square meters on earth.
-  double operator()(const S2Polygon& polygon) const {
-    return S2Earth::SteradiansToSquareMeters(polygon.GetArea());
+  double operator()(std::unique_ptr<S2Polygon> polygon) {
+    AD_CORRECTNESS_CHECK(polygon != nullptr);
+    return S2Earth::SteradiansToSquareMeters(polygon->GetArea());
   }
 
   double operator()(const Polygon<CoordType>& polygon) const {
     return MetricAreaVisitor{}(makeS2Polygon(polygon));
+  }
+
+  double operator()(S2PolygonVec polygons) const {
+    return MetricAreaVisitor{}(
+        S2Polygon::DestructiveUnion(std::move(polygons)));
   }
 
   double operator()(const MultiPolygon<CoordType>& polygons) const {
@@ -366,18 +372,13 @@ struct MetricAreaVisitor {
     }
     // For a multipolygon with multiple members, we need to compute the union of
     // the polygons to determine their area.
-    // TODO<ullingerc>: the number of steps could be reduced by building the
-    // union in pairs (like divide-and-conquer) or using `S2Builder`
-    auto unionPolygon = makeS2Polygon(polygons.at(0));
-    for (size_t i = 1; i < polygons.size(); ++i) {
-      unionPolygon.InitToUnion(unionPolygon, makeS2Polygon(polygons.at(i)));
-    }
-    return MetricAreaVisitor{}(unionPolygon);
+    return MetricAreaVisitor{}(
+        ::ranges::to_vector(polygons | ql::views::transform(makeS2Polygon)));
   }
 
   // Compute the area in square meters of a geometry collection
   double operator()(const Collection<CoordType>& collection) const {
-    return MetricAreaVisitor{}(collectionToMultiPolygon(collection));
+    return MetricAreaVisitor{}(collectionToS2Polygons(collection));
   }
 
   // The remaining geometry types always return the area zero
