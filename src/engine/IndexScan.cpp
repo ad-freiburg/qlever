@@ -628,10 +628,11 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+  using namespace std::chrono_literals;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
-      [this, state = std::move(innerState),
-       metadata = LazyScanMetadata{}]() mutable {
+      [this, state = std::move(innerState), metadata = LazyScanMetadata{},
+       lastSignal = 0ms]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
           return LoopControl::breakWithYieldAll(chunkedIndexScan());
@@ -641,12 +642,19 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         while (pendingBlocks.empty()) {
           if (state->doneFetching_) {
+            metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+            updateRuntimeInfoForLazyScan(metadata);
             return LoopControl::makeBreak();
           }
           state->fetch();
         }
         metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-        updateRuntimeInfoForLazyScan(metadata);
+        // Rate limit updates, analogously to the mechanism in
+        // `Operation::runComputation`.
+        if (lastSignal - metadata.blockingTime_ > 50ms) {
+          updateRuntimeInfoForLazyScan(metadata);
+          lastSignal = metadata.blockingTime_;
+        }
 
         // We now have non-empty pending blocks
         auto scan = getLazyScan(std::move(pendingBlocks));
