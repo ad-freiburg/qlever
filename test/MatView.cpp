@@ -23,7 +23,7 @@ TEST(MatView, Exp) {
   AD_LOG_INFO << "Plan " << std::endl;
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT * WHERE { ?a "
-      "geo:hasGeometry ?b . ?b geo:asWKT ?c }");
+      "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (0 AS ?g) }");
   AD_LOG_INFO << "Run hasGeom/asWKT " << std::endl;
   auto res = qet->getResult(true);
   // AD_LOG_INFO << res->idTable().numRows() << " rows x "
@@ -31,7 +31,7 @@ TEST(MatView, Exp) {
   AD_CORRECTNESS_CHECK(!res->isFullyMaterialized());
   auto generator = res->idTables();
 
-  constexpr size_t NumStaticCols = 3;
+  constexpr size_t NumStaticCols = 4;
   using Sorter = ad_utility::CompressedExternalIdTableSorter<
       SortTriple<0, 1, 2>,  // TODO non-3-col input?
       NumStaticCols>;
@@ -53,7 +53,7 @@ TEST(MatView, Exp) {
   AD_LOG_INFO << "Creating permutation..." << std::endl;
   auto sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
   std::array<ColumnIndex, NumStaticCols> columnPermutation{
-      ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
+      ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}, ColumnIndex{3}};
   auto permuteBlock = [&columnPermutation](auto&& block) {
     block.setColumnSubset(columnPermutation);
     return std::move(block);
