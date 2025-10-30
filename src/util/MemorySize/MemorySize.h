@@ -455,6 +455,24 @@ struct DivisionFunctor {
 }  // namespace detail
 
 // _____________________________________________________________________________
+namespace detail {
+struct DivisionFunctor {
+  template <typename U>
+  auto operator()(const U& a, const U& b) const {
+    static_assert(std::is_same_v<decltype(a), decltype(b)>,
+                  "Arguments shall be of the same type");
+    using DivisionType = std::decay_t<decltype(a)>;
+    if constexpr (std::is_floating_point_v<DivisionType>) {
+      return a / b;
+    } else {
+      static_assert(std::is_integral_v<DivisionType>);
+      return detail::sizeTDivision(a, b);
+    }
+  }
+};
+}  // namespace detail
+
+// _____________________________________________________________________________
 CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
     MemorySize::operator/(const T c) const {
   if constexpr (std::is_signed_v<T>) {

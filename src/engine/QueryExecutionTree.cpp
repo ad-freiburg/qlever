@@ -16,6 +16,7 @@
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 using std::string;
 
@@ -221,7 +222,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!variables.contains(var)) {
+      if (!ad_utility::contains(variables, var)) {
         strippedVariables.insert(var);
       }
     }

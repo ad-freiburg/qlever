@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
+#include <absl/numeric/bits.h>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
@@ -230,7 +232,7 @@ class EncodedIriManagerImpl {
   // `result` string.
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
     size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = std::countr_zero(encoded);
+    auto numTrailingZeros = absl::countr_zero(encoded);
     size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
     size_t len = NumDigits - numTrailingZeroNibbles;
     for (size_t i = 0; i < len; ++i) {

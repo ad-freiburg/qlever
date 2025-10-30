@@ -11,6 +11,7 @@
 #include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "util/Algorithm.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -550,7 +551,7 @@ OptionalJoin::makeTreeWithStrippedColumns(
   const auto* vars = &variables;
   for (const auto& [jcl, _] : _joinColumns) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }
@@ -567,7 +568,7 @@ OptionalJoin::makeTreeWithStrippedColumns(
   auto jcls = QueryExecutionTree::getJoinColumns(*_left, *_right);
   bool keepJoinColumns = ql::ranges::any_of(jcls, [&](const auto& jcl) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
-    return variables.contains(var);
+    return ad_utility::contains(variables, var);
   });
   return ad_utility::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),

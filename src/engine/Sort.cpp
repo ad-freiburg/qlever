@@ -11,6 +11,7 @@
 #include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
+#include "util/Algorithm.h"
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -102,7 +103,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     sortVars.push_back(var);
-    if (!variables.contains(var)) {
+    if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
       }
