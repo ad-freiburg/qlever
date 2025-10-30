@@ -4,8 +4,10 @@
 #include <memory>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/ValueId.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
+#include "rdfTypes/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -26,7 +28,8 @@ TEST(MatView, Writer) {
 
   AD_LOG_INFO << "Plan " << std::endl;
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(
-      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT * WHERE { ?a "
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT * "
+      "WHERE { ?a "
       "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (0 AS ?g) }");
   AD_LOG_INFO << "Run hasGeom/asWKT " << std::endl;
   auto res = qet->getResult(true);
@@ -34,8 +37,16 @@ TEST(MatView, Writer) {
   //             << res->idTable().numColumns() << " cols" << std::endl;
   AD_CORRECTNESS_CHECK(!res->isFullyMaterialized());
   auto generator = res->idTables();
+  auto vc = qet->getVariableColumns();
+  // This does not hold, switch columns
+  // EXPECT_EQ(vc[Variable{"?a"}].columnIndex_, 0);
+  // EXPECT_EQ(vc[Variable{"?b"}].columnIndex_, 1);
+  // EXPECT_EQ(vc[Variable{"?c"}].columnIndex_, 2);
+  // EXPECT_EQ(vc[Variable{"?g"}].columnIndex_, 3);
 
-  constexpr size_t NumStaticCols = 4;
+  constexpr size_t NumStaticCols =
+      4;  // ---> change to "dynamic table" (NumStaticCols == 0) -> then Sorter
+          // needs gets num cols only in constructor but templated is 0
   using Sorter = ad_utility::CompressedExternalIdTableSorter<
       SortTriple<0, 1, 2>,  // TODO non-3-col input?
       NumStaticCols>;
@@ -43,9 +54,30 @@ TEST(MatView, Writer) {
                    memoryLimit, allocator};
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
+
+  ///
+  auto idxS = qet->getVariableColumn(
+      Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
+  auto idxP = qet->getVariableColumn(Variable{"?b"});
+  auto idxO = qet->getVariableColumn(Variable{"?c"});
+  auto idxG = qet->getVariableColumn(Variable{"?g"});
+
+  // std::array<ColumnIndex, NumStaticCols> columnPermutationBeforeSorting{
+  //     idxS, idxP, idxO, idxG};
+  std::vector<ColumnIndex> columnPermutationBeforeSorting{idxS, idxP, idxO,
+                                                          idxG};
+
+  ///
+
   for (auto& [block, vocab] : generator) {
     AD_CORRECTNESS_CHECK(vocab.empty());
     totalTriples += block.numRows();
+    // Permute this block to SPO column order for sorting.
+    block.setColumnSubset(columnPermutationBeforeSorting);
+    // columnBasedIdTable::IdTable blockNew{4};
+    // blockNew.reserve(block.numRows());
+    // for (size_t row = 0; row < block.numRows(); ++row) {
+    // }
     spoSorter.pushBlock(block);
     if (progressBar.update()) {
       AD_LOG_INFO << progressBar.getProgressString() << std::flush;
@@ -58,6 +90,16 @@ TEST(MatView, Writer) {
   auto sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
   std::array<ColumnIndex, NumStaticCols> columnPermutation{
       ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}, ColumnIndex{3}};
+
+  // auto idxS = qet->getVariableColumn(
+  //     Variable{"?a"});  // or equiv: vc[Variable{"?b"}].columnIndex_
+  // auto idxP = qet->getVariableColumn(Variable{"?b"});
+  // auto idxO = qet->getVariableColumn(Variable{"?c"});
+  // auto idxG = qet->getVariableColumn(Variable{"?g"});
+
+  // std::array<ColumnIndex, NumStaticCols> columnPermutation{idxS, idxP, idxO,
+  //                                                          idxG};
+
   auto permuteBlock = [&columnPermutation](auto&& block) {
     block.setColumnSubset(columnPermutation);
     return std::move(block);
@@ -185,7 +227,7 @@ TEST(MatView, Reader) {
   AD_LOG_INFO << "get scan spec and blocks" << std::endl;
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  // {osmId, std::nullopt, std::nullopt}
+  scanSpec = {osmId, std::nullopt, std::nullopt};
   // scanSpec = {std::nullopt, std::nullopt, std::nullopt};
   auto scanSpecAndBlocks = p.getScanSpecAndBlocks(scanSpec, emptySnapshot);
   // auto scanSpecAndBlocks = p.getScanSpecAndBlocks(scanSpec, snapshot);
@@ -200,6 +242,9 @@ TEST(MatView, Reader) {
   auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, emptySnapshot);
   // auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
   AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
+  auto v = scan.at(0, 1);
+  EXPECT_EQ(v.getDatatype(), Datatype::VocabIndex);
+  AD_LOG_INFO << tmpqec->getIndex().getVocab()[v.getVocabIndex()] << std::endl;
 }
 
 }  // namespace
