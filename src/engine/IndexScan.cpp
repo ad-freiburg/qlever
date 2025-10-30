@@ -631,8 +631,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
   using namespace std::chrono_literals;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
-      [this, state = std::move(innerState), metadata = LazyScanMetadata{},
-       lastSignal = 0ms]() mutable {
+      [this, state = std::move(innerState),
+       metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
           return LoopControl::breakWithYieldAll(chunkedIndexScan());
@@ -649,12 +649,7 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           state->fetch();
         }
         metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-        // Rate limit updates, analogously to the mechanism in
-        // `Operation::runComputation`.
-        if (lastSignal - metadata.blockingTime_ > 50ms) {
-          updateRuntimeInfoForLazyScan(metadata);
-          lastSignal = metadata.blockingTime_;
-        }
+        updateRuntimeInfoForLazyScan(metadata);
 
         // We now have non-empty pending blocks
         auto scan = getLazyScan(std::move(pendingBlocks));
