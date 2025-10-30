@@ -217,15 +217,9 @@ ExecuteUpdate::computeGraphUpdateQuads(
   auto [toInsertTemplates, toInsert, localVocabInsert] =
       prepareTemplateAndResultContainer(
           std::move(graphUpdate.toInsert_.triples_));
-  AD_LOG_INFO << "Transformed insert triples template size: "
-              << toInsertTemplates.size()
-              << ", local vocab size: " << localVocabInsert.size() << std::endl;
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
       prepareTemplateAndResultContainer(
           std::move(graphUpdate.toDelete_.triples_));
-  AD_LOG_INFO << "Transformed delete triples template size: "
-              << toDeleteTemplates.size()
-              << ", local vocab size: " << localVocabDelete.size() << std::endl;
   tracer.endTrace("transforming");
 
   tracer.beginTrace("resultInterpolation");
