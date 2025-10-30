@@ -635,7 +635,17 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          return LoopControl::breakWithYieldAll(chunkedIndexScan());
+          auto scan = std::make_shared<
+              CompressedRelationReader::IdTableGeneratorInputRange>(
+              getLazyScan());
+          scan->details().numBlocksAll_ =
+              getMetadataForScan().value().sizeBlockMetadata_;
+          return LoopControl::breakWithYieldAll(
+              ad_utility::CachingTransformInputRange(*scan, [this, scan](
+                                                                auto& table) {
+                updateRuntimeInfoForLazyScan(scan->details());
+                return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+              }));
         }
 
         auto& pendingBlocks = state->pendingBlocks_;
