@@ -26,6 +26,11 @@ namespace ad_utility {
 
 // Some helper concepts.
 
+namespace joinAlgorithms::detail {
+template <typename T, typename U>
+CPP_requires(HasMinus, requires(T&& a, U&& b)(a - b));
+}
+
 // A  function `F` fulfills `UnaryIteratorFunction` if it can be called with a
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
@@ -640,9 +645,10 @@ class BlockAndSubrange {
 
  public:
   // The reference type of the underlying container.
-  using reference = std::iterator_traits<typename Block::iterator>::reference;
+  using reference =
+      typename std::iterator_traits<typename Block::iterator>::reference;
   using const_reference =
-      std::iterator_traits<typename Block::const_iterator>::reference;
+      typename std::iterator_traits<typename Block::const_iterator>::reference;
 
   // Construct from a container object, where the initial subrange will
   // represent the whole container.
@@ -701,7 +707,8 @@ class BlockAndSubrange {
       subrange_.second = end - blockBegin;
     };
     auto& block = fullBlock();
-    if constexpr (requires { begin - block.begin(); }) {
+    if constexpr (CPP_requires_ref(joinAlgorithms::detail::HasMinus,
+                                   decltype(begin), decltype(block.begin()))) {
       impl(block.begin(), block.end());
     } else {
       impl(std::as_const(block).begin(), std::as_const(block).end());
@@ -722,7 +729,7 @@ class BlockAndSubrange {
 template <typename Iterator, typename End, typename Projection>
 struct JoinSide {
   using CurrentBlocks =
-      std::vector<detail::BlockAndSubrange<std::iter_value_t<Iterator>>>;
+      std::vector<detail::BlockAndSubrange<ql::iter_value_t<Iterator>>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
@@ -730,7 +737,7 @@ struct JoinSide {
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  using value_type = ql::ranges::range_value_t<std::iter_value_t<Iterator>>;
+  using value_type = ql::ranges::range_value_t<ql::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
@@ -852,7 +859,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
-  using ProjectedEl = LeftSide::ProjectedEl;
+  using ProjectedEl = typename LeftSide::ProjectedEl;
   static_assert(
       ql::concepts::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
