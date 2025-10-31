@@ -205,6 +205,25 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
       ::testing::ContainsRegex("Insufficient memory"));
 }
 
+TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
+  std::string filename = "idTableCompressedSorter.cornerCases.dat";
+
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::CompressedExternalIdTable<0> writer{
+      filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
+
+  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
+
+  // Test pushing rows normally
+  for (const auto& row : randomTable) {
+    writer.push(row);
+  }
+
+  auto generator = writer.getRows();
+  auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
+  EXPECT_EQ(result.size(), randomTable.size());
+}
+
 template <size_t NumStaticColumns>
 void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
                             ad_utility::MemorySize memoryToUse) {
@@ -262,11 +281,6 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
       writer.push(row);
     }
   };
-  ASSERT_NO_THROW(pushAll());
-
-  // Only creating and then destroying a generator again does not prevent
-  // pushing.
-  { [[maybe_unused]] auto generator = writer.getRows(); }
   ASSERT_NO_THROW(pushAll());
 
   auto generator = writer.getRows();

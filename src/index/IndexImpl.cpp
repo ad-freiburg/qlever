@@ -179,11 +179,19 @@ IndexImpl::buildOspWithPatterns(
   // We need the patterns twice: once for the additional column, and once for
   // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
+
   // The column with index 1 always is `has-predicate` and is not needed here.
   // Note that the order of the columns during index building  is always `SPO`,
   // but the sorting might be different (PSO in this case).
-  auto lazyPatternScan = lazyScanWithPermutedColumns(
-      hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
+  // NOTE: We will iterate over the `hasPatternPredicateSortedByPSO` twice. It
+  // is important, that the generators that iterate over the sorted blocks are
+  // not active at the same time, because otherwise an assertion in
+  // `CompressedExternalIdTable` will fail. We thus nest the lifetime of the
+  // result of `getLazyPatternScan` inside the `joinWithyPatternThread` below.
+  auto getLazyPatternScan = [&]() {
+    return lazyScanWithPermutedColumns(hasPatternPredicateSortedByPSO,
+                                       std::array<ColumnIndex, 2>{0, 2});
+  };
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
 
   // The permutation (2, 1, 0, 3) switches the third column (the object) with
@@ -198,7 +206,8 @@ IndexImpl::buildOspWithPatterns(
   // predicate on a background thread. The result will be pushed to the `queue`
   // so that we can consume it asynchronously.
   ad_utility::JThread joinWithPatternThread{
-      [&queue, &ospAsBlocksTransformed, &lazyPatternScan] {
+      [&queue, &ospAsBlocksTransformed,
+       lazyPatternScan = getLazyPatternScan()]() mutable {
         // Setup the callback for the join that will buffer the results and push
         // them to the queue.
         IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
@@ -255,6 +264,7 @@ IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2,
                               std::move(blockGenerator), *thirdSorter);
+  joinWithPatternThread.join();
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.

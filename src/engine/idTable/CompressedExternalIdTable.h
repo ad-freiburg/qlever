@@ -304,9 +304,26 @@ CPP_class_template(size_t NumStaticCols,
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
+  // If the `compressAndWriteFuture_` is currently active, wait for its
+  // computation to be completed, else do nothing.
+  void waitForFuture() {
+    if (compressAndWriteFuture_.valid()) {
+      compressAndWriteFuture_.get();
+    }
+  }
+
+  // Store the `future` inside the `compressAndWriteFuture_`. This trivial
+  // wrapper can be used to inject more detailed logging when analyzing the
+  // control flow of this class or when fixing bugs.
+  void setFuture(std::future<void> future) {
+    AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
+    compressAndWriteFuture_ = std::move(future);
+  }
+
   // Store whether this table has previously already been iterated over (in
   // which case this member becomes `false`).
   std::atomic<bool> isFirstIteration_ = true;
+  std::atomic<bool> transformAndPushWasCalled_ = false;
 
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
@@ -352,12 +369,11 @@ CPP_class_template(size_t NumStaticCols,
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
+    transformAndPushWasCalled_ = false;
   }
 
  protected:
@@ -375,18 +391,21 @@ CPP_class_template(size_t NumStaticCols,
   // by the `Impl` via the `transformBlock` function.
   template <typename Transformation = ql::identity>
   void pushBlock(IdTableStatic<NumStaticCols> block) {
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     if (block.empty()) {
+      if (numBlocksPushed_ > 0) {
+        // BUGFIX: It's important to set the future, even if it does nothing
+        // (otherwise the assertion in `transformAndPushLastBlock` fails).
+        setFuture(std::async(std::launch::deferred, []() {}));
+      }
       return;
     }
     ++numBlocksPushed_;
-    compressAndWriteFuture_ = std::async(
+    setFuture(std::async(
         std::launch::async, [block = std::move(block), this]() mutable {
           blockTransformation_(block);
           this->writer_.writeIdTable(std::move(block).toDynamic());
-        });
+        }));
   }
 
   // If there is less than one complete block (meaning that the number of calls
@@ -398,11 +417,17 @@ CPP_class_template(size_t NumStaticCols,
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
+    AD_CORRECTNESS_CHECK(!transformAndPushWasCalled_.exchange(true));
+
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
-    AD_CORRECTNESS_CHECK((numBlocksPushed_ == 0) !=
-                         compressAndWriteFuture_.valid());
+    AD_CORRECTNESS_CHECK(
+        (numBlocksPushed_ == 0) != compressAndWriteFuture_.valid(), [this]() {
+          return absl::StrCat(
+              "numBlocksPushed: ", numBlocksPushed_,
+              ", futureIsValid: ", compressAndWriteFuture_.valid());
+        });
     // Optimization for inputs that are smaller than the blocksize, do not use
     // the external file, but simply sort and return the single block.
     if (numBlocksPushed_ == 0) {
@@ -413,9 +438,7 @@ CPP_class_template(size_t NumStaticCols,
     }
     pushBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
-    if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
-    }
+    waitForFuture();
     return true;
   }
 };
@@ -477,9 +500,7 @@ class CompressedExternalIdTable
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
-    if (this->compressAndWriteFuture_.valid()) {
-      this->compressAndWriteFuture_.get();
-    }
+    this->waitForFuture();
     return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
 };
@@ -616,6 +637,7 @@ class CompressedExternalIdTableSorter
           std::optional<size_t> blocksize = std::nullopt) {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
     // Explanation for the second argument of `runStreamAsync`: One block is
