@@ -32,7 +32,9 @@ class IndexScan final : public Operation {
 
   // this needs to be initialized before `scanSpecAndBlocks_`!
   std::optional<MaterializedView> scanView_;
-  mutable std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
+  // this needs to be initialized before `scanSpecAndBlocks_` and after
+  // `scanView_`!
+  std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
 
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
@@ -279,14 +281,18 @@ class IndexScan final : public Operation {
     };
   }
 
-  void makeEmptyLocatedTriplesSnapshot() const {
+  std::optional<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot()
+      const {
+    if (!scanView_.has_value()) {
+      return std::nullopt;
+    }
     LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
     emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
         .setOriginalMetadata(
-            scanView_->getPermutation()->metaData().blockDataShared());
+            scanView_.value().getPermutation()->metaData().blockDataShared());
     LocalVocab emptyVocab;
-    emptyLocatedTriplesSnapshot_ = LocatedTriplesSnapshot{
-        emptyLocatedTriples, emptyVocab.getLifetimeExtender(), 0};
+    return LocatedTriplesSnapshot{emptyLocatedTriples,
+                                  emptyVocab.getLifetimeExtender(), 0};
   }
 
   const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
