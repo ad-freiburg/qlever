@@ -62,7 +62,7 @@ namespace {
 template <auto throwingFunction>
 struct S {
   ad_utility::ThrowInDestructorIfSafe t_;
-  ~S() { t_(throwingFunction); }
+  ~S() noexcept(false) { t_(throwingFunction); }
 };
 
 // This function should as part of the `S` destructor invoke the

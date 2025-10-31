@@ -92,10 +92,11 @@ using GeneratorWithDetails =
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
 inline GeneratorWithDetails convertGenerator(
-    Permutation::IdTableGenerator gen) {
+    CompressedRelationReader::IdTableGeneratorInputRange gen) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
-      std::make_shared<Permutation::IdTableGenerator>(std::move(gen));
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(gen));
 
   // Create the range with a pointer to the generator's details
   auto range = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>(

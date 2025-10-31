@@ -32,12 +32,12 @@ namespace ad_utility {
 // predicate has already been evaluated for the current element.
 CPP_template(typename V, typename Pred)(
     requires ql::ranges::input_range<V>&& ql::ranges::view<V>&&
-        std::is_object_v<Pred>&& std::indirect_unary_predicate<
+        std::is_object_v<Pred>&& ql::concepts::indirect_unary_predicate<
             const Pred, ql::ranges::iterator_t<V>>) class TakeUntilInclusiveView
     : public ql::ranges::view_interface<TakeUntilInclusiveView<V, Pred>> {
  private:
   V base_;
-  Pred pred_;
+  ::ranges::semiregular_box_t<Pred> pred_;
 
   class Iterator {
    public:
@@ -112,11 +112,30 @@ CPP_template(typename V, typename Pred)(
 
     void operator++(int) { ++(*this); }
 
-    // TODO<joka921> Implement `ql::default_sentinel`
     bool operator==(ql::default_sentinel_t) const {
       return done_ || current_ == end_;
     }
+    bool operator!=(ql::default_sentinel_t sent) const {
+      return !(*this == sent);
+    }
+    friend bool operator==(ql::default_sentinel_t sent, const Iterator& it) {
+      return it == sent;
+    }
+    friend bool operator!=(ql::default_sentinel_t sent, const Iterator& it) {
+      return it != sent;
+    }
   };
+
+  // Return the address of the underlying predicate. Is required, because the
+  // `semiregular_box_t` might or might not wrap the actual predicate, which
+  // changes the required syntax.
+  auto* getAddressOfPred() {
+    if constexpr (ad_utility::isSimilar<decltype(pred_), Pred>) {
+      return &pred_;
+    } else {
+      return &pred_.get();
+    }
+  }
 
  public:
   TakeUntilInclusiveView() = default;
@@ -124,7 +143,8 @@ CPP_template(typename V, typename Pred)(
       : base_(std::move(base)), pred_(std::move(pred)) {}
 
   auto begin() {
-    return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_), &pred_};
+    return Iterator{ql::ranges::begin(base_), ql::ranges::end(base_),
+                    getAddressOfPred()};
   }
 
   auto end() { return ql::default_sentinel; }

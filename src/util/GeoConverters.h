@@ -72,7 +72,8 @@ inline std::unique_ptr<S2Loop> makeS2Loop(
 }
 
 // Helper to convert a `libspatialjoin` `Polygon` to an `S2Polygon`
-inline S2Polygon makeS2Polygon(const util::geo::Polygon<CoordType>& polygon) {
+inline std::unique_ptr<S2Polygon> makeS2Polygon(
+    const util::geo::Polygon<CoordType>& polygon) {
   std::vector<std::unique_ptr<S2Loop>> loops;
 
   // Outer boundary
@@ -89,7 +90,7 @@ inline S2Polygon makeS2Polygon(const util::geo::Polygon<CoordType>& polygon) {
   if (!s2polygon.IsValid()) {
     throw ad_utility::InvalidPolygonError();
   }
-  return s2polygon;
+  return std::make_unique<S2Polygon>(std::move(s2polygon));
 }
 
 }  // namespace geometryConverters

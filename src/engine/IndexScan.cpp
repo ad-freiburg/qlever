@@ -13,8 +13,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
-#include "util/Generator.h"
-#include "util/GeneratorConverter.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
@@ -366,7 +364,7 @@ Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
 }
 
 // _____________________________________________________________________________
-Permutation::IdTableGenerator IndexScan::getLazyScan(
+CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
@@ -378,12 +376,12 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 
-  return cppcoro::fromInputRange(
-      ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>(
-          ad_utility::CachingTransformInputRange<
-              ad_utility::OwningView<Permutation::IdTableGenerator>,
-              decltype(makeApplyColumnSubset()), LazyScanMetadata>{
-              std::move(lazyScanAllCols), makeApplyColumnSubset()}));
+  return CompressedRelationReader::IdTableGeneratorInputRange{
+      ad_utility::CachingTransformInputRange<
+          ad_utility::OwningView<
+              CompressedRelationReader::IdTableGeneratorInputRange>,
+          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
+          std::move(lazyScanAllCols), makeApplyColumnSubset()}};
 };
 
 // _____________________________________________________________________________
@@ -394,7 +392,7 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
 };
 
 // _____________________________________________________________________________
-std::array<Permutation::IdTableGenerator, 2>
+std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
@@ -442,7 +440,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 }
 
 // _____________________________________________________________________________
-Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
+CompressedRelationReader::IdTableGeneratorInputRange
+IndexScan::lazyScanForJoinOfColumnWithScan(
     ql::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
@@ -461,9 +460,8 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
 
 // _____________________________________________________________________________
 void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
-  updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status::lazilyMaterialized);
   auto& rti = runtimeInfo();
+  rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
   rti.numRows_ = metadata.numElementsYielded_;
   rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
@@ -481,6 +479,7 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
+  signalQueryUpdate();
 }
 
 // Store a Generator and its corresponding iterator as well as unconsumed values
@@ -629,13 +628,24 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
+  using namespace std::chrono_literals;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          return LoopControl::breakWithYieldAll(chunkedIndexScan());
+          auto scan = std::make_shared<
+              CompressedRelationReader::IdTableGeneratorInputRange>(
+              getLazyScan());
+          scan->details().numBlocksAll_ =
+              getMetadataForScan().value().sizeBlockMetadata_;
+          return LoopControl::breakWithYieldAll(
+              ad_utility::CachingTransformInputRange(*scan, [this, scan](
+                                                                auto& table) {
+                updateRuntimeInfoForLazyScan(scan->details());
+                return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+              }));
         }
 
         auto& pendingBlocks = state->pendingBlocks_;
@@ -648,6 +658,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
           }
           state->fetch();
         }
+        metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
+        updateRuntimeInfoForLazyScan(metadata);
 
         // We now have non-empty pending blocks
         auto scan = getLazyScan(std::move(pendingBlocks));
@@ -658,19 +670,16 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
 
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
-            std::move(scan), [](auto& table) {
+            std::move(scan),
+            [&metadata, &scanDetails,
+             originalMetadata = metadata](auto& table) mutable {
+              // Make sure we don't add everything more than once.
+              metadata = originalMetadata;
+              metadata.aggregate(scanDetails);
               return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
             });
 
-        // Use CallbackOnEndView to aggregate metadata after scan is consumed
-        auto callback = ad_utility::makeAssignableLambda(
-            [&metadata, &scanDetails]() mutable {
-              metadata.aggregate(scanDetails);
-            });
-
-        auto scanWithCallback = ad_utility::CallbackOnEndView{
-            std::move(transformedScan), std::move(callback)};
-        return LoopControl::yieldAll(std::move(scanWithCallback));
+        return LoopControl::yieldAll(std::move(transformedScan));
       }};
   return Result::LazyResult{std::move(range)};
 }

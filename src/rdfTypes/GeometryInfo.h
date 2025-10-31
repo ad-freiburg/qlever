@@ -122,6 +122,8 @@ struct MetricArea {
   explicit MetricArea(double area);
 
   double area() const { return area_; };
+
+  bool isValid() const { return !std::isnan(area_); }
 };
 
 // Class for internal exception handling of errors from `s2geometry`.

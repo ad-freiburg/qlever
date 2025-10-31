@@ -18,14 +18,16 @@
 
 namespace ad_utility {
 
-/// A lambda that accesses the `i`-th element in a `randomAccessContainer`
+/// A struct that accesses the `i`-th element in a `randomAccessContainer`
 /// using `operator[]`
-inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
-                                          auto i) -> decltype(auto) {
-  return randomAccessContainer[i];
+struct AccessViaBracketOperator {
+  template <typename Container, typename Index>
+  decltype(auto) operator()(Container&& randomAccessContainer, Index i) const {
+    return randomAccessContainer[i];
+  }
 };
 
-using AccessViaBracketOperator = decltype(accessViaBracketOperator);
+inline constexpr AccessViaBracketOperator accessViaBracketOperator{};
 
 template <typename A, typename P>
 CPP_requires(has_valid_accessor_, requires(A& a, P& p, uint64_t i)(&a(*p, i)));
@@ -98,16 +100,22 @@ class IteratorForAccessOperator {
   auto compareThreeWay(const IteratorForAccessOperator& rhs) const {
     return ql::compareThreeWay(index_, rhs.index_);
   }
+
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
 
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }
 
+  bool operator!=(const IteratorForAccessOperator& rhs) const {
+    return index_ != rhs.index_;
+  }
+
   IteratorForAccessOperator& operator+=(difference_type n) {
     index_ += n;
     return *this;
   }
+
   IteratorForAccessOperator operator+(difference_type n) const {
     IteratorForAccessOperator result{*this};
     result += n;
@@ -118,6 +126,7 @@ class IteratorForAccessOperator {
     ++index_;
     return *this;
   }
+
   IteratorForAccessOperator operator++(int) & {
     IteratorForAccessOperator result{*this};
     ++index_;
@@ -128,6 +137,7 @@ class IteratorForAccessOperator {
     --index_;
     return *this;
   }
+
   IteratorForAccessOperator operator--(int) & {
     IteratorForAccessOperator result{*this};
     --index_;
@@ -156,6 +166,7 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
+
   CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
@@ -166,6 +177,7 @@ class IteratorForAccessOperator {
   operator->() {
     return &(*(*this));
   }
+
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
       requires HasValidAccessor<A, P>) auto
   operator->() const {
