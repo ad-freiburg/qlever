@@ -181,7 +181,8 @@ class IndexScan final : public Operation {
   // Set the runtime info of the `scanTree` when it was lazily executed during a
   // join.
   void updateRuntimeInfoForLazyScan(
-      const CompressedRelationReader::LazyScanMetadata& metadata);
+      const CompressedRelationReader::LazyScanMetadata& metadata,
+      bool signalUpdate = true);
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
