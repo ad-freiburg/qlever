@@ -565,23 +565,29 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 
 // _____________________________________________________________________________
 namespace {
-// TODO<RobinTF> merge with convertGenerator
-// Helper function to update the underlying `IndexScan` runtime information
-// during the join.
-auto updateInfoWrapperRef(GeneratorWithDetails& range, IndexScan& scan) {
-  return ql::views::transform(range, [&scan, &range](auto& block) -> auto& {
-    scan.updateRuntimeInfoForLazyScan(std::as_const(range).details());
-    return block;
-  });
-}
-auto updateInfoWrapper(GeneratorWithDetails range, IndexScan& scan) {
-  auto sharedRange = std::make_shared<GeneratorWithDetails>(std::move(range));
-  return ql::views::transform(*sharedRange,
-                              [&scan, sharedRange](auto& block) -> auto& {
-                                scan.updateRuntimeInfoForLazyScan(
-                                    std::as_const(*sharedRange).details());
-                                return block;
-                              });
+// Type alias for the general InputRangeTypeErased with specific types.
+using IteratorWithSingleCol = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
+
+// Convert a `CompressedRelationReader::IdTableGeneratorInputRange` to a
+// `InputRangeTypeErased<IdTableAndFirstCol<IdTable>>` for more efficient access
+// in the join columns below. This also makes sure the runtime information of
+// the passed `IndexScan` is updated properly as the range is consumed.
+IteratorWithSingleCol convertGenerator(
+    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
+  // Store the generator in a wrapper so we can access its details after moving
+  auto generatorStorage =
+      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+          std::move(gen));
+
+  auto range = CachingTransformInputRange(
+      *generatorStorage, [generatorStorage, &scan](auto& table) {
+        scan.updateRuntimeInfoForLazyScan(generatorStorage->details());
+        // IndexScans don't have a local vocabulary, so we can just use an empty
+        // one.
+        return IdTableAndFirstCol{std::move(table), LocalVocab{}};
+      });
+
+  return IteratorWithSingleCol{std::move(range)};
 }
 }  // namespace
 
@@ -607,13 +613,13 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
             IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
         runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-        auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
-        auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
+        auto leftBlocks =
+            convertGenerator(std::move(leftBlocksInternal), *leftScan);
+        auto rightBlocks =
+            convertGenerator(std::move(rightBlocksInternal), *rightScan);
 
-        ad_utility::zipperJoinForBlocksWithoutUndef(
-            updateInfoWrapperRef(leftBlocks, *leftScan),
-            updateInfoWrapperRef(rightBlocks, *rightScan), std::less{},
-            rowAdder);
+        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
+                                                    std::less{}, rowAdder);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -664,8 +670,7 @@ Result Join::computeResultForIndexScanAndIdTable(
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
-            return LazyInputView{updateInfoWrapper(
-                convertGenerator(std::move(rightBlocksInternal)), *scan)};
+            return convertGenerator(std::move(rightBlocksInternal), *scan);
           }
         }();
 
