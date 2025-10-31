@@ -346,3 +346,15 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 }
+
+TEST(ServerTest, checkAccessToken) {
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  EXPECT_TRUE(server.checkAccessToken("accessToken"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.checkAccessToken("invalidAccessToken"),
+      testing::HasSubstr("Access token was provided but it was invalid"));
+
+  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
+}
