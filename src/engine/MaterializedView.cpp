@@ -144,3 +144,11 @@ void MaterializedViewWriter::writeViewToDisk() {
   AD_LOG_INFO << "Materialized view " << name_ << " written to disk."
               << std::endl;
 }
+
+// _____________________________________________________________________________
+MaterializedView::MaterializedView(std::string filenameBase)
+    : permutation_{Permutation::Enum::SPO,
+                   ad_utility::makeUnlimitedAllocator<Id>()} {
+  permutation_.loadFromDisk(filenameBase, [](Id) { return false; }, false);
+  AD_CORRECTNESS_CHECK(permutation_.isLoaded());
+}

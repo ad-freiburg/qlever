@@ -41,6 +41,11 @@ class MaterializedViewWriter {
 };
 
 class MaterializedView {
+ private:
+  Permutation permutation_;
+
+ public:
+  explicit MaterializedView(std::string filenameBase);
   // makeIndexScan? or get Permutation? or feed to index scan?
 };
 
