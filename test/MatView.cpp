@@ -377,4 +377,23 @@ TEST(MatView, Reader2) {
   AD_LOG_INFO << r.getDouble() << std::endl;
 }
 
+/*
+
+Write:
+
+???
+
+Load:
+
+???
+
+Scan:
+
+SERVICE <materialized-view> {
+_:config <name> "geom" ; <col-a> ?a ; <col-b> ?b ; <col-x> ?x .
+}
+# or: <col-0> ?a ; <col-1> ?b .
+
+*/
+
 }  // namespace
