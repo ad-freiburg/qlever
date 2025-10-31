@@ -42,11 +42,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
+      scanView_(scanView),
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
-      scanView_(scanView) {
+      numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -90,13 +90,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
+      scanView_{std::move(scanView)},
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
-      varsToKeep_{std::move(varsToKeep)},
-      scanView_{std::move(scanView)} {
+      varsToKeep_{std::move(varsToKeep)} {
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
   determineMultiplicities();
 }
@@ -257,6 +257,7 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
+  // scanSpecAndBlocks_.blockMetadata_.size()
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());

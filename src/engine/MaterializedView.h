@@ -71,7 +71,7 @@ class MaterializedViewManager {
   MaterializedView getView(const std::string& name);
 };
 
-// TODO manager for the open permuations (should be kept in `Index` like
+// TODO manager for the open permutations (should be kept in `Index` like
 // deltatriples) + reader: get index scan op on custom permutation
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEW_H_

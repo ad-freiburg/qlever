@@ -29,6 +29,11 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+
+  // this needs to be initialized before `scanSpecAndBlocks_`!
+  std::optional<MaterializedView> scanView_;
+  mutable std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
+
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
   size_t numVariables_;
@@ -47,10 +52,6 @@ class IndexScan final : public Operation {
   // of the query.
   using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
   VarsToKeep varsToKeep_;
-
-  //
-  std::optional<MaterializedView> scanView_;
-  mutable std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
