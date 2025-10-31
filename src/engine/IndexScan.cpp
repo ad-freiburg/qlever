@@ -459,7 +459,8 @@ IndexScan::lazyScanForJoinOfColumnWithScan(
 }
 
 // _____________________________________________________________________________
-void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
+void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
+                                             bool signalUpdate) {
   auto& rti = runtimeInfo();
   rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
   rti.numRows_ = metadata.numElementsYielded_;
@@ -479,7 +480,9 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
-  signalQueryUpdate();
+  if (signalUpdate) {
+    signalQueryUpdate();
+  }
 }
 
 // Store a Generator and its corresponding iterator as well as unconsumed values
