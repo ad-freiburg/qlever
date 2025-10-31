@@ -12,6 +12,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
+#include "util/HashMap.h"
 
 class MaterializedViewWriter {
  private:
@@ -34,9 +35,30 @@ class MaterializedViewWriter {
 
   std::vector<ColumnIndex> getIdTableColumnPermutation() const;
 
+  // Num cols and possibly col names should also be stored somewhere + maybe
+  // list of views
   void writeViewToDisk();
 };
 
-// TODO writer, reader: get index scan op
+class MaterializedView {
+  // makeIndexScan? or get Permutation? or feed to index scan?
+};
+
+class MaterializedViewManager {
+ private:
+  const Index& index_;
+  ad_utility::HashMap<std::string, MaterializedView> loadedViews_;
+
+ public:
+  MaterializedViewManager(const Index& index) : index_{index} {};
+
+  void loadView(std::string name);
+
+  // Load if not already loaded and get
+  const MaterializedView& getView();
+};
+
+// TODO manager for the open permuations (should be kept in `Index` like
+// deltatriples) + reader: get index scan op on custom permutation
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEW_H_

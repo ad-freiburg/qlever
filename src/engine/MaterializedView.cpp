@@ -64,12 +64,12 @@ void MaterializedViewWriter::writeViewToDisk() {
 
   auto memoryLimit = ad_utility::MemorySize::gigabytes(16);   // TODO
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();  // TODO
-  Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit,
-                   allocator};
 
   // Sort results externally
   AD_LOG_INFO << "Sorting result rows from query by first column..."
               << std::endl;
+  Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit,
+                   allocator};
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
@@ -78,7 +78,7 @@ void MaterializedViewWriter::writeViewToDisk() {
                          "Materialized views cannot contain entries from a "
                          "local vocabulary currently.");
     totalTriples += block.numRows();
-    // The IdTable may have a different column ordering from the SELECT
+    // The `IdTable` may have a different column ordering from the `SELECT`
     // statement, thus we must permute this to the column ordering we want to
     // have in our materialized view. In particular, the indexed column should
     // be the first.
@@ -101,15 +101,6 @@ void MaterializedViewWriter::writeViewToDisk() {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
   };
 
-  // ----
-  std::string sopFilename = filename + ".index.sop";
-  CompressedRelationWriter sopWriter{
-      numCols,
-      ad_utility::File{sopFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
-  };
-  // ---/---
-
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   MetaData spoMetaData;
   spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
@@ -120,9 +111,14 @@ void MaterializedViewWriter::writeViewToDisk() {
         }
       };
 
-  // ----
-  auto sopCallback = [&](ql::span<const CompressedRelationMetadata>) {};
-  // ---/---
+  // TODO<ullingerc> Remove and write single permutation
+  std::string sopFilename = filename + ".index.sop";
+  CompressedRelationWriter sopWriter{
+      numCols,
+      ad_utility::File{sopFilename, "w"},
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
+  };
+  auto sopCallback = [](ql::span<const CompressedRelationMetadata>) {};
 
   auto [numDistinctPredicates, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
