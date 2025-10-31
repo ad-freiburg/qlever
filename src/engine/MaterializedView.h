@@ -9,10 +9,13 @@
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "util/HashMap.h"
+
+static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 
 // TODO
 class MaterializedViewWriter {
@@ -46,6 +49,7 @@ class MaterializedViewWriter {
 class MaterializedView {
  private:
   std::shared_ptr<Permutation> permutation_;
+  VariableToColumnMap varToColMap_;
 
  public:
   MaterializedView(std::string_view onDiskBase, std::string_view name);

@@ -6,6 +6,10 @@
 
 #include "engine/MaterializedView.h"
 
+#include <nlohmann/json.hpp>
+#include <stdexcept>
+
+#include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -143,6 +147,21 @@ void MaterializedViewWriter::writeViewToDisk() {
     spoMetaData.appendToFile(&spoFile);
   }
 
+  // Export column names to view info JSON file
+  std::vector<std::string> columns = ::ranges::to_vector(
+      parsedQuery_.getVisibleVariables() |
+      ql::views::transform([](const Variable& var) { return var.name(); }));
+  nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
+                             {"columns", std::move(columns)}};
+  {
+    std::ofstream viewInfoFile(filename + ".viewinfo.json");
+    if (!viewInfoFile) {
+      throw std::runtime_error(
+          absl::StrCat("Cannot write ", filename, ".viewinfo.json"));
+    }
+    viewInfoFile << viewInfo.dump() << std::endl;
+  }
+
   AD_LOG_INFO << "Statistics for view: " << spoMetaData.statistics()
               << std::endl;
   // TODO<ullingerc> This removes the unnecessary permutation which should not
@@ -159,8 +178,34 @@ MaterializedView::MaterializedView(std::string_view onDiskBase,
           Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())} {
   AD_LOG_INFO << "Loading materialized view " << name << " from disk..."
               << std::endl;
-  permutation_->loadFromDisk(
-      getFilenameBase(onDiskBase, name), [](Id) { return false; }, false);
+  auto filename = getFilenameBase(onDiskBase, name);
+
+  // Read metadata from JSON
+  nlohmann::json viewInfoJson;
+  {
+    std::ifstream viewInfoFile(filename + ".viewinfo.json");
+    if (!viewInfoFile) {
+      throw std::runtime_error(
+          absl::StrCat("Cannot read ", filename, ".viewinfo.json"));
+    }
+    viewInfoFile >> viewInfoJson;
+  }
+
+  // Check version of view and restore column names
+  auto version = viewInfoJson.at("version").get<size_t>();
+  AD_CORRECTNESS_CHECK(version == MATERIALIZED_VIEWS_VERSION);
+
+  // Make variable to column map
+  auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
+  for (const auto& [index, columnName] :
+       ::ranges::views::enumerate(columnNames)) {
+    varToColMap_.insert({Variable{columnName},
+                         {static_cast<ColumnIndex>(index),
+                          ColumnIndexAndTypeInfo::PossiblyUndefined}});
+  }
+
+  // Read permutation
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
