@@ -157,7 +157,8 @@ MaterializedView::MaterializedView(std::string_view onDiskBase,
                                    std::string_view name)
     : permutation_{std::make_shared<Permutation>(
           Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())} {
-  AD_LOG_INFO << "Loading materialized view " << name << " from disk...";
+  AD_LOG_INFO << "Loading materialized view " << name << " from disk..."
+              << std::endl;
   permutation_->loadFromDisk(
       getFilenameBase(onDiskBase, name), [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());

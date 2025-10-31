@@ -14,6 +14,7 @@
 #include "libqlever/Qlever.h"
 #include "util/HashMap.h"
 
+// TODO
 class MaterializedViewWriter {
  private:
   std::string name_;
@@ -33,6 +34,7 @@ class MaterializedViewWriter {
 
   std::string getFilenameBase() const;
 
+  // TODO
   std::vector<ColumnIndex> getIdTableColumnPermutation() const;
 
   // Num cols and possibly col names should also be stored somewhere + maybe
@@ -40,6 +42,7 @@ class MaterializedViewWriter {
   void writeViewToDisk();
 };
 
+// TODO
 class MaterializedView {
  private:
   std::shared_ptr<Permutation> permutation_;
@@ -53,6 +56,7 @@ class MaterializedView {
   std::shared_ptr<const Permutation> getPermutation() const;
 };
 
+// TODO
 class MaterializedViewManager {
  private:
   const Index& index_;
