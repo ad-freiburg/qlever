@@ -563,6 +563,28 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
   }
 }
 
+// _____________________________________________________________________________
+namespace {
+// TODO<RobinTF> merge with convertGenerator
+// Helper function to update the underlying `IndexScan` runtime information
+// during the join.
+auto updateInfoWrapperRef(GeneratorWithDetails& range, IndexScan& scan) {
+  return ql::views::transform(range, [&scan, &range](auto& block) -> auto& {
+    scan.updateRuntimeInfoForLazyScan(std::as_const(range).details());
+    return block;
+  });
+}
+auto updateInfoWrapper(GeneratorWithDetails range, IndexScan& scan) {
+  auto sharedRange = std::make_shared<GeneratorWithDetails>(std::move(range));
+  return ql::views::transform(*sharedRange,
+                              [&scan, sharedRange](auto& block) -> auto& {
+                                scan.updateRuntimeInfoForLazyScan(
+                                    std::as_const(*sharedRange).details());
+                                return block;
+                              });
+}
+}  // namespace
+
 // ______________________________________________________________________________________________________
 Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
   return createResult(
@@ -588,13 +610,10 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
         auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
-                                                    std::less{}, rowAdder);
-
-        leftScan->updateRuntimeInfoForLazyScan(
-            std::as_const(leftBlocks).details());
-        rightScan->updateRuntimeInfoForLazyScan(
-            std::as_const(rightBlocks).details());
+        ad_utility::zipperJoinForBlocksWithoutUndef(
+            updateInfoWrapperRef(leftBlocks, *leftScan),
+            updateInfoWrapperRef(rightBlocks, *rightScan), std::less{},
+            rowAdder);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -635,8 +654,7 @@ Result Join::computeResultForIndexScanAndIdTable(
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
-                            &indexScanResult]()
-            -> std::variant<LazyInputView, GeneratorWithDetails> {
+                            &indexScanResult]() -> LazyInputView {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
@@ -646,7 +664,8 @@ Result Join::computeResultForIndexScanAndIdTable(
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
-            return convertGenerator(std::move(rightBlocksInternal));
+            return LazyInputView{updateInfoWrapper(
+                convertGenerator(std::move(rightBlocksInternal)), *scan)};
           }
         }();
 
@@ -659,20 +678,10 @@ Result Join::computeResultForIndexScanAndIdTable(
               left, right, std::less{}, rowAdder);
         };
         auto blockForIdTable = std::array{std::move(permutationIdTable)};
-        std::visit(
-            [&doJoin, &blockForIdTable](auto& blocks) {
-              if constexpr (idTableIsRightInput) {
-                doJoin(blocks, blockForIdTable);
-              } else {
-                doJoin(blockForIdTable, blocks);
-              }
-            },
-            rightBlocks);
-
-        if (std::holds_alternative<GeneratorWithDetails>(rightBlocks)) {
-          scan->updateRuntimeInfoForLazyScan(
-              std::as_const(std::get<GeneratorWithDetails>(rightBlocks))
-                  .details());
+        if constexpr (idTableIsRightInput) {
+          doJoin(rightBlocks, blockForIdTable);
+        } else {
+          doJoin(blockForIdTable, rightBlocks);
         }
 
         auto localVocab = std::move(rowAdder.localVocab());
