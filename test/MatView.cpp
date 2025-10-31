@@ -352,30 +352,29 @@ TEST(MatView, Reader2) {
   auto p = view.getPermutation();
 
   //-----------------------------------------------------
+  SparqlTriple::AdditionalScanColumns additionalCols{// From MagicService
+                                                     {3, Variable{"?x"}},
+                                                     {4, Variable{"?y"}}};
   IndexScan scan(tmpqec.get(), Permutation::Enum::SPO,
                  {ad_utility::triple_component::Iri::fromIriref(
                       "<https://www.openstreetmap.org/way/6593464>"),
-                  Variable{"?a"}, Variable{"?b"}},
+                  Variable{"?a"}, Variable{"?b"}, additionalCols},
                  IndexScan::Graphs::All(), std::nullopt, view);
   auto res = scan.getResult();
   AD_LOG_INFO << "scan: " << res->idTable().numRows() << std::endl;
 
-  // LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
-  // emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
-  //     .setOriginalMetadata(p->metaData().blockDataShared());
-  // LocalVocab emptyVocab;
-  // LocatedTriplesSnapshot emptySnapshot{emptyLocatedTriples,
-  //                                      emptyVocab.getLifetimeExtender(), 0};
+  auto v = res->idTable().at(0, 1);
+  EXPECT_EQ(v.getDatatype(), Datatype::VocabIndex);
+  auto string = tmpqec->getIndex().getVocab()[v.getVocabIndex()];
+  EXPECT_EQ(string, LlacDEngolasters);
 
-  // ad_utility::SharedCancellationHandle cancellationHandle =
-  //     std::make_shared<ad_utility::CancellationHandle<>>();
-  // ScanSpecification scanSpec = {osmId, std::nullopt, std::nullopt};
-  // // scanSpec = {std::nullopt, std::nullopt, std::nullopt};
-  // auto scanSpecAndBlocks = p->getScanSpecAndBlocks(scanSpec, emptySnapshot);
-  // auto scan = p->scan(scanSpecAndBlocks, {}, cancellationHandle,
-  // emptySnapshot);
-  // // auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
-  // AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
+  auto c = res->idTable().at(0, 2);
+  EXPECT_EQ(c.getDatatype(), Datatype::Int);
+  AD_LOG_INFO << c.getInt() << std::endl;
+
+  auto r = res->idTable().at(0, 3);
+  EXPECT_EQ(r.getDatatype(), Datatype::Double);
+  AD_LOG_INFO << r.getDouble() << std::endl;
 }
 
 }  // namespace
