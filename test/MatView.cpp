@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "engine/MaterializedView.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/ValueId.h"
 #include "gmock/gmock.h"
@@ -63,11 +64,9 @@ TEST(MatView, Writer) {
   AD_LOG_INFO << "Plan " << std::endl;
   auto [qet, qec, parsed] = qlv.parseAndPlanQuery(
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
-      "?x "
-      "WHERE { ?a "
-      "geo:hasGeometry ?b . ?b geo:asWKT ?c . BIND (42 AS ?g)   BIND (RAND() "
-      "AS "
-      "?x) }");
+      "?x WHERE { ?a geo:hasGeometry ?b . ?b geo:asWKT ?c . VALUES ?g { 42 43 "
+      "}  BIND (RAND() AS ?x) }");
+  AD_LOG_INFO << "OnDiskBase: " << qec->getIndex().getOnDiskBase() << std::endl;
   AD_LOG_INFO << "Run hasGeom/asWKT " << std::endl;
   auto res = qet->getResult(true);
   // AD_LOG_INFO << res->idTable().numRows() << " rows x "
@@ -318,6 +317,25 @@ TEST(MatView, Reader) {
   auto r = scan.at(0, 3);
   EXPECT_EQ(r.getDatatype(), Datatype::Double);
   AD_LOG_INFO << r.getDouble() << std::endl;
+}
+
+TEST(MatView, Writer2) {
+  std::string indexBasename = "osm-andorra";
+  qlever::EngineConfig config;
+  config.baseName_ = indexBasename;
+  std::string memoryLimitStr = "16GB";
+  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
+  qlever::Qlever qlv{config};
+
+  AD_LOG_INFO << "Started. " << std::endl;
+
+  AD_LOG_INFO << "Plan " << std::endl;
+  auto qp = qlv.parseAndPlanQuery(
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
+      "?x WHERE { ?a geo:hasGeometry ?b . ?b geo:asWKT ?c . VALUES ?g { 42 43 "
+      "}  BIND (RAND() AS ?x) }");
+  MaterializedViewWriter mvw{"geom", qp};
+  mvw.writeViewToDisk();
 }
 
 }  // namespace
