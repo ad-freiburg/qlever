@@ -16,7 +16,7 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string name, qlever::Qlever::QueryPlan queryPlan)
-    : name_{name} {
+    : name_{std::move(name)} {
   auto [qet, qec, parsedQuery] = queryPlan;
   AD_CORRECTNESS_CHECK(qet != nullptr);
   AD_CORRECTNESS_CHECK(qec != nullptr);
@@ -26,8 +26,15 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
+std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
+                                              std::string_view name) {
+  return absl::StrCat(onDiskBase, ".view.", name);
+}
+
+// _____________________________________________________________________________
 std::string MaterializedViewWriter::getFilenameBase() const {
-  return absl::StrCat(qec_->getIndex().getOnDiskBase(), ".view." + name_);
+  return MaterializedView::getFilenameBase(qec_->getIndex().getOnDiskBase(),
+                                           name_);
 }
 
 // _____________________________________________________________________________
@@ -146,9 +153,32 @@ void MaterializedViewWriter::writeViewToDisk() {
 }
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string filenameBase)
-    : permutation_{Permutation::Enum::SPO,
-                   ad_utility::makeUnlimitedAllocator<Id>()} {
-  permutation_.loadFromDisk(filenameBase, [](Id) { return false; }, false);
-  AD_CORRECTNESS_CHECK(permutation_.isLoaded());
+MaterializedView::MaterializedView(std::string_view onDiskBase,
+                                   std::string_view name)
+    : permutation_{std::make_shared<Permutation>(
+          Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())} {
+  AD_LOG_INFO << "Loading materialized view " << name << " from disk...";
+  permutation_->loadFromDisk(
+      getFilenameBase(onDiskBase, name), [](Id) { return false; }, false);
+  AD_CORRECTNESS_CHECK(permutation_->isLoaded());
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<const Permutation> MaterializedView::getPermutation() const {
+  AD_CORRECTNESS_CHECK(permutation_ != nullptr);
+  return permutation_;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewManager::loadView(const std::string& name) {
+  if (loadedViews_.contains(name)) {
+    return;
+  }
+  loadedViews_.insert({name, MaterializedView{index_.getOnDiskBase(), name}});
+};
+
+// _____________________________________________________________________________
+MaterializedView MaterializedViewManager::getView(const std::string& name) {
+  loadView(name);
+  return loadedViews_.at(name);
 }

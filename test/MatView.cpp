@@ -267,8 +267,8 @@ TEST(MatView, Reader) {
 
   AD_LOG_INFO << "load permutation" << std::endl;
   Permutation p{Permutation::Enum::SPO, allocator};
-  // std::string onDiskBaseP = indexBasename + ".mv";
-  std::string onDiskBaseP = indexBasename + ".view.geom";
+  std::string onDiskBaseP = indexBasename + ".mv";
+  // std::string onDiskBaseP = indexBasename + ".view.geom";
   p.loadFromDisk(onDiskBaseP, [](Id) { return false; }, false);
   EXPECT_TRUE(p.isLoaded());
   AD_LOG_INFO << "get snapshot" << std::endl;
@@ -331,6 +331,40 @@ TEST(MatView, Writer2) {
 
   MaterializedViewWriter mvw{"geom", qp};
   mvw.writeViewToDisk();
+}
+
+TEST(MatView, Reader2) {
+  qlever::EngineConfig config;
+  config.baseName_ = "osm-andorra";
+  qlever::Qlever qlv{config};
+
+  auto [tmpqet, tmpqec, tmpplan] = qlv.parseAndPlanQuery(
+      "SELECT (<https://www.openstreetmap.org/way/6593464> AS ?id) {}");
+  auto tmpres = tmpqet->getResult();
+  auto osmId = tmpres->idTable().at(0, 0);
+  ASSERT_EQ(osmId.getDatatype(), Datatype::VocabIndex);
+  //-----------------------------------------------------
+
+  MaterializedViewManager m{tmpqec->getIndex()};
+  auto view = m.getView("geom");
+  auto p = view.getPermutation();
+
+  //-----------------------------------------------------
+  LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
+  emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
+      .setOriginalMetadata(p->metaData().blockDataShared());
+  LocalVocab emptyVocab;
+  LocatedTriplesSnapshot emptySnapshot{emptyLocatedTriples,
+                                       emptyVocab.getLifetimeExtender(), 0};
+
+  ad_utility::SharedCancellationHandle cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ScanSpecification scanSpec = {osmId, std::nullopt, std::nullopt};
+  // scanSpec = {std::nullopt, std::nullopt, std::nullopt};
+  auto scanSpecAndBlocks = p->getScanSpecAndBlocks(scanSpec, emptySnapshot);
+  auto scan = p->scan(scanSpecAndBlocks, {}, cancellationHandle, emptySnapshot);
+  // auto scan = p.scan(scanSpecAndBlocks, {}, cancellationHandle, snapshot);
+  AD_LOG_INFO << "scan: " << scan.numRows() << std::endl;
 }
 
 }  // namespace

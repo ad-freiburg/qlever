@@ -42,11 +42,15 @@ class MaterializedViewWriter {
 
 class MaterializedView {
  private:
-  Permutation permutation_;
+  std::shared_ptr<Permutation> permutation_;
 
  public:
-  explicit MaterializedView(std::string filenameBase);
-  // makeIndexScan? or get Permutation? or feed to index scan?
+  MaterializedView(std::string_view onDiskBase, std::string_view name);
+
+  static std::string getFilenameBase(std::string_view onDiskBase,
+                                     std::string_view name);
+
+  std::shared_ptr<const Permutation> getPermutation() const;
 };
 
 class MaterializedViewManager {
@@ -57,10 +61,10 @@ class MaterializedViewManager {
  public:
   MaterializedViewManager(const Index& index) : index_{index} {};
 
-  void loadView(std::string name);
+  void loadView(const std::string& name);
 
-  // Load if not already loaded and get
-  const MaterializedView& getView();
+  // Load if not already loaded and return
+  MaterializedView getView(const std::string& name);
 };
 
 // TODO manager for the open permuations (should be kept in `Index` like
