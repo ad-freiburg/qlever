@@ -267,7 +267,8 @@ TEST(MatView, Reader) {
 
   AD_LOG_INFO << "load permutation" << std::endl;
   Permutation p{Permutation::Enum::SPO, allocator};
-  std::string onDiskBaseP = indexBasename + ".mv";
+  // std::string onDiskBaseP = indexBasename + ".mv";
+  std::string onDiskBaseP = indexBasename + ".view.geom";
   p.loadFromDisk(onDiskBaseP, [](Id) { return false; }, false);
   EXPECT_TRUE(p.isLoaded());
   AD_LOG_INFO << "get snapshot" << std::endl;
@@ -320,20 +321,14 @@ TEST(MatView, Reader) {
 }
 
 TEST(MatView, Writer2) {
-  std::string indexBasename = "osm-andorra";
   qlever::EngineConfig config;
-  config.baseName_ = indexBasename;
-  std::string memoryLimitStr = "16GB";
-  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
+  config.baseName_ = "osm-andorra";
   qlever::Qlever qlv{config};
-
-  AD_LOG_INFO << "Started. " << std::endl;
-
-  AD_LOG_INFO << "Plan " << std::endl;
   auto qp = qlv.parseAndPlanQuery(
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
       "?x WHERE { ?a geo:hasGeometry ?b . ?b geo:asWKT ?c . VALUES ?g { 42 43 "
       "}  BIND (RAND() AS ?x) }");
+
   MaterializedViewWriter mvw{"geom", qp};
   mvw.writeViewToDisk();
 }
