@@ -181,8 +181,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           std::vector<ParsedQuery>&& updates,
-          const ad_utility::Timer& requestTimer,
-          SharedTimeTracer tracer,
+          const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);

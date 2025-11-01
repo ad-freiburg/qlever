@@ -1020,7 +1020,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, &tracer]() {
+       &plannedUpdate, tracer]() {
         tracer->endTrace("waitingForUpdateThread");
         json results = json::array();
         // TODO<qup42> We currently create a new snapshot after each update in
