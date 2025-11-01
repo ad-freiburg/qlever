@@ -742,6 +742,52 @@ TEST(RelationalExpression, VariableAndConstant) {
                                {B(true), B(true), U});
 }
 
+// _____________________________________________________________________________
+TEST(RelationalExpression, encodedIrisAndVocabIrisAreComparable) {
+  TestIndexConfig tic;
+  tic.turtleInput = "<1> <2> <3>";
+  tic.encodedIriManager =
+      EncodedIriManager{std::vector<std::string>{"prefix/"}};
+  auto* qec = getQec(std::move(tic));
+  auto makeTriple = [qec](std::string_view iriA, std::string_view iriB,
+                          bool expectedResult) {
+    auto toId = [qec](std::string_view iriString) {
+      return TripleComponent{iri(iriString)}
+          .toValueId(qec->getIndex().getVocab(),
+                     qec->getIndex().encodedIriManager())
+          .value();
+    };
+    return std::tuple{toId(iriA), toId(iriB), Id::makeFromBool(expectedResult)};
+  };
+
+  LocalVocab localVocab;
+  sparqlExpression::EvaluationContext context{
+      *qec,
+      VariableToColumnMap{},
+      IdTable{qec->getAllocator()},
+      qec->getAllocator(),
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      EvaluationContext::TimePoint::max()};
+
+  std::array testValues{
+      makeTriple("<1>", "<1>", true),
+      makeTriple("<1>", "<2>", false),
+      makeTriple("<prefix/1>", "<1>", false),
+      makeTriple("<prefix/2>", "<2>", false),
+  };
+
+  // The whole point of this unit test is to test these values.
+  ASSERT_EQ(std::get<0>(testValues.at(2)).getDatatype(), Datatype::EncodedVal);
+  ASSERT_EQ(std::get<0>(testValues.at(3)).getDatatype(), Datatype::EncodedVal);
+
+  for (const auto& [left, right, expected] : testValues) {
+    auto expression = makeExpression<EQ>(left, right);
+    auto resultAsVariant = expression.evaluate(&context);
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<Id>(expected));
+  }
+}
+
 TEST(RelationalExpression, VariableAndVariable) {
   auto ints = Variable{"?ints"};
   auto doubles = Variable{"?doubles"};
@@ -857,8 +903,6 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
                                     {{{2, 3}}});
 }
-
-TEST(RelationalExpression, InExpression) {}
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto makeInt = [](int i) {
