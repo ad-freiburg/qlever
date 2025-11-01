@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
@@ -33,13 +34,16 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     std::optional<MaterializedView> scanView)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
+      scanView_(scanView),
+      emptyLocatedTriplesSnapshot_(makeEmptyLocatedTriplesSnapshot()),
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
@@ -64,6 +68,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
   for (size_t i = 3 - numVariables_; i < permutedTriple.size(); ++i) {
     AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
   }
+
+  //
+  if (scanView_.has_value()) {
+    AD_CORRECTNESS_CHECK(scanView.value().getPermutation()->permutation() ==
+                         permutation);
+  }
 }
 
 // _____________________________________________________________________________
@@ -73,13 +83,16 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     std::optional<MaterializedView> scanView)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
+      scanView_{std::move(scanView)},
+      emptyLocatedTriplesSnapshot_(makeEmptyLocatedTriplesSnapshot()),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
@@ -246,6 +259,7 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
+  // scanSpecAndBlocks_.blockMetadata_.size()
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
@@ -267,6 +281,12 @@ Result IndexScan::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 const Permutation& IndexScan::getScanPermutation() const {
+  if (scanView_.has_value()) {
+    if (!emptyLocatedTriplesSnapshot_.has_value()) {
+      makeEmptyLocatedTriplesSnapshot();
+    }
+    return *scanView_->getPermutation();
+  }
   return getIndex().getImpl().getPermutation(permutation_);
 }
 
@@ -296,6 +316,7 @@ size_t IndexScan::getCostEstimate() {
 void IndexScan::determineMultiplicities() {
   multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
+    // TODO handle materialized view
     if (numVariables_ == 0) {
       return {};
     } else if (numVariables_ == 1) {

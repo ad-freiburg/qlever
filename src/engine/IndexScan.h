@@ -7,7 +7,10 @@
 
 #include <string>
 
+#include "engine/MaterializedView.h"
 #include "engine/Operation.h"
+#include "index/DeltaTriples.h"
+#include "util/Exception.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -26,6 +29,13 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+
+  // this needs to be initialized before `scanSpecAndBlocks_`!
+  std::optional<MaterializedView> scanView_;
+  // this needs to be initialized before `scanSpecAndBlocks_` and after
+  // `scanView_`!
+  std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
+
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
   size_t numVariables_;
@@ -49,7 +59,8 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
-            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
+            std::optional<MaterializedView> scanView = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -58,7 +69,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            std::optional<MaterializedView> scanView = std::nullopt);
 
   ~IndexScan() override = default;
 
@@ -268,6 +280,28 @@ class IndexScan final : public Operation {
       }
       return std::move(table);
     };
+  }
+
+  std::optional<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot()
+      const {
+    if (!scanView_.has_value()) {
+      return std::nullopt;
+    }
+    LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
+    emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
+        .setOriginalMetadata(
+            scanView_.value().getPermutation()->metaData().blockDataShared());
+    LocalVocab emptyVocab;
+    return LocatedTriplesSnapshot{emptyLocatedTriples,
+                                  emptyVocab.getLifetimeExtender(), 0};
+  }
+
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
+    if (scanView_.has_value()) {
+      AD_CORRECTNESS_CHECK(emptyLocatedTriplesSnapshot_.has_value());
+      return emptyLocatedTriplesSnapshot_.value();
+    }
+    return _executionContext->locatedTriplesSnapshot();
   }
 
  public:
