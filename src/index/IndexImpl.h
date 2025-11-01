@@ -555,6 +555,7 @@ class IndexImpl {
   createPermutationPairImpl(size_t numColumns, const std::string& fileName1,
                             const std::string& fileName2, T&& sortedTriples,
                             Permutation::KeyOrder permutation,
+                            ad_utility::MemorySize twinRelationSorterMemory,
                             Callbacks&&... perTripleCallbacks);
 
   // _______________________________________________________________________
@@ -575,6 +576,7 @@ class IndexImpl {
   [[nodiscard]] size_t createPermutationPair(
       size_t numColumns, SortedTriplesType&& sortedTriples,
       const Permutation& p1, const Permutation& p2,
+      ad_utility::MemorySize twinRelationSorterMemory,
       CallbackTypes&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
@@ -591,6 +593,7 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(size_t numColumns, T&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
+                     ad_utility::MemorySize twinRelationSorterMemory,
                      Callbacks&&... perTripleCallbacks);
 
   void openTextFileHandle();
@@ -698,12 +701,14 @@ class IndexImpl {
   CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
           size_t numColumns, BlocksOfTriples sortedTriples,
+          ad_utility::MemorySize twinRelationSorterMemory,
           NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   CPP_template(typename... NextSorter)(requires(
       sizeof...(NextSorter) <=
       1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               ad_utility::MemorySize twinRelationSorterMemory,
                                NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
@@ -716,12 +721,15 @@ class IndexImpl {
                1)) void createPSOAndPOSImpl(size_t numColumns,
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
+                                            ad_utility::MemorySize
+                                                twinRelationSorterMemory,
                                             NextSorter&&... nextSorter);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(
       sizeof...(NextSorter) <=
       1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               ad_utility::MemorySize twinRelationSorterMemory,
                                NextSorter&&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
