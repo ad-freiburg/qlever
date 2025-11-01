@@ -90,7 +90,9 @@ class stream_generator_promise {
   // every bit of `value` is written, then the coroutine will be resumed.
   suspend_sometimes yield_value(std::string_view value) noexcept {
     if (isBufferLargeEnough(value)) {
-      std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
+      if (!value.empty()) {
+        std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
+      }
       currentIndex_ += value.size();
       overflow_ = {};
       // Only suspend if we reached the maximum capacity exactly.
