@@ -482,12 +482,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery,
-       this](std::vector<ParsedQuery> operations, std::string operationName,
-             const std::string operationString,
-             std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string msg,
-             SharedTimeTracer tracer) -> Awaitable<void> {
+       &requestTimer, &plannedQuery, this](
+          std::vector<ParsedQuery> operations, std::string operationName,
+          const std::string operationString,
+          std::function<bool(const ParsedQuery&)> expectedOperation,
+          const std::string msg, SharedTimeTracer tracer) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -524,19 +523,20 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
         &index_.encodedIriManager(), query.query_, query.datasetClauses_);
-    SharedTimeTracer dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
+    auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
-        "following update was sent instead of an query: ", dummy);
+        "following update was sent instead of an query: ",
+        dummy);
   };
   auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
-    SharedTimeTracer tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
         index().getBlankNodeManager(), &index().encodedIriManager(),
@@ -552,12 +552,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
        this](GraphStoreOperation operation) -> Awaitable<void> {
-        SharedTimeTracer tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
-        tracer->beginTrace("parsing");
-        std::vector<ParsedQuery> parsedOperations =
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    tracer->beginTrace("parsing");
+    std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request, index_);
-        tracer->endTrace("parsing");
+    tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
@@ -1005,8 +1005,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer,
-        SharedTimeTracer tracer,
+        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
@@ -1051,11 +1050,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     tracer->beginTrace("processUpdateImpl");
                     auto res = this->processUpdateImpl(plannedUpdate.value(),
                                                        cancellationHandle,
-                                                       deltaTriples, *tracer.get());
+                                                       deltaTriples, *tracer);
                     tracer->endTrace("processUpdateImpl");
                     return res;
                   },
-                  true, *tracer.get());
+                  true, *tracer);
           tracer->endTrace("execution");
 
           tracer->endTrace("update");
