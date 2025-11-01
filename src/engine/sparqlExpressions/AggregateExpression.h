@@ -19,7 +19,12 @@ namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
 // `AggregateExpression` if there is nothing to be done on the final result.
-inline auto identity = [](auto&& result, size_t) { return AD_FWD(result); };
+struct Identity {
+  template <typename T>
+  auto operator()(T&& result, size_t) const {
+    return AD_FWD(result);
+  }
+};
 
 namespace detail {
 
@@ -46,11 +51,10 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
 // Class for a SPARQL expression that aggregates a given set of values to a
 // single value using `AggregateOperation`, and then applies `FinalOperation`.
 //
-// NOTE: The `FinalOperation` is typically the `identity` from above. One
+// NOTE: The `FinalOperation` is typically the `Identity` from above. One
 // exception is the `AvgExpression`, where the `FinalOperation` divides the
 // aggregated value (sum) by the number of elements.
-template <typename AggregateOperation,
-          typename FinalOperation = decltype(identity)>
+template <typename AggregateOperation, typename FinalOperation = Identity>
 class AggregateExpression : public SparqlExpression {
  public:
   // Create an aggregate expression from the given arguments. For example, for
@@ -102,15 +106,14 @@ template <typename Function, typename ValueGetter>
 using AGG_EXP = AggregateExpression<
     Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
-// Helper function that for a given `NumericOperation` with numeric arguments
+// Helper struct that for a given `NumericOperation` with numeric arguments
 // and result (integer or floating points), returns the corresponding function
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
-inline auto makeNumericExpressionForAggregate() {
-  return [](const auto&... args)
-             -> CPP_ret(NumericValue)(
-                 requires(concepts::same_as<std::decay_t<decltype(args)>,
-                                            NumericValue>&&...)) {
+struct NumericExpressionForAggregate {
+  template <typename... Args>
+  auto operator()(const Args&... args) const -> CPP_ret(NumericValue)(
+      requires(ad_utility::SimilarTo<Args, NumericValue>&&...)) {
     auto visitor = [](const auto&... t) -> NumericValue {
       if constexpr ((... ||
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
@@ -120,17 +123,25 @@ inline auto makeNumericExpressionForAggregate() {
       }
     };
     return std::visit(visitor, args...);
-  };
+  }
+};
+
+template <typename NumericOperation>
+inline auto makeNumericExpressionForAggregate() {
+  return NumericExpressionForAggregate<NumericOperation>{};
 }
 
 // Aggregate expression for COUNT.
 //
 // NOTE: For this expression, we have to override `getVariableForCount` for the
 // pattern trick.
-inline auto count = [](const auto& a, const auto& b) -> int64_t {
-  return a + b;
+struct Count {
+  template <typename T1, typename T2>
+  int64_t operator()(const T1& a, const T2& b) const {
+    return a + b;
+  }
 };
-using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
+using CountExpressionBase = AGG_EXP<Count, IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -147,24 +158,24 @@ class CountExpression : public CountExpressionBase {
 };
 
 // Aggregate expression for SUM.
-inline auto addForSum = makeNumericExpressionForAggregate<std::plus<>>();
-using SumExpressionBase = AGG_EXP<decltype(addForSum), NumericValueGetter>;
-class SumExpression : public AGG_EXP<decltype(addForSum), NumericValueGetter> {
+using AddForSum = NumericExpressionForAggregate<std::plus<>>;
+using SumExpressionBase = AGG_EXP<AddForSum, NumericValueGetter>;
+class SumExpression : public AGG_EXP<AddForSum, NumericValueGetter> {
   using SumExpressionBase::SumExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
 };
 
 // Aggregate expression for AVG.
-inline auto avgFinalOperation = [](const NumericValue& aggregation,
-                                   size_t numElements) {
-  return makeNumericExpressionForAggregate<std::divides<>>()(
-      aggregation, NumericValue{static_cast<double>(numElements)});
+struct AvgFinalOperation {
+  NumericValue operator()(const NumericValue& aggregation,
+                          size_t numElements) const {
+    return makeNumericExpressionForAggregate<std::divides<>>()(
+        aggregation, NumericValue{static_cast<double>(numElements)});
+  }
 };
 using AvgOperation =
-    Operation<2,
-              FunctionAndValueGetters<decltype(addForSum), NumericValueGetter>>;
-using AvgExpressionBase =
-    AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+    Operation<2, FunctionAndValueGetters<AddForSum, NumericValueGetter>>;
+using AvgExpressionBase = AggregateExpression<AvgOperation, AvgFinalOperation>;
 class AvgExpression : public AvgExpressionBase {
   using AvgExpressionBase::AvgExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
@@ -187,27 +198,27 @@ inline const auto compareIdsOrStrings =
 
 // Aggregate expression for MIN and MAX.
 template <valueIdComparators::Comparison comparison>
-inline const auto minMaxLambdaForAllTypes = CPP_template_lambda()(typename T)(
-    const T& a, const T& b,
-    const EvaluationContext* ctx)(requires SingleExpressionResult<T>) {
-  auto actualImpl = [ctx](const auto& x, const auto& y) {
-    return compareIdsOrStrings<comparison>(x, y, ctx);
-  };
-  if constexpr (ad_utility::isSimilar<T, Id>) {
-    return std::get<Id>(actualImpl(a, b));
-  } else {
-    // TODO<joka921> We should definitely move strings here.
-    return std::visit(actualImpl, a, b);
+struct MinMaxLambdaForAllTypes {
+  template <typename T>
+  auto operator()(const T& a, const T& b, const EvaluationContext* ctx) const
+      -> CPP_ret(T)(requires SingleExpressionResult<T>) {
+    auto actualImpl = [ctx](const auto& x, const auto& y) {
+      return compareIdsOrStrings<comparison>(x, y, ctx);
+    };
+    if constexpr (ad_utility::isSimilar<T, Id>) {
+      return std::get<Id>(actualImpl(a, b));
+    } else {
+      // TODO<joka921> We should definitely move strings here.
+      return std::visit(actualImpl, a, b);
+    }
   }
 };
-constexpr inline auto minLambdaForAllTypes =
-    minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
-constexpr inline auto maxLambdaForAllTypes =
-    minMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
-using MinExpressionBase =
-    AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;
-using MaxExpressionBase =
-    AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter>;
+using MinLambdaForAllTypes =
+    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
+using MaxLambdaForAllTypes =
+    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
+using MinExpressionBase = AGG_EXP<MinLambdaForAllTypes, ActualValueGetter>;
+using MaxExpressionBase = AGG_EXP<MaxLambdaForAllTypes, ActualValueGetter>;
 class MinExpression : public MinExpressionBase {
   using MinExpressionBase::MinExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
