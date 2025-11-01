@@ -142,6 +142,7 @@ class IndexImpl {
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+  size_t maxFilesPerBatch_ = MAX_NUM_FILES_FOR_DIRECT_MERGE;
 
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
@@ -274,6 +275,11 @@ class IndexImpl {
   // the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // Set the maximum number of files to merge per batch during vocabulary
+  // merging. If the number of partial vocabulary files exceeds this limit,
+  // two-stage merging is used to avoid hitting OS file descriptor limits.
+  void setMaxFilesPerBatch(size_t maxFiles) { maxFilesPerBatch_ = maxFiles; }
 
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
