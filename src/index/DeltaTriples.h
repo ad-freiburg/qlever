@@ -170,14 +170,12 @@ class DeltaTriples {
   }
   DeltaTriplesCount getCounts() const;
 
-  // Insert triples. The block metadata must be updated using
-  // `updateAugmentedMetadata` before the next query.
+  // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples. The block metadata must be updated using
-  // `updateAugmentedMetadata` before the next query.
+  // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
@@ -204,8 +202,7 @@ class DeltaTriples {
       Permutation::Enum permutation,
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
 
-  // Update the block metadata. Must be called after an update before the next
-  // query.
+  // Update the block metadata.
   void updateAugmentedMetadata();
 
  private:
