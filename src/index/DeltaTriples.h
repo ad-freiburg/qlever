@@ -276,6 +276,7 @@ class DeltaTriplesManager {
   template <typename ReturnType>
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
                     bool writeToDiskAfterRequest = true,
+                    bool updateMetadataAfterRequest = true,
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 

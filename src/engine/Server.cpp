@@ -1063,7 +1063,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     tracer.endTrace("processUpdateImpl");
                     return res;
                   },
-                  true, tracer);
+                  true, true, tracer);
           tracer.endTrace("execution");
 
           tracer.endTrace("update");

@@ -249,13 +249,15 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer& tracer) {
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer& tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
   tracer.beginTrace("acquiringDeltaTriplesWriteLock");
   return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest,
+                                      updateMetadataAfterRequest,
                                       &tracer](DeltaTriples& deltaTriples) {
     auto updateSnapshot = [this, &deltaTriples] {
       auto newSnapshot = deltaTriples.getSnapshot();
@@ -275,19 +277,23 @@ ReturnType DeltaTriplesManager::modify(
       updateSnapshot();
       tracer.endTrace("snapshotCreation");
     };
+    auto updateMetadata = [&tracer, &deltaTriples,
+                           updateMetadataAfterRequest]() {
+      if (updateMetadataAfterRequest) {
+        tracer.beginTrace("updateMetadata");
+        deltaTriples.updateAugmentedMetadata();
+        tracer.endTrace("updateMetadata");
+      }
+    };
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
       function(deltaTriples);
-      tracer.beginTrace("updateMetadata");
-      deltaTriples.updateAugmentedMetadata();
-      tracer.endTrace("updateMetadata");
+      updateMetadata();
       writeAndUpdateSnapshot();
     } else {
       ReturnType returnValue = function(deltaTriples);
-      tracer.beginTrace("updateMetadata");
-      deltaTriples.updateAugmentedMetadata();
-      tracer.endTrace("updateMetadata");
+      updateMetadata();
       writeAndUpdateSnapshot();
       return returnValue;
     }
@@ -296,13 +302,15 @@ ReturnType DeltaTriplesManager::modify(
 // Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
-    ad_utility::timer::TimeTracer&);
+    bool updateMetadataAfterRequest, ad_utility::timer::TimeTracer&);
 template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
     const std::function<UpdateMetadata(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
+    bool writeToDiskAfterRequest, bool updateMetadataAfterRequest,
+    ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

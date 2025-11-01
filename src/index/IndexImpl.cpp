@@ -928,29 +928,28 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   };
 
   // Load the permutations and register the original metadata for the delta
-  // triples. We only register the metadata as a block after loading all
-  // permutations, because `modify` updates the metadata and we would get
-  // warnings about missing metadata otherwise.
+  // triples.
   // TODO<joka921> We could delegate the setting of the metadata to the
   // `Permutation`class, but we first have to deal with The delta triples for
   // the additional permutations.
   // The setting of the metadata doesn't affect the contents of the delta
   // triples, so we don't need to call `writeToDisk`, therefore the second
   // argument to `modify` is `false`.
-  auto setOriginalMetadataFor = [this](const auto&... ps) {
+  auto setMetadata = [this](const Permutation& p) {
     deltaTriplesManager().modify<void>(
-        [&ps...](DeltaTriples& deltaTriples) {
-          (deltaTriples.setOriginalMetadata(ps.permutation(),
-                                            ps.metaData().blockDataShared()),
-           ...);
+        [&p](DeltaTriples& deltaTriples) {
+          deltaTriples.setOriginalMetadata(p.permutation(),
+                                           p.metaData().blockDataShared());
         },
-        false);
+        false, false);
   };
 
-  auto load = [this, &isInternalId](Permutation& permutation,
-                                    bool loadInternalPermutation = false) {
+  auto load = [this, &isInternalId, &setMetadata](
+                  Permutation& permutation,
+                  bool loadInternalPermutation = false) {
     permutation.loadFromDisk(onDiskBase_, isInternalId,
                              loadInternalPermutation);
+    setMetadata(permutation);
   };
 
   load(pso_, true);
@@ -960,13 +959,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     load(osp_);
     load(spo_);
     load(sop_);
-    setOriginalMetadataFor(pso_, pos_, ops_, osp_, spo_, sop_);
   } else {
     AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "
            "with predicate variables will therefore not work"
         << std::endl;
-    setOriginalMetadataFor(pso_, pos_);
   }
 
   // We have to load the patterns first to figure out if the patterns were built
