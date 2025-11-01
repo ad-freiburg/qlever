@@ -247,10 +247,6 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
   }
 
   tracer.endTrace("adding");
-  tracer.beginTrace("updateMetadata");
-  updateAugmentedMetadata();
-  tracer.endTrace("updateMetadata");
-
   return handles;
 }
 

@@ -202,6 +202,9 @@ class DeltaTriples {
       Permutation::Enum permutation,
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
 
+  // Update the block metadata.
+  void updateAugmentedMetadata();
+
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
@@ -270,6 +273,7 @@ class DeltaTriplesManager {
   template <typename ReturnType>
   ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
                     bool writeToDiskAfterRequest = true,
+                    bool updateMetadataAfterRequest = true,
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
