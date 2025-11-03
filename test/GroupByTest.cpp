@@ -2114,8 +2114,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
-    EXPECT_THAT(optional, ::testing::Optional(makeIdTableFromVector(
-                              {{V(6), I(1)}, {V(7), I(2)}, {V(19), I(5)}})));
+    EXPECT_THAT(optional,
+                optionalHasTable({{V(6), I(1)}, {V(7), I(2)}, {V(19), I(5)}}));
   }
   {
     auto clone = xyzScanSortedByX->clone();
@@ -2124,8 +2124,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
                         std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
-    EXPECT_THAT(optional, ::testing::Optional(makeIdTableFromVector(
-                              {{V(6), I(0)}, {V(7), I(0)}, {V(19), I(0)}})));
+    EXPECT_THAT(optional,
+                optionalHasTable({{V(6), I(0)}, {V(7), I(0)}, {V(19), I(0)}}));
   }
 }
 
