@@ -441,19 +441,30 @@ TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
       absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
   testMetricArea<Coll>(addDatatype(collection3), 0, 0);
 
-  // Collection containing a multipolygon
+  // Collection containing a multipolygon and a point to be ignored
   auto collection4 =
       absl::StrCat("GEOMETRYCOLLECTION(",
-                   removeDatatype(litRealWorldMultiPolygonIntersecting), ")");
+                   removeDatatype(litRealWorldMultiPolygonIntersecting),
+                   ", POINT(1.0 2.0))");
   testMetricArea<Coll>(addDatatype(collection4),
                        areaRealWorldMultiPolygonIntersecting,
                        numRealWorldMultiPolygonIntersecting);
 
-  // Collection containing a nested collection
-  auto collection5 = absl::StrCat("GEOMETRYCOLLECTION(", collection4, ")");
+  // Collection containing a nested collection and a further point
+  auto collection5 =
+      absl::StrCat("GEOMETRYCOLLECTION(POINT(3 4),", collection4, ")");
   testMetricArea<Coll>(addDatatype(collection5),
                        areaRealWorldMultiPolygonIntersecting,
                        numRealWorldMultiPolygonIntersecting);
+
+  // The same case of a nested collection but the collection is not flattened
+  // during parsing
+  {
+    Coll inner = getGeometryOfTypeOrThrow<Coll>(addDatatype(collection4));
+    Coll outer{DAnyGeometry{DPoint{3, 4}}, DAnyGeometry{inner}};
+    auto expected = areaRealWorldMultiPolygonIntersecting;
+    EXPECT_NEAR(computeMetricArea(outer), expected, 0.01 * expected);
+  }
 }
 
 // ____________________________________________________________________________

@@ -89,8 +89,6 @@ class Permutation {
   using MetadataAndBlocks =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds;
 
-  using IdTableGenerator = CompressedRelationReader::IdTableGenerator;
-
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
   // - The result is returned as a lazy generator of blocks.
@@ -108,7 +106,7 @@ class Permutation {
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
-  IdTableGenerator lazyScan(
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,

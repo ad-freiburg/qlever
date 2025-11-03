@@ -74,8 +74,8 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   try {
     area = computeMetricArea(parsed.value());
   } catch (const InvalidPolygonError&) {
-    AD_LOG_WARN << "Could not compute area of WKT literal `" << wkt << "`."
-                << std::endl;
+    AD_LOG_DEBUG << "Could not compute area of WKT literal `" << wkt << "`."
+                 << std::endl;
   }
 
   return GeometryInfo{type,      boundingBox.value(), centroid.value(),

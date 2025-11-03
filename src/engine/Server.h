@@ -46,7 +46,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool noAccessCheck = false, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -80,6 +80,7 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
@@ -299,6 +300,7 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+  FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
