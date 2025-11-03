@@ -119,15 +119,15 @@ ExecuteUpdate::transformTriplesTemplate(
     return std::get<Id>(defaultGraph);
   }();
   auto lookupGraph = [&defaultGraphIri, &variableColumns, &lookupTc](
-                         const SparqlTripleSimpleWithGraph::Graph& graph)
-      -> IdOrVariableIndex {
+                         const SparqlTripleSimpleWithGraph::Graph& graph) {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
               return defaultGraphIri;
             },
-            [&lookupTc](const ad_utility::triple_component::Iri& iri)
-                -> IdOrVariableIndex { return lookupTc(TripleComponent(iri)); },
+            [&lookupTc](const ad_utility::triple_component::Iri& iri) {
+              return lookupTc(TripleComponent(iri));
+            },
             [&variableColumns](const Variable& var) -> IdOrVariableIndex {
               AD_CORRECTNESS_CHECK(variableColumns.contains(var));
               return variableColumns.at(var).columnIndex_;
@@ -197,8 +197,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   const auto& encodedIriManager = index.encodedIriManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns, &encodedIriManager,
-       &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
+      [&vocab, &variableColumns, &encodedIriManager, &result](
+          const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
                                      tripleTemplates);
@@ -215,11 +215,9 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   tracer.beginTrace("transforming");
   auto [toInsertTemplates, toInsert, localVocabInsert] =
-      prepareTemplateAndResultContainer(
-          std::move(graphUpdate.toInsert_.triples_));
+      prepareTemplateAndResultContainer(graphUpdate.toInsert_.triples_);
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
-      prepareTemplateAndResultContainer(
-          std::move(graphUpdate.toDelete_.triples_));
+      prepareTemplateAndResultContainer(graphUpdate.toDelete_.triples_);
   tracer.endTrace("transforming");
 
   tracer.beginTrace("resultInterpolation");
