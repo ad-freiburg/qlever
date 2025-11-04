@@ -1401,7 +1401,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const char* b = XSD_BOOLEAN_TYPE;
     // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
     // "-INF", which doesn't have a short form notation.
-    if (type == nullptr || type == i || type == d ||
+    if (type == nullptr || type == i ||
+        (type == d && ad_utility::contains(literal, ".")) ||
         (type == b && literal.length() > 1)) {
       return std::move(literal);
     } else {
