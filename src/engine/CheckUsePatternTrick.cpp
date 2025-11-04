@@ -64,11 +64,17 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
+    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
+                                               p::TextSearchQuery,
+                                               p::NamedCachedResult>) {
+      // For `MagicServiceQuery`s delegate to the nested graph patterns.
+      if (arg.childGraphPattern_.has_value()) {
+        return check(arg.childGraphPattern_.value());
+      }
+      return false;
     } else {
       static_assert(
-          ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
-                                p::SpatialQuery, p::TextSearchQuery, p::Load,
-                                p::NamedCachedResult>);
+          ad_utility::SameAsAny<T, p::TransPath, p::Describe, p::Load>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();

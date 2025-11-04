@@ -3912,3 +3912,34 @@ TEST(QueryPlanner, NamedCachedResult) {
   // contents etc. of cached queries.
   h::expect(query, h::ExplicitIdTableOperation(3), qec);
 }
+
+// Regression tests for https://github.com/ad-freiburg/qlever/issues/2483
+TEST(QueryPlanner, PatternTrickWithMagicServiceQueries) {
+  h::expect(R"(
+PREFIX textSearch: <https://qlever.cs.uni-freiburg.de/textSearch/>
+SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
+  ?s ?p ?e
+  SERVICE textSearch: {
+    ?t textSearch:contains [ textSearch:word "olympic" ] .
+    ?t textSearch:contains [ textSearch:entity ?e ] .
+  }
+}
+GROUP BY ?p
+)",
+            h::_);
+
+  h::expect(R"(
+PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
+  ?s ?p ?e .
+  ?x ?y ?z
+  SERVICE qlss: {
+    _:config qlss:left ?e ;
+             qlss:right ?z ;
+             qlss:maxDistance 500 .
+  }
+}
+GROUP BY ?p
+)",
+            h::_);
+}
