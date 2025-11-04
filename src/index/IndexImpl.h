@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
@@ -195,6 +196,8 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  MaterializedViewsManager materializedViews_;
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -269,6 +272,10 @@ class IndexImpl {
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  MaterializedViewsManager& materializedViewsManager() {
+    return materializedViews_;
+  }
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.
@@ -474,11 +481,11 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum permutation) const;
+  std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,

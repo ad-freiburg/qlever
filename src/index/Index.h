@@ -28,6 +28,7 @@ class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesSnapshot;
 class DeltaTriplesManager;
+class MaterializedViewsManager;
 
 class Index {
  private:
@@ -120,6 +121,10 @@ class Index {
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
+
+  // Get a reference to the `MaterializedViewsManager` of this `Index`.
+  MaterializedViewsManager& materializedViewsManager();
+  const MaterializedViewsManager& materializedViewsManager() const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
@@ -225,11 +230,11 @@ class Index {
 
   // _____________________________________________________________________________
   std::vector<float> getMultiplicities(
-      const TripleComponent& key, Permutation::Enum permutation,
+      const TripleComponent& key, const Permutation& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
-  std::vector<float> getMultiplicities(Permutation::Enum p) const;
+  std::vector<float> getMultiplicities(const Permutation& p) const;
 
   /**
    * @brief Perform a scan for one or two keys i.e. retrieve all YZ from the XYZ

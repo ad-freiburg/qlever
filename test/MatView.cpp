@@ -4,7 +4,7 @@
 #include <memory>
 
 #include "engine/IndexScan.h"
-#include "engine/MaterializedView.h"
+#include "engine/MaterializedViews.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/ValueId.h"
 #include "gmock/gmock.h"
@@ -347,7 +347,7 @@ TEST(MatView, Reader2) {
   ASSERT_EQ(osmId.getDatatype(), Datatype::VocabIndex);
   //-----------------------------------------------------
 
-  MaterializedViewManager m{tmpqec->getIndex()};
+  MaterializedViewsManager m{tmpqec->getIndex().getOnDiskBase()};
   auto view = m.getView("geom");
   auto p = view.getPermutation();
 

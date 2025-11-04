@@ -32,6 +32,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Load.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
@@ -61,6 +62,7 @@
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
@@ -860,6 +862,12 @@ auto QueryPlanner::seedWithScansAndText(
             " { ... }'. For more information, please see the QLever Wiki."));
       }
       pushPlan(plan);
+      continue;
+    }
+
+    if (ql::starts_with(input, MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET)) {
+      parsedQuery::MaterializedViewQuery config{node.triple_};
+      pushPlan(getMaterializedViewIndexScanPlan(config));
       continue;
     }
 
@@ -3006,6 +3014,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
+  } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
+    visitMaterializedViewQuery(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -3134,6 +3144,29 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
+    const parsedQuery::MaterializedViewQuery& viewQuery) {
+  const auto& viewManager = _qec->getIndex().materializedViewsManager();
+  if (!viewQuery.viewName_.has_value()) {
+    throw MaterializedViewConfigException(
+        "To read from a materialized view its name must be set in the "
+        "query configuration.");
+  }
+  auto view = viewManager.getView(viewQuery.viewName_.value());
+  auto scanTriple = view.makeScanConfig(viewQuery);
+  return makeSubtreePlan<IndexScan>(
+      _qec, Permutation::Enum::SPO, std::move(scanTriple),
+      IndexScan::Graphs::All(), std::nullopt, std::move(view));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
+    const parsedQuery::MaterializedViewQuery& viewQuery) {
+  candidatePlans_.push_back(
+      {planner_.getMaterializedViewIndexScanPlan(viewQuery)});
 }
 
 // _______________________________________________________________

@@ -323,11 +323,12 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
+      return idx.getMultiplicities(*getPermutedTriple()[0],
+                                   getScanPermutation(),
                                    locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(getScanPermutation());
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);

@@ -6,6 +6,7 @@
 
 #include "index/Index.h"
 
+#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -262,13 +263,13 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
-std::vector<float> Index::getMultiplicities(Permutation::Enum p) const {
+std::vector<float> Index::getMultiplicities(const Permutation& p) const {
   return pimpl_->getMultiplicities(p);
 }
 
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum p,
+    const TripleComponent& key, const Permutation& p,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return pimpl_->getMultiplicities(key, p, locatedTriplesSnapshot);
 }
@@ -317,4 +318,14 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 // ____________________________________________________________________________
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
+}
+
+// ____________________________________________________________________________
+const MaterializedViewsManager& Index::materializedViewsManager() const {
+  return pimpl_->materializedViewsManager();
+}
+
+// ____________________________________________________________________________
+MaterializedViewsManager& Index::materializedViewsManager() {
+  return pimpl_->materializedViewsManager();
 }

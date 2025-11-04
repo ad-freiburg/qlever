@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "engine/MaterializedView.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Operation.h"
 #include "index/DeltaTriples.h"
 #include "util/Exception.h"

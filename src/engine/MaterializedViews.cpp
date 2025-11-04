@@ -4,15 +4,21 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "engine/MaterializedView.h"
+#include "engine/MaterializedViews.h"
+
+#include <absl/strings/str_cat.h>
 
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "engine/QueryExecutionContext.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
+#include "parser/MaterializedViewQuery.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -21,6 +27,7 @@
 MaterializedViewWriter::MaterializedViewWriter(
     std::string name, qlever::Qlever::QueryPlan queryPlan)
     : name_{std::move(name)} {
+  MaterializedView::throwIfInvalidName(name);
   auto [qet, qec, parsedQuery] = queryPlan;
   AD_CORRECTNESS_CHECK(qet != nullptr);
   AD_CORRECTNESS_CHECK(qec != nullptr);
@@ -60,6 +67,13 @@ std::vector<ColumnIndex> MaterializedViewWriter::getIdTableColumnPermutation()
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewToDisk() {
+  // SPO comparator
+  using Comparator = SortTriple<0, 1, 2>;
+  // Sorter with a dynamic number of columns (template argument `NumStaticCols
+  // == 0`)
+  using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
+  using MetaData = IndexMetaDataMmap;
+
   auto columnPermutation = getIdTableColumnPermutation();
   size_t numCols = columnPermutation.size();
   auto filename = getFilenameBase();
@@ -174,8 +188,15 @@ void MaterializedViewWriter::writeViewToDisk() {
 // _____________________________________________________________________________
 MaterializedView::MaterializedView(std::string_view onDiskBase,
                                    std::string_view name)
-    : permutation_{std::make_shared<Permutation>(
-          Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())} {
+    : onDiskBase_{onDiskBase},
+      name_{name},
+      permutation_{std::make_shared<Permutation>(
+          Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())},
+      indexedColVariable_{"?dummy"}  // Is initialized from metadata later
+{
+  AD_CORRECTNESS_CHECK(onDiskBase != "",
+                       "The index base filename was not set.");
+  throwIfInvalidName(name);
   AD_LOG_INFO << "Loading materialized view " << name << " from disk..."
               << std::endl;
   auto filename = getFilenameBase(onDiskBase, name);
@@ -197,12 +218,16 @@ MaterializedView::MaterializedView(std::string_view onDiskBase,
 
   // Make variable to column map
   auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
+  AD_CORRECTNESS_CHECK(
+      columnNames.size() >= 4,
+      "Expected at least four columns in materialized view metadata");
   for (const auto& [index, columnName] :
        ::ranges::views::enumerate(columnNames)) {
     varToColMap_.insert({Variable{columnName},
                          {static_cast<ColumnIndex>(index),
                           ColumnIndexAndTypeInfo::PossiblyUndefined}});
   }
+  indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
   permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
@@ -216,15 +241,78 @@ std::shared_ptr<const Permutation> MaterializedView::getPermutation() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewManager::loadView(const std::string& name) {
+void MaterializedViewsManager::loadView(const std::string& name) const {
   if (loadedViews_.contains(name)) {
     return;
   }
-  loadedViews_.insert({name, MaterializedView{index_.getOnDiskBase(), name}});
+  loadedViews_.insert({name, MaterializedView{onDiskBase_, name}});
 };
 
 // _____________________________________________________________________________
-MaterializedView MaterializedViewManager::getView(const std::string& name) {
+MaterializedView MaterializedViewsManager::getView(
+    const std::string& name) const {
   loadView(name);
   return loadedViews_.at(name);
+}
+
+// _____________________________________________________________________________
+SparqlTripleSimple MaterializedView::makeScanConfig(
+    const parsedQuery::MaterializedViewQuery& viewQuery) const {
+  AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
+  if (viewQuery.childGraphPattern_.has_value()) {
+    throw MaterializedViewConfigException(
+        "A materialized view query may not have a child group graph pattern.");
+  }
+
+  if (!viewQuery.scanCol_.has_value()) {
+    throw MaterializedViewConfigException(
+        "You must set a variable, IRI or literal for the scan column of a "
+        "materialized view.");
+  }
+
+  auto s = viewQuery.scanCol_.value();
+  // TODO these placeholder variables need to be unique in case multiple
+  // materialized view queries are contained in one query
+  TripleComponent p{Variable{"?_internal_view_variable_p"}};
+  TripleComponent o{Variable{"?_internal_view_variable_o"}};
+  AdditionalScanColumns additionalCols;
+
+  // Assemble which columns should be bound to which variables
+  for (const auto& [viewVar, targetVar] : viewQuery.requestedVariables_) {
+    if (!varToColMap_.contains(viewVar)) {
+      throw MaterializedViewConfigException(absl::StrCat(
+          "The column '", viewVar.name(),
+          "' does not exist in the materialized view '", name_, "'."));
+    }
+    auto colIdx = varToColMap_.at(viewVar).columnIndex_;
+    if (colIdx == 1) {
+      p = targetVar;
+    } else if (colIdx == 2) {
+      o = targetVar;
+    } else {
+      AD_CORRECTNESS_CHECK(colIdx > 2);
+      additionalCols.emplace_back(colIdx, targetVar);
+    }
+  }
+
+  return {s, p, o, additionalCols};
+}
+
+namespace string_constants::detail {
+static constexpr auto validViewName = ctll::fixed_string{R"(^[a-zA-Z0-9\-]+$)"};
+}
+
+// _____________________________________________________________________________
+bool MaterializedView::isValidName(std::string_view name) {
+  return ctre::match<string_constants::detail::validViewName>(name);
+}
+
+// _____________________________________________________________________________
+void MaterializedView::throwIfInvalidName(std::string_view name) {
+  if (!MaterializedView::isValidName(name)) {
+    throw MaterializedViewConfigException(
+        absl::StrCat("'", name,
+                     "' is not a valid name for a materialized view. Only "
+                     "alphanumeric characters and hyphens are allowed."));
+  }
 }
