@@ -11,6 +11,7 @@
 #include "engine/MaterializedViews.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
+#include "util/Exception.h"
 
 namespace parsedQuery {
 
@@ -46,6 +47,8 @@ void MaterializedViewQuery::setViewName(const TripleComponent& object) {
     throw MaterializedViewConfigException(
         "Parameter <name> to materialized view query needs to be a literal");
   }
+  AD_CORRECTNESS_CHECK(!viewName_.has_value(),
+                       "Only one view name may be set.");
   viewName_ = asStringViewUnsafe(object.getLiteral().getContent());
 }
 
@@ -55,6 +58,8 @@ void MaterializedViewQuery::setScanCol(const TripleComponent& object) {
     throw MaterializedViewConfigException(
         "Parameter <scan-column> may not be undef.");
   }
+  AD_CORRECTNESS_CHECK(!scanCol_.has_value(),
+                       "Only one scan column may be set.");
   scanCol_ = object;
 }
 

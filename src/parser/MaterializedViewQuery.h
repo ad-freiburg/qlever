@@ -11,27 +11,30 @@
 
 namespace parsedQuery {
 
+// TODO
 struct MaterializedViewQuery : MagicServiceQuery {
  public:
   std::optional<std::string> viewName_;
   std::optional<TripleComponent> scanCol_;
   ad_utility::HashMap<Variable, Variable> requestedVariables_;
 
+  // Default constructor. If this is used, add configuration triples one-by-one
+  // using `addParameter`.
   MaterializedViewQuery() = default;
 
-  // Initialize using magic predicate
+  // Alternative: Initialize using magic predicate. No calls to `addParameter`
+  // are necessary in this case.
   explicit MaterializedViewQuery(const SparqlTriple& triple);
 
   void addParameter(const SparqlTriple& triple) override;
 
  private:
+  // Internal helpers for shared code between `addParameter` and magic predicate
+  // constructor
   void setViewName(const TripleComponent& object);
   void setScanCol(const TripleComponent& object);
   void addPayloadVariable(const Variable& column,
                           const TripleComponent& object);
-
-  // TODO support special predicate "[Scan for index column Var or Lit/Iri]
-  // matView:nameOfView:nameOfReqCol ?outVar"
 };
 
 }  // namespace parsedQuery
