@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
@@ -19,6 +20,7 @@
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/TripleComponent.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -66,7 +68,9 @@ std::vector<ColumnIndex> MaterializedViewWriter::getIdTableColumnPermutation()
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewToDisk() {
+void MaterializedViewWriter::writeViewToDisk(
+    ad_utility::MemorySize memoryLimit,
+    ad_utility::AllocatorWithLimit<Id> allocator) {
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
   // Sorter with a dynamic number of columns (template argument `NumStaticCols
@@ -88,9 +92,6 @@ void MaterializedViewWriter::writeViewToDisk() {
                        "trying to index might be cached - please clear the "
                        "cache and try again.");
   auto generator = result->idTables();
-
-  auto memoryLimit = ad_utility::MemorySize::gigabytes(64);   // TODO
-  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();  // TODO
 
   // Sort results externally
   AD_LOG_INFO << "Sorting result rows from query by first column..."
@@ -202,13 +203,19 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
+  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
+  if (!std::filesystem::exists(metadataFilename)) {
+    throw std::runtime_error(
+        absl::StrCat("The materialized view '", name_, "' does not exist."));
+  }
+
   // Read metadata from JSON
   nlohmann::json viewInfoJson;
   {
-    std::ifstream viewInfoFile(filename + ".viewinfo.json");
+    std::ifstream viewInfoFile{metadataFilename};
     if (!viewInfoFile) {
       throw std::runtime_error(
-          absl::StrCat("Cannot read ", filename, ".viewinfo.json"));
+          absl::StrCat("Error reading ", filename, ".viewinfo.json"));
     }
     viewInfoFile >> viewInfoJson;
   }

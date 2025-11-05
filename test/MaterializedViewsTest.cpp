@@ -8,8 +8,6 @@
 #include <gtest/gtest.h>
 
 #include "./MaterializedViewsTestHelpers.h"
-#include "./util/GTestHelpers.h"
-#include "util/Exception.h"
 
 namespace {
 
@@ -68,6 +66,66 @@ TEST_F(MaterializedViewsTest, Basic) {
     auto res = qet->getResult(false);
     EXPECT_EQ(res->idTable().numRows(), 1);
   }
+
+  // Wrong queries
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          ?s view:testView1:blabliblu ?x .
+        }
+      )"),
+      ::testing::HasSubstr("The column '?blabliblu' does not exist in the "
+                           "materialized view 'testView1'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          ?s view:testViewXYZ:g ?x .
+        }
+      )"),
+      ::testing::HasSubstr(
+          "The materialized view 'testViewXYZ' does not exist"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view: {
+            _:config view:name "testView1" ;
+                    view:payload-g ?x .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "You must set a variable, IRI or literal for the scan column of a "
+          "materialized view"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view: {
+            _:config view:scan-column ?s ;
+                    view:payload-g ?x .
+          }
+        }
+      )"),
+      ::testing::HasSubstr(
+          "To read from a materialized view its name must be set in the "
+          "query configuration"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().query(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          SERVICE view: {
+            _:config view:name "testView1" ;
+                    view:scan-column ?s ;
+                    view:payload-g ?x .
+            { ?s ?p ?o }
+          }
+        }
+      )"),
+      ::testing::HasSubstr("A materialized view query may not have a child "
+                           "group graph pattern"));
 }
 
 // _____________________________________________________________________________
@@ -80,6 +138,16 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       qlv().writeMaterializedView("Something Out!of~the.ordinary",
                                   "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }"),
       ::testing::HasSubstr("not a valid name for a materialized view"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().writeMaterializedView(
+          "testView2",
+          "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }"),
+      ::testing::HasSubstr("Materialized views cannot contain entries from a "
+                           "local vocabulary currently."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().loadMaterializedView("doesNotExist"),
+      ::testing::HasSubstr(
+          "The materialized view 'doesNotExist' does not exist."));
 }
 
 }  // namespace

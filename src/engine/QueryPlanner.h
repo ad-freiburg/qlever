@@ -610,7 +610,8 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node,
                               TextLimitMap& textLimits) const;
 
-  //
+  // Given a `MaterializedViewQuery` construct a `SubtreePlan` for an
+  // `IndexScan` operation on the requested materialized view.
   SubtreePlan getMaterializedViewIndexScanPlan(
       const parsedQuery::MaterializedViewQuery& viewQuery);
 

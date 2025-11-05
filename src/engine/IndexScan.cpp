@@ -69,7 +69,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
   }
 
-  //
+  // If scanning a view is requested, check that the permutation matches that of
+  // the view.
   if (scanView_.has_value()) {
     AD_CORRECTNESS_CHECK(scanView.value().getPermutation()->permutation() ==
                          permutation);
@@ -259,7 +260,6 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  // scanSpecAndBlocks_.blockMetadata_.size()
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
       locatedTriplesSnapshot(), getLimitOffset());
@@ -281,6 +281,8 @@ Result IndexScan::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 const Permutation& IndexScan::getScanPermutation() const {
+  // If a materialized view is set, scan its permutation and use an empty
+  // `LocatedTriplesSnapshot` on the metadata of this permutation.
   if (scanView_.has_value()) {
     if (!emptyLocatedTriplesSnapshot_.has_value()) {
       makeEmptyLocatedTriplesSnapshot();
@@ -316,7 +318,6 @@ size_t IndexScan::getCostEstimate() {
 void IndexScan::determineMultiplicities() {
   multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
-    // TODO handle materialized view
     if (numVariables_ == 0) {
       return {};
     } else if (numVariables_ == 1) {
@@ -777,4 +778,29 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::optional<LocatedTriplesSnapshot>
+IndexScan::makeEmptyLocatedTriplesSnapshot() const {
+  if (!scanView_.has_value()) {
+    return std::nullopt;
+  }
+  LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
+  emptyLocatedTriples[static_cast<size_t>(
+                          scanView_.value().getPermutation()->permutation())]
+      .setOriginalMetadata(
+          scanView_.value().getPermutation()->metaData().blockDataShared());
+  LocalVocab emptyVocab;
+  return LocatedTriplesSnapshot{emptyLocatedTriples,
+                                emptyVocab.getLifetimeExtender(), 0};
+}
+
+// _____________________________________________________________________________
+const LocatedTriplesSnapshot& IndexScan::locatedTriplesSnapshot() const {
+  if (scanView_.has_value()) {
+    AD_CORRECTNESS_CHECK(emptyLocatedTriplesSnapshot_.has_value());
+    return emptyLocatedTriplesSnapshot_.value();
+  }
+  return _executionContext->locatedTriplesSnapshot();
 }

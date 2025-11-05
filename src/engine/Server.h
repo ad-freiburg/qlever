@@ -320,7 +320,9 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  //
+  // Given a name and query, compute the query result and write a new
+  // materialized view of this result to disk. This assumes that the access
+  // token has already been checked.
   void writeMaterializedView(
       std::string name,
       const ad_utility::url_parser::sparqlOperation::Query& query,

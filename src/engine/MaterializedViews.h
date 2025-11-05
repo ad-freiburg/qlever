@@ -12,17 +12,25 @@
 #include "parser/MaterializedViewQuery.h"
 #include "util/HashMap.h"
 
+// Forward declarations
 class QueryExecutionContext;
 class QueryExecutionTree;
 
+// For the future, materialized views save their version. If we change something
+// about the way materialized views are stored, we can break the existing ones
+// cleanly without breaking the entire index format.
 static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 
+// A custom exception that will be thrown for all configuration errors while
+// reading or writing materialized views.
 class MaterializedViewConfigException : public std::runtime_error {
   // Constructors have to be explicitly inherited
   using std::runtime_error::runtime_error;
 };
 
-// TODO
+// The `MaterializedViewWriter` can be used to write a new materialized view to
+// disk, given an already planned query. The query will be executed lazily and
+// the results will be written to the view.
 class MaterializedViewWriter {
  private:
   std::string name_;
@@ -33,20 +41,28 @@ class MaterializedViewWriter {
   using QueryPlan = qlever::Qlever::QueryPlan;
 
  public:
-  // TODO enforce sane alphanum+dash view names
+  // Initialize a writer given the base filename of the view and a query plan.
+  // The view will be written to files prefixed with the index basename followed
+  // by the view name.
   MaterializedViewWriter(std::string name, QueryPlan queryPlan);
 
   std::string getFilenameBase() const;
 
-  // TODO
+  // Computes the column ordering how the `IdTable`s from executing the
+  // `QueryExecutionTree` must be permuted to match the requested target columns
+  // and column ordering.
   std::vector<ColumnIndex> getIdTableColumnPermutation() const;
 
-  // Num cols and possibly col names should also be stored somewhere + maybe
-  // list of views
-  void writeViewToDisk();
+  // Actually computes and externally sorts the query result and writes the view
+  // (SPO permutation and metadata) to disk.
+  void writeViewToDisk(ad_utility::MemorySize memoryLimit =
+                           ad_utility::MemorySize::gigabytes(64),
+                       ad_utility::AllocatorWithLimit<Id> allocator =
+                           ad_utility::makeUnlimitedAllocator<Id>());
 };
 
-// TODO
+// This class represents a single loaded `MaterializedView`. It can be used for
+// `IndexScan`s.
 class MaterializedView {
  private:
   std::string onDiskBase_;
@@ -91,7 +107,8 @@ class MaterializedView {
           "?_internal_view_variable_o"}) const;
 };
 
-// TODO
+// The `MaterializedViewsManager` is part of the `Index` and is used to manage
+// the currently loaded `MaterializedViews` in a `Server` or `Qlever` instance.
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
@@ -106,11 +123,12 @@ class MaterializedViewsManager {
     onDiskBase_ = onDiskBase;
   };
 
-  // TODO const -> we don't want to break the const-ness of `Index` everywhere
-  // just for this loading of views. The views themselves aren't changed.
+  // Since we don't want to break the const-ness of `Index` everywhere
+  // just for the loading of views, `loadedViews_` is mutable. Note that this is
+  // okay, because the views themselves aren't changed (only loaded on-demand).
   void loadView(const std::string& name) const;
 
-  // Load if not already loaded and return
+  // Load the given view if it is not already loaded and return it.
   MaterializedView getView(const std::string& name) const;
 };
 

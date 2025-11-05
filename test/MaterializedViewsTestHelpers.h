@@ -12,7 +12,9 @@
 
 #include <fstream>
 
+#include "./util/GTestHelpers.h"
 #include "engine/MaterializedViews.h"
+#include "util/Exception.h"
 
 namespace materializedViewsTestHelpers {
 

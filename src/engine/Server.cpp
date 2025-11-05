@@ -455,7 +455,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     logCommand(cmd, "write materialized view");
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
         parameters, "view-name");
-    AD_CONTRACT_CHECK(name.has_value());
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Writing a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     auto query = std::visit(
@@ -471,18 +473,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           }
         },
         parsedHttpRequest.operation_);
-    // TODO<ullingerc> Canellation, time limit, coroutine?
-    AD_CONTRACT_CHECK(name.value() != "");
+    // TODO<ullingerc> Address several improvements here: Support for
+    // cancellation? coroutine?
+    AD_CONTRACT_CHECK(name.value() != "",
+                      "The name for the view may not be empty");
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    AD_CONTRACT_CHECK(timeLimit.has_value());
+    AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
+
     writeMaterializedView(name.value(), query, requestTimer, cancellationHandle,
                           timeLimit.value());
+
     nlohmann::json json{{"materialized-view-written", name.value()}};
     response = createJsonResponse(json, request);
-    parsedHttpRequest.operation_ =
-        None{};  // Prevent regular query processing by removing the query from
-                 // the request
+
+    // Prevent regular query processing by removing the query from the request
+    parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
     requireValidAccessToken("load-materialized-view");
     logCommand(cmd, "explicitly load materialized view");

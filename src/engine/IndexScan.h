@@ -30,10 +30,10 @@ class IndexScan final : public Operation {
   TripleComponent object_;
   Graphs graphsToFilter_;
 
-  // this needs to be initialized before `scanSpecAndBlocks_`!
+  // this needs to be initialized before `scanSpecAndBlocks_`
   std::optional<MaterializedView> scanView_;
   // this needs to be initialized before `scanSpecAndBlocks_` and after
-  // `scanView_`!
+  // `scanView_`
   std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
 
   ScanSpecAndBlocks scanSpecAndBlocks_;
@@ -281,27 +281,14 @@ class IndexScan final : public Operation {
     };
   }
 
-  std::optional<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot()
-      const {
-    if (!scanView_.has_value()) {
-      return std::nullopt;
-    }
-    LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
-    emptyLocatedTriples[static_cast<size_t>(Permutation::SPO)]
-        .setOriginalMetadata(
-            scanView_.value().getPermutation()->metaData().blockDataShared());
-    LocalVocab emptyVocab;
-    return LocatedTriplesSnapshot{emptyLocatedTriples,
-                                  emptyVocab.getLifetimeExtender(), 0};
-  }
+  // Helper for scans on materialized views to retrieve an empty
+  // `LocatedTriplesSnapshot` on the correct permuation metadata.
+  std::optional<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot() const;
 
-  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
-    if (scanView_.has_value()) {
-      AD_CORRECTNESS_CHECK(emptyLocatedTriplesSnapshot_.has_value());
-      return emptyLocatedTriplesSnapshot_.value();
-    }
-    return _executionContext->locatedTriplesSnapshot();
-  }
+  // Use the empty `LocatedTriplesSnapshot` for scans on materialized views and
+  // the normal `LocatedTriplesSnapshot` from the `QueryExecutionContext` in all
+  // other cases.
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override;
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>>

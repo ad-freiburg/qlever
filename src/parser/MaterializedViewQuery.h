@@ -11,7 +11,11 @@
 
 namespace parsedQuery {
 
-// TODO
+// A `MagicServiceQuery` for performing a custom `IndexScan` on a
+// `MaterializedView`. Using the `SERVICE` version of this query, the user may
+// select arbitrary payload columns to be read. With the magic predicate
+// version, also supported by this class, only one payload column may be
+// read.
 struct MaterializedViewQuery : MagicServiceQuery {
  public:
   std::optional<std::string> viewName_;
