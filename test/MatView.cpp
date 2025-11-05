@@ -271,7 +271,8 @@ TEST(MatView, Reader) {
   Permutation p{Permutation::Enum::SPO, allocator};
   std::string onDiskBaseP = indexBasename + ".mv";
   // std::string onDiskBaseP = indexBasename + ".view.geom";
-  p.loadFromDisk(onDiskBaseP, [](Id) { return false; }, false);
+  p.loadFromDisk(
+      onDiskBaseP, [](Id) { return false; }, false);
   EXPECT_TRUE(p.isLoaded());
   AD_LOG_INFO << "get snapshot" << std::endl;
   // auto snapshot = tmpqec->locatedTriplesSnapshot();
