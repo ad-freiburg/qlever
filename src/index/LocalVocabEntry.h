@@ -51,6 +51,13 @@ class alignas(16) LocalVocabEntry
   QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
   QL_EXPLICIT(false)
   LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  // Constructor for when the position in the vocab is already known.
+  QL_EXPLICIT(true)
+  LocalVocabEntry(Base&& base, auto lower, auto upper)
+      : Base{std::move(base)},
+        lowerBoundInVocab_(IdProxy::make(lower.getBits())),
+        upperBoundInVocab_(IdProxy::make(upper.getBits())),
+        positionInVocabKnown_(true) {}
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
