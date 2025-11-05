@@ -281,7 +281,8 @@ class TripleComponent {
     // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
     // Otherwise, `newWord` would be copied here despite the `std::move`.
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower), Id::makeFromVocabIndex(upper))));
+        LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
+                        Id::makeFromVocabIndex(upper))));
   }
 
   // Human-readable output. Is used for debugging, testing, and for the creation
