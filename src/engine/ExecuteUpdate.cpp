@@ -57,17 +57,25 @@ ExecuteUpdate::transformTriplesTemplate(
   // scan with jumps over the disk for lookups instead of random accesses.
   ad_utility::HashSet<TripleComponent> lookupItems;
   // Collect the Literals and Iri for the Vocab lookup.
-  auto addTCToLookup = [&lookupItems](const TripleComponent& tc) {
+  auto addTCToLookup = [&lookupItems,
+                        &encodedIriManager](const TripleComponent& tc) {
+    if (tc.isIri() &&
+        encodedIriManager.encode(tc.getIri().toStringRepresentation())
+            .has_value()) {
+      // The IRI can be represented as an `EncodedVal` which does not need a
+      // Vocab lookup.
+      return;
+    }
     if (tc.isLiteral() || tc.isIri()) {
       lookupItems.insert(tc);
     }
   };
   auto addGraphToLookup =
-      [&lookupItems](const SparqlTripleSimpleWithGraph::Graph& g) {
-        // Ignore the default graph (std::monostate) here, because it is always
-        // added.
+      [&addTCToLookup](const SparqlTripleSimpleWithGraph::Graph& g) {
+        // Ignore the default graph (`std::monostate`) here, because it is
+        // always added.
         if (const auto* iri = std::get_if<TripleComponent::Iri>(&g)) {
-          lookupItems.insert(TripleComponent(*iri));
+          addTCToLookup(TripleComponent(*iri));
         }
       };
   for (const auto& triple : triples) {
@@ -80,7 +88,8 @@ ExecuteUpdate::transformTriplesTemplate(
   // `defaultGraphIri`.
   lookupItems.insert(TripleComponent(
       ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
-  std::vector lookupVec(lookupItems.begin(), lookupItems.end());
+  std::vector lookupVec(std::move_iterator(lookupItems.begin()),
+                        std::move_iterator(lookupItems.end()));
   ql::ranges::sort(
       lookupVec, vocab.getCaseComparator(), [](const TripleComponent& tc) {
         AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
@@ -93,10 +102,11 @@ ExecuteUpdate::transformTriplesTemplate(
   // no solutions.
   LocalVocab localVocab{};
   ad_utility::HashMap<TripleComponent, Id> lookupMap;
-  for (const auto& tc : lookupVec) {
+  for (auto& tc : lookupVec) {
     // Explicit copy because `toValueId` is `&&`.
-    lookupMap.emplace(tc, TripleComponent(tc).toValueId(vocab, localVocab,
-                                                        encodedIriManager));
+    TripleComponent copy{tc};
+    lookupMap.emplace(std::move(tc), std::move(copy).toValueId(
+                                         vocab, localVocab, encodedIriManager));
   }
   auto lookupTc = [&encodedIriManager, &lookupMap, &variableColumns](
                       const TripleComponent& tc) -> IdOrVariableIndex {
@@ -105,8 +115,8 @@ ExecuteUpdate::transformTriplesTemplate(
       AD_CORRECTNESS_CHECK(variableColumns.contains(tc.getVariable()));
       return variableColumns.at(tc.getVariable()).columnIndex_;
     }
-    if (!(tc.isLiteral() || tc.isIri())) {
-      return tc.toValueIdIfNotString(&encodedIriManager).value();
+    if (auto optionalId = tc.toValueIdIfNotString(&encodedIriManager)) {
+      return optionalId.value();
     }
     auto found = lookupMap.find(tc);
     AD_CORRECTNESS_CHECK(found != lookupMap.end());
@@ -252,8 +262,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
 void ExecuteUpdate::sortAndRemoveDuplicates(
     std::vector<IdTriple<>>& container) {
   ql::ranges::sort(container);
-  container.erase(std::unique(container.begin(), container.end()),
-                  container.end());
+  auto duplicates = ql::ranges::unique(container);
+  container.erase(duplicates.begin(), duplicates.end());
 }
 
 // _____________________________________________________________________________
