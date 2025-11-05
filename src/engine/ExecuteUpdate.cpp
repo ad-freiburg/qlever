@@ -197,8 +197,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
     ad_utility::timer::TimeTracer& tracer) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
-  auto updateClause = query.updateClause();
-  auto& graphUpdate = updateClause.op_;
+  const auto& updateClause = query.updateClause();
+  const auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
   tracer.beginTrace("preparation");
