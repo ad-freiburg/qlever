@@ -204,4 +204,9 @@ void Qlever::writeMaterializedView(std::string name, std::string query) const {
   writer.writeViewToDisk();
 }
 
+// ___________________________________________________________________________
+void Qlever::loadMaterializedView(std::string name) const {
+  index_.materializedViewsManager().loadView(std::move(name));
+}
+
 }  // namespace qlever
