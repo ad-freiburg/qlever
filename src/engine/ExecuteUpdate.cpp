@@ -262,8 +262,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
 void ExecuteUpdate::sortAndRemoveDuplicates(
     std::vector<IdTriple<>>& container) {
   ql::ranges::sort(container);
-  auto duplicates = ql::ranges::unique(container);
-  container.erase(duplicates.begin(), duplicates.end());
+  container.erase(std::unique(container.begin(), container.end()),
+                  container.end());
 }
 
 // _____________________________________________________________________________
