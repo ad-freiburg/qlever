@@ -483,6 +483,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     parsedHttpRequest.operation_ =
         None{};  // Prevent regular query processing by removing the query from
                  // the request
+  } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
+    requireValidAccessToken("load-materialized-view");
+    logCommand(cmd, "explicitly load materialized view");
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value());
+    index_.materializedViewsManager().loadView(name.value());
+    nlohmann::json json{{"materialized-view-loaded", name.value()}};
+    response = createJsonResponse(json, request);
   }
 
   // Ping with or without message.
