@@ -282,7 +282,7 @@ class IndexScan final : public Operation {
   }
 
   // Helper for scans on materialized views to retrieve an empty
-  // `LocatedTriplesSnapshot` on the correct permuation metadata.
+  // `LocatedTriplesSnapshot` on the correct permutation metadata.
   std::optional<LocatedTriplesSnapshot> makeEmptyLocatedTriplesSnapshot() const;
 
   // Use the empty `LocatedTriplesSnapshot` for scans on materialized views and
