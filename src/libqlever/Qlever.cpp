@@ -7,6 +7,7 @@
 #include "libqlever/Qlever.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
@@ -195,6 +196,12 @@ void IndexBuilderConfig::validate() const {
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
   }
+}
+
+// ___________________________________________________________________________
+void Qlever::writeMaterializedView(std::string name, std::string query) const {
+  MaterializedViewWriter writer{name, parseAndPlanQuery(query)};
+  writer.writeViewToDisk();
 }
 
 }  // namespace qlever

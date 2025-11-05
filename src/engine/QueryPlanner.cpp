@@ -3156,7 +3156,8 @@ SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
         "query configuration.");
   }
   auto view = viewManager.getView(viewQuery.viewName_.value());
-  auto scanTriple = view.makeScanConfig(viewQuery);
+  auto scanTriple = view.makeScanConfig(viewQuery, generateUniqueVarName(),
+                                        generateUniqueVarName());
   return makeSubtreePlan<IndexScan>(
       _qec, Permutation::Enum::SPO, std::move(scanTriple),
       IndexScan::Graphs::All(), std::nullopt, std::move(view));

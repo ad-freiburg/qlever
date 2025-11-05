@@ -319,6 +319,14 @@ class Server {
           ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
+
+  //
+  void writeMaterializedView(
+      std::string name,
+      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      TimeLimit timeLimit);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

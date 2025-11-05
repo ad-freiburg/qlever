@@ -233,6 +233,10 @@ class Qlever {
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
   void clearNamedResultCache();
+
+  // Write a new materialized view with `name` to disk and store the result of
+  // `query`.
+  void writeMaterializedView(std::string name, std::string query) const;
 };
 }  // namespace qlever
 

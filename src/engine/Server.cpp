@@ -21,6 +21,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/HttpError.h"
+#include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SparqlProtocol.h"
@@ -28,6 +29,7 @@
 #include "index/IndexImpl.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/TimeTracer.h"
@@ -448,6 +450,39 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       json[nlohmann::json(key)] = std::move(value);
     }
     response = createJsonResponse(json, request);
+  } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
+    requireValidAccessToken("write-materialized-view");
+    logCommand(cmd, "write materialized view");
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value());
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    auto query = std::visit(
+        [](const auto& op) -> Query {
+          using T = std::decay_t<decltype(op)>;
+          if constexpr (std::is_same_v<T, Query>) {
+            return op;
+          } else {
+            static_assert(
+                ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
+            throw std::runtime_error(
+                "Action 'write-materialized-view' requires a 'SELECT' query.");
+          }
+        },
+        parsedHttpRequest.operation_);
+    // TODO<ullingerc> Canellation, time limit, coroutine?
+    AD_CONTRACT_CHECK(name.value() != "");
+    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    AD_CONTRACT_CHECK(timeLimit.has_value());
+    writeMaterializedView(name.value(), query, requestTimer, cancellationHandle,
+                          timeLimit.value());
+    nlohmann::json json{{"materialized-view-written", name.value()}};
+    response = createJsonResponse(json, request);
+    parsedHttpRequest.operation_ =
+        None{};  // Prevent regular query processing by removing the query from
+                 // the request
   }
 
   // Ping with or without message.
@@ -1260,4 +1295,22 @@ void Server::adjustParsedQueryLimitOffset(
   if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
     exportLimit = std::stoul(sendParameter.value());
   }
+}
+
+// _____________________________________________________________________________
+void Server::writeMaterializedView(
+    std::string name, const Query& query, const ad_utility::Timer& requestTimer,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    TimeLimit timeLimit) {
+  auto parsedQuery = SparqlParser::parseQuery(
+      &index_.encodedIriManager(), query.query_, query.datasetClauses_);
+  auto qec = std::make_shared<QueryExecutionContext>(
+      index_, &cache_, allocator_, sortPerformanceEstimator_,
+      &namedResultCache_);
+  auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
+                        cancellationHandle);
+  auto qet =
+      std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
+  MaterializedViewWriter writer(name, {qet, qec, std::move(plan.parsedQuery_)});
+  writer.writeViewToDisk();
 }

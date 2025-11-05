@@ -27,7 +27,7 @@
 MaterializedViewWriter::MaterializedViewWriter(
     std::string name, qlever::Qlever::QueryPlan queryPlan)
     : name_{std::move(name)} {
-  MaterializedView::throwIfInvalidName(name);
+  MaterializedView::throwIfInvalidName(name_);
   auto [qet, qec, parsedQuery] = queryPlan;
   AD_CORRECTNESS_CHECK(qet != nullptr);
   AD_CORRECTNESS_CHECK(qec != nullptr);
@@ -37,8 +37,8 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
-std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
-                                              std::string_view name) {
+std::string MaterializedView::getFilenameBase(const std::string& onDiskBase,
+                                              const std::string& name) {
   return absl::StrCat(onDiskBase, ".view.", name);
 }
 
@@ -84,10 +84,12 @@ void MaterializedViewWriter::writeViewToDisk() {
   auto result = qet_->getResult(true);
   AD_CORRECTNESS_CHECK(!result->isFullyMaterialized(),
                        "For now only lazy operations are supported as input to "
-                       "the materialized view writer");
+                       "the materialized view writer. The query you are "
+                       "trying to index might be cached - please clear the "
+                       "cache and try again.");
   auto generator = result->idTables();
 
-  auto memoryLimit = ad_utility::MemorySize::gigabytes(16);   // TODO
+  auto memoryLimit = ad_utility::MemorySize::gigabytes(64);   // TODO
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();  // TODO
 
   // Sort results externally
@@ -186,20 +188,19 @@ void MaterializedViewWriter::writeViewToDisk() {
 }
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string_view onDiskBase,
-                                   std::string_view name)
-    : onDiskBase_{onDiskBase},
-      name_{name},
+MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
+    : onDiskBase_{std::move(onDiskBase)},
+      name_{std::move(name)},
       permutation_{std::make_shared<Permutation>(
           Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())},
       indexedColVariable_{"?dummy"}  // Is initialized from metadata later
 {
-  AD_CORRECTNESS_CHECK(onDiskBase != "",
+  AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
-  throwIfInvalidName(name);
-  AD_LOG_INFO << "Loading materialized view " << name << " from disk..."
+  throwIfInvalidName(name_);
+  AD_LOG_INFO << "Loading materialized view " << name_ << " from disk..."
               << std::endl;
-  auto filename = getFilenameBase(onDiskBase, name);
+  auto filename = getFilenameBase(onDiskBase_, name_);
 
   // Read metadata from JSON
   nlohmann::json viewInfoJson;
@@ -257,7 +258,8 @@ MaterializedView MaterializedViewsManager::getView(
 
 // _____________________________________________________________________________
 SparqlTripleSimple MaterializedView::makeScanConfig(
-    const parsedQuery::MaterializedViewQuery& viewQuery) const {
+    const parsedQuery::MaterializedViewQuery& viewQuery,
+    Variable placeholderPredicate, Variable placeholderObject) const {
   AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
   if (viewQuery.childGraphPattern_.has_value()) {
     throw MaterializedViewConfigException(
@@ -273,8 +275,8 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   auto s = viewQuery.scanCol_.value();
   // TODO these placeholder variables need to be unique in case multiple
   // materialized view queries are contained in one query
-  TripleComponent p{Variable{"?_internal_view_variable_p"}};
-  TripleComponent o{Variable{"?_internal_view_variable_o"}};
+  TripleComponent p{std::move(placeholderPredicate)};
+  TripleComponent o{std::move(placeholderObject)};
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
@@ -303,12 +305,12 @@ static constexpr auto validViewName = ctll::fixed_string{R"(^[a-zA-Z0-9\-]+$)"};
 }
 
 // _____________________________________________________________________________
-bool MaterializedView::isValidName(std::string_view name) {
+bool MaterializedView::isValidName(const std::string& name) {
   return ctre::match<string_constants::detail::validViewName>(name);
 }
 
 // _____________________________________________________________________________
-void MaterializedView::throwIfInvalidName(std::string_view name) {
+void MaterializedView::throwIfInvalidName(const std::string& name) {
   if (!MaterializedView::isValidName(name)) {
     throw MaterializedViewConfigException(
         absl::StrCat("'", name,

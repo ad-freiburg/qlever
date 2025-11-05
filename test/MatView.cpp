@@ -396,4 +396,15 @@ _:config <name> "geom" ; <col-a> ?a ; <col-b> ?b ; <col-x> ?x .
 
 */
 
+TEST(MatView, Writer3) {
+  qlever::EngineConfig config;
+  config.baseName_ = "osm-andorra";
+  qlever::Qlever qlv{config};
+  qlv.writeMaterializedView(
+      "geom",
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?a ?b ?c ?g "
+      "?x WHERE { ?a geo:hasGeometry ?b . ?b geo:asWKT ?c . VALUES ?g { 42 43 "
+      "}  BIND (RAND() AS ?x) }");
+}
+
 }  // namespace

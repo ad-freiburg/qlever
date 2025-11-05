@@ -61,12 +61,12 @@ class MaterializedView {
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
   // not exist.
-  MaterializedView(std::string_view onDiskBase, std::string_view name);
+  MaterializedView(std::string onDiskBase, std::string name);
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
-  static std::string getFilenameBase(std::string_view onDiskBase,
-                                     std::string_view name);
+  static std::string getFilenameBase(const std::string& onDiskBase,
+                                     const std::string& name);
 
   // Return a pointer to the open `Permutation` object for this view. Note that
   // this is always an SPO permutation because materialized views are indexed on
@@ -76,14 +76,19 @@ class MaterializedView {
   // Checks if the given name is allowed for a materialized view. Currently only
   // alphanumerics and hyphens are allowed. This is relevant for safe filenames
   // and for correctly splitting the special predicate.
-  static bool isValidName(std::string_view name);
-  static void throwIfInvalidName(std::string_view name);
+  static bool isValidName(const std::string& name);
+  static void throwIfInvalidName(const std::string& name);
 
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
-  // of `IndexScan` such that the columns requested by the user are returned.
+  // of `IndexScan` such that the columns requested by the user are returned. If
+  // the `viewQuery` does not request columns 1 and 2, the placeholders should
+  // be set to unique variable names.
   SparqlTripleSimple makeScanConfig(
-      const parsedQuery::MaterializedViewQuery& viewQuery) const;
+      const parsedQuery::MaterializedViewQuery& viewQuery,
+      Variable placeholderPredicate = Variable{"?_internal_view_variable_p"},
+      Variable placeholderObject = Variable{
+          "?_internal_view_variable_o"}) const;
 };
 
 // TODO
@@ -94,10 +99,12 @@ class MaterializedViewsManager {
 
  public:
   MaterializedViewsManager() = default;
-  explicit MaterializedViewsManager(std::string_view onDiskBase)
-      : onDiskBase_{onDiskBase} {};
+  explicit MaterializedViewsManager(std::string onDiskBase)
+      : onDiskBase_{std::move(onDiskBase)} {};
 
-  void setOnDiskBase(std::string_view onDiskBase) { onDiskBase_ = onDiskBase; };
+  void setOnDiskBase(const std::string& onDiskBase) {
+    onDiskBase_ = onDiskBase;
+  };
 
   // TODO const -> we don't want to break the const-ness of `Index` everywhere
   // just for this loading of views. The views themselves aren't changed.
