@@ -265,8 +265,7 @@ class TripleComponent {
     }
     using Bounds = std::pair<VocabIndex, VocabIndex>;
     AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
-    auto [lower, upper] =
-        std::get<std::pair<VocabIndex, VocabIndex>>(idOrBounds);
+    auto [lower, upper] = std::get<Bounds>(idOrBounds);
     // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
     // which we look up in (and potentially add to) our local vocabulary.
     AD_CORRECTNESS_CHECK(isLiteral() || isIri());

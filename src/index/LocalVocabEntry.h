@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
 #define QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
 
+#include <gtest/gtest_prod.h>
+
 #include <atomic>
 
 #include "backports/algorithm.h"
@@ -30,6 +32,8 @@ class alignas(16) LocalVocabEntry
   // directly because of cyclic dependencies.
   static constexpr std::string_view proxyTag = "LveIdProxy";
   using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
+
+  FRIEND_TEST(TripleComponent, toValueId);
 
  private:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
@@ -73,6 +77,9 @@ class alignas(16) LocalVocabEntry
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
+                                                upperBound_);
   };
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
