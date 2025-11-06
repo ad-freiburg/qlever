@@ -30,17 +30,12 @@ jobs:
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
           df -h
-          brew install pkg-config icu4c 
-          echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
-          echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
+          brew install pkg-config icu4c
+          PATH="$(brew --prefix)/opt/icu4c/bin:$(brew --prefix)/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
+          PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$(brew --prefix)/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
       - name: Install python dependencies for E2E tests
         run: |
-          echo ICU_VERSION="76.1" >> $GITHUB_ENV
           pip3 install --break-system-packages pyaml --no-binary=:pyicu: pyicu
-
-      - name: Install conan
-        run: |
-          brew install conan@2
       - name: Install dependencies
         run: |
           brew install llvm@17
