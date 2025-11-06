@@ -101,9 +101,6 @@ class SparqlExpressionPimpl {
   };
   std::optional<LangFilterData> getLanguageFilterExpression() const;
 
-  // Return true iff the `LANG()` function is used inside this expression.
-  bool containsLangExpression() const;
-
   // Return the size and cost estimate for this expression if it is used as the
   // expression of a `FILTER` clause given that the input has `inputSize` many
   // elements and the input is sorted by the variable `firstSortedVariable`.

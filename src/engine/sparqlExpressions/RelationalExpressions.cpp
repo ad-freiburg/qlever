@@ -297,7 +297,7 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
 template <Comparison Comp>
 std::optional<SparqlExpression::LangFilterData>
 RelationalExpression<Comp>::getLanguageFilterExpression() const {
-  if (Comp != valueIdComparators::Comparison::EQ) {
+  if (Comp != Comparison::EQ) {
     return std::nullopt;
   }
 
@@ -311,10 +311,6 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     if (!optVar.has_value() || !langPtr) {
       return std::nullopt;
     }
-
-    // TODO<joka921> Check that the language string doesn't contain a datatype
-    // etc.
-    // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
         std::move(optVar.value()),
         std::string{asStringViewUnsafe(langPtr->value().getContent())}};

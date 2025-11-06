@@ -17,27 +17,6 @@ using Lit = ad_utility::triple_component::Literal;
 using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________
-// `LangExpressionImpl` extends the `NaryExpression` class with the method
-// `containsLangExpression()`, which is required for the
-// usage within the `Filter()`. In addition, `Filter()` requires access to the
-// optional underlying variable, this access is solved over the stand alone
-// function `getVariableFromLangExpression()`.
-CPP_template(typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LangExpressionImpl
-    : public NaryExpression<NaryOperation> {
- public:
-  using NaryExpression<NaryOperation>::NaryExpression;
-
-  bool containsLangExpression() const override { return true; }
-
-  std::optional<Variable> variable() const {
-    auto children = this->children();
-    AD_CORRECTNESS_CHECK(children.size() == 1);
-    return children[0]->getVariableOrNullopt();
-  }
-};
-
-//______________________________________________________________________________
 inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
   if (!optLangTag.has_value()) {
     return Id::makeUndefined();
@@ -48,9 +27,8 @@ inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
 };
 
 //______________________________________________________________________________
-using LangExpression = detail::langImpl::LangExpressionImpl<
-    detail::Operation<1, detail::FV<decltype(detail::langImpl::getLanguageTag),
-                                    detail::LanguageTagValueGetter>>>;
+NARY_EXPRESSION(LangExpression, 1,
+                FV<decltype(getLanguageTag), LanguageTagValueGetter>);
 
 }  //  namespace detail::langImpl
 
@@ -67,7 +45,10 @@ std::optional<Variable> getVariableFromLangExpression(
   if (!langExpr) {
     return std::nullopt;
   }
-  return langExpr->variable();
+
+  auto children = langExpr->children();
+  AD_CORRECTNESS_CHECK(children.size() == 1);
+  return children[0]->getVariableOrNullopt();
 }
 
 //______________________________________________________________________________
