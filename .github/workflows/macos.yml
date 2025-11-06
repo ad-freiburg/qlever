@@ -40,18 +40,18 @@ jobs:
         run: |
           brew install llvm@17
           brew install conan@2
-          echo 'export PATH="/usr/local/opt/llvm@17/bin:$PATH"' >> ~/.bash_profile
-          echo PATH="/usr/local/opt/llvm@17/bin:$PATH" >> $GITHUB_ENV
-          echo 'export LDFLAGS="-L/usr/local/opt/llvm@17/lib -L/usr/local/opt/llvm@17/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@17/lib/c++"' >> ~/.bash_profile
-          echo LDFLAGS="-L/usr/local/opt/llvm@17/lib -L/usr/local/opt/llvm@17/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@17/lib/c++" >> $GITHUB_ENV
-          echo 'export CPPFLAGS="-I/usr/local/opt/llvm@17/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="-I/usr/local/opt/llvm@17/include" >> $GITHUB_ENV
-          echo 'export CFLAGS="-I/usr/local/opt/llvm@17/include"' >> ~/.bash_profile
-          echo  CFLAGS="-I/usr/local/opt/llvm@17/include" >> $GITHUB_ENV
-          echo 'export CC="/usr/local/opt/llvm@17/bin/clang"' >> ~/.bash_profile
-          echo CC="/usr/local/opt/llvm@17/bin/clang" >> $GITHUB_ENV
-          echo 'export CXX="/usr/local/opt/llvm@17/bin/clang++"' >> ~/.bash_profile
-          echo CXX="/usr/local/opt/llvm@17/bin/clang++" >> $GITHUB_ENV
+          echo 'export PATH="$(brew --prefix)/opt/llvm@17/bin:$PATH"' >> ~/.bash_profile
+          echo PATH="$(brew --prefix)/opt/llvm@17/bin:$PATH" >> $GITHUB_ENV
+          echo 'export LDFLAGS="-L$(brew --prefix)/opt/llvm@17/lib -L$(brew --prefix)/opt/llvm@17/lib/c++ -Wl,-rpath,$(brew --prefix)/opt/llvm@17/lib/c++"' >> ~/.bash_profile
+          echo LDFLAGS="-L$(brew --prefix)/opt/llvm@17/lib -L$(brew --prefix)/opt/llvm@17/lib/c++ -Wl,-rpath,$(brew --prefix)/opt/llvm@17/lib/c++" >> $GITHUB_ENV
+          echo 'export CPPFLAGS="-I$(brew --prefix)/opt/llvm@17/include"' >> ~/.bash_profile
+          echo  CPPFLAGS="-I$(brew --prefix)/opt/llvm@17/include" >> $GITHUB_ENV
+          echo 'export CFLAGS="-I$(brew --prefix)/opt/llvm@17/include"' >> ~/.bash_profile
+          echo  CFLAGS="-I$(brew --prefix)/opt/llvm@17/include" >> $GITHUB_ENV
+          echo 'export CC="$(brew --prefix)/opt/llvm@17/bin/clang"' >> ~/.bash_profile
+          echo CC="$(brew --prefix)/opt/llvm@17/bin/clang" >> $GITHUB_ENV
+          echo 'export CXX="$(brew --prefix)/opt/llvm@17/bin/clang++"' >> ~/.bash_profile
+          echo CXX="$(brew --prefix)/opt/llvm@17/bin/clang++" >> $GITHUB_ENV
           source ~/.bash_profile
       - name: Print clang version
         run: clang++ --version
