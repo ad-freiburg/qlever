@@ -46,7 +46,7 @@ class GraphPattern {
   // `languageInQuotes` is the language. Return `true` if it could successfully
   // be applied, false otherwise.
   bool addLanguageFilter(const Variable& variable,
-                         const std::string& languageInQuotes);
+                         const std::vector<std::string>& langTags);
 
   bool _optional;
 

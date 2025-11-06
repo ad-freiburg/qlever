@@ -266,8 +266,9 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
-                                                  const std::string& langTag) {
+bool ParsedQuery::GraphPattern::addLanguageFilter(
+    const Variable& variable, const std::vector<std::string>& langTags) {
+  AD_CONTRACT_CHECK(!langTags.empty());
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
@@ -309,16 +310,22 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
     AD_CORRECTNESS_CHECK(predicate.isIri());
-    predicate =
-        PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-            predicate.getIri(), langTag));
+    std::vector<PropertyPath> predicates;
+    for (const std::string& langTag : langTags) {
+      predicates.push_back(
+          PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+              predicate.getIri(), langTag)));
+    }
+    predicate = predicates.size() == 1
+                    ? std::move(predicates[0])
+                    : PropertyPath::makeAlternative(std::move(predicates));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
   // case a triple `?variable ql:langtag "language"` is added at the end of
   // the graph pattern.
   if (matchingTriples.empty()) {
-    if (!variableFoundInTriple) {
+    if (!variableFoundInTriple || langTags.size() > 1) {
       return false;
     }
     AD_LOG_DEBUG << "language filter variable " + variable.name() +
@@ -338,7 +345,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     auto& t = std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())
                   ._triples;
 
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+    auto langEntity = ad_utility::convertLangtagToEntityUri(langTags.at(0));
     SparqlTriple triple{
         variable,
         PropertyPath::fromIri(
