@@ -1314,7 +1314,8 @@ void Server::adjustParsedQueryLimitOffset(
 
 // _____________________________________________________________________________
 void Server::writeMaterializedView(
-    std::string name, const Query& query, const ad_utility::Timer& requestTimer,
+    const std::string& name, const Query& query,
+    const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
   auto parsedQuery = SparqlParser::parseQuery(

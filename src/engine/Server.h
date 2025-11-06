@@ -324,7 +324,7 @@ class Server {
   // materialized view of this result to disk. This assumes that the access
   // token has already been checked.
   void writeMaterializedView(
-      std::string name,
+      const std::string& name,
       const ad_utility::url_parser::sparqlOperation::Query& query,
       const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,

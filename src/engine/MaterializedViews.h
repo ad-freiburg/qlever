@@ -44,7 +44,7 @@ class MaterializedViewWriter {
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
-  MaterializedViewWriter(std::string name, QueryPlan queryPlan);
+  MaterializedViewWriter(std::string name, const QueryPlan& queryPlan);
 
   std::string getFilenameBase() const;
 
@@ -58,7 +58,7 @@ class MaterializedViewWriter {
   void writeViewToDisk(ad_utility::MemorySize memoryLimit =
                            ad_utility::MemorySize::gigabytes(64),
                        ad_utility::AllocatorWithLimit<Id> allocator =
-                           ad_utility::makeUnlimitedAllocator<Id>());
+                           ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for
@@ -67,9 +67,11 @@ class MaterializedView {
  private:
   std::string onDiskBase_;
   std::string name_;
-  std::shared_ptr<Permutation> permutation_;
+  std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
+      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
   VariableToColumnMap varToColMap_;
-  Variable indexedColVariable_;
+  // The true value is read from on-disk metadata in the constructor
+  Variable indexedColVariable_{"?dummy"};
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 

@@ -27,7 +27,7 @@
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
-    std::string name, qlever::Qlever::QueryPlan queryPlan)
+    std::string name, const qlever::Qlever::QueryPlan& queryPlan)
     : name_{std::move(name)} {
   MaterializedView::throwIfInvalidName(name_);
   auto [qet, qec, parsedQuery] = queryPlan;
@@ -70,7 +70,7 @@ std::vector<ColumnIndex> MaterializedViewWriter::getIdTableColumnPermutation()
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewToDisk(
     ad_utility::MemorySize memoryLimit,
-    ad_utility::AllocatorWithLimit<Id> allocator) {
+    ad_utility::AllocatorWithLimit<Id> allocator) const {
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
   // Sorter with a dynamic number of columns (template argument `NumStaticCols
@@ -146,7 +146,10 @@ void MaterializedViewWriter::writeViewToDisk(
       ad_utility::File{sopFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN,
   };
-  auto sopCallback = [](ql::span<const CompressedRelationMetadata>) {};
+  auto sopCallback = [](ql::span<const CompressedRelationMetadata>) {
+    // TODO<ullingerc> This callback is unused and should be removed once we can
+    // write single permutations
+  };
 
   auto [numDistinctPredicates, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
@@ -190,12 +193,7 @@ void MaterializedViewWriter::writeViewToDisk(
 
 // _____________________________________________________________________________
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
-    : onDiskBase_{std::move(onDiskBase)},
-      name_{std::move(name)},
-      permutation_{std::make_shared<Permutation>(
-          Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())},
-      indexedColVariable_{"?dummy"}  // Is initialized from metadata later
-{
+    : onDiskBase_{std::move(onDiskBase)}, name_{std::move(name)} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -281,8 +279,8 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   }
 
   auto s = viewQuery.scanCol_.value();
-  // TODO these placeholder variables need to be unique in case multiple
-  // materialized view queries are contained in one query
+  // TODO<ullingerc> these placeholder variables need to be unique in case
+  // multiple materialized view queries are contained in one query
   TripleComponent p{std::move(placeholderPredicate)};
   TripleComponent o{std::move(placeholderObject)};
   AdditionalScanColumns additionalCols;

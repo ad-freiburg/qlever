@@ -200,13 +200,14 @@ void IndexBuilderConfig::validate() const {
 
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  MaterializedViewWriter writer{name, parseAndPlanQuery(query)};
+  MaterializedViewWriter writer{std::move(name),
+                                parseAndPlanQuery(std::move(query))};
   writer.writeViewToDisk();
 }
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  index_.materializedViewsManager().loadView(std::move(name));
+  index_.materializedViewsManager().loadView(name);
 }
 
 }  // namespace qlever
