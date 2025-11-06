@@ -22,11 +22,10 @@ jobs:
       matrix:
         build-type: [Release]
     runs-on: macos-15
+    env:
+      LLVM_VERSION: 17
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
           df -h
@@ -38,20 +37,21 @@ jobs:
           pip3 install --break-system-packages pyaml --no-binary=:pyicu: pyicu
       - name: Install dependencies
         run: |
-          brew install llvm@17
+          brew install llvm@${{env.LLVM_VERSION}}
           brew install conan@2
-          echo 'export PATH="$(brew --prefix llvm@17)/bin:$PATH"' >> ~/.bash_profile
-          echo PATH="$(brew --prefix llvm@17)/bin:$PATH" >> $GITHUB_ENV
-          echo 'export LDFLAGS="-L$(brew --prefix llvm@17)/lib -L$(brew --prefix llvm@17)/lib/c++ -Wl,-rpath,$(brew --prefix llvm@17)/lib/c++"' >> ~/.bash_profile
-          echo LDFLAGS="-L$(brew --prefix llvm@17)/lib -L$(brew --prefix llvm@17)/lib/c++ -Wl,-rpath,$(brew --prefix llvm@17)/lib/c++" >> $GITHUB_ENV
-          echo 'export CPPFLAGS="-I$(brew --prefix llvm@17)/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="-I$(brew --prefix llvm@17)/include" >> $GITHUB_ENV
-          echo 'export CFLAGS="-I$(brew --prefix llvm@17)/include"' >> ~/.bash_profile
-          echo  CFLAGS="-I$(brew --prefix llvm@17)/include" >> $GITHUB_ENV
-          echo 'export CC="$(brew --prefix llvm@17)/bin/clang"' >> ~/.bash_profile
-          echo CC="$(brew --prefix llvm@17)/bin/clang" >> $GITHUB_ENV
-          echo 'export CXX="$(brew --prefix llvm@17)/bin/clang++"' >> ~/.bash_profile
-          echo CXX="$(brew --prefix llvm@17)/bin/clang++" >> $GITHUB_ENV
+          export LLVM_PREFIX=$(brew --prefix llvm@${{env.LLVM_VERSION}})
+          echo 'export PATH="$LLVM_PREFIX/bin:$PATH"' >> ~/.bash_profile
+          echo PATH="$LLVM_PREFIX/bin:$PATH" >> $GITHUB_ENV
+          echo 'export LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++"' >> ~/.bash_profile
+          echo LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++" >> $GITHUB_ENV
+          echo 'export CPPFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
+          echo  CPPFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo 'export CFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
+          echo  CFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo 'export CC="$LLVM_PREFIX/bin/clang"' >> ~/.bash_profile
+          echo CC="$LLVM_PREFIX/bin/clang" >> $GITHUB_ENV
+          echo 'export CXX="$LLVM_PREFIX/bin/clang++"' >> ~/.bash_profile
+          echo CXX="$LLVM_PREFIX/bin/clang++" >> $GITHUB_ENV
           source ~/.bash_profile
       - name: Print clang version
         run: clang++ --version
@@ -70,9 +70,9 @@ jobs:
         run: |
           conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing
       - name: Configure CMake
-        # For std::ranges::join_view we need the -fexperimental-library flag on libc++17, which on Mac requires to manually tinker with the linking flags.
+        # For std::ranges::join_view we need the -fexperimental-library flag on libc++17.
         # We currently cannot use the parallel algorithms, as the parallel sort requires a GNU-extension, and we build with `libc++`.
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON -DADDITIONAL_LINKER_FLAGS="-L$(brew --prefix llvm@17)/lib/c++"
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON
 
       - name: Build
         # Build your program with the given configuration
