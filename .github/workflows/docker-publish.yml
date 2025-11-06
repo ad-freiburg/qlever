@@ -88,6 +88,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         env:
+          # We build multiplatform images which have an image index above the
+          # image manifests. Attach the annotations directly to the image index.
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
         with:
           images: adfreiburg/qlever
