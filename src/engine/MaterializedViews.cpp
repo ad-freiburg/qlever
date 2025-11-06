@@ -304,6 +304,10 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
     }
   }
 
+  // Additional columns must be sorted
+  std::sort(additionalCols.begin(), additionalCols.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
   return {s, p, o, additionalCols};
 }
 
