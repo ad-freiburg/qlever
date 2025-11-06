@@ -80,7 +80,7 @@ jobs:
         run: >
           df -h;
           source ${{github.workspace}}/build/conanrun.sh;
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 1; 
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j; 
 
       - name: Test
         working-directory: ${{github.workspace}}/build/test
