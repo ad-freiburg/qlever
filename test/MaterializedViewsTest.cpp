@@ -163,6 +163,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");
+  ASSERT_TRUE(view != nullptr);
 
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
@@ -185,7 +186,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:g>"),
         V{"?o"}}};
 
-    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
     EXPECT_EQ(t, expected);
   }
@@ -202,7 +203,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
         ::testing::HasSubstr("Unknown parameter"));
 
-    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
     EXPECT_EQ(t, expected);
   }
@@ -215,7 +216,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:o>"),
         V{"?o"}}};
 
-    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{V{"?s"}, placeholderP, V{"?o"}};
     EXPECT_EQ(t, expected);
   }

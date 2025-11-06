@@ -31,7 +31,8 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
 
   // this needs to be initialized before `scanSpecAndBlocks_`
-  std::optional<MaterializedView> scanView_;
+  using ScanView = std::optional<std::shared_ptr<const MaterializedView>>;
+  ScanView scanView_;
   // this needs to be initialized before `scanSpecAndBlocks_` and after
   // `scanView_`
   std::optional<LocatedTriplesSnapshot> emptyLocatedTriplesSnapshot_;
@@ -60,7 +61,7 @@ class IndexScan final : public Operation {
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
-            std::optional<MaterializedView> scanView = std::nullopt);
+            ScanView scanView = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -70,7 +71,7 @@ class IndexScan final : public Operation {
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
             bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
-            std::optional<MaterializedView> scanView = std::nullopt);
+            ScanView scanView = std::nullopt);
 
   ~IndexScan() override = default;
 

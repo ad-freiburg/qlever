@@ -123,7 +123,6 @@ class Index {
   const DeltaTriplesManager& deltaTriplesManager() const;
 
   // Get a reference to the `MaterializedViewsManager` of this `Index`.
-  MaterializedViewsManager& materializedViewsManager();
   const MaterializedViewsManager& materializedViewsManager() const;
 
   // --------------------------------------------------------------------------

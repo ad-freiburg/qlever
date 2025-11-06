@@ -236,8 +236,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -252,11 +251,12 @@ void MaterializedViewsManager::loadView(const std::string& name) const {
   if (loadedViews_.contains(name)) {
     return;
   }
-  loadedViews_.insert({name, MaterializedView{onDiskBase_, name}});
+  loadedViews_.insert(
+      {name, std::make_shared<MaterializedView>(onDiskBase_, name)});
 };
 
 // _____________________________________________________________________________
-MaterializedView MaterializedViewsManager::getView(
+std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
   return loadedViews_.at(name);

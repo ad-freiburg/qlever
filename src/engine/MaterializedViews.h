@@ -114,7 +114,8 @@ class MaterializedView {
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
-  mutable ad_utility::HashMap<std::string, MaterializedView> loadedViews_;
+  mutable ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>
+      loadedViews_;
 
  public:
   MaterializedViewsManager() = default;
@@ -131,7 +132,8 @@ class MaterializedViewsManager {
   void loadView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it.
-  MaterializedView getView(const std::string& name) const;
+  std::shared_ptr<const MaterializedView> getView(
+      const std::string& name) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

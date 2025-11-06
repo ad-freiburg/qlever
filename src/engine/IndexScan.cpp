@@ -35,7 +35,7 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
-                     std::optional<MaterializedView> scanView)
+                     ScanView scanView)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
@@ -72,7 +72,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
   // If scanning a view is requested, check that the permutation matches that of
   // the view.
   if (scanView_.has_value()) {
-    AD_CORRECTNESS_CHECK(scanView.value().getPermutation()->permutation() ==
+    AD_CORRECTNESS_CHECK(scanView.value()->getPermutation()->permutation() ==
                          permutation);
   }
 }
@@ -85,7 +85,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
-                     std::optional<MaterializedView> scanView)
+                     ScanView scanView)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
@@ -287,7 +287,7 @@ const Permutation& IndexScan::getScanPermutation() const {
     if (!emptyLocatedTriplesSnapshot_.has_value()) {
       makeEmptyLocatedTriplesSnapshot();
     }
-    return *scanView_->getPermutation();
+    return *(scanView_.value()->getPermutation());
   }
   return getIndex().getImpl().getPermutation(permutation_);
 }
@@ -788,9 +788,9 @@ IndexScan::makeEmptyLocatedTriplesSnapshot() const {
   }
   LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
   emptyLocatedTriples[static_cast<size_t>(
-                          scanView_.value().getPermutation()->permutation())]
+                          scanView_.value()->getPermutation()->permutation())]
       .setOriginalMetadata(
-          scanView_.value().getPermutation()->metaData().blockDataShared());
+          scanView_.value()->getPermutation()->metaData().blockDataShared());
   LocalVocab emptyVocab;
   return LocatedTriplesSnapshot{emptyLocatedTriples,
                                 emptyVocab.getLifetimeExtender(), 0};

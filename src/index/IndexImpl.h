@@ -273,7 +273,7 @@ class IndexImpl {
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
-  MaterializedViewsManager& materializedViewsManager() {
+  const MaterializedViewsManager& materializedViewsManager() const {
     return materializedViews_;
   }
 
