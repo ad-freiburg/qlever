@@ -89,7 +89,7 @@ MaterializedViewQuery::MaterializedViewQuery(const SparqlTriple& triple) {
   if (sep == std::string::npos) {
     throw MaterializedViewConfigException(absl::StrCat(
         "Special triple for materialized view has an invalid predicate '",
-        simpleTriple.p_.getString(),
+        predicate,
         "'. Expected <https://qlever.cs.uni-freiburg.de/materializedView/"
         "VIEWNAME:COLNAME>."));
   }

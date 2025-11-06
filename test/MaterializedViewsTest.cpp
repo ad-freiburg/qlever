@@ -8,6 +8,10 @@
 #include <gtest/gtest.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "engine/MaterializedViews.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
+#include "util/GTestHelpers.h"
 
 namespace {
 
@@ -148,6 +152,101 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       qlv().loadMaterializedView("doesNotExist"),
       ::testing::HasSubstr(
           "The materialized view 'doesNotExist' does not exist."));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ManualConfigurations) {
+  auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+
+  MaterializedViewWriter writer{"testView1", plan};
+  writer.writeViewToDisk();
+
+  MaterializedViewsManager manager{testIndexBase_};
+  auto view = manager.getView("testView1");
+
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using Triple = SparqlTripleSimple;
+  using V = Variable;
+  auto iri = [](const std::string& ref) {
+    return ad_utility::triple_component::Iri::fromIriref(ref);
+  };
+  auto lit = [](const std::string& literal) {
+    return ad_utility::triple_component::Literal::fromStringRepresentation(
+        literal);
+  };
+
+  V placeholderP{"?placeholder_p"};
+  V placeholderO{"?placeholder_o"};
+
+  // Request for reading an extra payload column
+  {
+    ViewQuery query{SparqlTriple{
+        V{"?s"},
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:g>"),
+        V{"?o"}}};
+
+    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    EXPECT_EQ(t, expected);
+  }
+  {
+    ViewQuery query;
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        query.addParameter(
+            SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
+        ::testing::HasSubstr("Unknown parameter"));
+
+    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    EXPECT_EQ(t, expected);
+  }
+
+  // Request for reading a payload column from the first three columns of the
+  // view
+  {
+    ViewQuery query{SparqlTriple{
+        V{"?s"},
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:o>"),
+        V{"?o"}}};
+
+    auto t = view.makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{V{"?s"}, placeholderP, V{"?o"}};
+    EXPECT_EQ(t, expected);
+  }
+
+  // Invalid inputs
+  {
+    ViewQuery query;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        query.addParameter(
+            SparqlTriple{iri("<config>"), iri("<blabliblu>"), V{"?o"}}),
+        ::testing::HasSubstr("Unknown parameter"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        query.addParameter(
+            SparqlTriple{iri("<config>"), iri("<name>"), V{"?o"}}),
+        ::testing::HasSubstr("Parameter <name> to materialized view query "
+                             "needs to be a literal"));
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        query.addParameter(
+            SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}}),
+        ::testing::HasSubstr("Each payload column may only be requested once"));
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ViewQuery(SparqlTriple{V{"?s"},
+                               iri("<https://qlever.cs.uni-freiburg.de/"
+                                   "materializedView/testView1>"),
+                               V{"?o"}}),
+        ::testing::HasSubstr(
+            "Special triple for materialized view has an invalid predicate"));
+  }
 }
 
 }  // namespace

@@ -57,10 +57,11 @@ inline void removeTestIndex(const std::string& basename) {
 // _____________________________________________________________________________
 class MaterializedViewsTest : public ::testing::Test {
  private:
-  const std::string testIndexBase_ = "_materializedViewsTestIndex";
   std::shared_ptr<qlever::Qlever> qlv_;
 
  protected:
+  const std::string testIndexBase_ = "_materializedViewsTestIndex";
+
   void SetUp() override {
     makeTestIndex(testIndexBase_);
     qlever::EngineConfig config;
