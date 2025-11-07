@@ -1201,6 +1201,67 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
               triples[0]);
   }
   {
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(
+        triples,
+        ::testing::ElementsAre(SparqlTriple{
+            Var{"?x"},
+            PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+                iri("<label>"), "en")),
+            Var{"?y"}}));
+  }
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?x"},
+                    PropertyPath::makeAlternative(
+                        {PropertyPath::fromIri(
+                             ad_utility::convertToLanguageTaggedPredicate(
+                                 iri("<label>"), "en")),
+                         PropertyPath::fromIri(
+                             ad_utility::convertToLanguageTaggedPredicate(
+                                 iri("<label>"), "de"))}),
+                    Var{"?y"}}));
+  }
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { ?x <label> ?y . "
+        "FILTER (LANG(?y) = \"en\" || LANG(?y) = \"de\")}");
+    EXPECT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?x"},
+                    PropertyPath::makeAlternative(
+                        {PropertyPath::fromIri(
+                             ad_utility::convertToLanguageTaggedPredicate(
+                                 iri("<label>"), "en")),
+                         PropertyPath::fromIri(
+                             ad_utility::convertToLanguageTaggedPredicate(
+                                 iri("<label>"), "de"))}),
+                    Var{"?y"}}));
+  }
+  // Ensure filter is applied regularly if we have no predicate to work with and
+  // more than one language. This could potentially be optimized in the future.
+  {
+    ParsedQuery q = parseQuery(
+        "SELECT * { <somebody> ?p ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
+
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) IN (\"en\", \"de\"))");
+  }
+  {
     ParsedQuery q = parseQuery(
         "SELECT * WHERE {<somebody> ?p ?y . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1273,6 +1334,15 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
+  }
+  // Ensure filter is applied regularly if list is empty.
+  {
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?x) IN ())}");
+
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) IN ())");
   }
   // Verify the filter is not applied as a regular filter if it is used
   // somewhere in a triple

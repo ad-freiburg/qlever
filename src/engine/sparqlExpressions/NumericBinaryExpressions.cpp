@@ -357,8 +357,11 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
       auto rightFilter = children[1]->getLanguageFilterExpression();
       if (leftFilter.has_value() && rightFilter.has_value() &&
           leftFilter->variable_ == rightFilter->variable_) {
-        ad_utility::appendVector(leftFilter->languages_,
-                                 rightFilter->languages_);
+        for (auto& lang : rightFilter->languages_) {
+          if (!ad_utility::contains(leftFilter->languages_, lang)) {
+            leftFilter->languages_.push_back(std::move(lang));
+          }
+        }
         return leftFilter;
       }
     }

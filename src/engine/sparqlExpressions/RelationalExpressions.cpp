@@ -566,7 +566,7 @@ std::optional<SparqlExpression::LangFilterData>
 InExpression::getLanguageFilterExpression() const {
   const auto& left = children_[0];
   std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
-  if (!optVar.has_value()) {
+  if (!optVar.has_value() || children_.size() < 2) {
     return std::nullopt;
   }
   std::vector<std::string> languages;
@@ -576,7 +576,12 @@ InExpression::getLanguageFilterExpression() const {
     if (!langPtr) {
       return std::nullopt;
     }
-    languages.emplace_back(asStringViewUnsafe(langPtr->value().getContent()));
+    auto view = asStringViewUnsafe(langPtr->value().getContent());
+    // Deduplicate in O(n²), but the queries are usually small enough that this
+    // doesn't justify using a hash set for this.
+    if (!ad_utility::contains(languages, view)) {
+      languages.emplace_back(view);
+    }
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};

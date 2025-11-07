@@ -268,7 +268,7 @@ ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 // __________________________________________________________________________
 bool ParsedQuery::GraphPattern::addLanguageFilter(
     const Variable& variable, const std::vector<std::string>& langTags) {
-  AD_CONTRACT_CHECK(!langTags.empty());
+  AD_CORRECTNESS_CHECK(!langTags.empty());
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
