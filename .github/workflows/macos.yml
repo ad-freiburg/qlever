@@ -21,41 +21,37 @@ jobs:
       fail-fast: false
       matrix:
         build-type: [Release]
-    runs-on: macos-13
+    runs-on: macos-15
+    env:
+      LLVM_VERSION: 17
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
           df -h
-          brew install pkg-config icu4c 
-          echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
-          echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
+          brew install pkg-config icu4c
+          echo PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$PATH" >> $GITHUB_ENV
+          echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$(brew --prefix icu4c)/lib/pkgconfig" >> $GITHUB_ENV
       - name: Install python dependencies for E2E tests
         run: |
-          pip3 install pyaml pyicu
-
-      - name: Install conan
-        run: |
-          brew install conan@2
+          pip3 install --break-system-packages pyaml --no-binary=:pyicu: pyicu
       - name: Install dependencies
         run: |
-          brew install llvm@17
+          brew install llvm@${{env.LLVM_VERSION}}
           brew install conan@2
-          echo 'export PATH="/usr/local/opt/llvm@17/bin:$PATH"' >> ~/.bash_profile
-          echo PATH="/usr/local/opt/llvm@17/bin:$PATH" >> $GITHUB_ENV
-          echo 'export LDFLAGS="-L/usr/local/opt/llvm@17/lib -L/usr/local/opt/llvm@17/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@17/lib/c++"' >> ~/.bash_profile
-          echo LDFLAGS="-L/usr/local/opt/llvm@17/lib -L/usr/local/opt/llvm@17/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@17/lib/c++" >> $GITHUB_ENV
-          echo 'export CPPFLAGS="-I/usr/local/opt/llvm@17/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="-I/usr/local/opt/llvm@17/include" >> $GITHUB_ENV
-          echo 'export CFLAGS="-I/usr/local/opt/llvm@17/include"' >> ~/.bash_profile
-          echo  CFLAGS="-I/usr/local/opt/llvm@17/include" >> $GITHUB_ENV
-          echo 'export CC="/usr/local/opt/llvm@17/bin/clang"' >> ~/.bash_profile
-          echo CC="/usr/local/opt/llvm@17/bin/clang" >> $GITHUB_ENV
-          echo 'export CXX="/usr/local/opt/llvm@17/bin/clang++"' >> ~/.bash_profile
-          echo CXX="/usr/local/opt/llvm@17/bin/clang++" >> $GITHUB_ENV
+          export LLVM_PREFIX=$(brew --prefix llvm@${{env.LLVM_VERSION}})
+          echo 'export PATH="$LLVM_PREFIX/bin:$PATH"' >> ~/.bash_profile
+          echo PATH="$LLVM_PREFIX/bin:$PATH" >> $GITHUB_ENV
+          echo 'export LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++"' >> ~/.bash_profile
+          echo LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++" >> $GITHUB_ENV
+          echo 'export CPPFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
+          echo  CPPFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo 'export CFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
+          echo  CFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo 'export CC="$LLVM_PREFIX/bin/clang"' >> ~/.bash_profile
+          echo CC="$LLVM_PREFIX/bin/clang" >> $GITHUB_ENV
+          echo 'export CXX="$LLVM_PREFIX/bin/clang++"' >> ~/.bash_profile
+          echo CXX="$LLVM_PREFIX/bin/clang++" >> $GITHUB_ENV
           source ~/.bash_profile
       - name: Print clang version
         run: clang++ --version
@@ -63,7 +59,7 @@ jobs:
       - name: Cache for conan
         uses: actions/cache@v3
         env:
-          cache-name: cache-conan-modules-macos-13
+          cache-name: cache-conan-modules-macos-15
         with:
           path: ~/.conan2
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/clang-17-macos')}}
@@ -74,9 +70,9 @@ jobs:
         run: |
           conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing
       - name: Configure CMake
-        # For std::ranges::join_view we need the -fexperimental-library flag on libc++17, which on Mac requires to manually tinker with the linking flags.
+        # For std::ranges::join_view we need the -fexperimental-library flag on libc++17.
         # We currently cannot use the parallel algorithms, as the parallel sort requires a GNU-extension, and we build with `libc++`.
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON -DADDITIONAL_LINKER_FLAGS="-L$(brew --prefix llvm)/lib/c++"
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON
 
       - name: Build
         # Build your program with the given configuration
@@ -84,7 +80,7 @@ jobs:
         run: >
           df -h;
           source ${{github.workspace}}/build/conanrun.sh;
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 1; 
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 2; 
 
       - name: Test
         working-directory: ${{github.workspace}}/build/test
