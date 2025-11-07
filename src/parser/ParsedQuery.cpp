@@ -241,7 +241,8 @@ void ParsedQuery::addSolutionModifiers(
 
 // _____________________________________________________________________________
 const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
-  return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
+  return std::visit(std::mem_fn(&parsedQuery::ClauseBase::getVisibleVariables),
+                    _clause);
 }
 
 // _____________________________________________________________________________
@@ -460,9 +461,9 @@ void ParsedQuery::addHavingClause(
         " and also not bound inside the SELECT clause");
     auto newVariable = addInternalAlias(std::move(havingClause.expression_),
                                         internalVariableGenerator);
-    _havingClauses.emplace_back(
-        sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
-            newVariable));
+    _havingClauses.push_back(
+        {sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+            newVariable)});
   }
 }
 

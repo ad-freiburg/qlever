@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/MagicServiceQuery.h"
 #include "util/HashMap.h"
@@ -78,8 +79,7 @@ struct VarOrFixedEntity {
     return std::holds_alternative<FixedEntity>(entity_);
   }
 
-  friend bool operator==(const VarOrFixedEntity&,
-                         const VarOrFixedEntity&) = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(VarOrFixedEntity, entity_)
 };
 
 /**
