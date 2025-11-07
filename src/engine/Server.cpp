@@ -1061,7 +1061,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           results.push_back(createResponseMetadataForUpdate(
               index_, index_.deltaTriplesManager().getCurrentSnapshot(),
               *plannedUpdate, plannedUpdate->queryExecutionTree_,
-              updateMetadata, *tracer.get()));
+              updateMetadata, *tracer));
           tracer->reset();
 
           AD_LOG_INFO << "Done processing update"
