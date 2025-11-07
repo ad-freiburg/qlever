@@ -227,8 +227,9 @@ TEST(TripleComponent, toValueId) {
     auto lve = lv.getWord(id.getLocalVocabIndex());
     // Check that the constructed LVEs have the correct position in vocab set
     EXPECT_TRUE(lve.positionInVocabKnown_);
-    auto boundMatcher = testing::Eq(LocalVocabEntry::IdProxy::make(
-        Id::makeFromVocabIndex(VocabIndex::make(pos)).getBits()));
+    testing::Matcher<LocalVocabEntry::IdProxy> boundMatcher =
+        testing::Eq(LocalVocabEntry::IdProxy::make(
+            Id::makeFromVocabIndex(VocabIndex::make(pos)).getBits()));
     EXPECT_THAT(lve.lowerBoundInVocab_, boundMatcher);
     EXPECT_THAT(lve.upperBoundInVocab_, boundMatcher);
   };
