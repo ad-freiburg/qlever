@@ -73,10 +73,9 @@ void MaterializedViewQuery::addPayloadVariable(const Variable& column,
   }
   if (requestedVariables_.contains(column)) {
     throw MaterializedViewConfigException(
-        "Each payload column may only be requested once.");
+        absl::StrCat("Each payload column may only be requested once, but '",
+                     column.name(), "' was requested again."));
   }
-  // TODO<ullingerc> check that no two payload columns are mapped to the same
-  // output variable.
   requestedVariables_.insert({column, object.getVariable()});
 }
 

@@ -280,21 +280,42 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   }
 
   auto s = viewQuery.scanCol_.value();
-  // TODO<ullingerc> these placeholder variables need to be unique in case
-  // multiple materialized view queries are contained in one query
+  std::optional<Variable> scanColVar =
+      s.isVariable() ? std::optional{s.getVariable()} : std::nullopt;
+  AD_CORRECTNESS_CHECK(
+      placeholderPredicate != placeholderObject,
+      "Placeholders for predicate and object must not be the same variable");
   TripleComponent p{std::move(placeholderPredicate)};
   TripleComponent o{std::move(placeholderObject)};
   AdditionalScanColumns additionalCols;
 
   // Assemble which columns should be bound to which variables
+  ad_utility::HashSet<Variable> uniqueTargetVar;
   for (const auto& [viewVar, targetVar] : viewQuery.requestedVariables_) {
     if (!varToColMap_.contains(viewVar)) {
       throw MaterializedViewConfigException(absl::StrCat(
           "The column '", viewVar.name(),
           "' does not exist in the materialized view '", name_, "'."));
     }
+    if (uniqueTargetVar.contains(targetVar)) {
+      throw MaterializedViewConfigException(
+          absl::StrCat("Each target variable for a payload column may only be "
+                       "associated with one column. However  '",
+                       targetVar.name(), "' was requested multiple times."));
+    }
+    if (scanColVar.has_value() && scanColVar.value() == targetVar) {
+      throw MaterializedViewConfigException(absl::StrCat(
+          "The variable for the scan column of a materialized "
+          "view may not also be used for a payload column, but '",
+          scanColVar.value().name(), "' violated this requirement."));
+    }
     auto colIdx = varToColMap_.at(viewVar).columnIndex_;
-    if (colIdx == 1) {
+    if (colIdx == 0) {
+      throw MaterializedViewConfigException(absl::StrCat(
+          "The scan column of a materialized view may not be requested as "
+          "payload, but '",
+          scanColVar.value().name(), "' violated this requirement."));
+    } else if (colIdx == 1) {
       p = targetVar;
     } else if (colIdx == 2) {
       o = targetVar;
@@ -302,23 +323,12 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
       AD_CORRECTNESS_CHECK(colIdx > 2);
       additionalCols.emplace_back(colIdx, targetVar);
     }
+    uniqueTargetVar.insert(targetVar);
   }
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
-
-  // There should not be multiple variables for the same column
-  auto duplicate = std::adjacent_find(
-      additionalCols.begin(), additionalCols.end(),
-      [](const auto& a, const auto& b) { return a.first == b.first; });
-  if (duplicate != additionalCols.end()) {
-    throw MaterializedViewConfigException(absl::StrCat(
-        "Each column from a materialized view may be bound to at most one "
-        "variable. However, your configuration requested column ",
-        duplicate->first, " twice as variables ", duplicate->second.name(),
-        " and ", (duplicate + 1)->second.name(), "."));
-  }
 
   return {s, p, o, additionalCols};
 }

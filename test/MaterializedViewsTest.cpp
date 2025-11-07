@@ -233,20 +233,58 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
             SparqlTriple{iri("<config>"), iri("<name>"), V{"?o"}}),
         ::testing::HasSubstr("Parameter <name> to materialized view query "
                              "needs to be a literal"));
+
     query.addParameter(
         SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}});
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<name>"), lit("\"testView1\"")});
+    query.addParameter(
+        SparqlTriple{iri("<config>"), iri("<scan-column>"), V{"?s"}});
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query, V{"?a"}, V{"?a"}),
+        ::testing::HasSubstr("Placeholders for predicate and object must not "
+                             "be the same variable"));
+
     AD_EXPECT_THROW_WITH_MESSAGE(
         query.addParameter(
             SparqlTriple{iri("<config>"), iri("<payload-g>"), V{"?o"}}),
         ::testing::HasSubstr("Each payload column may only be requested once"));
+
+    auto query2 = query;
+    query2.addParameter(
+        SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?o"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query2),
+        ::testing::HasSubstr(
+            "Each target variable for a payload column may only be "
+            "associated with one column"));
+
+    auto query3 = query;
+    query3.addParameter(
+        SparqlTriple{iri("<config>"), iri("<payload-o>"), V{"?s"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query3),
+        ::testing::HasSubstr(
+            "The variable for the scan column of a materialized "
+            "view may not also be used for a payload column"));
+
+    auto query4 = query;
+    query4.addParameter(
+        SparqlTriple{iri("<config>"), iri("<payload-s>"), V{"?y"}});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        view->makeScanConfig(query4),
+        ::testing::HasSubstr(
+            "The scan column of a materialized view may not be requested as "
+            "payload"));
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         ViewQuery(SparqlTriple{V{"?s"},
                                iri("<https://qlever.cs.uni-freiburg.de/"
                                    "materializedView/testView1>"),
                                V{"?o"}}),
-        ::testing::HasSubstr(
-            "Special triple for materialized view has an invalid predicate"));
+        ::testing::HasSubstr("Special triple for materialized view has an "
+                             "invalid predicate"));
   }
 }
 
