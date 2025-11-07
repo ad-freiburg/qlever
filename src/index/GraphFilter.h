@@ -10,6 +10,7 @@
 
 #include <variant>
 
+#include "backports/three_way_comparison.h"
 #include "global/ValueId.h"
 #include "parser/TripleComponent.h"
 #include "util/HashSet.h"
@@ -28,7 +29,7 @@ class GraphFilter {
  public:
   // Marker type for the "ALL" case.
   struct AllTag {
-    bool operator==(const AllTag&) const = default;
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag)
   };
 
   // ALL, WHITELIST, BLACKLIST
@@ -41,9 +42,9 @@ class GraphFilter {
   FilterType filter_;
 
  public:
-  GraphFilter(const GraphFilter&) noexcept = default;
+  GraphFilter(const GraphFilter&) = default;
   GraphFilter(GraphFilter&&) noexcept = default;
-  GraphFilter& operator=(const GraphFilter&) noexcept = default;
+  GraphFilter& operator=(const GraphFilter&) = default;
   GraphFilter& operator=(GraphFilter&&) noexcept = default;
 
   // Keep all graphs.
@@ -83,7 +84,7 @@ class GraphFilter {
   bool areAllGraphsAllowed() const;
 
   // Make sure this filter is comparable.
-  bool operator==(const GraphFilter&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphFilter, filter_)
 
   // Describe this `GraphFilter` and write it to the output stream using
   // `formatter` to format the individual graph values `T`.

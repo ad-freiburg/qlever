@@ -5,6 +5,7 @@
 #include "index/TextScoring.h"
 
 #include "index/Index.h"
+#include "util/Algorithm.h"
 
 // ____________________________________________________________________________
 static void logWordNotFound(const std::string& word,
@@ -130,7 +131,7 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   // or the matching docId
   DocumentIndex docId;
   DocumentIndex convertedContextId = DocumentIndex::make(contextId.get());
-  if (docIdSet_.contains(convertedContextId)) {
+  if (ad_utility::contains(docIdSet_, convertedContextId)) {
     docId = DocumentIndex::make(contextId.get());
   } else {
     auto it = docIdSet_.upper_bound(convertedContextId);
