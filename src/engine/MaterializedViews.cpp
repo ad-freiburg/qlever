@@ -304,9 +304,21 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
     }
   }
 
-  // Additional columns must be sorted
+  // Additional columns must be sorted (required by internals of `IndexScan`)
   std::sort(additionalCols.begin(), additionalCols.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
+
+  // There should not be multiple variables for the same column
+  auto duplicate = std::adjacent_find(
+      additionalCols.begin(), additionalCols.end(),
+      [](const auto& a, const auto& b) { return a.first == b.first; });
+  if (duplicate != additionalCols.end()) {
+    throw MaterializedViewConfigException(absl::StrCat(
+        "Each column from a materialized view may be bound to at most one "
+        "variable. However, your configuration requested column ",
+        duplicate->first, " twice as variables ", duplicate->second.name(),
+        " and ", (duplicate + 1)->second.name(), "."));
+  }
 
   return {s, p, o, additionalCols};
 }
