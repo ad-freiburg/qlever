@@ -1259,7 +1259,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
 
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
-              "(LANG(?x) IN (\"en\", \"de\"))");
+              "(LANG(?y) IN (\"en\", \"de\"))");
   }
   {
     ParsedQuery q = parseQuery(
