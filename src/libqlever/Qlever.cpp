@@ -74,6 +74,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().setPrefixesForEncodedValuesWithBitPattern(
+      config.prefixesForIdEncodedIrisWithBitPattern_);
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
