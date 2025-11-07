@@ -10,6 +10,7 @@
 #include <string>
 
 #include "util/MemorySize/MemorySize.h"
+using namespace ad_utility::memory_literals;
 
 // Constants which are only used during index creation
 
@@ -110,5 +111,17 @@ constexpr inline size_t NumColumnsIndexBuilding = 4;
 // The maximal number of distinct graphs in a block such that this information
 // is stored in the metadata of the block.
 constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
+
+// The memory available for the twin relation sorter for the permutation pairs
+// SPO/SOP and OSP/OPS during index building.
+//
+// NOTE: For SPO/SOP and OSP/OPS, "relations" (all triples with the same S or
+// O) are relatively small, so that a constant amount of memory is sufficient.
+// For PSO/POS, "relations" can be huge (think of `rdf:type`), but that
+// permutation pair comes last during index building when no other permutations
+// are being built anymore. We can therefore give it half of the memory limit
+// configured for the index building. See `src/index/IndexImpl.cpp` for details.
+constexpr inline ad_utility::MemorySize
+    DEFAULT_MEMORY_FOR_TWIN_RELATION_SORTER = 5_GB;
 
 #endif  // QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H

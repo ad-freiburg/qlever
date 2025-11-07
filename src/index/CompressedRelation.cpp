@@ -1653,7 +1653,8 @@ auto CompressedRelationWriter::createPermutationPair(
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
-        perBlockCallbacks) -> PermutationPairResult {
+        perBlockCallbacks,
+    ad_utility::MemorySize twinRelationSorterMemory) -> PermutationPairResult {
   auto [c0, c1, c2, c3] = permutation.keys();
   // This logic only works for permutations that have the graph as the fourth
   // column.
@@ -1697,7 +1698,7 @@ auto CompressedRelationWriter::createPermutationPair(
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
       twinRelationSorter(basename + ".twin-twinRelationSorter", numColumns,
-                         4_GB, alloc);
+                         twinRelationSorterMemory, alloc);
 
   DistinctIdCounter distinctCol1Counter;
   auto addBlockForLargeRelation = [&numBlocksCurrentRel, &writer1,
