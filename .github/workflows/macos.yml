@@ -91,4 +91,6 @@ jobs:
         run: benchmark/BenchmarkExamples -p
 
       - name: E2E
-        run: ${{github.workspace}}/e2e/e2e.sh
+        run: |
+          source ${{github.workspace}}/build/conanrun.sh
+          ${{github.workspace}}/e2e/e2e.sh
