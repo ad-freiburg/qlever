@@ -63,11 +63,12 @@ class alignas(16) LocalVocabEntry
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
-    // Check that the given bounds are correct.
-    AD_EXPENSIVE_CHECK(
-        positionInVocabExpensiveCase() ==
-        PositionInVocab{lowerBoundInVocab_.load(std::memory_order_relaxed),
-                        upperBoundInVocab_.load(std::memory_order_relaxed)});
+    // Check that the given bounds are correct. The extra braces are needed to
+    // keep the macro expansion from splitting the initializer into two
+    // arguments.
+    AD_EXPENSIVE_CHECK((positionInVocabExpensiveCase() ==
+                        PositionInVocab{IdProxy::make(lower.getBits()),
+                                        IdProxy::make(upper.getBits())}));
   }
 
   // Slice to base class `LiteralOrIri`.
