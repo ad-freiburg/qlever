@@ -57,7 +57,7 @@ jobs:
       - name: Install and run conan
         working-directory: ${{github.workspace}}/build
         run: |
-          conan install .. -pr=../conanprofiles/clang-17-macos -of=. --build=missing
+          conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing
       - name: Configure CMake
         # For std::ranges::join_view we need the -fexperimental-library flag on libc++17.
         # We currently cannot use the parallel algorithms, as the parallel sort requires a GNU-extension, and we build with `libc++`.
