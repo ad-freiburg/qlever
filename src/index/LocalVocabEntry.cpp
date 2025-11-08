@@ -32,10 +32,5 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   positionInVocab.lowerBound_ = IdProxy::make(lower.getBits());
   positionInVocab.upperBound_ = IdProxy::make(upper.getBits());
 
-  lowerBoundInVocab_.store(positionInVocab.lowerBound_,
-                           std::memory_order_relaxed);
-  upperBoundInVocab_.store(positionInVocab.upperBound_,
-                           std::memory_order_relaxed);
-  positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
 }

@@ -233,7 +233,7 @@ class TripleComponent {
     if (lower != upper) {
       return Id::makeFromVocabIndex(lower);
     }
-    return std::make_pair(lower, upper);
+    return std::pair(lower, upper);
   }
 
   // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
@@ -277,8 +277,6 @@ class TripleComponent {
         return LiteralOrIri{std::move(getIri())};
       }
     };
-    // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
-    // Otherwise, `newWord` would be copied here despite the `std::move`.
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
                         Id::makeFromVocabIndex(upper))));

@@ -16,6 +16,7 @@
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
+#include "util/Exception.h"
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -61,7 +62,11 @@ class alignas(16) LocalVocabEntry
       : Base{std::move(base)},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
-        positionInVocabKnown_(true) {}
+        positionInVocabKnown_(true) {
+    // Check that the given bounds are correct.
+    AD_EXPENSIVE_CHECK(positionInVocab() ==
+                       PositionInVocab{lowerBoundInVocab_, upperBoundInVocab_});
+  }
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
@@ -88,7 +93,13 @@ class alignas(16) LocalVocabEntry
       return {lowerBoundInVocab_.load(std::memory_order_relaxed),
               upperBoundInVocab_.load(std::memory_order_relaxed)};
     }
-    return positionInVocabExpensiveCase();
+    auto positionInVocab = positionInVocabExpensiveCase();
+    lowerBoundInVocab_.store(positionInVocab.lowerBound_,
+                             std::memory_order_relaxed);
+    upperBoundInVocab_.store(positionInVocab.upperBound_,
+                             std::memory_order_relaxed);
+    positionInVocabKnown_.store(true, std::memory_order_release);
+    return positionInVocab;
   }
 
   // It suffices to hash the base class `LiteralOrIri` as the position in the
