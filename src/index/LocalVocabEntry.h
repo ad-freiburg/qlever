@@ -64,8 +64,7 @@ class alignas(16) LocalVocabEntry
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
     // Check that the given bounds are correct. The extra braces are needed to
-    // keep the macro expansion from splitting the initializer into two
-    // arguments.
+    // keep the macro expansion from interpreting the expression as two separate parameters.
     AD_EXPENSIVE_CHECK((positionInVocabExpensiveCase() ==
                         PositionInVocab{IdProxy::make(lower.getBits()),
                                         IdProxy::make(upper.getBits())}));
