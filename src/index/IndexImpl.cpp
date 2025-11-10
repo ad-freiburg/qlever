@@ -180,18 +180,25 @@ IndexImpl::buildOspWithPatterns(
   // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
 
-  // The column with index 1 always is `has-predicate` and is not needed here.
-  // Note that the order of the columns during index building  is always `SPO`,
-  // but the sorting might be different (PSO in this case).
+  // Lambda that creates and returns a generator that reads the `has-pattern`
+  // relation. Only reads columns 0 and 2 (subject and object pattern), since
+  // column 1 is always the `has-pattern` predicate. The relation is sorted by
+  // PSO, so the result is sorted by subject and then object.
+  //
   // NOTE: We will iterate over the `hasPatternPredicateSortedByPSO` twice. It
-  // is important, that the generators that iterate over the sorted blocks are
-  // not active at the same time, because otherwise an assertion in
-  // `CompressedExternalIdTable` will fail. We thus nest the lifetime of the
-  // result of `getLazyPatternScan` inside the `joinWithyPatternThread` below.
+  // is important that the respective generators are not active at the same
+  // time, otherwise the assertion `!mergeIsActive_.load()` in
+  // `CompressedExternalIdTableSorter::getSortedBlocks` will fail. We therefore
+  // scope the lifetime of this generator inside the `joinWithPatternThread`.
+  // That is, when we are done with the join (which we now explicitly wait
+  // for before starting the second generator, see below), the generator is
+  // destroyed.
   auto getLazyPatternScan = [&]() {
     return lazyScanWithPermutedColumns(hasPatternPredicateSortedByPSO,
                                        std::array<ColumnIndex, 2>{0, 2});
   };
+
+  // Create a producer-consumer queue with space for up to four `IdTable`s.
   ad_utility::data_structures::ThreadSafeQueue<IdTable> queue{4};
 
   // The permutation (2, 1, 0, 3) switches the third column (the object) with

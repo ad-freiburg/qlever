@@ -1,6 +1,8 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -205,24 +207,52 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
       ::testing::ContainsRegex("Insufficient memory"));
 }
 
+// Test corner cases involving empty blocks.
 TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTable<0> writer{
+
+  // Use the Sorter (not the plain CompressedExternalIdTable)
+  ad_utility::CompressedExternalIdTableSorter<std::less<>, 0> sorter{
       filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
 
+  // Create empty and non-empty tables
+  CopyableIdTable<0> emptyTable = createRandomlyFilledIdTable(0, NUM_COLS);
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
 
-  // Test pushing rows normally
-  for (const auto& row : randomTable) {
-    writer.push(row);
-  }
+  // Now we can use pushBlock via the public interface
+  sorter.pushBlock(emptyTable);   // Push empty block
+  sorter.pushBlock(emptyTable);   // Push another empty block
+  sorter.pushBlock(randomTable);  // Push real data
 
-  auto generator = writer.getRows();
-  auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
-  EXPECT_EQ(result.size(), randomTable.size());
+  auto result = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+  EXPECT_EQ(result.size(), randomTable.size());  // Only non-empty rows
 }
+
+// TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
+//   std::string filename = "idTableCompressedSorter.cornerCases.dat";
+//
+//   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+//   true; ad_utility::CompressedExternalIdTable<0> writer{
+//       filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
+//
+//   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100,
+//   NUM_COLS); CopyableIdTable<0> emptyTable = createRandomlyFilledIdTable(0,
+//   NUM_COLS);
+//
+//   // Push the normal rows, with empty blocks in between.
+//   for (const auto& row : randomTable) {
+//     if (row[0] % 10 == 0) {
+//       writer.pushBlock(emptyTable);
+//     }
+//     writer.push(row);
+//   }
+//
+//   auto generator = writer.getRows();
+//   auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
+//   EXPECT_EQ(result.size(), randomTable.size());
+// }
 
 template <size_t NumStaticColumns>
 void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
