@@ -1,5 +1,5 @@
 [settings]
-arch=x86_64
+arch=armv8
 build_type=Release
 compiler=clang
 compiler.cppstd=gnu17
