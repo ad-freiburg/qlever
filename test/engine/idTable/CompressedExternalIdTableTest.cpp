@@ -208,51 +208,30 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
 }
 
 // Test corner cases involving empty blocks.
+//
+// NOTE: We use `CompressedExternalIdTableSorter` here instead of
+// `CompressedExternalIdTable` because the latter does not have a public
+// `pushBlock` method, which we need to test pushing empty blocks.
 TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
+  // Create an instance of `CompressedExternalIdTableSorter`.
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
-
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-
-  // Use the Sorter (not the plain CompressedExternalIdTable)
-  ad_utility::CompressedExternalIdTableSorter<std::less<>, 0> sorter{
+  ad_utility::CompressedExternalIdTableSorter<SortBySPO, 0> sorter{
       filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
 
-  // Create empty and non-empty tables
+  // Create an empty block and a non-empty block.
   CopyableIdTable<0> emptyTable = createRandomlyFilledIdTable(0, NUM_COLS);
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
 
-  // Now we can use pushBlock via the public interface
-  sorter.pushBlock(emptyTable);   // Push empty block
-  sorter.pushBlock(emptyTable);   // Push another empty block
-  sorter.pushBlock(randomTable);  // Push real data
+  // Push empty and non-empty blocks.
+  sorter.pushBlock(emptyTable);
+  sorter.pushBlock(randomTable);
+  sorter.pushBlock(emptyTable);
 
+  // Check that no assertion fails and that the result is as expected.
   auto result = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
-  EXPECT_EQ(result.size(), randomTable.size());  // Only non-empty rows
+  EXPECT_EQ(result.size(), randomTable.size());
 }
-
-// TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
-//   std::string filename = "idTableCompressedSorter.cornerCases.dat";
-//
-//   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
-//   true; ad_utility::CompressedExternalIdTable<0> writer{
-//       filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
-//
-//   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100,
-//   NUM_COLS); CopyableIdTable<0> emptyTable = createRandomlyFilledIdTable(0,
-//   NUM_COLS);
-//
-//   // Push the normal rows, with empty blocks in between.
-//   for (const auto& row : randomTable) {
-//     if (row[0] % 10 == 0) {
-//       writer.pushBlock(emptyTable);
-//     }
-//     writer.push(row);
-//   }
-//
-//   auto generator = writer.getRows();
-//   auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
-//   EXPECT_EQ(result.size(), randomTable.size());
-// }
 
 template <size_t NumStaticColumns>
 void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
