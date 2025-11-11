@@ -3149,7 +3149,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 // _______________________________________________________________
 SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
     const parsedQuery::MaterializedViewQuery& viewQuery) {
-  const auto& viewManager = _qec->getIndex().materializedViewsManager();
+  const auto& viewManager = _qec->materializedViewsManager();
   if (!viewQuery.viewName_.has_value()) {
     throw MaterializedViewConfigException(
         "To read from a materialized view its name must be set in the "

@@ -1042,7 +1042,6 @@ void IndexImpl::setKbName(const std::string& name) {
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;
-  materializedViews_.setOnDiskBase(onDiskBase);
 }
 
 // ____________________________________________________________________________

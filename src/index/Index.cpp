@@ -319,8 +319,3 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
 }
-
-// ____________________________________________________________________________
-const MaterializedViewsManager& Index::materializedViewsManager() const {
-  return pimpl_->materializedViewsManager();
-}

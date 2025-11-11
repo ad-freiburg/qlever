@@ -8,8 +8,10 @@
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
 #include "engine/VariableToColumnMap.h"
-#include "libqlever/Qlever.h"
+#include "index/Permutation.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
+#include "parser/SparqlTriple.h"
 #include "util/HashMap.h"
 
 // Forward declarations
@@ -38,9 +40,12 @@ class MaterializedViewWriter {
   std::shared_ptr<QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
 
-  using QueryPlan = qlever::Qlever::QueryPlan;
-
  public:
+  // Type alias repeated here from `Qlever.h` to avoid cyclic include.
+  using QueryPlan =
+      std::tuple<std::shared_ptr<QueryExecutionTree>,
+                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+
   // Initialize a writer given the base filename of the view and a query plan.
   // The view will be written to files prefixed with the index basename followed
   // by the view name.
@@ -112,8 +117,9 @@ class MaterializedView {
           "?_internal_view_variable_o"}) const;
 };
 
-// The `MaterializedViewsManager` is part of the `Index` and is used to manage
-// the currently loaded `MaterializedViews` in a `Server` or `Qlever` instance.
+// The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
+// used to manage the currently loaded `MaterializedViews` in a `Server` or
+// `Qlever` instance.
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
@@ -129,9 +135,9 @@ class MaterializedViewsManager {
     onDiskBase_ = onDiskBase;
   };
 
-  // Since we don't want to break the const-ness of `Index` everywhere
-  // just for the loading of views, `loadedViews_` is mutable. Note that this is
-  // okay, because the views themselves aren't changed (only loaded on-demand).
+  // Since we don't want to break the const-ness in a lot of places just for the
+  // loading of views, `loadedViews_` is mutable. Note that this is okay,
+  // because the views themselves aren't changed (only loaded on-demand).
   void loadView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it.

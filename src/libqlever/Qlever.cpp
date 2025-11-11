@@ -40,6 +40,8 @@ Qlever::Qlever(const EngineConfig& config)
     index_.addTextFromOnDiskIndex();
   }
 
+  materializedViewsManager_.setOnDiskBase(config.baseName_);
+
   // Estimate the cost of sorting operations (needed for query planning).
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -164,7 +166,7 @@ void Qlever::eraseResultWithName(std::string name) {
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) const {
   auto qecPtr = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_);
+      &namedResultCache_, &materializedViewsManager_);
   // TODO<joka921> support Dataset clauses.
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.getImpl().encodedIriManager(), std::move(query), {});
@@ -207,7 +209,7 @@ void Qlever::writeMaterializedView(std::string name, std::string query) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  index_.materializedViewsManager().loadView(name);
+  materializedViewsManager_.loadView(name);
 }
 
 }  // namespace qlever

@@ -196,8 +196,6 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
-  MaterializedViewsManager materializedViews_;
-
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -272,10 +270,6 @@ class IndexImpl {
   }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
-
-  const MaterializedViewsManager& materializedViewsManager() const {
-    return materializedViews_;
-  }
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.

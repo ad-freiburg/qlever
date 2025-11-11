@@ -8,6 +8,7 @@
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -74,11 +75,12 @@ TEST(ExecuteUpdate, executeUpdate) {
             "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
+        MaterializedViewsManager materializedViewsManager;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{},
-                                  &namedResultCache);
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  &materializedViewsManager);
         expectExecuteUpdateHelper(update, qec, index);
         index.deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -94,11 +96,12 @@ TEST(ExecuteUpdate, executeUpdate) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
+        MaterializedViewsManager materializedViewsManager;
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{},
-                                  &namedResultCache);
+                                  SortPerformanceEstimator{}, &namedResultCache,
+                                  &materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };

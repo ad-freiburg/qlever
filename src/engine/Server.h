@@ -14,6 +14,7 @@
 
 #include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -83,6 +84,7 @@ class Server {
   bool noAccessCheck_;
   QueryResultCache cache_;
   NamedResultCache namedResultCache_;
+  MaterializedViewsManager materializedViewsManager_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;

@@ -14,6 +14,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "engine/MaterializedViews.h"
+#include "libqlever/Qlever.h"
 #include "util/Exception.h"
 
 namespace materializedViewsTestHelpers {

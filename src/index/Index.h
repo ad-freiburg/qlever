@@ -122,9 +122,6 @@ class Index {
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
 
-  // Get a reference to the `MaterializedViewsManager` of this `Index`.
-  const MaterializedViewsManager& materializedViewsManager() const;
-
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------

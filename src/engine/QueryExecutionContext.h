@@ -91,6 +91,7 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 
 // Forward declaration because of cyclic dependency
 class NamedResultCache;
+class MaterializedViewsManager;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -101,6 +102,7 @@ class QueryExecutionContext {
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
+      MaterializedViewsManager* materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
@@ -168,6 +170,12 @@ class QueryExecutionContext {
     return *namedResultCache_;
   }
 
+  // Get a reference to the `MaterializedViewsManager`.
+  const MaterializedViewsManager& materializedViewsManager() const {
+    AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
+    return *materializedViewsManager_;
+  };
+
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
   // the string given in `PinResultWithName` as the query name. If
@@ -210,6 +218,8 @@ class QueryExecutionContext {
   // the query that is executed using this context should be cached. When
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
+
+  MaterializedViewsManager* materializedViewsManager_ = nullptr;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

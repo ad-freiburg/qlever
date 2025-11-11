@@ -91,6 +91,8 @@ void Server::initialize(const std::string& indexBaseName, bool useText,
     index_.addTextFromOnDiskIndex();
   }
 
+  materializedViewsManager_.setOnDiskBase(indexBaseName);
+
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
@@ -307,7 +309,8 @@ auto Server::prepareOperation(
       << ad_utility::truncateOperationString(operationSPARQL) << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedResultCache_,
-                            std::ref(messageSender), pinSubtrees, pinResult);
+                            &materializedViewsManager_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
 
   configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
                                 accessTokenOk, qec);
@@ -501,7 +504,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value());
-    index_.materializedViewsManager().loadView(name.value());
+    materializedViewsManager_.loadView(name.value());
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
   }
@@ -1332,7 +1335,7 @@ void Server::writeMaterializedView(
       &index_.encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
       index_, &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_);
+      &namedResultCache_, &materializedViewsManager_);
   auto plan = planQuery(std::move(parsedQuery), requestTimer, timeLimit, *qec,
                         cancellationHandle);
   auto qet =
