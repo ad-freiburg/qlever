@@ -81,6 +81,9 @@ class MaterializedView {
   // not exist.
   MaterializedView(std::string onDiskBase, std::string name);
 
+  // Get the name of the view.
+  const std::string& getName() const { return name_; }
+
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
   static std::string getFilenameBase(const std::string& onDiskBase,

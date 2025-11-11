@@ -131,8 +131,14 @@ string IndexScan::getCacheKeyImpl() const {
   graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+    os << " column subset "
+       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
   }
+
+  if (scanView_.has_value()) {
+    os << " on materialized view " << scanView_.value()->getName();
+  }
+
   return std::move(os).str();
 }
 
@@ -273,6 +279,10 @@ IdTable IndexScan::materializedIndexScan() const {
 // _____________________________________________________________________________
 Result IndexScan::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "IndexScan result computation...\n";
+  if (scanView_.has_value()) {
+    runtimeInfo().addDetail("scan-on-materialized-view",
+                            scanView_.value()->getName());
+  }
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }

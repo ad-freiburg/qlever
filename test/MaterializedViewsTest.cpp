@@ -46,6 +46,14 @@ TEST_F(MaterializedViewsTest, Basic) {
   for (const auto& query : equivalentQueries) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(query);
     auto res = qet->getResult(false);
+
+    EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
+                ::testing::HasSubstr("on materialized view testView1"));
+    const auto& rtDetails =
+        qet->getRootOperation()->getRuntimeInfoPointer()->details_;
+    ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
+    EXPECT_EQ(rtDetails["scan-on-materialized-view"], "testView1");
+
     EXPECT_EQ(res->idTable().numRows(), 4);
     auto col = qet->getVariableColumn(Variable{"?x"});
     for (size_t i = 0; i < res->idTable().numRows(); ++i) {
@@ -164,6 +172,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");
   ASSERT_TRUE(view != nullptr);
+  EXPECT_EQ(view->getName(), "testView1");
 
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
