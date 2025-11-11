@@ -16,6 +16,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
@@ -447,6 +448,139 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, propagateChangesFromUpdatesParameter) {
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  LocalVocab localVocab;
+
+  auto insertTriples = [&, this](const std::vector<std::string>& turtles) {
+    auto triples = makeIdTriples(vocab, localVocab, turtles);
+    auto updateSnapshot =
+        getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>();
+    deltaTriplesManager.modify<void>(
+        [&](DeltaTriples& deltaTriples) {
+          deltaTriples.insertTriples(cancellationHandle, std::move(triples));
+        },
+        {.updateSnapshotAfterRequest_ = updateSnapshot});
+  };
+
+  // Initially the changes from updates should be propagated.
+  EXPECT_TRUE(
+      getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>());
+  auto initialSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  auto initialIndex = initialSnapshot->index_;
+
+  insertTriples({"<A> <B> <C>"});
+
+  auto snapshotAfterInsert = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_NE(snapshotAfterInsert->index_, initialIndex);
+
+  // Disable the propagation of the changes from updates.
+  setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>(false);
+
+  auto snapshotBeforeSecondUpdate = deltaTriplesManager.getCurrentSnapshot();
+  auto indexBeforeSecondUpdate = snapshotBeforeSecondUpdate->index_;
+  insertTriples({"<D> <E> <F>"});
+  auto snapshotAfterSecondInsert = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_EQ(snapshotAfterSecondInsert->index_, indexBeforeSecondUpdate);
+
+  // Force snapshot creation should work regardless of parameter
+  deltaTriplesManager.updateStoredSnapshot();
+  auto snapshotAfterForce = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_NE(snapshotAfterForce->index_, indexBeforeSecondUpdate);
+
+  // The changes from the updates should directly be visible after enabling.
+  setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>(true);
+
+  auto snapshotBeforeThirdUpdate = deltaTriplesManager.getCurrentSnapshot();
+  auto indexBeforeThirdUpdate = snapshotBeforeThirdUpdate->index_;
+  EXPECT_NE(indexBeforeThirdUpdate, snapshotAfterForce->index_);
+
+  insertTriples({"<G> <H> <I>"});
+
+  auto snapshotAfterThirdInsert = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_NE(snapshotAfterThirdInsert->index_, indexBeforeThirdUpdate);
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, propagateChangesFromUpdatesMetadataBehavior) {
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  LocalVocab localVocab;
+
+  auto setPropagateChangesFromUpdates =
+      setRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_,
+                          bool>;
+  auto augmentedMetadataAvailable = [&deltaTriplesManager]() {
+    return deltaTriplesManager.deltaTriples_.withReadLock(
+        [](const auto& deltaTriples) {
+          const auto& locatedTriples = deltaTriples.locatedTriples();
+          auto hasAugmentedMetadata = [](const auto& permutation) {
+            return permutation.augmentedMetadata_.has_value();
+          };
+          // Either all permutations should have augmented metadata or none.
+          auto all = ql::ranges::all_of(locatedTriples, hasAugmentedMetadata);
+          auto none = ql::ranges::none_of(locatedTriples, hasAugmentedMetadata);
+          EXPECT_TRUE(all || none);
+          return all;
+        });
+  };
+  auto resetMetadata = [&deltaTriplesManager]() {
+    deltaTriplesManager.deltaTriples_.withWriteLock([](auto& deltaTriples) {
+      for (auto& permutation : deltaTriples.locatedTriples()) {
+        permutation.augmentedMetadata_.reset();
+      }
+    });
+  };
+  auto insertTriples = [&, this](const std::vector<std::string>& turtles) {
+    auto triples = makeIdTriples(vocab, localVocab, turtles);
+    auto updateMetadata =
+        getRuntimeParameter<&RuntimeParameters::propagateChangesFromUpdates_>();
+    deltaTriplesManager.modify<void>(
+        [&](DeltaTriples& deltaTriples) {
+          deltaTriples.insertTriples(cancellationHandle, std::move(triples));
+        },
+        {.updateMetadataAfterRequest_ = updateMetadata});
+  };
+
+  setPropagateChangesFromUpdates(true);
+  EXPECT_FALSE(augmentedMetadataAvailable());
+
+  // Insert first triple with normal behavior - should update metadata
+  insertTriples({"<A> <B> <C>"});
+  EXPECT_TRUE(augmentedMetadataAvailable());
+
+  setPropagateChangesFromUpdates(false);
+  resetMetadata();
+  insertTriples({"<D> <E> <F>"});
+  EXPECT_FALSE(augmentedMetadataAvailable());
+
+  insertTriples({"<G> <H> <I>"});
+  EXPECT_FALSE(augmentedMetadataAvailable());
+
+  // Manually force metadata update - should work regardless of parameter
+  deltaTriplesManager.forceMetadataUpdate();
+  EXPECT_TRUE(augmentedMetadataAvailable());
+
+  // Make the changes from updates visible again. Immediately creates augmented
+  // metadata and resumes updating metadata after updates
+  resetMetadata();
+  setPropagateChangesFromUpdates(true);
+  EXPECT_TRUE(augmentedMetadataAvailable());
+
+  // Future updates should resume normal metadata updates
+  resetMetadata();
+  insertTriples({"<J> <K> <L>"});
+  EXPECT_TRUE(augmentedMetadataAvailable());
 }
 
 // _____________________________________________________________________________

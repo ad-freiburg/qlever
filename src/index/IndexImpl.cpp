@@ -958,7 +958,12 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
           deltaTriples.setOriginalMetadata(p.permutation(),
                                            p.metaData().blockDataShared());
         },
-        false);
+        {.writeToDiskAfterRequest_ = false,
+         .updateMetadataAfterRequest_ = false,
+         // It would also be enough to do a single snapshot after loading all
+         // permutations, but this is only very little overhead and reduces the
+         // complexity.
+         .updateSnapshotAfterRequest_ = true});
   };
 
   auto load = [this, &isInternalId, &setMetadata](

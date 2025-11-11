@@ -1043,12 +1043,29 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         // directly on the `DeltaTriples` (we have an exclusive lock on them
         // anyway).
         for (ParsedQuery& update : updates) {
-          // Make the snapshot before the query planning. Otherwise, it could
-          // happen that the query planner "knows" that a result is empty, when
-          // actually it is not due to a preceding update in the chain. Also,
-          // this improves the size estimates and hence the query plan.
+          bool propagateUpdates = getRuntimeParameter<
+              &RuntimeParameters::propagateChangesFromUpdates_>();
+          // If the propagation of changes from updates is disabled but the
+          // update has a where clause, create a snapshot and update the
+          // metadata anyway for the execution of this update. This ensures that
+          // updates are always evaluated correctly even if the option is
+          // disabled.
           tracer.beginTrace("snapshot");
-          qec.updateLocatedTriplesSnapshot();
+          if (!propagateUpdates &&
+              !update._rootGraphPattern._graphPatterns.empty()) {
+            index_.deltaTriplesManager().forceMetadataUpdate();
+            qec.updateLocatedTriplesSnapshot(
+                index_.deltaTriplesManager().getNewSnapshot());
+          } else {
+            // When update change propagation is enabled (the default) update
+            // set the current snapshot for the evaluation before for the query
+            // planning. Otherwise, it could happen that the query planner
+            // "knows" that a result is empty, when actually it is not due to a
+            // preceding update in the chain. Also, this improves the size
+            // estimates and hence the query plan.
+            qec.updateLocatedTriplesSnapshot(
+                index_.deltaTriplesManager().getCurrentSnapshot());
+          }
           tracer.endTrace("snapshot");
           tracer.beginTrace("planning");
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
@@ -1069,7 +1086,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                     tracer.endTrace("processUpdateImpl");
                     return res;
                   },
-                  true, tracer);
+                  {.updateMetadataAfterRequest_ = propagateUpdates,
+                   .updateSnapshotAfterRequest_ = propagateUpdates},
+                  tracer);
           tracer.endTrace("execution");
 
           tracer.endTrace("update");
