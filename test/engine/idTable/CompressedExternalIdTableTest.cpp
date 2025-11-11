@@ -207,29 +207,31 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
       ::testing::ContainsRegex("Insufficient memory"));
 }
 
-// Test corner cases involving empty blocks.
-//
-// NOTE: We use `CompressedExternalIdTableSorter` here instead of
-// `CompressedExternalIdTable` because the latter does not have a public
-// `pushBlock` method, which we need to test pushing empty blocks.
+// Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.
 TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
-  // Create an instance of `CompressedExternalIdTableSorter`.
+  // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
+  size_t blockSize = 10;
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortBySPO, 0> sorter{
-      filename, NUM_COLS, 100_MB, ad_utility::testing::makeAllocator()};
+  size_t blockMemory = blockSize * NUM_COLS * sizeof(Id) * 2;
+  ad_utility::CompressedExternalIdTable<0> writer{
+      filename, NUM_COLS, ad_utility::MemorySize::bytes(blockMemory),
+      ad_utility::testing::makeAllocator()};
 
-  // Create an empty block and a non-empty block.
-  CopyableIdTable<0> emptyTable = createRandomlyFilledIdTable(0, NUM_COLS);
-  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
+  // Push exactly 10 rows. After the 10th row, one full block is written and
+  // `currentBlock_` becomes empty. When `getRows()` is later called, it will
+  // call `pushBlock()` with this empty block, which must be handled correctly
+  // (the empty block is detected and skipped, and a dummy future is created to
+  // maintain invariants). This corner case failed in an earlier version.
+  CopyableIdTable<0> randomTable =
+      createRandomlyFilledIdTable(blockSize, NUM_COLS);
+  for (const auto& row : randomTable) {
+    writer.push(row);
+  }
 
-  // Push empty and non-empty blocks.
-  sorter.pushBlock(emptyTable);
-  sorter.pushBlock(randomTable);
-  sorter.pushBlock(emptyTable);
-
-  // Check that no assertion fails and that the result is as expected.
-  auto result = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+  // Check that no failure occurs and the result is as expected.
+  auto generator = writer.getRows();
+  auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
   EXPECT_EQ(result.size(), randomTable.size());
 }
 
