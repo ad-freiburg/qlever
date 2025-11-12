@@ -27,12 +27,12 @@ static constexpr std::string_view dummyTurtle = R"(
 )";
 
 // _____________________________________________________________________________
-inline void makeTestIndex(const std::string& basename) {
+inline void makeTestIndex(const std::string& basename, const std::string& kg) {
   // Write dummy turtle file
   auto ttlFilename = absl::StrCat(basename, ".ttl");
   {
     std::ofstream ttl{ttlFilename};
-    ttl << dummyTurtle;
+    ttl << kg;
   }
 
   // Build index on dummy turtle file
@@ -63,8 +63,12 @@ class MaterializedViewsTest : public ::testing::Test {
  protected:
   const std::string testIndexBase_ = "_materializedViewsTestIndex";
 
+  virtual std::string getDummyTurtle() const {
+    return std::string{dummyTurtle};
+  }
+
   void SetUp() override {
-    makeTestIndex(testIndexBase_);
+    makeTestIndex(testIndexBase_, getDummyTurtle());
     qlever::EngineConfig config;
     config.baseName_ = testIndexBase_;
     qlv_ = std::make_shared<qlever::Qlever>(config);
@@ -78,6 +82,25 @@ class MaterializedViewsTest : public ::testing::Test {
   qlever::Qlever& qlv() {
     AD_CORRECTNESS_CHECK(qlv_ != nullptr);
     return *qlv_;
+  }
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsTestLarge : public MaterializedViewsTest {
+ protected:
+  static constexpr size_t numFakeSubjects_ = 10'000;
+
+  std::string getDummyTurtle() const override {
+    std::string dummy;
+    for (size_t i = 0; i < numFakeSubjects_; ++i) {
+      dummy =
+          absl::StrCat(dummy, "<s", i,
+                       "> <p1> \"abc\" ."
+                       "<s",
+                       i, "> <p2> \"", 2 * i,
+                       "\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n");
+    }
+    return dummy;
   }
 };
 

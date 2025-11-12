@@ -352,3 +352,24 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   EXPECT_EQ(res->idTable().numColumns(), 2);
   EXPECT_EQ(res->idTable().numRows(), 4);
 }
+
+TEST_F(MaterializedViewsTestLarge, LazyScan) {
+  // Write a simple view
+  qlv().writeMaterializedView("testView1",
+                              "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+  qlv().loadMaterializedView("testView1");
+
+  // Query
+  auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
+      "SELECT * { ?s "
+      "<https://qlever.cs.uni-freiburg.de/materializedView/"
+      "testView1:o> ?o }");
+  auto res2 = qet->getResult(true);
+  size_t cnt = 0;
+  ASSERT_FALSE(res2->isFullyMaterialized());
+  for (const auto& [idTable, localVocab] : res2->idTables()) {
+    EXPECT_EQ(idTable.numColumns(), 2);
+    cnt += idTable.numRows();
+  }
+  EXPECT_EQ(cnt, 2 * numFakeSubjects_);
+}
