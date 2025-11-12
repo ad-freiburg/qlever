@@ -9,14 +9,18 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "engine/MaterializedViews.h"
+#include "engine/Server.h"
 #include "gmock/gmock.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 
 namespace {
 
 using namespace materializedViewsTestHelpers;
+
+}  // namespace
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
@@ -320,4 +324,31 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   }
 }
 
-}  // namespace
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, serverIntegration) {
+  // Write a new materialized view using the `Server` class
+  {
+    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+    server.initialize(testIndexBase_, false);
+    ad_utility::url_parser::sparqlOperation::Query query{
+        "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }", {}};
+    ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    static constexpr size_t dummyTimeLimit = 1000 * 60 * 60;  // 1 hour
+    std::chrono::milliseconds timeLimit{dummyTimeLimit};
+    server.writeMaterializedView("testViewFromServer", query, requestTimer,
+                                 cancellationHandle, timeLimit);
+  }
+
+  // Try loading the new view
+  qlv().loadMaterializedView("testViewFromServer");
+  auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
+      "SELECT * { ?s "
+      "<https://qlever.cs.uni-freiburg.de/materializedView/"
+      "testViewFromServer:o> ?o }");
+  auto res = qet->getResult(false);
+  ASSERT_TRUE(res->isFullyMaterialized());
+  EXPECT_EQ(res->idTable().numColumns(), 2);
+  EXPECT_EQ(res->idTable().numRows(), 4);
+}

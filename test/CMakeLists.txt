@@ -483,4 +483,4 @@ addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
-addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
+addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)

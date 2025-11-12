@@ -333,6 +333,7 @@ class Server {
       const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
+  FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H
