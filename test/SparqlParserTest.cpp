@@ -1201,6 +1201,17 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
               triples[0]);
   }
   {
+    // The empty language tag can't be optimized.
+    ParsedQuery q =
+        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) = \"\")}");
+    EXPECT_FALSE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    EXPECT_THAT(triples, ::testing::ElementsAre(SparqlTriple{
+                             Var{"?x"}, PropertyPath::fromIri(iri("<label>")),
+                             Var{"?y"}}));
+  }
+  {
     ParsedQuery q =
         parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
