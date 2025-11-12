@@ -2368,7 +2368,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
 
     // Prevent multiplying out two `UNION`s that are joined with each other.
-    // This can create too many posibilities and make the query planner run out
+    // This can create too many possibilities and make the query planner run out
     // of memory and crash the system.
     if (!unionOperation ||
         std::dynamic_pointer_cast<Union>(other._qet->getRootOperation())) {
