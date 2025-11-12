@@ -9,6 +9,7 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "engine/MaterializedViews.h"
+#include "gmock/gmock.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
@@ -233,6 +234,23 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto t = view->makeScanConfig(query, placeholderP, placeholderO);
     Triple expected{V{"?s"}, placeholderP, V{"?o"}};
     EXPECT_EQ(t, expected);
+    std::vector<Variable> expectedVars{V{"?s"}, V{"?o"}};
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAreArray(expectedVars));
+  }
+
+  // Request for reading from a view with a fixed value for the scan column
+  {
+    ViewQuery query{SparqlTriple{
+        iri("<s1>"),
+        iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1:p>"),
+        V{"?p"}}};
+    auto t = view->makeScanConfig(query, placeholderP, placeholderO);
+    Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
+    EXPECT_EQ(t, expected);
+    std::vector<Variable> expectedVars{V{"?p"}};
+    EXPECT_THAT(query.getVarsToKeep(),
+                ::testing::UnorderedElementsAreArray(expectedVars));
   }
 
   // Invalid inputs
