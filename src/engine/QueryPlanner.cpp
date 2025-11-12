@@ -3159,19 +3159,10 @@ SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
   auto scanTriple = view->makeScanConfig(viewQuery, generateUniqueVarName(),
                                          generateUniqueVarName());
 
-  // Strip unused placeholder columns immediately
-  ad_utility::HashSet<Variable> varsToKeep;
-  if (viewQuery.scanCol_.value().isVariable()) {
-    varsToKeep.insert(viewQuery.scanCol_.value().getVariable());
-  }
-  for (const auto& [original, target] : viewQuery.requestedVariables_) {
-    varsToKeep.insert(target);
-  }
-
   return makeSubtreePlan<IndexScan>(_qec, Permutation::Enum::SPO,
                                     std::move(scanTriple),
                                     IndexScan::Graphs::All(), std::nullopt,
-                                    std::move(view), std::move(varsToKeep));
+                                    std::move(view), viewQuery.getVarsToKeep());
 }
 
 // _______________________________________________________________

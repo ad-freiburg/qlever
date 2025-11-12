@@ -100,4 +100,16 @@ MaterializedViewQuery::MaterializedViewQuery(const SparqlTriple& triple) {
   addPayloadVariable(requestedColumn, simpleTriple.o_);
 }
 
+// _____________________________________________________________________________
+ad_utility::HashSet<Variable> MaterializedViewQuery::getVarsToKeep() const {
+  ad_utility::HashSet<Variable> varsToKeep;
+  if (scanCol_.has_value() && scanCol_.value().isVariable()) {
+    varsToKeep.insert(scanCol_.value().getVariable());
+  }
+  for (const auto& [original, target] : requestedVariables_) {
+    varsToKeep.insert(target);
+  }
+  return varsToKeep;
+}
+
 }  // namespace parsedQuery

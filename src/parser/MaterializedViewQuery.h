@@ -32,6 +32,10 @@ struct MaterializedViewQuery : MagicServiceQuery {
 
   void addParameter(const SparqlTriple& triple) override;
 
+  // Return the variables that should be visible from this read on the
+  // materialized view. Used for column stripping.
+  ad_utility::HashSet<Variable> getVarsToKeep() const;
+
  private:
   // Internal helpers for shared code between `addParameter` and magic predicate
   // constructor
