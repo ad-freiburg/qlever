@@ -35,7 +35,7 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
-                     ScanView scanView)
+                     ScanView scanView, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
@@ -47,7 +47,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
+      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      varsToKeep_(std::move(varsToKeep)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);

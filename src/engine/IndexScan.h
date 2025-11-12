@@ -61,7 +61,8 @@ class IndexScan final : public Operation {
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
-            ScanView scanView = std::nullopt);
+            ScanView scanView = std::nullopt,
+            VarsToKeep varsToKeep = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
