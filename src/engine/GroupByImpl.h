@@ -723,6 +723,11 @@ class GroupByImpl : public Operation {
    * @tparam BlocksEnd: the corresponding end/sentinel type for the input range.
    * In many cases this is the same type as BlockIterator, but it may be a
    *   distinct sentinel type for ranges that use sentinels.
+   * @param restTable A partially filled table that already contains the rows
+   *   from the current block that would have created new groups in the hash
+   *   map. Additional rows collected from subsequent blocks will be appended
+   *   to this table inside the function before the sort-based fallback is
+   *   executed.
    *
    * The function consumes the remaining input starting at `blockIt`
    * up to `blocksEnd` and returns the final `Result` consisting of the
@@ -735,9 +740,8 @@ class GroupByImpl : public Operation {
       handleRemainderUsingHybridApproach(
           HashMapOptimizationData data,
           HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
-          const IdTable& currentTable,
-          std::vector<size_t> nonMatchingRows) const;
+      HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+      IdTable restTable) const;
 };
 
 // _____________________________________________________________________________

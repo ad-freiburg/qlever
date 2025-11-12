@@ -155,14 +155,14 @@ class HybridGroupByBenchmark : public BenchmarkInterface {
          /*hybrid*/ true},
     };
 
-    size_t numMeasurements = 1;
-    size_t startNumRows = 1'000'000;
-    size_t endNumRows = 1'000'000;
+    size_t numMeasurements = 30;
+    size_t startNumRows = 12000000;
+    size_t endNumRows = 12000000;
     float blockSizeFactor = 0.08;
-    size_t startThreshold = 100'000;
-    size_t endThreshold = 100'000;
-    size_t totalNumGroups = 1'000'000;
-    size_t groupSegments = 20;
+    size_t startThreshold = 350'000;
+    size_t endThreshold = 350'000;
+    size_t totalNumGroups = 12000000;
+    size_t groupSegments = 30;
 
     for (const auto& s : scenarios) {
       RuntimeParameters().set<"group-by-hash-map-enabled">(s.useHashMap_);

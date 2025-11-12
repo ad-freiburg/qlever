@@ -1603,7 +1603,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   auto blocksEnd = ql::ranges::end(subresults);
 
   size_t groupThreshold =
-      RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+    RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+  const size_t inWidth = _subtree->getResultWidth();
 
   size_t blocksProcessedBeforeFallback = 0;
   size_t totalRowsBeforeFallback = 0;
@@ -1624,17 +1625,15 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(inputLocalVocab);
     // Load all entries from inputTable into the hash map.
-    auto updateResult =
-        updateHashMapWithTable(inputTable, data, aggregationData, timers);
-    // Advance to next block
-    ++blockIt;
+  auto updateResult =
+    updateHashMapWithTable(inputTable, data, aggregationData, timers);
 
-    // If the size of the hashmap (the number of groups) exceeds the
-    // `groupThreshold`, we switch to a hybrid approach, where we add all
-    // entries with existing groups to the hash map, and then perform a
-    // sort-based grouping on the remaining entries.
-    if (updateResult.thresholdExceeded_ ||
-        aggregationData.numGroups() > groupThreshold) {
+  // If the size of the hashmap (the number of groups) exceeds the
+  // `groupThreshold`, we switch to a hybrid approach, where we add all
+  // entries with existing groups to the hash map, and then perform a
+  // sort-based grouping on the remaining entries.
+  if (updateResult.thresholdExceeded_ ||
+    aggregationData.numGroups() > groupThreshold) {
       initialProcessingTimer.stop();
       // Record statistics about the fallback trigger
       runtimeInfo().addDetail("hybridTriggerBlocks",
@@ -1652,11 +1651,18 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
                    << std::endl;
       // If threshold was exceeded, we need to handle remaining unprocessed rows
       // Note: nonMatchingRows contains only the unprocessed rows from current
-      // table
+      // table. Copy them before advancing the underlying generator.
+      IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
+      if (!updateResult.nonMatchingRows_.empty()) {
+        restTable.insertSubsetAtEnd(inputTable, updateResult.nonMatchingRows_);
+      }
+
+      ++blockIt;
       return handleRemainderUsingHybridApproach<NUM_GROUP_COLUMNS>(
           std::move(data), aggregationData, timers, blockIt, blocksEnd,
-          inputTable, updateResult.nonMatchingRows_);
+          std::move(restTable));
     }
+    ++blockIt;
   }
   initialProcessingTimer.stop();
   runtimeInfo().addDetail("hashMapOnlyProcessing",
@@ -1673,12 +1679,11 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
                  typename BlocksEnd)(
     requires std::input_iterator<BlockIterator>&&
         std::sentinel_for<BlocksEnd, BlockIterator>) Result
-    GroupByImpl::handleRemainderUsingHybridApproach(
-        HashMapOptimizationData data,
-        HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-        HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
-        const IdTable& currentTable,
-        std::vector<size_t> nonMatchingRows) const {
+  GroupByImpl::handleRemainderUsingHybridApproach(
+    HashMapOptimizationData data,
+    HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+    HashMapTimers& timers, BlockIterator blockIt, BlocksEnd blocksEnd,
+    IdTable restTable) const {
   const size_t inWidth = _subtree->getResultWidth();
   LocalVocab& localVocab = data.localVocabRef_.value();
 
@@ -1690,17 +1695,8 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       hashResultTimer{Timer::Stopped}, finalMergeTimer{Timer::Stopped},
       finalSortTimer{Timer::Stopped};
 
-  IdTable restTable{inWidth, getExecutionContext()->getAllocator()};
-  // Copy non-matching rows of the current table to the restTable
-  // These are the rows that weren't processed due to threshold being exceeded
-  if (!nonMatchingRows.empty()) {
-    bufferingTimer.cont();
-    restTable.insertSubsetAtEnd(currentTable, nonMatchingRows);
-    bufferingTimer.stop();
-  }
-
   size_t totalRowsProcessed = 0;
-  size_t totalNonMatchingRows = 0;
+  size_t totalNonMatchingRows = restTable.numRows();
 
   // Batch existing-group rows and buffer new-group rows
   for (; blockIt != blocksEnd; ++blockIt) {
