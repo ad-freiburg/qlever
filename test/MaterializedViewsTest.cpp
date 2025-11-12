@@ -354,22 +354,29 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 }
 
 TEST_F(MaterializedViewsTestLarge, LazyScan) {
-  // Write a simple view
-  qlv().writeMaterializedView("testView1",
-                              "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+  // Write a simple view, inflated 10x using cartesian product with a values
+  // clause
+  qlv().writeMaterializedView(
+      "testView1",
+      "SELECT * { ?s ?p ?o . VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
   qlv().loadMaterializedView("testView1");
 
-  // Query
+  // Run a simple query and consume its result lazily
   auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
       "SELECT * { ?s "
       "<https://qlever.cs.uni-freiburg.de/materializedView/"
       "testView1:o> ?o }");
-  auto res2 = qet->getResult(true);
-  size_t cnt = 0;
-  ASSERT_FALSE(res2->isFullyMaterialized());
-  for (const auto& [idTable, localVocab] : res2->idTables()) {
+  auto res = qet->getResult(true);
+  size_t numRows = 0;
+  size_t numBlocks = 0;
+  ASSERT_FALSE(res->isFullyMaterialized());
+  for (const auto& [idTable, localVocab] : res->idTables()) {
+    EXPECT_TRUE(localVocab.empty());
     EXPECT_EQ(idTable.numColumns(), 2);
-    cnt += idTable.numRows();
+    numRows += idTable.numRows();
+    ++numBlocks;
   }
-  EXPECT_EQ(cnt, 2 * numFakeSubjects_);
+  EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+  AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
+              << " block(s)" << std::endl;
 }
