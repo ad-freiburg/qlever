@@ -166,6 +166,8 @@ class IndexMetaData {
 
   const MapType& data() const { return data_; }
 
+  size_t totalElements() const { return totalElements_; }
+
   BlocksType& blockData() { return *blockData_; }
   const BlocksType& blockData() const { return *blockData_; }
   std::shared_ptr<const BlocksType> blockDataShared() const {
