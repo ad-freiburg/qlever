@@ -26,33 +26,26 @@ jobs:
       LLVM_VERSION: 17
     steps:
       - uses: actions/checkout@v4
+
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
           df -h
           brew install pkg-config icu4c
           echo PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$PATH" >> $GITHUB_ENV
           echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$(brew --prefix icu4c)/lib/pkgconfig" >> $GITHUB_ENV
+
       - name: Install python dependencies for E2E tests
         run: |
           pip3 install --break-system-packages pyaml --no-binary=:pyicu: pyicu
+
       - name: Install dependencies
         run: |
-          brew install llvm@${{env.LLVM_VERSION}}
-          brew install conan@2
+          brew install llvm@${{env.LLVM_VERSION}} conan@2
           export LLVM_PREFIX=$(brew --prefix llvm@${{env.LLVM_VERSION}})
-          echo 'export PATH="$LLVM_PREFIX/bin:$PATH"' >> ~/.bash_profile
           echo PATH="$LLVM_PREFIX/bin:$PATH" >> $GITHUB_ENV
-          echo 'export LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++"' >> ~/.bash_profile
-          echo LDFLAGS="-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -Wl,-rpath,$LLVM_PREFIX/lib/c++" >> $GITHUB_ENV
-          echo 'export CPPFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
-          echo 'export CFLAGS="-I$LLVM_PREFIX/include"' >> ~/.bash_profile
-          echo  CFLAGS="-I$LLVM_PREFIX/include" >> $GITHUB_ENV
-          echo 'export CC="$LLVM_PREFIX/bin/clang"' >> ~/.bash_profile
           echo CC="$LLVM_PREFIX/bin/clang" >> $GITHUB_ENV
-          echo 'export CXX="$LLVM_PREFIX/bin/clang++"' >> ~/.bash_profile
           echo CXX="$LLVM_PREFIX/bin/clang++" >> $GITHUB_ENV
-          source ~/.bash_profile
+
       - name: Print clang version
         run: clang++ --version
 
@@ -63,41 +56,41 @@ jobs:
         with:
           path: ~/.conan2
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt', 'conanprofiles/clang-17-macos')}}
+
       - name: Create build directory
         run: mkdir ${{github.workspace}}/build
+
       - name: Install and run conan
         working-directory: ${{github.workspace}}/build
-        run: |
-          conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing
+        run: conan install .. -pr:b=../conanprofiles/clang-17-macos -pr:h=../conanprofiles/clang-17-macos -of=. --build=missing
+
       - name: Configure CMake
         # For std::ranges::join_view we need the -fexperimental-library flag on libc++17.
         # We currently cannot use the parallel algorithms, as the parallel sort requires a GNU-extension, and we build with `libc++`.
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON
 
       - name: Build
         # Build your program with the given configuration
         # Sourcing the conanrun.sh even for building is required to make gtest_discover_tests pass reliably.
-        run: >
-          df -h;
-          source ${{github.workspace}}/build/conanrun.sh;
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 2; 
+        run: |
+          df -h
+          source ${{github.workspace}}/build/conanrun.sh
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 2
 
       - name: Test
         working-directory: ${{github.workspace}}/build/test
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: >
-          df -h;
-          source ../conanrun.sh;
-          env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .;
+        run: |
+          df -h
+          source ${{github.workspace}}/build/conanrun.sh
+          env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
 
       - name: Running and printing the benchmark examples.
         working-directory: ${{github.workspace}}/build
-        run: >
-          source ./conanrun.sh;
-          benchmark/BenchmarkExamples -p;
+        run: benchmark/BenchmarkExamples -p
 
       - name: E2E
-        run: >
-          source ${{github.workspace}}/build/conanrun.sh;
-          ${{github.workspace}}/e2e/e2e.sh;
+        run: |
+          source ${{github.workspace}}/build/conanrun.sh
+          ${{github.workspace}}/e2e/e2e.sh
