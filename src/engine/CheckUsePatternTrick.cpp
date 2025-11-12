@@ -67,11 +67,10 @@ bool isVariableContainedInGraphPatternOperation(
     } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
                                                p::TextSearchQuery,
                                                p::NamedCachedResult>) {
-      // For `MagicServiceQuery`s delegate to the nested graph patterns.
-      if (arg.childGraphPattern_.has_value()) {
-        return check(arg.childGraphPattern_.value());
-      }
-      return false;
+      // For `MagicServiceQuery`s disable the pattern trick. This might slow
+      // things down more than necessary but is never wrong. In the future this
+      // could potentially be enabled for certain magic service queries.
+      return true;
     } else {
       static_assert(
           ad_utility::SameAsAny<T, p::TransPath, p::Describe, p::Load>);
