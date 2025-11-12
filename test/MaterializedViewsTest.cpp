@@ -174,6 +174,11 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->getName(), "testView1");
 
+  MaterializedViewsManager managerNoBaseName;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      managerNoBaseName.getView("testView1"),
+      ::testing::HasSubstr("index base filename was not set"));
+
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
   using V = Variable;
