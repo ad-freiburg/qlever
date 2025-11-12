@@ -2021,6 +2021,14 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
                 optionalHasTable(
                     {{getId("\"älpha\""), I(1)}, {getId("\"Beta\""), I(1)}}));
   }
+
+  // LIMIT 0 edge case
+  {
+    auto clone = xyScan->clone();
+    clone->applyLimit({0, 1});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+    EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
+  }
 }
 
 // _____________________________________________________________________________
@@ -2116,6 +2124,14 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
     auto optional = groupBy.computeGroupByForFullIndexScan();
     EXPECT_THAT(optional,
                 optionalHasTable({{V(6), I(1)}, {V(7), I(2)}, {V(19), I(5)}}));
+  }
+  {
+    auto clone = xyzScanSortedByX->clone();
+    clone->applyLimit({0, 1});
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
+
+    auto optional = groupBy.computeGroupByForFullIndexScan();
+    EXPECT_THAT(optional, optionalHasTable({}));
   }
   {
     auto clone = xyzScanSortedByX->clone();

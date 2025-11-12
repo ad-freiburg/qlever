@@ -978,6 +978,12 @@ CPP_template_def(typename IdGetter)(
   uint64_t remainingOffset = limitOffset._offset;
   uint64_t remainingLimit = limitOffset.limitOrDefault();
 
+  // For LIMIT 0 we need to abort early for correctness (and its also more
+  // efficient).
+  if (remainingLimit == 0) {
+    return std::move(table).toDynamic();
+  }
+
   // Helper lambda that processes the next `colId` and a count. If it's new, a
   // row with the previous `currentColId` and its count are added to the
   // result, and `currentColId` and its count are updated to the new `colId`.
