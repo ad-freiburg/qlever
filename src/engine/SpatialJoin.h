@@ -29,6 +29,7 @@ struct PreparedSpatialJoinParams {
   std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
+  std::optional<std::string> rightCacheName_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins

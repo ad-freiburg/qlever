@@ -43,7 +43,9 @@ TEST(NamedResultCache, basicWorkflow) {
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
         {1, 0},
-        localVocab.clone()};
+        localVocab.clone(),
+        "cache key",
+        std::nullopt};
   };
   // store something in the cache and check that it's there
   {
@@ -52,7 +54,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -65,7 +68,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-1");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -86,7 +90,8 @@ TEST(NamedResultCache, basicWorkflow) {
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
-    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab] = *res;
+    const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
+                 outCacheKey, outGeoIndex] = *res;
     EXPECT_THAT(*outTable, matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
@@ -115,7 +120,7 @@ TEST(NamedResultCache, E2E) {
   std::string pinnedQuery =
       "SELECT * { {?s <p> <o> } UNION {VALUES ?s { <notInVocab> }}} INTERNAL "
       "SORT BY ?s";
-  qec->pinResultWithName() = "dummyQuery";
+  qec->pinResultWithName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
   [[maybe_unused]] auto pinnedResult = qet.getResult();
 

@@ -355,7 +355,8 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 
 // `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{5};
+  // Set the size of this cache to at least the number of supported units.
+  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
   using Mixin<UnitOfMeasurementValueGetter>::operator();
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,

@@ -55,6 +55,11 @@ class DateYearOrDuration {
     bits_ = absl::bit_cast<uint64_t>(d) | (datetime << numPayloadDateBits);
   }
 
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+  DateYearOrDuration() = default;
+#endif
+
   // Construct a `DateYearOrDuration` given a `DayTimeDuration` object.
   explicit DateYearOrDuration(DayTimeDuration dayTimeDuration) {
     bits_ = absl::bit_cast<uint64_t>(dayTimeDuration) |
@@ -201,5 +206,8 @@ class DateYearOrDuration {
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
 };
+#ifdef QLEVER_CPP_17
+static_assert(std::is_default_constructible_v<DateYearOrDuration>);
+#endif
 
 #endif  //  QLEVER_DATES_AND_DURATION_H
