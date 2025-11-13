@@ -93,10 +93,10 @@ class SparqlExpressionPimpl {
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
 
-  // Struct to store a variable and a list of allowed language tags for it.
+  // Struct to store a variable and a set of allowed language tags for it.
   struct LangFilterData {
     Variable variable_;
-    std::vector<std::string> languages_;
+    ad_utility::HashSet<std::string> languages_;
   };
   // If `this` is an expression of the form `LANG(?variable) = "language"`,
   // return the variable and the language. Else return `std::nullopt`.

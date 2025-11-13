@@ -311,6 +311,10 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     if (!optVar.has_value() || !langPtr) {
       return std::nullopt;
     }
+
+    // TODO<joka921> Check that the language string doesn't contain a datatype
+    // etc.
+    // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
         std::move(optVar.value()),
         {std::string{asStringViewUnsafe(langPtr->value().getContent())}}};
@@ -569,19 +573,14 @@ InExpression::getLanguageFilterExpression() const {
   if (!optVar.has_value() || children_.size() < 2) {
     return std::nullopt;
   }
-  std::vector<std::string> languages;
+  ad_utility::HashSet<std::string> languages;
   for (const auto& child : children_ | ql::views::drop(1)) {
     const auto* langPtr =
         dynamic_cast<const StringLiteralExpression*>(child.get());
     if (!langPtr) {
       return std::nullopt;
     }
-    auto view = asStringViewUnsafe(langPtr->value().getContent());
-    // Deduplicate in O(n²), but the queries are usually small enough that this
-    // doesn't justify using a hash set for this.
-    if (!ad_utility::contains(languages, view)) {
-      languages.emplace_back(view);
-    }
+    languages.emplace(asStringViewUnsafe(langPtr->value().getContent()));
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};

@@ -43,10 +43,10 @@ class GraphPattern {
   // pattern.
 
   // Modify query to take care of language filter. `variable` is the variable,
-  // `languageInQuotes` is the language. Return `true` if it could successfully
-  // be applied, false otherwise.
+  // `langTags` are the associated languages. Return `true` if it could
+  // successfully be applied, false otherwise.
   bool addLanguageFilter(const Variable& variable,
-                         const std::vector<std::string>& langTags);
+                         const ad_utility::HashSet<std::string>& langTags);
 
   bool _optional;
 

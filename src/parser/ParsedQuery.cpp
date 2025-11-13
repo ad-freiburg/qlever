@@ -267,11 +267,12 @@ ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
 bool ParsedQuery::GraphPattern::addLanguageFilter(
-    const Variable& variable, const std::vector<std::string>& langTags) {
+    const Variable& variable,
+    const ad_utility::HashSet<std::string>& langTags) {
   AD_CORRECTNESS_CHECK(!langTags.empty());
   // Since most literals have an empty language tag we don't create extra
   // triples for them, so we can't use this optimization.
-  if (ad_utility::contains(langTags, "")) {
+  if (langTags.contains("")) {
     return false;
   }
   // Find all triples where the object is the `variable` and the predicate is
@@ -330,33 +331,44 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
   // case a triple `?variable ql:langtag "language"` is added at the end of
   // the graph pattern.
   if (matchingTriples.empty()) {
-    if (!variableFoundInTriple || langTags.size() > 1) {
+    if (!variableFoundInTriple) {
       return false;
     }
+    AD_CORRECTNESS_CHECK(!_graphPatterns.empty());
     AD_LOG_DEBUG << "language filter variable " + variable.name() +
                         " did not appear as object in any suitable "
                         "triple. "
                         "Using literal-to-language predicate instead.\n";
 
-    // If necessary create an empty `BasicGraphPattern` at the end to which we
-    // can append a triple.
+    std::vector<BasicGraphPattern> operations;
+    for (const auto& langTag : langTags) {
+      operations.emplace_back(std::vector{SparqlTriple{
+          variable,
+          PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
+              LANGUAGE_PREDICATE)),
+          ad_utility::convertLangtagToEntityUri(langTag)}});
+    }
+
+    // Optimization if there already is a `BasicGraphPattern` we can use.
     // TODO<joka921> It might be beneficial to place this triple not at the
     // end but close to other occurrences of `variable`.
-    if (_graphPatterns.empty() ||
-        !std::holds_alternative<parsedQuery::BasicGraphPattern>(
-            _graphPatterns.back())) {
-      _graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{});
+    if (operations.size() == 1 &&
+        std::holds_alternative<BasicGraphPattern>(_graphPatterns.back())) {
+      std::get<BasicGraphPattern>(_graphPatterns.back())
+          ._triples.push_back(std::move(operations.at(0)._triples.at(0)));
+    } else {
+      auto makeOp = [](GraphPatternOperation basicPattern) {
+        GraphPattern pattern;
+        pattern._graphPatterns.push_back(std::move(basicPattern));
+        return pattern;
+      };
+      GraphPatternOperation operation{std::move(operations.at(0))};
+      for (auto& basicPattern : operations | ql::views::drop(1)) {
+        operation = Union{makeOp(std::move(operation)),
+                          makeOp(std::move(basicPattern))};
+      }
+      _graphPatterns.push_back(std::move(operation));
     }
-    auto& t = std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())
-                  ._triples;
-
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTags.at(0));
-    SparqlTriple triple{
-        variable,
-        PropertyPath::fromIri(
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
-        langEntity};
-    t.push_back(std::move(triple));
   }
   return true;
 }

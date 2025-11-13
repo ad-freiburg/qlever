@@ -347,23 +347,20 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 
   std::optional<SparqlExpression::LangFilterData> getLanguageFilterExpression()
       const override {
-    if constexpr (std::is_same_v<BinaryPrefilterExpr,
-                                 prefilterExpressions::OrExpression>) {
-      // Concatenate filters for the case of
-      // `LANG(?abc) = "en" || LANG(?abc) = "mul"` and so on.
-      const auto& children = this->children();
-      AD_CORRECTNESS_CHECK(children.size() == 2);
-      auto leftFilter = children[0]->getLanguageFilterExpression();
-      auto rightFilter = children[1]->getLanguageFilterExpression();
-      if (leftFilter.has_value() && rightFilter.has_value() &&
-          leftFilter->variable_ == rightFilter->variable_) {
-        for (auto& lang : rightFilter->languages_) {
-          if (!ad_utility::contains(leftFilter->languages_, lang)) {
-            leftFilter->languages_.push_back(std::move(lang));
-          }
-        }
-        return leftFilter;
-      }
+    if constexpr (!std::is_same_v<BinaryPrefilterExpr,
+                                  prefilterExpressions::OrExpression>) {
+      return std::nullopt;
+    }
+    // Concatenate filters for the case of
+    // `LANG(?abc) = "en" || LANG(?abc) = "mul"` and so on.
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+    auto leftFilter = children[0]->getLanguageFilterExpression();
+    auto rightFilter = children[1]->getLanguageFilterExpression();
+    if (leftFilter.has_value() && rightFilter.has_value() &&
+        leftFilter->variable_ == rightFilter->variable_) {
+      leftFilter->languages_.merge(rightFilter->languages_);
+      return leftFilter;
     }
     return std::nullopt;
   }
