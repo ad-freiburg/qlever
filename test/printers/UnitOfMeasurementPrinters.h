@@ -5,7 +5,7 @@
 #ifndef QLEVER_TEST_PRINTERS_UNITOFMEASUREMENTPRINTERS_H
 #define QLEVER_TEST_PRINTERS_UNITOFMEASUREMENTPRINTERS_H
 
-#include "global/Constants.h"
+#include "util/UnitOfMeasurement.h"
 
 // _____________________________________________________________
 inline void PrintTo(const UnitOfMeasurement& unit, std::ostream* os) {
