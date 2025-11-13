@@ -179,7 +179,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               getLengthForTesting(line),
                                               MetricArea{0}}));
   static constexpr std::string_view polygon =
-      "\"POLYGON(2 4, 4 4, 4 2, 2 2)\""
+      "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   t.checkFromLocalAndNormalVocabAndLiteral(
       std::string{polygon},
@@ -249,7 +249,7 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
       "\"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
-      "\"POLYGON(2 4, 4 4, 4 2, 2 2)\""
+      "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   GeoPointOrWktTester t;
