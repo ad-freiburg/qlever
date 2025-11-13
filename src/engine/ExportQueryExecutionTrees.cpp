@@ -467,11 +467,19 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         }
         double dIntPart;
         // If the fractional part is zero, write number with one decimal place
-        // to make it distinct from integers. Otherwise, use `%g`, which uses
+        // to make it distinct from integers. Otherwise, use `%.13g`, which uses
         // fixed-size or exponential notation, whichever is more compact.
-        std::string out = std::modf(d, &dIntPart) == 0.0
-                              ? absl::StrFormat("%.1f", d)
-                              : absl::StrFormat("%g", d);
+        std::string out;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          out = absl::StrFormat("%.1f", d);
+        } else {
+          out = absl::StrFormat("%.13g", d);
+          // For some values `modf` evaluates to zero, but rounding still leads
+          // to a value without a trailing '.0'.
+          if (out.find_last_of(".e") == std::string::npos) {
+            out += ".0";
+          }
+        }
         return std::pair{std::move(out), XSD_DECIMAL_TYPE};
       }();
     case Bool:
@@ -918,9 +926,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab(),
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab(),
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             STREAMABLE_YIELD(optionalStringAndType.value().first);
           }
@@ -1401,8 +1409,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const char* b = XSD_BOOLEAN_TYPE;
     // Note: If `type` is `XSD_DOUBLE_TYPE`, `literal` is always "NaN", "INF" or
     // "-INF", which doesn't have a short form notation.
-    if (type == nullptr || type == i ||
-        (type == d && ad_utility::contains(literal, ".")) ||
+    if (type == nullptr || type == i || type == d ||
         (type == b && literal.length() > 1)) {
       return std::move(literal);
     } else {
