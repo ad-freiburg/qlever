@@ -1374,5 +1374,4 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // Explicit template instantiation for unit test helper function
 template Awaitable<std::optional<NonStreamedResponse>>
-Server::onlyForTestingProcess<
-    SimpleRequest, std::optional<NonStreamedResponse>>(SimpleRequest&);
+Server::onlyForTestingProcess(SimpleRequest&);
