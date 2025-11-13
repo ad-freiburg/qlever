@@ -482,16 +482,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           }
         },
         parsedHttpRequest.operation_);
-    // TODO<ullingerc> Address several improvements here: Support for
-    // cancellation? coroutine?
     AD_CONTRACT_CHECK(name.value() != "",
                       "The name for the view may not be empty");
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
 
-    writeMaterializedView(name.value(), query, requestTimer, cancellationHandle,
-                          timeLimit.value());
+    co_await [name, query, requestTimer, cancellationHandle, timeLimit,
+              this]() -> Awaitable<void> {
+      // TODO<ullingerc> Add support for cancellation
+      co_return writeMaterializedView(name.value(), query, requestTimer,
+                                      cancellationHandle, timeLimit.value());
+    }();
 
     nlohmann::json json{{"materialized-view-written", name.value()}};
     response = createJsonResponse(json, request);
@@ -1331,6 +1333,12 @@ void Server::writeMaterializedView(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
+  // The cache is cleared, because cache entries cannot be processed at the
+  // moment.
+  // TODO<ullingerc> Remove this as soon as we can build views from fully
+  // materialized results.
+  cache_.clearUnpinnedOnly();
+
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(
@@ -1343,3 +1351,28 @@ void Server::writeMaterializedView(
   MaterializedViewWriter writer(name, {qet, qec, std::move(plan.parsedQuery_)});
   writer.writeViewToDisk();
 }
+
+// For helper function `Server::onlyForTestingProcess`
+using NonStreamedResponse = http::response<http::string_body>;
+using SimpleRequest = http::request<http::string_body>;
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
+  ResponseT res;
+  co_await process(request, [&](auto response) -> Awaitable<void> {
+    using T = std::decay_t<decltype(response)>;
+    // At the moment only non-streamed results are returned
+    if constexpr (std::is_same_v<T, NonStreamedResponse>) {
+      res = std::optional{response};
+    }
+    co_return;
+  });
+  co_return res;
+}
+
+// Explicit template instatiation for unit test helper function
+template Awaitable<std::optional<NonStreamedResponse>>
+Server::onlyForTestingProcess<
+    SimpleRequest, std::optional<NonStreamedResponse>>(SimpleRequest&);

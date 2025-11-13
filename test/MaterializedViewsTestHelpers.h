@@ -45,7 +45,7 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 // _____________________________________________________________________________
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
-  std::cout << "Removing test index " << basename << ".*" << std::endl;
+  std::cout << "Removing test files " << basename << ".*" << std::endl;
   for (const auto& entry :
        std::filesystem::directory_iterator(std::filesystem::current_path())) {
     if (entry.is_regular_file() &&
@@ -62,12 +62,14 @@ class MaterializedViewsTest : public ::testing::Test {
 
  protected:
   const std::string testIndexBase_ = "_materializedViewsTestIndex";
+  std::stringstream log_;
 
   virtual std::string getDummyTurtle() const {
     return std::string{dummyTurtle};
   }
 
   void SetUp() override {
+    ad_utility::setGlobalLoggingStream(&log_);
     makeTestIndex(testIndexBase_, getDummyTurtle());
     qlever::EngineConfig config;
     config.baseName_ = testIndexBase_;
@@ -77,12 +79,15 @@ class MaterializedViewsTest : public ::testing::Test {
   void TearDown() override {
     qlv_ = nullptr;
     removeTestIndex(testIndexBase_);
+    ad_utility::setGlobalLoggingStream(&std::cout);
   }
 
   qlever::Qlever& qlv() {
     AD_CORRECTNESS_CHECK(qlv_ != nullptr);
     return *qlv_;
   }
+
+  void clearLog() { log_.str(""); }
 };
 
 // _____________________________________________________________________________

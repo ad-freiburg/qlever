@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./util/HttpRequestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Server.h"
 #include "gmock/gmock.h"
@@ -19,15 +20,21 @@
 namespace {
 
 using namespace materializedViewsTestHelpers;
+using namespace ad_utility::testing;
 
 }  // namespace
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
   // Write a simple view
+  clearLog();
   qlv().writeMaterializedView("testView1",
                               "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
+                              "Materialized view testView1 written to disk"));
   qlv().loadMaterializedView("testView1");
+  EXPECT_THAT(log_.str(), ::testing::HasSubstr(
+                              "Loading materialized view testView1 from disk"));
 
   // Test index scan on materialized view
   std::vector<std::string> equivalentQueries{
@@ -326,10 +333,13 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
-  // Write a new materialized view using the `Server` class
+  // Initialize but do not start a `Server` instance on our test index
+  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  server.initialize(testIndexBase_, false);
+
+  // Write a new materialized view using the `writeMaterializedView` method of
+  // the `Server` class
   {
-    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-    server.initialize(testIndexBase_, false);
     ad_utility::url_parser::sparqlOperation::Query query{
         "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }", {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
@@ -342,17 +352,111 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   }
 
   // Try loading the new view
-  qlv().loadMaterializedView("testViewFromServer");
-  auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
-      "SELECT * { ?s "
-      "<https://qlever.cs.uni-freiburg.de/materializedView/"
-      "testViewFromServer:o> ?o }");
-  auto res = qet->getResult(false);
-  ASSERT_TRUE(res->isFullyMaterialized());
-  EXPECT_EQ(res->idTable().numColumns(), 2);
-  EXPECT_EQ(res->idTable().numRows(), 4);
+  {
+    qlv().loadMaterializedView("testViewFromServer");
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
+        "SELECT * { ?s "
+        "<https://qlever.cs.uni-freiburg.de/materializedView/"
+        "testViewFromServer:o> ?o }");
+    auto res = qet->getResult(false);
+    ASSERT_TRUE(res->isFullyMaterialized());
+    EXPECT_EQ(res->idTable().numColumns(), 2);
+    EXPECT_EQ(res->idTable().numRows(), 4);
+  }
+
+  // Test the HTTP request processing of the `Server` class regarding writing
+  // and loading materialized views.
+  using ReqT = http::request<http::string_body>;
+  using ResT = std::optional<http::response<http::string_body>>;
+  auto simulateHttpRequest =
+      [&](const ReqT& request,
+          ad_utility::source_location location =
+              AD_CURRENT_SOURCE_LOC()) -> std::optional<nlohmann::json> {
+    auto l = generateLocationTrace(location);
+    boost::asio::io_context io;
+    std::future<ResT> fut = co_spawn(
+        io,
+        [](auto request, auto& server) -> boost::asio::awaitable<ResT> {
+          co_return co_await server
+              .template onlyForTestingProcess<decltype(request), ResT>(request);
+        }(std::move(request), server),
+        boost::asio::use_future);
+    io.run();
+    auto response = fut.get();
+    if (!response.has_value()) {
+      return std::nullopt;
+    }
+    return std::optional{nlohmann::json::parse(response.value().body())};
+  };
+
+  // Write a materialized view trough a simulated HTTP POST request.
+  {
+    clearLog();
+    auto request = makePostRequest(
+        "/?cmd=write-materialized-view&view-name=testViewFromHTTP&access-token="
+        "accessToken",
+        "application/sparql-query", "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+    auto response = simulateHttpRequest(request);
+
+    // Check HTTP response
+    ASSERT_TRUE(response.has_value());
+    ASSERT_TRUE(response.value().contains("materialized-view-written"));
+    EXPECT_EQ(response.value()["materialized-view-written"],
+              "testViewFromHTTP");
+
+    // Check correct logging
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view testViewFromHTTP written to disk"));
+  }
+
+  // Write a materialized view trough a simulated HTTP GET request.
+  {
+    clearLog();
+    auto request = makeGetRequest(
+        "/?cmd=write-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20%7B%20%3Fs%20%3Fp%20%3Fo%20.%20BIND(1%"
+        "20AS%20%3Fg)%20%7D");
+    auto response = simulateHttpRequest(request);
+
+    // Check HTTP response
+    ASSERT_TRUE(response.has_value());
+    ASSERT_TRUE(response.value().contains("materialized-view-written"));
+    EXPECT_EQ(response.value()["materialized-view-written"],
+              "testViewFromHTTP2");
+
+    // Check correct logging
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view testViewFromHTTP2 written to disk"));
+  }
+
+  // Load a materialized view trough a simulated HTTP GET request.
+  {
+    clearLog();
+    auto request = makeGetRequest(
+        "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken");
+    auto response = simulateHttpRequest(request);
+
+    // Check HTTP response
+    ASSERT_TRUE(response.has_value());
+    ASSERT_TRUE(response.value().contains("materialized-view-loaded"));
+    EXPECT_EQ(response.value()["materialized-view-loaded"],
+              "testViewFromHTTP2");
+
+    // Check correct logging
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Loading materialized view testViewFromHTTP2 from disk"));
+  }
+
+  // TODO<ullingerc> Add tests to check different error handlings in
+  // `Server::process`
 }
 
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTestLarge, LazyScan) {
   // Write a simple view, inflated 10x using cartesian product with a values
   // clause
