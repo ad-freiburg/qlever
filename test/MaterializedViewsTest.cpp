@@ -389,7 +389,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     return std::optional{nlohmann::json::parse(response.value().body())};
   };
 
-  // Write a materialized view trough a simulated HTTP POST request.
+  // Write a materialized view through a simulated HTTP POST request.
   {
     clearLog();
     auto request = makePostRequest(
@@ -410,7 +410,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                     "Materialized view testViewFromHTTP written to disk"));
   }
 
-  // Write a materialized view trough a simulated HTTP GET request.
+  // Write a materialized view through a simulated HTTP GET request.
   {
     clearLog();
     auto request = makeGetRequest(
@@ -432,7 +432,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                     "Materialized view testViewFromHTTP2 written to disk"));
   }
 
-  // Load a materialized view trough a simulated HTTP GET request.
+  // Load a materialized view through a simulated HTTP GET request.
   {
     clearLog();
     auto request = makeGetRequest(
