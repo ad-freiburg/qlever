@@ -1357,9 +1357,9 @@ using NonStreamedResponse = http::response<http::string_body>;
 using SimpleRequest = http::request<http::string_body>;
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
+template <typename RequestT, typename ResponseT>
+requires ad_utility::httpUtils::HttpRequest<RequestT>
+Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
   ResponseT res;
   co_await process(request, [&](auto response) -> Awaitable<void> {
     using T = std::decay_t<decltype(response)>;

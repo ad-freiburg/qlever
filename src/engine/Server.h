@@ -146,9 +146,9 @@ class Server {
   // Helper function for unit tests, calls `process` with the given request and
   // returns the response that would have been sent. This needs to be declared
   // here for templates to be visible to the compiler.
-  CPP_template_def(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
+  template <typename RequestT, typename ResponseT>
+  requires ad_utility::httpUtils::HttpRequest<RequestT>
+  Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
