@@ -7,8 +7,6 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
-#include <util/MemorySize/MemorySize.h>
-
 #include <optional>
 #include <string>
 #include <utility>
@@ -21,6 +19,7 @@
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
