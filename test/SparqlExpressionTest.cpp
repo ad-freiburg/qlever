@@ -1943,10 +1943,11 @@ TEST(OrExpression, getLanguageFilterExpression) {
   {
     auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
                                makeSimpleLangFilter("\"de\"", Variable{"?x"}));
-    EXPECT_THAT(oe->getLanguageFilterExpression(),
-                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                               AD_FIELD(LFD, languages_,
-                                        ElementsAre(Eq("en"), Eq("de"))))));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("de"))))));
   }
   // Simple case with deduplication
   {
@@ -1958,10 +1959,10 @@ TEST(OrExpression, getLanguageFilterExpression) {
         std::make_unique<VariableExpression>(Variable{"?x"}));
     auto oe = makeOrExpression(makeSimpleLangFilter("\"en\"", Variable{"?x"}),
                                makeSimpleLangFilter("\"en\"", Variable{"?x"}));
-    EXPECT_THAT(
-        oe->getLanguageFilterExpression(),
-        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                       AD_FIELD(LFD, languages_, ElementsAre(Eq("en"))))));
+    EXPECT_THAT(oe->getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
   }
   // Complicated case with deduplication and IN
   {
@@ -1984,11 +1985,12 @@ TEST(OrExpression, getLanguageFilterExpression) {
             makeOrExpression(
                 makeSimpleLangFilter("\"\"", Variable{"?x"}),
                 makeMultiLangFilter({"\"de\"", "\"en\""}, Variable{"?x"}))));
-    EXPECT_THAT(oe->getLanguageFilterExpression(),
-                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                               AD_FIELD(LFD, languages_,
-                                        ElementsAre(Eq(""), Eq("mul"), Eq("en"),
-                                                    Eq("de"))))));
+    EXPECT_THAT(
+        oe->getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                     Eq("en"), Eq("de"))))));
   }
 
   // Non-matching variables

@@ -959,10 +959,10 @@ TEST(RelationalExpression, getLanguageFilterExpression) {
     auto le = makeLangExpression(
         std::make_unique<VariableExpression>(Variable{"?x"}));
     EqualExpression ee{{std::move(sle), std::move(le)}};
-    EXPECT_THAT(
-        ee.getLanguageFilterExpression(),
-        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                       AD_FIELD(LFD, languages_, ElementsAre(Eq("en"))))));
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
   }
   // Commutative case
   {
@@ -971,10 +971,10 @@ TEST(RelationalExpression, getLanguageFilterExpression) {
     auto sle = std::make_unique<StringLiteralExpression>(
         tripleComponentLiteral("\"en\""));
     EqualExpression ee{{std::move(le), std::move(sle)}};
-    EXPECT_THAT(
-        ee.getLanguageFilterExpression(),
-        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                       AD_FIELD(LFD, languages_, ElementsAre(Eq("en"))))));
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
   }
   // Not equality
   {
@@ -1016,10 +1016,10 @@ TEST(InExpression, getLanguageFilterExpression) {
         tripleComponentLiteral("\"en\""));
     children.push_back(std::move(sle));
     InExpression ie{std::move(le), std::move(children)};
-    EXPECT_THAT(
-        ie.getLanguageFilterExpression(),
-        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                       AD_FIELD(LFD, languages_, ElementsAre(Eq("en"))))));
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
   }
   // Empty case
   {
@@ -1042,11 +1042,11 @@ TEST(InExpression, getLanguageFilterExpression) {
     children.push_back(std::move(sle2));
     children.push_back(std::move(sle3));
     InExpression ie{std::move(le), std::move(children)};
-    EXPECT_THAT(
-        ie.getLanguageFilterExpression(),
-        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                       AD_FIELD(LFD, languages_,
-                                ElementsAre(Eq(""), Eq("mul"), Eq("en"))))));
+    EXPECT_THAT(ie.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq(""), Eq("mul"),
+                                                             Eq("en"))))));
   }
   // Duplicate values are deduplicated
   {
@@ -1062,10 +1062,11 @@ TEST(InExpression, getLanguageFilterExpression) {
     children.push_back(std::move(sle2));
     children.push_back(std::move(sle3));
     InExpression ie{std::move(le), std::move(children)};
-    EXPECT_THAT(ie.getLanguageFilterExpression(),
-                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
-                               AD_FIELD(LFD, languages_,
-                                        ElementsAre(Eq("en"), Eq("mul"))))));
+    EXPECT_THAT(
+        ie.getLanguageFilterExpression(),
+        Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                       AD_FIELD(LFD, languages_,
+                                UnorderedElementsAre(Eq("en"), Eq("mul"))))));
   }
   // Some values are not literals
   {
