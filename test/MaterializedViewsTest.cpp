@@ -5,13 +5,12 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Server.h"
-#include "gmock/gmock.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/CancellationHandle.h"
