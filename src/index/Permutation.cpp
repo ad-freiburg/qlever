@@ -21,7 +21,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
 // _____________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const ScanSpecification& scanSpec,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   return {scanSpec,
           BlockMetadataRanges(
               getActualPermutation(scanSpec).getAugmentedMetadataForPermutation(
@@ -67,7 +67,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
-                          const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+                          const LocatedTriplesVersion& locatedTriplesSnapshot,
                           const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -82,7 +82,7 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
   return p.reader().getResultSizeOfScan(
       scanSpecAndBlocks,
@@ -92,7 +92,7 @@ size_t Permutation::getResultSizeOfScan(
 // _____________________________________________________________________
 std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
   return p.reader().getSizeEstimateForScan(
       scanSpecAndBlocks,
@@ -102,7 +102,7 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(col0Id);
   return p.reader().getDistinctCol1IdsAndCounts(
       getScanSpecAndBlocks(
@@ -115,7 +115,7 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctCol0IdsAndCounts(
       getScanSpecAndBlocks(scanSpec, locatedTriplesSnapshot),
@@ -165,7 +165,7 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
-    Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    Id col0Id, const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(col0Id);
   if (p.meta_.col0IdExists(col0Id)) {
     return p.meta_.getMetaData(col0Id);
@@ -180,7 +180,7 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
   auto firstAndLastTriple = p.reader().getFirstAndLastTripleIgnoringGraph(
       scanSpecAndBlocks,
@@ -198,7 +198,7 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LocatedTriplesVersion& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
@@ -246,8 +246,8 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  static const LocatedTriplesSnapshot emptySnapshot{
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
+  static const LocatedTriplesVersion emptySnapshot{
       {}, LocalVocab{}.getLifetimeExtender(), 0};
   const auto& actualSnapshot =
       isInternalPermutation_ ? emptySnapshot : locatedTriplesSnapshot;
@@ -256,7 +256,7 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 
 // ______________________________________________________________________
 BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesVersion& locatedTriplesSnapshot) const {
   BlockMetadataSpan blocks(
       isInternalPermutation_
           ? meta_.blockData()

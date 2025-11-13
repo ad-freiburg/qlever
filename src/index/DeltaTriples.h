@@ -27,27 +27,32 @@
 using LocatedTriplesPerBlockAllPermutations =
     std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>;
 
-// The locations of a set of delta triples (triples that were inserted or
-// deleted since the index was built) in each of the six permutations, and a
-// local vocab. This is all the information that is required to perform a query
-// that correctly respects these delta triples, hence the name.
-struct LocatedTriplesSnapshot {
+// A version of a set of delta triples (triples that were inserted or
+// deleted since the index was built):
+// - locations of the located triples in each of the six permutations
+// - an index (orders versions by the last modification time)
+// - a copy of the local vocab when used as fixed snapshot of a version
+// This is all the information that is required to perform a query that
+// correctly respects these delta triples.
+struct LocatedTriplesVersion {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
-  // Make sure to keep the local vocab alive as long as the snapshot is alive.
+  // Make sure to keep the local vocab alive as long as the version is alive.
   // The `DeltaTriples` class may concurrently add new entries under the hood,
   // but this is safe because the `LifetimeExtender` prevents access entirely.
-  LocalVocab::LifetimeExtender localVocabLifetimeExtender_;
-  // A unique index for this snapshot that is used in the query cache.
+  std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender_;
+  // A unique index for this snapshot. If one version has been modified later
+  // than another, then the version that has been modified last has a higher
+  // index. The index is used in the query cache.
   size_t index_;
-  // Get `TripleWithPosition` objects for given permutation.
+  // Get `LocatedTriplesPerBlock` objects for given permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
 };
 
-// A shared pointer to a constant `LocatedTriplesSnapshot`, but as an explicit
-// class, such that it can be forward-declared.
-class SharedLocatedTriplesSnapshot
-    : public std::shared_ptr<const LocatedTriplesSnapshot> {};
+// A fixed snapshot of a `LocatedTriplesVersion` as a shared pointer, but as an
+// explicit class, such that it can be forward-declared.
+class LocatedTriplesSnapshot
+    : public std::shared_ptr<const LocatedTriplesVersion> {};
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {
@@ -93,10 +98,13 @@ class DeltaTriples {
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
-  size_t nextSnapshotIndex_ = 0;
 
-  // The located triples for all the 6 permutations.
-  LocatedTriplesPerBlockAllPermutations locatedTriples_;
+  // The located triples for all the 6 permutations. We store it as a
+  // `shared_ptr` so that we can easily convert them to a
+  // `LocatedTriplesSnapshot`.
+  std::shared_ptr<LocatedTriplesVersion> locatedTriples_ =
+      std::make_shared<LocatedTriplesVersion>(
+          LocatedTriplesPerBlockAllPermutations{}, std::nullopt, 0);
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -146,15 +154,17 @@ class DeltaTriples {
   // Get the common `LocalVocab` of the delta triples.
  private:
   LocalVocab& localVocab() { return localVocab_; }
-  auto& locatedTriples() { return locatedTriples_; }
-  const auto& locatedTriples() const { return locatedTriples_; }
+  auto& locatedTriples() { return locatedTriples_->locatedTriplesPerBlock_; }
+  const auto& locatedTriples() const {
+    return locatedTriples_->locatedTriplesPerBlock_;
+  }
 
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
 
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return locatedTriples_.at(static_cast<size_t>(permutation));
+    return locatedTriples_->getLocatedTriplesForPermutation(permutation);
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -192,9 +202,13 @@ class DeltaTriples {
   void readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
-  // `LocalVocab` which form a snapshot of the current status of this
-  // `DeltaTriples` object.
-  SharedLocatedTriplesSnapshot getSnapshot();
+  // `LocalVocab` which form an unchanging snapshot of the current state of
+  // this `DeltaTriples` object.
+  LocatedTriplesSnapshot getSnapshot();
+
+  // Return a shallow copy of the `LocatedTriples` which mirrors the state of
+  // this `DeltaTriples` object.
+  LocatedTriplesSnapshot asSnapshot() const;
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed.
@@ -252,7 +266,7 @@ class DeltaTriples {
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
+  ad_utility::Synchronized<LocatedTriplesSnapshot, std::shared_mutex>
       currentLocatedTriplesSnapshot_;
 
  public:
@@ -281,7 +295,12 @@ class DeltaTriplesManager {
 
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.
-  SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
+  LocatedTriplesSnapshot getCurrentSnapshot() const;
+
+  // Return a shared pointer to a shallow copy of the `DeltaTriples`. This is
+  // always cheap but the state of the snapshot mirrors the underlying
+  // `DeltaTriples`. It should only be used inside `modify`.
+  LocatedTriplesSnapshot asSnapshot() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

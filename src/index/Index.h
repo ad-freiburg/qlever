@@ -26,7 +26,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
-struct LocatedTriplesSnapshot;
+struct LocatedTriplesVersion;
 class DeltaTriplesManager;
 
 class Index {
@@ -126,10 +126,10 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(
       const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
   [[nodiscard]] size_t getCardinality(
       Id id, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -226,7 +226,7 @@ class Index {
   // _____________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
   std::vector<float> getMultiplicities(Permutation::Enum p) const;
@@ -250,14 +250,14 @@ class Index {
                Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesVersion& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesVersion& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
@@ -265,7 +265,7 @@ class Index {
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

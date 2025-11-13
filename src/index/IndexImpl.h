@@ -295,12 +295,12 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesSnapshot&) const;
+                        const LocatedTriplesVersion&) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(
       const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -475,7 +475,7 @@ class IndexImpl {
   // _____________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, Permutation::Enum permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
   std::vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -485,21 +485,21 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesVersion& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+               const LocatedTriplesVersion& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesVersion& locatedTriplesSnapshot) const;
 
  protected:
   // Private member functions
