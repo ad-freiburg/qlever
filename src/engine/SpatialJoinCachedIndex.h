@@ -10,6 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/Serializer.h"
 
 // Forward declarations
 class MutableS2ShapeIndex;
@@ -33,6 +34,9 @@ class SpatialJoinCachedIndex {
   //  respective `IdTable` from which this `SpatialJoinCachedIndex` was created.
   ad_utility::HashMap<size_t, size_t> shapeIndexToRow_;
 
+  std::string serializeShapes() const;
+  std::vector<size_t> serializeLineIndices() const;
+
  public:
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
@@ -50,6 +54,27 @@ class SpatialJoinCachedIndex {
   // this function is inlined.
   size_t getRow(size_t shapeIndex) const {
     return shapeIndexToRow_.at(shapeIndex);
+  }
+
+  // Only for serialization, TODO<joka921> make it tagged.
+  struct TagForSerialization {};
+  SpatialJoinCachedIndex(TagForSerialization);
+  void populateFromSerialized(std::string_view serializedShapes,
+                              std::vector<size_t> lineIndices);
+
+  AD_SERIALIZE_FRIEND_FUNCTION(SpatialJoinCachedIndex) {
+    serializer | arg.geometryColumn_;
+    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      serializer << arg.serializeShapes();
+      serializer << arg.serializeLineIndices();
+    } else {
+      std::string serializedShapes;
+      // TODO<joka921> Make it impossible to use the wrong types here.
+      serializer >> serializedShapes;
+      std::vector<size_t> lineIndices;
+      serializer >> lineIndices;
+      arg.populateFromSerialized(serializedShapes, lineIndices);
+    }
   }
 };
 

@@ -37,7 +37,10 @@ class SpatialJoinCachedIndexImpl {
       }
     }
     lines_.shrink_to_fit();
+    return populateFromLines();
+  }
 
+  ad_utility::HashMap<size_t, size_t> populateFromLines() {
     ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
     for (const auto& [line, row] : lines_) {
       auto shapeIndex =
@@ -76,3 +79,35 @@ std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
     const {
   return {pimpl_, &pimpl_->s2index_};
 }
+
+// ____________________________________________________________________________
+std::string SpatialJoinCachedIndex::serializeShapes() const {
+  Encoder encoder;
+  for (const auto& [line, row] : pimpl_->lines_) {
+    line.Encode(&encoder);
+  }
+  return std::string{encoder.base(), encoder.length()};
+}
+
+std::vector<size_t> SpatialJoinCachedIndex::serializeLineIndices() const {
+  return ::ranges::to<std::vector>(pimpl_->lines_ | ranges::views::values);
+}
+
+void SpatialJoinCachedIndex::populateFromSerialized(
+    std::string_view serializedShapes, std::vector<size_t> lineIndices) {
+  pimpl_ = std::make_shared<SpatialJoinCachedIndexImpl>();
+  pimpl_->lines_.reserve(lineIndices.size());
+  Decoder decoder(serializedShapes.data(), serializedShapes.size());
+  for (size_t i = 0; i < lineIndices.size(); ++i) {
+    pimpl_->lines_.emplace_back(S2Polyline{}, lineIndices[i]);
+    bool success = pimpl_->lines_.back().first.Decode(&decoder);
+    if (!success) {
+      throw std::runtime_error("Could not decode serialized geometry.");
+    }
+  }
+  shapeIndexToRow_ = pimpl_->populateFromLines();
+}
+
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(TagForSerialization)
+    : geometryColumn_("?dummyCol"),
+      pimpl_(std::make_shared<SpatialJoinCachedIndexImpl>()) {}

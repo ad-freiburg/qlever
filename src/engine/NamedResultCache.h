@@ -51,6 +51,8 @@ class NamedResultCache {
 
  private:
   ad_utility::Synchronized<Cache> cache_;
+  // Keep track of all keys for serialization purposes
+  ad_utility::Synchronized<std::vector<Key>> keys_;
 
  public:
   // Store the given `result` under the given `name`. If a result with the same
@@ -76,6 +78,13 @@ class NamedResultCache {
   // `QueryExecutionTree`.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
+
+  // Serialize the complete cache to disk at the given `path`.
+  void writeToDisk(const std::string& path) const;
+
+  // Deserialize and load the cache from disk at the given `path`.
+  // This will clear any existing cache entries before loading.
+  void readFromDisk(const std::string& path);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
