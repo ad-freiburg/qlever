@@ -192,7 +192,7 @@ inline util::geo::I32Box boxToWebMerc(const util::geo::DBox& b) {
 // ____________________________________________________________________________
 inline void checkGeoPoint(std::optional<GeoPoint> actual,
                           std::optional<GeoPoint> expected,
-                          Loc sourceLocation = Loc::current()) {
+                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(actual.has_value(), expected.has_value());
   if (!actual.has_value()) {
@@ -205,7 +205,7 @@ inline void checkGeoPoint(std::optional<GeoPoint> actual,
 // ____________________________________________________________________________
 inline void checkGeoPointOrWkt(std::optional<GeoPointOrWkt> actual,
                                std::optional<GeoPointOrWkt> expected,
-                               Loc sourceLocation = Loc::current()) {
+                               Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(actual.has_value(), expected.has_value());
   if (!actual.has_value()) {
