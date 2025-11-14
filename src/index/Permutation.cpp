@@ -66,13 +66,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 // _____________________________________________________________________________
 void Permutation::setOriginalMetadataForDeltaTriples(
     DeltaTriples& deltaTriples) const {
-  if (isInternalPermutation_) {
-    deltaTriples.setInternalOriginalMetadata(permutation(),
-                                             metaData().blockDataShared());
-  } else {
-    deltaTriples.setOriginalMetadata(permutation(),
-                                     metaData().blockDataShared());
-  }
+  deltaTriples.setOriginalMetadata(permutation(), metaData().blockDataShared(),
+                                   isInternalPermutation_);
   if (internalPermutation_ != nullptr) {
     internalPermutation().setOriginalMetadataForDeltaTriples(deltaTriples);
   }

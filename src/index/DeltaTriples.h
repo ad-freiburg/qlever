@@ -216,15 +216,12 @@ class DeltaTriples {
   SharedLocatedTriplesSnapshot getSnapshot();
 
   // Register the original `metadata` for the given `permutation`. This has to
-  // be called before any updates are processed.
+  // be called before any updates are processed. If `setInternalMetadata` is
+  // true, this will set the metadata to the internal permutations instead.
   void setOriginalMetadata(
       Permutation::Enum permutation,
-      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
-  // Register the original `metadata` for the given `permutation`. This has to
-  // be called before any updates are processed.
-  void setInternalOriginalMetadata(
-      Permutation::Enum permutation,
-      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
+      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
+      bool setInternalMetadata);
 
   // Update the block metadata.
   void updateAugmentedMetadata();
