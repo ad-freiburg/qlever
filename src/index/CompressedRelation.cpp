@@ -2057,11 +2057,15 @@ CPP_template(typename Range)(requires ql::ranges::input_range<Range>) static voi
 CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
     ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges)
     : scanSpec_(std::move(scanSpec)) {
-  const auto& blockRangeView = blockMetadataRanges | ql::views::join;
-  checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    const auto& blockRangeView = blockMetadataRanges | ql::views::join;
+    checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
+  }
   blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
-  checkBlockMetadataInvariantBlockConsistencyImpl(
-      getBlockMetadataView(), scanSpec_.firstFreeColIndex());
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    checkBlockMetadataInvariantBlockConsistencyImpl(
+        getBlockMetadataView(), scanSpec_.firstFreeColIndex());
+  }
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
 }
 
