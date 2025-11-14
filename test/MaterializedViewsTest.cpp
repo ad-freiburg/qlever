@@ -480,15 +480,34 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
-        "application/sparql-update", simpleWriteQuery_);
+        "application/sparql-query", simpleWriteQuery_);
     AD_EXPECT_THROW_WITH_MESSAGE(
         simulateHttpRequest(request),
         ::testing::HasSubstr("write-materialized-view requires a valid access "
                              "token but no access token was provided"));
   }
 
-  // TODO<ullingerc> Add tests to check different error handlings in
-  // `Server::process`
+  // Test check for name of the view (missing)
+  {
+    auto request = makePostRequest(
+        "/?cmd=write-materialized-view&access-token=accessToken",
+        "application/sparql-query", simpleWriteQuery_);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        simulateHttpRequest(request),
+        ::testing::HasSubstr(
+            "Writing a materialized view requires a name to be set "
+            "via the 'view-name' parameter"));
+  }
+
+  // Test check for name of the view (empty)
+  {
+    auto request = makePostRequest(
+        "/?cmd=write-materialized-view&view-name=&access-token=accessToken",
+        "application/sparql-query", simpleWriteQuery_);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        simulateHttpRequest(request),
+        ::testing::HasSubstr("The name for the view may not be empty"));
+  }
 }
 
 // _____________________________________________________________________________
