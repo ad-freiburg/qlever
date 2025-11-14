@@ -53,6 +53,15 @@ TEST_F(MaterializedViewsTest, Basic) {
         }
       }
     )",
+      // Regression test (subquery)
+      R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        SELECT * {
+          ?s view:testView1:g ?x .
+        }
+      }
+    )",
   };
   for (const auto& query : equivalentQueries) {
     auto [qet, qec, parsed] = qlv().parseAndPlanQuery(query);
@@ -471,21 +480,48 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   qlv().loadMaterializedView("testView1");
 
   // Run a simple query and consume its result lazily
-  auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
-      "SELECT * { ?s "
-      "<https://qlever.cs.uni-freiburg.de/materializedView/"
-      "testView1:o> ?o }");
-  auto res = qet->getResult(true);
-  size_t numRows = 0;
-  size_t numBlocks = 0;
-  ASSERT_FALSE(res->isFullyMaterialized());
-  for (const auto& [idTable, localVocab] : res->idTables()) {
-    EXPECT_TRUE(localVocab.empty());
-    EXPECT_EQ(idTable.numColumns(), 2);
-    numRows += idTable.numRows();
-    ++numBlocks;
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
+        "SELECT * { ?s "
+        "<https://qlever.cs.uni-freiburg.de/materializedView/"
+        "testView1:o> ?o }");
+
+    auto res = qet->getResult(true);
+    size_t numRows = 0;
+    size_t numBlocks = 0;
+
+    ASSERT_FALSE(res->isFullyMaterialized());
+
+    for (const auto& [idTable, localVocab] : res->idTables()) {
+      EXPECT_TRUE(localVocab.empty());
+      EXPECT_EQ(idTable.numColumns(), 2);
+      numRows += idTable.numRows();
+      ++numBlocks;
+    }
+
+    EXPECT_EQ(numRows, 2 * numFakeSubjects_);
+    AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
+                << " block(s)" << std::endl;
+
+    EXPECT_THAT(qet->getRootOperation()->getCacheKey(),
+                ::testing::HasSubstr("on materialized view testView1"));
+    const auto& rtDetails =
+        qet->getRootOperation()->getRuntimeInfoPointer()->details_;
+    ASSERT_TRUE(rtDetails.contains("scan-on-materialized-view"));
+    EXPECT_EQ(rtDetails["scan-on-materialized-view"], "testView1");
   }
-  EXPECT_EQ(numRows, 2 * numFakeSubjects_);
-  AD_LOG_INFO << "Lazy scan had " << numRows << " rows from " << numBlocks
-              << " block(s)" << std::endl;
+
+  // Regression test for `COUNT(*)`
+  {
+    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(
+        "SELECT (COUNT(*) AS ?cnt) { ?s "
+        "<https://qlever.cs.uni-freiburg.de/materializedView/"
+        "testView1:o> ?o }");
+    auto res = qet->getResult();
+    ASSERT_TRUE(res->isFullyMaterialized());
+    auto col = qet->getVariableColumn(Variable{"?cnt"});
+    auto count = res->idTable().at(0, col);
+    ASSERT_TRUE(count.getDatatype() == Datatype::Int);
+    EXPECT_EQ(count.getInt(), 2 * numFakeSubjects_);
+  }
 }
