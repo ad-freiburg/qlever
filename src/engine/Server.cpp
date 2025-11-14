@@ -505,11 +505,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery,
-       this](std::vector<ParsedQuery> operations, std::string operationName,
-             const std::string operationString,
-             std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string msg) -> Awaitable<void> {
+       &requestTimer, &plannedQuery, this](
+          std::vector<ParsedQuery> operations, std::string operationName,
+          const std::string operationString,
+          std::function<bool(const ParsedQuery&)> expectedOperation,
+          const std::string msg, SharedTimeTracer tracer) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -529,7 +529,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
       co_return co_await processUpdate(
-          std::move(operations), requestTimer, cancellationHandle, qec,
+          std::move(operations), requestTimer, tracer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value(), plannedQuery);
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
@@ -546,32 +546,41 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
         &index_.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
-        "following update was sent instead of an query: ");
+        "following update was sent instead of an query: ",
+        dummy);
   };
   auto visitUpdate = [this, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
         index().getBlankNodeManager(), &index().encodedIriManager(),
         update.update_, update.datasetClauses_);
+    tracer->endTrace("parsing");
     return visitOperation(
         std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
-        "following query was sent instead of an update: ");
+        "following query was sent instead of an update: ",
+        tracer);
   };
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
        this](GraphStoreOperation operation) -> Awaitable<void> {
+    auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
+    tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request, index_);
+    tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
@@ -587,7 +596,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         std::move(parsedOperations),
         absl::StrCat("Graph Store (", std::string_view{request.method_string()},
                      ")"),
-        std::move(operationString), trueFunc, "Unused dummy message");
+        std::move(operationString), trueFunc, "Unused dummy message", tracer);
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
@@ -1019,12 +1028,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
-        const ad_utility::Timer& requestTimer,
+        const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  ad_utility::timer::TimeTracer tracer("update");
-  tracer.beginTrace("waitingForUpdateThread");
+  tracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1035,33 +1043,41 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, &tracer]() {
-        tracer.endTrace("waitingForUpdateThread");
+       &plannedUpdate, tracer]() {
+        tracer->endTrace("waitingForUpdateThread");
         qec.updateLocatedTriplesSnapshot();
         return index_.deltaTriplesManager().modify<json>(
-            [this, &cancellationHandle, &plannedUpdate, &tracer, &updates,
-             &requestTimer, &timeLimit, &qec](auto& deltaTriples) {
+            [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
+             &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
               json results = json::array();
-              for (ParsedQuery& update : updates) {
-                tracer.beginTrace("planning");
-                plannedUpdate = planQuery(std::move(update), requestTimer,
+              for (size_t i = 0; i < updates.size(); i++) {
+                // The augmented metadata is invalidated by any update. It is
+                // only updated automatically at the end of modify. Updates with
+                // non-empty graph patterns need the augmented metadata. Update
+                // the augmented metadata before executing those updates.
+                if (i != 0 &&
+                    !updates[i]._rootGraphPattern._graphPatterns.empty()) {
+                  deltaTriples.updateAugmentedMetadata();
+                }
+                tracer->beginTrace("planning");
+                plannedUpdate = planQuery(std::move(updates[i]), requestTimer,
                                           timeLimit, qec, cancellationHandle);
-                tracer.endTrace("planning");
-                tracer.beginTrace("execution");
+                tracer->endTrace("planning");
+                tracer->beginTrace("execution");
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->processUpdateImpl(
                     plannedUpdate.value(), cancellationHandle, deltaTriples,
-                    tracer);
-                tracer.endTrace("execution");
+                    *tracer);
+                tracer->endTrace("execution");
 
-                tracer.endTrace("update");
+                tracer->endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
                     index_, index_.deltaTriplesManager().getCurrentSnapshot(),
                     *plannedUpdate, plannedUpdate->queryExecutionTree_,
-                    updateMetadata, tracer));
-                tracer.reset();
+                    updateMetadata, *tracer));
+                tracer->reset();
 
                 AD_LOG_INFO << "Done processing update, total time was "
                             << requestTimer.msecs().count() << " ms"
@@ -1075,12 +1091,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               }
               return results;
             },
-            true, tracer);
+            true, true, *tracer);
       },
       cancellationHandle);
   auto responses = co_await std::move(coroutine);
-  tracer.endTrace("update");
-  responses.push_back(tracer.getJSONShort());
+  tracer->endTrace("update");
+  responses.push_back(tracer->getJSONShort());
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The responses body of a
   // successful update request is implementation defined."
