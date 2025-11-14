@@ -226,7 +226,7 @@ LocatedTriplesVersion DeltaTriples::createVersionSnapshot() {
 LocatedTriplesVersion DeltaTriples::getMirroringVersion() const {
   // Creating a `shared_ptr<const LocatedTriplesVersion>` from a
   // `shared_ptr<LocatedTriplesVersion>` is cheap.
-  return LocatedTriplesVersion(locatedTriples_);
+  return LocatedTriplesVersion{locatedTriples_};
 }
 
 // ____________________________________________________________________________
