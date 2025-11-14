@@ -22,7 +22,8 @@ int main(int argc, char** argv) {
   uint64_t count = 0;
   auto wordCallback = [&file, &count](
                           const auto& word,
-                          [[maybe_unused]] bool isExternalDummy = true) {
+                          [[maybe_unused]] bool isExternalDummy = true,
+                          [[maybe_unused]] bool isInTextIndexDummy = true) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     return count++;
   };

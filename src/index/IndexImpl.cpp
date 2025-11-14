@@ -607,6 +607,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
+  // Initializing textIndexIndices_
+  textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+      onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::CreateTag{});
+
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
@@ -615,14 +619,28 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
+    // Extends the word callback by the functionality to add a word to the
+    // fulltext index.
+    auto extendedCallback = [&](std::string_view word, bool external,
+                                bool inTextIndex) {
+      const auto idx = wordCallback(word, external);
+      if (inTextIndex) {
+        textIndexIndices_.value().push_back(VocabIndex::make(idx));
+      }
+      return idx;
+    };
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numFiles, sortPred, extendedCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
     return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
+
+  // Save textIndexIndices_
+  textIndexIndices_.value().close();
+
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
@@ -1055,6 +1073,12 @@ void IndexImpl::setKbName(const std::string& name) {
   osp_.setKbName(name);
 }
 
+// _____________________________________________________________________________
+void IndexImpl::setTextIndexLiteralFilter(
+    const TextIndexLiteralConfiguration& config) {
+  textIndexLiteralFilter_ = TextIndexLiteralFilter{config};
+}
+
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;
@@ -1231,6 +1255,11 @@ void IndexImpl::readConfiguration() {
 // ___________________________________________________________________________
 LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
+  // Here changes can be made whether literals should be in the text index.
+  // This has to be done this early on since "triple" values will be moved later
+  // on.
+  auto oInTextIndex = textIndexLiteralFilter_.shouldObjectBeInTextIndex(
+      triple.predicate_, triple.object_);
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
   if (triple.object_.isLiteral()) {
@@ -1272,7 +1301,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
-  for (auto& el : resultTriple) {
+  for (auto [index, el] : ::ranges::views::enumerate(resultTriple)) {
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
       continue;
@@ -1282,6 +1311,11 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+
+    // Retrieve the inTextIndex value for object.
+    if (index == 2) {
+      component.inTextIndex_ = oInTextIndex;
+    }
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }

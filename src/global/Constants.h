@@ -261,6 +261,7 @@ constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
+constexpr inline std::string_view TEXT_INDEX_LITERAL_IDS = ".textliterals";
 
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "

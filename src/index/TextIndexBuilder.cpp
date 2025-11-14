@@ -52,8 +52,27 @@ void TextIndexBuilder::buildTextIndexFile(
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
                 bAndKParamForTextScoring_};
 
+  // Build the Mmap vector containing `VocabIndex`es of all literals that should
+  // be added to the text index if it hasn't been build during RDF index
+  // building and option to add literals was set. This will add all object
+  // literals of the RDF triples to the text index. This is currently used in
+  // the e2e tests when building the RDF and text index separately.
+  if (!textIndexIndices_.has_value() && addWordsFromLiterals) {
+    textIndexIndices_ = ad_utility::MmapVector<VocabIndex>(
+        onDiskBase_ + TEXT_INDEX_LITERAL_IDS, ad_utility::CreateTag{});
+    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
+         index = index.incremented()) {
+      auto text = vocab_[index];
+      if (!isLiteral(text)) {
+        continue;
+      }
+      textIndexIndices_.value().push_back(index);
+    }
+  }
+
   // Build the text vocabulary (first scan over the text records).
   processWordsForVocabulary(wordsFile, addWordsFromLiterals);
+
   // Calculate the score data for the words
   scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
                                 vocab_);
@@ -140,11 +159,11 @@ void TextIndexBuilder::processWordsForInvertedLists(
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
     std::string contextFile, bool addWordsFromLiterals) const {
-  auto localeManager = textVocab_.getLocaleManager();
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
   TextRecordIndex contextId = TextRecordIndex::make(0);
   if (!contextFile.empty()) {
+    auto localeManager = textVocab_.getLocaleManager();
     WordsFileParser p(contextFile, localeManager);
     ad_utility::HashSet<std::string> items;
     for (auto& line : p) {
@@ -158,28 +177,43 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
-      if (!isLiteral(text)) {
-        continue;
-      }
-
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
-      WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
-      co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
-        WordsFileLine wordLine{std::move(word), false, contextId, 1};
-        co_yield wordLine;
-      }
-      contextId = contextId.incremented();
+    for (auto line : wordsInLiterals(contextId)) {
+      co_yield line;
     }
   }
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiterals(
+    TextRecordIndex& contextId) const {
+  for (const auto& index : textIndexIndices_.value()) {
+    // We need the explicit cast to `std::string` because the return type of
+    //  `indexToString` might be `string_view` if the vocabulary is stored
+    // uncompressed in memory.
+    for (auto line :
+         literalToWordsFileLines(std::string{vocab_[index]}, contextId)) {
+      co_yield line;
+    }
+  }
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<WordsFileLine> TextIndexBuilder::literalToWordsFileLines(
+    std::string text, TextRecordIndex& contextId) const {
+  auto localeManager = textVocab_.getLocaleManager();
+  // We need the explicit cast to `std::string` because the return type of
+  //  `indexToString` might be `string_view` if the vocabulary is stored
+  // uncompressed in memory.
+  WordsFileLine entityLine{text, true, contextId, 1, true};
+  co_yield entityLine;
+  std::string_view textView = text;
+  textView = textView.substr(0, textView.rfind('"'));
+  textView.remove_prefix(1);
+  for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
+    WordsFileLine wordLine{std::move(word), false, contextId, 1};
+    co_yield wordLine;
+  }
+  contextId = contextId.incremented();
 }
 
 // _____________________________________________________________________________

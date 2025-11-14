@@ -21,35 +21,44 @@
 #include "util/TypeTraits.h"
 
 // An IRI or a literal together with the information, whether it should be part
-// of the external vocabulary
+// of the external vocabulary and if it should be in the text index.
 struct PossiblyExternalizedIriOrLiteral {
   PossiblyExternalizedIriOrLiteral(TripleComponent iriOrLiteral,
-                                   bool isExternal = false)
-      : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
+                                   bool isExternal = false,
+                                   bool inTextIndex = false)
+      : iriOrLiteral_{std::move(iriOrLiteral)},
+        isExternal_{isExternal},
+        inTextIndex_{inTextIndex} {}
   PossiblyExternalizedIriOrLiteral() = default;
   TripleComponent iriOrLiteral_;
   bool isExternal_ = false;
+  bool inTextIndex_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
     serializer | arg.iriOrLiteral_;
     serializer | arg.isExternal_;
+    serializer | arg.inTextIndex_;
   }
 };
 
 struct TripleComponentWithIndex {
   std::string iriOrLiteral_;
   bool isExternal_ = false;
+  bool inTextIndex_ = false;
   uint64_t index_ = 0;
 
   [[nodiscard]] const auto& isExternal() const { return isExternal_; }
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
+  [[nodiscard]] const auto& inTextIndex() const { return inTextIndex_; }
+  [[nodiscard]] auto& inTextIndex() { return inTextIndex_; }
   bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;
     serializer | arg.isExternal_;
+    serializer | arg.inTextIndex_;
     serializer | arg.index_;
   }
 };
@@ -176,9 +185,18 @@ struct alignas(256) ItemMapManager {
           keyView, LocalVocabIndexAndSplitVal{
                        res, comparator_->extractAndTransformComparableNonOwning(
                                 repr, TripleComponentComparator::Level::TOTAL,
-                                key.isExternal_, &buffer.charAllocator())});
+                                key.isExternal_, key.inTextIndex_,
+                                &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
+      // If same key appears multiple times make sure to set isExternal and
+      // inTextIndex to true if it was detected true at least once.
+      if (key.isExternal_) {
+        it->second.splitVal_.isExternalized_ = true;
+      }
+      if (key.inTextIndex_) {
+        it->second.splitVal_.inTextIndex_ = true;
+      }
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));
     }
   }

@@ -53,9 +53,9 @@ class MergeVocabularyTest : public ::testing::Test {
   // the base directory for our test
   std::string _basePath;
 
-  // The bool means "is in the external vocabulary and not in the internal
-  // vocabulary".
-  using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
+  // The first bool means "is in the external vocabulary and not in the internal
+  // vocabulary". The second bool means inTextIndex.
+  using ExpectedVocabulary = std::vector<std::tuple<std::string, bool, bool>>;
   ExpectedVocabulary expectedMergedVocabulary_;
   ExpectedVocabulary expectedMergedGeoVocabulary_;
 
@@ -89,37 +89,42 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},
-        {"\"bla\"", true, 2},
-        {"\"gorilla\"", false, 3},
+        {"\"ape\"", false, true, 0},
+        {"\"bla\"", true, true, 2},
+        {"\"gorilla\"", false, true, 3},
         {"\"LINESTRING(1 2, 3 4)\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 0},
-        {"\"monkey\"", false, 4},
-        {"_:blank", false, 0},
-        {"_:blunk", false, 1}};
+         true, false, 0},
+        {"\"monkey\"", true, false, 4},
+        {"\"zebra\"", false, true, 5},
+        {"_:blank", false, false, 0},
+        {"_:blunk", false, false, 1}};
     std::vector<TripleComponentWithIndex> words1{
-        {"\"bear\"", false, 1},
-        {"\"monkey\"", true, 4},
+        {"\"bear\"", false, true, 1},
+        {"\"monkey\"", false, true, 4},
         {"\"POLYGON((1 2, 3 4))\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 1},
-        {"\"zebra\"", false, 5},
-        {"_:blunk", false, 1},
+         true, false, 1},
+        {"\"zebra\"", true, false, 5},
+        {"_:blunk", false, false, 1},
     };
 
     // Note that the word "monkey" appears in both vocabularies, buth with
     // different settings for `isExternal`. In this case it is externalized.
+    // The same goes for `inTextIndex`. The word "zebra" has the exact inverted
+    // settings for `isExternal` and `inTextIndex` in the partial vocabularies
+    // to test that no lucky order of vocabularies is enough to pass this test.
     expectedMergedVocabulary_ = ExpectedVocabulary{
-        {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
-        {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
+        {"\"ape\"", false, true},   {"\"bear\"", false, true},
+        {"\"bla\"", true, true},    {"\"gorilla\"", false, true},
+        {"\"monkey\"", true, true}, {"\"zebra\"", true, true}};
     expectedMergedGeoVocabulary_ = ExpectedVocabulary{
         {"\"LINESTRING(1 2, 3 4)\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true},
+         true, false},
         {"\"POLYGON((1 2, 3 4))\""
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true}};
+         true, false}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
@@ -185,20 +190,20 @@ class MergeVocabularyTest : public ::testing::Test {
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
-  std::vector<std::pair<std::string, bool>> mergeResult;
-  std::vector<std::pair<std::string, bool>> geoMergeResult;
+  std::vector<std::tuple<std::string, bool, bool>> mergeResult;
+  std::vector<std::tuple<std::string, bool, bool>> geoMergeResult;
   {
     // Simulate `Vocabulary::WordWriter::operation()` for testing purposes
     auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
-                                        const auto& word,
-                                        bool isExternal) -> uint64_t {
+                                        const auto& word, bool isExternal,
+                                        bool inTextIndex) -> uint64_t {
       if (ql::starts_with(word, "\"") &&
           ql::ends_with(
               word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
-        geoMergeResult.emplace_back(word, isExternal);
+        geoMergeResult.emplace_back(word, isExternal, inTextIndex);
         return (geoMergeResult.size() - 1) | (1ull << 59);
       } else {
-        mergeResult.emplace_back(word, isExternal);
+        mergeResult.emplace_back(word, isExternal, inTextIndex);
         return mergeResult.size() - 1;
       }
     };

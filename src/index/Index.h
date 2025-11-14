@@ -15,6 +15,7 @@
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
+#include "index/TextIndexLiteralConfiguration.h"
 #include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
@@ -181,6 +182,13 @@ class Index {
   [[nodiscard]] float getAverageNofEntityContexts() const;
 
   void setKbName(const std::string& name);
+
+  // Sets the regex used to filter which literals are added to the text index.
+  // The regex is applied on the predicate of the literal and is either used
+  // as whitelist (standard) or blacklist.
+  // If this is set to true all literals no matter if they appear as subject
+  // predicate or object are added to the text index.
+  void setTextIndexLiteralFilter(const TextIndexLiteralConfiguration& config);
 
   void setTextName(const std::string& name);
 

@@ -74,14 +74,20 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.setTextIndexLiteralFilter({config.tripleInTextIndexRegex_,
+                                   config.tripleInTextIndexRegexIsBlacklist_
+                                       ? LiteralFilterType::DeclineMatching
+                                       : LiteralFilterType::AcceptMatching,
+                                   config.addWordsFromAllLiterals_});
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
     index.createFromFiles(config.inputFiles_);
   }
-
-  if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
+  bool addLiterals = config.addWordsFromAllLiterals_ ||
+                     !config.tripleInTextIndexRegex_.empty();
+  if (config.wordsAndDocsFileSpecified() || addLiterals) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     auto textIndexBuilder = TextIndexBuilder(
         ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
@@ -89,7 +95,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         config.wordsAndDocsFileSpecified()
             ? std::optional{std::pair{config.wordsfile_, config.docsfile_}}
             : std::nullopt,
-        config.addWordsFromLiterals_, config.textScoringMetric_,
+        addLiterals, config.textScoringMetric_,
         {config.bScoringParam_, config.kScoringParam_});
     if (!config.docsfile_.empty()) {
       textIndexBuilder.buildDocsDB(config.docsfile_);
@@ -194,6 +200,19 @@ void IndexBuilderConfig::validate() const {
         ". Both or none of docsfile and wordsfile have to be given to build "
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
+  }
+  if (addWordsFromAllLiterals_ && !tripleInTextIndexRegex_.empty()) {
+    throw std::invalid_argument(
+        "The option to add all literals to text index "
+        "shouldn't be used with a filter for literals. "
+        "Either choose to add all literals or choose "
+        "a regex that evaluates predicates of triples "
+        "with literals as object.");
+  }
+  if (!tripleInTextIndexRegex_.empty() && onlyAddTextIndex_) {
+    throw std::invalid_argument(
+        "The regex to filter literals with a regex on predicates only works "
+        "when building the RDF and text index not only the text index.");
   }
 }
 

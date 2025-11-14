@@ -196,15 +196,31 @@ int main(int argc, char** argv) {
   add("text-words-input-file,w", po::value(&config.wordsfile_),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W",
-      po::bool_switch(&config.addWordsFromLiterals_),
-      "Consider all literals from the internal vocabulary as text records. Can "
+      po::bool_switch(&config.addWordsFromAllLiterals_),
+      "Consider all object literals from the internal vocabulary as text "
+      "records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
+  add("text-index-regex,r", po::value(&config.tripleInTextIndexRegex_),
+      "Regex which is used to match predicates. If the predicate matches and "
+      "`text-index-regex-is-blacklist` is set to false (default), the object "
+      "(if "
+      "it is a literal) is added to the text index.");
+  add("text-index-regex-is-blacklist,R",
+      po::bool_switch(&config.tripleInTextIndexRegexIsBlacklist_),
+      "If not set the object literals of predicates matching "
+      "`text-index-regex` will be added to the text index. If set the "
+      "object literals for every non-matching predicate will be added. If a "
+      "literal appears together with multiple predicates, then it is added if "
+      "at least one of the predicates indicates that it should be added to the "
+      "text index");
   add("text-index-name,T", po::value(&config.textIndexName_),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
   add("add-text-index,A", po::bool_switch(&config.onlyAddTextIndex_),
       "Only build the text index. Assumes that a knowledge graph index with "
-      "the same `index-basename` already exists.");
+      "the same `index-basename` already exists. Also if Literals should be"
+      "added to the text index those have to be precomputed during the normal"
+      "index building.");
   add("bm25-b", po::value(&config.bScoringParam_),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
