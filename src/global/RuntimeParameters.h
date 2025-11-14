@@ -117,6 +117,10 @@ struct RuntimeParameters {
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
 
+  // Memory limit for sorting rows during the writing of materialized views.
+  MemorySizeParameter materializedViewWriterMemory_{
+      ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

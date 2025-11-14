@@ -60,10 +60,10 @@ class MaterializedViewWriter {
 
   // Actually computes and externally sorts the query result and writes the view
   // (SPO permutation and metadata) to disk.
-  void writeViewToDisk(ad_utility::MemorySize memoryLimit =
-                           ad_utility::MemorySize::gigabytes(64),
-                       ad_utility::AllocatorWithLimit<Id> allocator =
-                           ad_utility::makeUnlimitedAllocator<Id>()) const;
+  void writeViewToDisk(
+      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for

@@ -1358,7 +1358,9 @@ void Server::writeMaterializedView(
   auto qet =
       std::make_shared<QueryExecutionTree>(std::move(plan.queryExecutionTree_));
   MaterializedViewWriter writer(name, {qet, qec, std::move(plan.parsedQuery_)});
-  writer.writeViewToDisk();
+  auto memoryLimit =
+      getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
+  writer.writeViewToDisk(memoryLimit);
 }
 
 // For helper function `Server::onlyForTestingProcess`
