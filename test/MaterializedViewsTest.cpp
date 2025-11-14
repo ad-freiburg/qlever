@@ -289,6 +289,17 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
                 ::testing::UnorderedElementsAreArray(expectedVars));
   }
 
+  // Test that we can write a view from a fully materialized result
+  {
+    auto plan = qlv().parseAndPlanQuery(
+        "SELECT * { BIND(1 AS ?s) BIND(2 AS ?p) BIND(3 AS ?o) BIND(4 AS ?g) }");
+    auto qet = std::get<0>(plan);
+    auto res = qet->getResult(true);
+    EXPECT_TRUE(res->isFullyMaterialized());
+    MaterializedViewWriter writer{"testView4", plan};
+    writer.writeViewToDisk();
+  }
+
   // Invalid inputs
   {
     ViewQuery query;

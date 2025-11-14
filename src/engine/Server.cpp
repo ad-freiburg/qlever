@@ -1342,12 +1342,6 @@ void Server::writeMaterializedView(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     TimeLimit timeLimit) {
-  // The cache is cleared, because cache entries cannot be processed at the
-  // moment.
-  // TODO<ullingerc> Remove this as soon as we can build views from fully
-  // materialized results.
-  cache_.clearUnpinnedOnly();
-
   auto parsedQuery = SparqlParser::parseQuery(
       &index_.encodedIriManager(), query.query_, query.datasetClauses_);
   auto qec = std::make_shared<QueryExecutionContext>(

@@ -97,12 +97,6 @@ void MaterializedViewWriter::writeViewToDisk(
   AD_LOG_INFO << "Computing result for materialized view query " << name_
               << "..." << std::endl;
   auto result = qet_->getResult(true);
-  AD_CORRECTNESS_CHECK(!result->isFullyMaterialized(),
-                       "For now only lazy operations are supported as input to "
-                       "the materialized view writer. The query you are "
-                       "trying to index might be cached - please clear the "
-                       "cache and try again.");
-  auto generator = result->idTables();
 
   // Sort results externally
   AD_LOG_INFO << "Sorting result rows from query by first column..."
@@ -112,21 +106,36 @@ void MaterializedViewWriter::writeViewToDisk(
   size_t totalTriples = 0;
   ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
-  for (auto& [block, vocab] : generator) {
+  auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
     AD_CORRECTNESS_CHECK(vocab.empty(),
                          "Materialized views cannot contain entries from a "
                          "local vocabulary currently.");
     totalTriples += block.numRows();
     // The `IdTable` may have a different column ordering from the `SELECT`
-    // statement, thus we must permute this to the column ordering we want to
-    // have in our materialized view. In particular, the indexed column should
-    // be the first.
+    // statement, thus we must permute this to the column ordering we want
+    // to have in our materialized view. In particular, the indexed column
+    // should be the first.
     block.setColumnSubset(columnPermutation);
     spoSorter.pushBlock(block);
     if (progressBar.update()) {
       AD_LOG_INFO << progressBar.getProgressString() << std::flush;
     }
+  };
+
+  if (result->isFullyMaterialized()) {
+    // If we have a fully materialized result, this is const, so we need to copy
+    // it for the necessary modifications (permuting columns).
+    IdTable idTableCopyForPermutation = result->idTable().clone();
+    processBlock(idTableCopyForPermutation, result->localVocab());
+  } else {
+    // Process lazy result blockwise
+    auto generator = result->idTables();
+    for (auto& [block, vocab] : generator) {
+      processBlock(block, vocab);
+    }
   }
+
+  // for (auto& [block, vocab] : generator)
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
   // Write compressed relation to disk
@@ -244,8 +253,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
