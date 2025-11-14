@@ -254,7 +254,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks), true, varsToKeep_);
+      std::move(scanSpecAndBlocks), true, varsToKeep_, scanView_);
 }
 
 // _____________________________________________________________________________
@@ -743,7 +743,8 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_,
+      scanView_);
 }
 
 // _____________________________________________________________________________
@@ -768,7 +769,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, scanView_);
 }
 
 // _____________________________________________________________________________
