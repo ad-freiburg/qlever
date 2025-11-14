@@ -250,7 +250,8 @@ DeltaTriples::DeltaTriples(const Index& index)
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesSnapshot_{deltaTriples_.wlock()->createVersionSnapshot()} {}
+      currentLocatedTriplesSnapshot_{
+          deltaTriples_.wlock()->createVersionSnapshot()} {}
 
 // _____________________________________________________________________________
 template <typename ReturnType>

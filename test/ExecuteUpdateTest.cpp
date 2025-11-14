@@ -53,7 +53,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
-              qec.setLocatedTriplesForEvaluation(deltaTriples.getMirroringVersion());
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getMirroringVersion());
               for (auto& pq : pqs) {
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);

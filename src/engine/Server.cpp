@@ -1048,7 +1048,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         return index_.deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
              &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
-              qec.setLocatedTriplesForEvaluation(deltaTriples.getMirroringVersion());
+              qec.setLocatedTriplesForEvaluation(
+                  deltaTriples.getMirroringVersion());
               json results = json::array();
               for (size_t i = 0; i < updates.size(); i++) {
                 // The augmented metadata is invalidated by any update. It is
