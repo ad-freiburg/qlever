@@ -466,6 +466,18 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                     "Loading materialized view testViewFromHTTP2 from disk"));
   }
 
+  // Test error message for wrong query type
+  {
+    auto request = makePostRequest(
+        "/?cmd=write-materialized-view&view-name=testViewFromHTTP3&"
+        "access-token=accessToken",
+        "application/sparql-update", "INSERT DATA { <a> <b> <c> }");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        simulateHttpRequest(request),
+        ::testing::HasSubstr(
+            "Action 'write-materialized-view' requires a 'SELECT' query"));
+  }
+
   // TODO<ullingerc> Add tests to check different error handlings in
   // `Server::process`
 }
