@@ -62,6 +62,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
  protected:
   const std::string testIndexBase_ = "_materializedViewsTestIndex";
+  const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
 
   virtual std::string getDummyTurtle() const {

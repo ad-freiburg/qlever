@@ -27,8 +27,7 @@ using namespace ad_utility::testing;
 TEST_F(MaterializedViewsTest, Basic) {
   // Write a simple view
   clearLog();
-  qlv().writeMaterializedView("testView1",
-                              "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   EXPECT_THAT(log_.str(), ::testing::HasSubstr(
                               "Materialized view testView1 written to disk"));
   qlv().loadMaterializedView("testView1");
@@ -168,7 +167,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
                            "view needs to have at least four columns"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().writeMaterializedView("Something Out!of~the.ordinary",
-                                  "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }"),
+                                  simpleWriteQuery_),
       ::testing::HasSubstr("not a valid name for a materialized view"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlv().writeMaterializedView(
@@ -184,7 +183,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
-  auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
   MaterializedViewWriter writer{"testView1", plan};
   writer.writeViewToDisk();
@@ -348,8 +347,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
     server.initialize(testIndexBase_, false);
 
-    ad_utility::url_parser::sparqlOperation::Query query{
-        "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }", {}};
+    ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
@@ -409,7 +407,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP&access-token="
         "accessToken",
-        "application/sparql-query", "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }");
+        "application/sparql-query", simpleWriteQuery_);
     auto response = simulateHttpRequest(request);
 
     // Check HTTP response
@@ -476,6 +474,17 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         simulateHttpRequest(request),
         ::testing::HasSubstr(
             "Action 'write-materialized-view' requires a 'SELECT' query"));
+  }
+
+  // Test access token check
+  {
+    auto request = makePostRequest(
+        "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
+        "application/sparql-update", simpleWriteQuery_);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        simulateHttpRequest(request),
+        ::testing::HasSubstr("write-materialized-view requires a valid access "
+                             "token but no access token was provided"));
   }
 
   // TODO<ullingerc> Add tests to check different error handlings in
