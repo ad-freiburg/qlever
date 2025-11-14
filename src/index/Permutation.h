@@ -66,6 +66,8 @@ class Permutation {
                     std::function<bool(Id)> isInternalId,
                     bool loadAdditional = false);
 
+  // Set the original metadata for the delta triples. This also sets the
+  // metadata for internal permutation if present.
   void setOriginalMetadataForDeltaTriples(DeltaTriples& deltaTriples) const;
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.

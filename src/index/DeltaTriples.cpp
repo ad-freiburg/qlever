@@ -42,6 +42,16 @@ void DeltaTriples::clear() {
 
 // ____________________________________________________________________________
 template <bool internal>
+auto& DeltaTriples::getLocatedTriple() {
+  if constexpr (internal) {
+    return internalLocatedTriples_;
+  } else {
+    return locatedTriples();
+  }
+}
+
+// ____________________________________________________________________________
+template <bool internal>
 std::vector<DeltaTriples::LocatedTripleHandles<internal>>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   ql::span<const IdTriple<0>> triples,
@@ -49,15 +59,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   ad_utility::timer::TimeTracer& tracer) {
   constexpr const auto& allPermutations =
       internal ? Permutation::INTERNAL : Permutation::ALL;
-  auto& lt = [this]() -> decltype(auto) {
-    if constexpr (internal) {
-      // These parentheses seem redundant, but they ensure this lambda returns a
-      // proper reference.
-      return (internalLocatedTriples_);
-    } else {
-      return locatedTriples();
-    }
-  }();
+  auto& lt = getLocatedTriple<internal>();
   std::array<std::vector<LocatedTriples::iterator>, allPermutations.size()>
       intermediateHandles;
   for (auto permutation : allPermutations) {
@@ -78,8 +80,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     tracer.endTrace(Permutation::toString(permutation));
   }
   tracer.beginTrace("transformHandles");
-  std::vector<DeltaTriples::LocatedTripleHandles<internal>> handles{
-      triples.size()};
+  std::vector<LocatedTripleHandles<internal>> handles{triples.size()};
   for (auto permutation : allPermutations) {
     for (size_t i = 0; i < triples.size(); i++) {
       handles[i].forPermutation(permutation) =
@@ -96,15 +97,7 @@ void DeltaTriples::eraseTripleInAllPermutations(
     LocatedTripleHandles<internal>& handles) {
   constexpr const auto& allPermutations =
       internal ? Permutation::INTERNAL : Permutation::ALL;
-  auto& lt = [this]() -> decltype(auto) {
-    if constexpr (internal) {
-      // These parentheses seem redundant, but they ensure this lambda returns a
-      // proper reference.
-      return (internalLocatedTriples_);
-    } else {
-      return locatedTriples();
-    }
-  }();
+  auto& lt = getLocatedTriple<internal>();
   // Erase for all permutations.
   for (auto permutation : allPermutations) {
     auto ltIter = handles.forPermutation(permutation);
@@ -126,22 +119,23 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(
     Id objectId = ids.at(2);
     auto optionalLiteralOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
         index_, objectId, localVocab_);
-    if (optionalLiteralOrIri.has_value() &&
-        optionalLiteralOrIri.value().isLiteral() &&
-        optionalLiteralOrIri.value().hasLanguageTag()) {
-      Id predicateId = ids.at(1);
-      auto predicate = ExportQueryExecutionTrees::idToLiteralOrIri(
-          index_, predicateId, localVocab_);
-      AD_CORRECTNESS_CHECK(predicate.has_value() && predicate.value().isIri());
-      auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
-          predicate.value().getIri(),
-          std::string{asStringViewUnsafe(
-              optionalLiteralOrIri.value().getLanguageTag())});
-      Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
-          index_.getVocab(), localVocab_, index_.encodedIriManager());
-      internalTriples.push_back(
-          IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
+    if (!optionalLiteralOrIri.has_value() ||
+        !optionalLiteralOrIri.value().isLiteral() ||
+        !optionalLiteralOrIri.value().hasLanguageTag()) {
+      continue;
     }
+    Id predicateId = ids.at(1);
+    auto predicate = ExportQueryExecutionTrees::idToLiteralOrIri(
+        index_, predicateId, localVocab_);
+    AD_CORRECTNESS_CHECK(predicate.has_value() && predicate.value().isIri());
+    auto specialPredicate = ad_utility::convertToLanguageTaggedPredicate(
+        predicate.value().getIri(),
+        std::string{
+            asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag())});
+    Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
+        index_.getVocab(), localVocab_, index_.encodedIriManager());
+    internalTriples.push_back(
+        IdTriple<0>{std::array{ids.at(0), specialId, ids.at(2), ids.at(3)}});
   }
   return internalTriples;
 }
@@ -430,6 +424,10 @@ void DeltaTriples::writeToDisk() const {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
+  // TODO<RobinTF> Currently this only writes non-internal delta triples to
+  // disk. The internal triples will be regenerated when importing the rest
+  // again. In the future we might to also want to explicitly store the internal
+  // triples.
   auto toRange = [](const TriplesToHandlesMap<false>& map) {
     return map | ql::views::keys |
            ql::views::transform(

@@ -27,7 +27,7 @@
 using LocatedTriplesPerBlockAllPermutations =
     std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>;
 using LocatedTriplesPerBlockInternalPermutations =
-    std::array<LocatedTriplesPerBlock, 2>;
+    std::array<LocatedTriplesPerBlock, Permutation::INTERNAL.size()>;
 
 // The locations of a set of delta triples (triples that were inserted or
 // deleted since the index was built) in each of the six permutations, and a
@@ -104,6 +104,7 @@ class DeltaTriples {
   // The located triples for all the 6 permutations.
   LocatedTriplesPerBlockAllPermutations locatedTriples_;
 
+  // The located triples for the 2 internal permutations.
   LocatedTriplesPerBlockInternalPermutations internalLocatedTriples_;
 
   // The local vocabulary of the delta triples (they may have components,
@@ -129,7 +130,8 @@ class DeltaTriples {
   template <bool internal>
   struct LocatedTripleHandles {
     using It = LocatedTriples::iterator;
-    std::array<It, internal ? 2 : Permutation::ALL.size()> handles_;
+    std::array<It, (internal ? Permutation::INTERNAL : Permutation::ALL).size()>
+        handles_;
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
@@ -182,6 +184,9 @@ class DeltaTriples {
   }
   DeltaTriplesCount getCounts() const;
 
+  // From the triples that are explicitly being added to the index, compute a
+  // bunch of triples to be inserted into the internal permutation to make
+  // things like efficient language filters work.
   Triples makeInternalTriples(const Triples& triples);
 
   // Insert triples.
@@ -225,6 +230,11 @@ class DeltaTriples {
   void updateAugmentedMetadata();
 
  private:
+  // Helper function to get the correct located triple (either internal or
+  // external), depending on the `internal` template parameter.
+  template <bool internal>
+  auto& getLocatedTriple();
+
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
   // When `insertOrDelete` is `true`, the triples are inserted, otherwise

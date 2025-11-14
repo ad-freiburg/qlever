@@ -946,6 +946,9 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
   // Load the permutations and register the original metadata for the delta
   // triples.
+  // The setting of the metadata doesn't affect the contents of the delta
+  // triples, so we don't need to call `writeToDisk`, therefore the second
+  // argument to `modify` is `false`.
   auto setMetadata = [this](const Permutation& permutation) {
     deltaTriplesManager().modify<void>(
         [&permutation](DeltaTriples& deltaTriples) {
@@ -960,9 +963,6 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     permutation.loadFromDisk(onDiskBase_, isInternalId,
                              loadInternalPermutation);
     setMetadata(permutation);
-    if (loadInternalPermutation) {
-      setMetadata(permutation.internalPermutation());
-    }
   };
 
   load(pso_, true);
