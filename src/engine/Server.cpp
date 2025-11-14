@@ -951,7 +951,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, LocatedTriplesSnapshot snapshot,
+    const Index& index, LocatedTriplesVersion snapshot,
     const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
@@ -1045,10 +1045,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, tracer]() {
         tracer->endTrace("waitingForUpdateThread");
-        qec.updateLocatedTriplesSnapshot();
         return index_.deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, tracer, &updates,
              &requestTimer, &timeLimit, &qec](DeltaTriples& deltaTriples) {
+              qec.setLocatedTriplesForEvaluation(deltaTriples.getMirroringVersion());
               json results = json::array();
               for (size_t i = 0; i < updates.size(); i++) {
                 // The augmented metadata is invalidated by any update. It is

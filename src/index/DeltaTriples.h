@@ -27,14 +27,14 @@
 using LocatedTriplesPerBlockAllPermutations =
     std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>;
 
-// A version of a set of delta triples (triples that were inserted or
+// The state of a set of delta triples (triples that were inserted or
 // deleted since the index was built):
 // - locations of the located triples in each of the six permutations
 // - an index (orders versions by the last modification time)
 // - a copy of the local vocab when used as fixed snapshot of a version
 // This is all the information that is required to perform a query that
 // correctly respects these delta triples.
-struct LocatedTriplesVersion {
+struct LocatedTriplesState {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
   // Make sure to keep the local vocab alive as long as the version is alive.
   // The `DeltaTriples` class may concurrently add new entries under the hood,
@@ -49,10 +49,11 @@ struct LocatedTriplesVersion {
       Permutation::Enum permutation) const;
 };
 
-// A fixed snapshot of a `LocatedTriplesVersion` as a shared pointer, but as an
-// explicit class, such that it can be forward-declared.
-class LocatedTriplesSnapshot
-    : public std::shared_ptr<const LocatedTriplesVersion> {};
+// A shared pointer to a `LocatedTriplesState`, but as an explicit class, such
+// that it can be forward-declared. The actual content of the
+// `LocatedTriplesState` can change in some cases.
+class LocatedTriplesVersion
+    : public std::shared_ptr<const LocatedTriplesState> {};
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {
@@ -102,8 +103,8 @@ class DeltaTriples {
   // The located triples for all the 6 permutations. We store it as a
   // `shared_ptr` so that we can easily convert them to a
   // `LocatedTriplesSnapshot`.
-  std::shared_ptr<LocatedTriplesVersion> locatedTriples_ =
-      std::make_shared<LocatedTriplesVersion>(
+  std::shared_ptr<LocatedTriplesState> locatedTriples_ =
+      std::make_shared<LocatedTriplesState>(
           LocatedTriplesPerBlockAllPermutations{}, std::nullopt, 0);
 
   // The local vocabulary of the delta triples (they may have components,
@@ -204,11 +205,13 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form an unchanging snapshot of the current state of
   // this `DeltaTriples` object.
-  LocatedTriplesSnapshot getSnapshot();
+  LocatedTriplesVersion createVersionSnapshot();
 
-  // Return a shallow copy of the `LocatedTriples` which mirrors the state of
-  // this `DeltaTriples` object.
-  LocatedTriplesSnapshot asSnapshot() const;
+  // Return a cheap shallow copy of the `LocatedTriples` which directly mirrors
+  // the state of this `DeltaTriples` object. NOTE: only use this when the
+  // DeltaTriples are not changed while the version is being used for
+  // evaluation.
+  LocatedTriplesVersion getMirroringVersion() const;
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed.
@@ -269,7 +272,7 @@ class DeltaTriples {
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<LocatedTriplesSnapshot, std::shared_mutex>
+  ad_utility::Synchronized<LocatedTriplesVersion, std::shared_mutex>
       currentLocatedTriplesSnapshot_;
 
  public:
@@ -297,14 +300,10 @@ class DeltaTriplesManager {
   // update the current snapshot.
   void clear();
 
-  // Return a shared pointer to a deep copy of the current snapshot. This can
-  // be safely used to execute a query without interfering with future updates.
-  LocatedTriplesSnapshot getCurrentSnapshot() const;
-
-  // Return a shared pointer to a shallow copy of the `DeltaTriples`. This is
-  // always cheap but the state of the snapshot mirrors the underlying
-  // `DeltaTriples`. It should only be used inside `modify`.
-  LocatedTriplesSnapshot asSnapshot() const;
+  // Return a shared pointer to a deep copy of the current version snapshot.
+  // This can be safely used to execute a query without interfering with future
+  // updates.
+  LocatedTriplesVersion getCurrentSnapshot() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

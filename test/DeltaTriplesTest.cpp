@@ -362,7 +362,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
-    LocatedTriplesSnapshot beforeUpdate =
+    LocatedTriplesVersion beforeUpdate =
         deltaTriplesManager.getCurrentSnapshot();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is the same for all threads, the
@@ -453,25 +453,25 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
   auto Snapshot =
       [](size_t index,
-         size_t numTriples) -> testing::Matcher<const LocatedTriplesSnapshot> {
+         size_t numTriples) -> testing::Matcher<const LocatedTriplesVersion> {
     auto m = AD_PROPERTY(LocatedTriplesPerBlock, numTriples, numTriples);
     return testing::Pointee(testing::AllOf(
-        AD_FIELD(LocatedTriplesVersion, index_, testing::Eq(index)),
-        AD_FIELD(LocatedTriplesVersion, locatedTriplesPerBlock_,
+        AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
+        AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,
                  testing::ElementsAre(m, m, m, m, m, m))));
   };
-  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  DeltaTriples deltaTriples(testQec->getIndex());
   auto& vocab = testQec->getIndex().getVocab();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
   // Do one transparent and two copied snapshots.
-  LocatedTriplesSnapshot transparentSnapshotBeforeUpdate =
-      deltaTriplesManager.asSnapshot();
-  LocatedTriplesSnapshot copiedSnapshotBeforeUpdate =
-      deltaTriplesManager.getCurrentSnapshot();
-  LocatedTriplesSnapshot copiedSnapshotBeforeUpdate2 =
-      deltaTriplesManager.getCurrentSnapshot();
+  LocatedTriplesVersion transparentSnapshotBeforeUpdate =
+      deltaTriples.getMirroringVersion();
+  LocatedTriplesVersion copiedSnapshotBeforeUpdate =
+      deltaTriples.createVersionSnapshot();
+  LocatedTriplesVersion copiedSnapshotBeforeUpdate2 =
+      deltaTriples.createVersionSnapshot();
 
   // All snapshots have the same index and triples.
   EXPECT_THAT(transparentSnapshotBeforeUpdate, Snapshot(0, 0));
@@ -479,18 +479,15 @@ TEST_F(DeltaTriplesTest, LocatedTriplesVersion) {
   EXPECT_THAT(copiedSnapshotBeforeUpdate2, Snapshot(0, 0));
 
   // Modifying the delta triples increases the index_.
-  deltaTriplesManager.modify<void>([this, &vocab, &cancellationHandle](
-                                       DeltaTriples& deltaTriples) {
-    LocalVocab localVocab;
-    auto triplesToInsert = makeIdTriples(vocab, localVocab, {"<A> <B> <C>"});
-    deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
-  });
+  LocalVocab localVocab;
+  auto triplesToInsert = makeIdTriples(vocab, localVocab, {"<A> <B> <C>"});
+  deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
 
   // Another transparent and copied snapshot.
-  LocatedTriplesSnapshot transparentSnapshotAfterUpdate =
-      deltaTriplesManager.asSnapshot();
-  LocatedTriplesSnapshot copiedSnapshotAfterUpdate =
-      deltaTriplesManager.getCurrentSnapshot();
+  LocatedTriplesVersion transparentSnapshotAfterUpdate =
+      deltaTriples.getMirroringVersion();
+  LocatedTriplesVersion copiedSnapshotAfterUpdate =
+      deltaTriples.createVersionSnapshot();
 
   // The two new snapshots are identical and up-to-date.
   EXPECT_THAT(transparentSnapshotAfterUpdate, Snapshot(1, 1));
