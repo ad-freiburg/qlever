@@ -1725,11 +1725,10 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
   }
 
   // perform sort-based grouping on buffered new groups
-  if (restTable.numRows() > 0) {
-    restSortTimer.cont();
-    Engine::sort(restTable, data.columnIndices_.value());
-    restSortTimer.stop();
-  }
+  restSortTimer.cont();
+  Engine::sort(restTable, data.columnIndices_.value());
+  restSortTimer.stop();
+  
   restGroupByTimer.cont();
   IdTable restResult = CALL_FIXED_SIZE((std::array{inWidth, getResultWidth()}),
                                        &GroupByImpl::doGroupBy, this, restTable,
@@ -1742,15 +1741,13 @@ CPP_template_def(size_t NUM_GROUP_COLUMNS, typename BlockIterator,
       aggregationData, data.aggregateAliases_, &localVocab);
   hashResultTimer.stop();
 
-  if (restTable.numRows() > 0) {
-    finalMergeTimer.cont();
-    hashResult.insertAtEnd(restResult);
-    finalMergeTimer.stop();
+  finalMergeTimer.cont();
+  hashResult.insertAtEnd(restResult);
+  finalMergeTimer.stop();
 
-    finalSortTimer.cont();
-    Engine::sort(hashResult, resultSortedOn());
-    finalSortTimer.stop();
-  }
+  finalSortTimer.cont();
+  Engine::sort(hashResult, resultSortedOn());
+  finalSortTimer.stop();
 
   remainderProcessingTimer.stop();
 
