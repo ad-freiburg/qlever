@@ -332,13 +332,13 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
-  // Initialize but do not start a `Server` instance on our test index
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  server.initialize(testIndexBase_, false);
-
   // Write a new materialized view using the `writeMaterializedView` method of
   // the `Server` class
   {
+    // Initialize but do not start a `Server` instance on our test index
+    Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+    server.initialize(testIndexBase_, false);
+
     ad_utility::url_parser::sparqlOperation::Query query{
         "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }", {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
@@ -375,10 +375,16 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, auto& server) -> boost::asio::awaitable<ResT> {
+        [](auto request, auto indexName) -> boost::asio::awaitable<ResT> {
+          // Initialize but do not start a `Server` instance on our test index
+          Server server{4321, 1, ad_utility::MemorySize::megabytes(1),
+                        "accessToken"};
+          server.initialize(indexName, false);
+
+          // Simulate receiving the HTTP request
           co_return co_await server
               .template onlyForTestingProcess<decltype(request), ResT>(request);
-        }(std::move(request), server),
+        }(request, testIndexBase_),
         boost::asio::use_future);
     io.run();
     auto response = fut.get();

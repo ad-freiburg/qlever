@@ -144,8 +144,9 @@ class Server {
       Awaitable<void> process(RequestT& request, ResponseT&& send);
 
   // Helper function for unit tests, calls `process` with the given request and
-  // returns the response that would have been sent. This needs to be declared
-  // here for templates to be visible to the compiler.
+  // returns the response that would have been sent.
+  // TODO<review> We get obscure compiler errors on some compilers if we use the
+  // `CPP_template_def` polyfill here. Why?
   template <typename RequestT, typename ResponseT>
   requires ad_utility::httpUtils::HttpRequest<RequestT>
   Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);

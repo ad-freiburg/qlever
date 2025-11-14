@@ -1357,6 +1357,8 @@ using NonStreamedResponse = http::response<http::string_body>;
 using SimpleRequest = http::request<http::string_body>;
 
 // _____________________________________________________________________________
+// TODO<review> We get obscure compiler errors on some compilers if we use the
+// `CPP_template_def` polyfill here. Why?
 template <typename RequestT, typename ResponseT>
 requires ad_utility::httpUtils::HttpRequest<RequestT>
 Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
