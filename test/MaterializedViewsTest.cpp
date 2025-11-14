@@ -20,6 +20,7 @@ namespace {
 
 using namespace materializedViewsTestHelpers;
 using namespace ad_utility::testing;
+using V = Variable;
 
 }  // namespace
 
@@ -157,6 +158,23 @@ TEST_F(MaterializedViewsTest, Basic) {
       )"),
       ::testing::HasSubstr("A materialized view query may not have a child "
                            "group graph pattern"));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ColumnPermutation) {
+  // Test that the names and ordering of the columns in a newly written view
+  // matches the names (including aliases) and ordering requested by the
+  // `SELECT` statement
+  const std::string reorderedQuery =
+      "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
+  qlv().writeMaterializedView("testView3", reorderedQuery);
+  MaterializedView view{testIndexBase_, "testView3"};
+  EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
+  const auto& map = view.getVariableToColumnMap();
+  EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
+  EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
+  EXPECT_EQ(map.at(V{"?x"}).columnIndex_, 2);
+  EXPECT_EQ(map.at(V{"?g"}).columnIndex_, 3);
 }
 
 // _____________________________________________________________________________

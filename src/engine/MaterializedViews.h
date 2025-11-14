@@ -56,7 +56,10 @@ class MaterializedViewWriter {
   // Computes the column ordering how the `IdTable`s from executing the
   // `QueryExecutionTree` must be permuted to match the requested target columns
   // and column ordering.
-  std::vector<ColumnIndex> getIdTableColumnPermutation() const;
+  using ColumnPermutation = std::vector<ColumnIndex>;
+  using ColumnNames = std::vector<std::string>;
+  using ColumnNamesAndPermutation = std::pair<ColumnNames, ColumnPermutation>;
+  ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // Actually computes and externally sorts the query result and writes the view
   // (SPO permutation and metadata) to disk.
@@ -88,6 +91,14 @@ class MaterializedView {
 
   // Get the name of the view.
   const std::string& getName() const { return name_; }
+
+  // Get the variable to column map.
+  const VariableToColumnMap& getVariableToColumnMap() const {
+    return varToColMap_;
+  }
+
+  // Get the name of the indexed column.
+  const Variable& getIndexedColumn() const { return indexedColVariable_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.

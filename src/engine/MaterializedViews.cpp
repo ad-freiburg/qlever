@@ -51,20 +51,31 @@ std::string MaterializedViewWriter::getFilenameBase() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> MaterializedViewWriter::getIdTableColumnPermutation()
-    const {
-  auto targetVars = parsedQuery_.getVisibleVariables();
-  auto numCols = targetVars.size();
-  AD_CONTRACT_CHECK(targetVars.size() >= 4,
+MaterializedViewWriter::ColumnNamesAndPermutation
+MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
+  AD_CONTRACT_CHECK(
+      parsedQuery_.hasSelectClause(),
+      "Materialized views may only be built from 'SELECT' statements. "
+      "'CONSTRUCT', 'ASK' and update queries are not allowed.");
+
+  auto targetVarsAndCols =
+      qet_->selectedVariablesToColumnIndices(parsedQuery_.selectClause());
+  auto numCols = targetVarsAndCols.size();
+  AD_CONTRACT_CHECK(numCols >= 4,
                     "Currently the query used to write a materialized view "
                     "needs to have at least four columns.");
 
+  std::vector<std::string> targetVars;
+  targetVars.reserve(numCols);
   std::vector<ColumnIndex> columnPermutation;
   columnPermutation.reserve(numCols);
-  for (const auto& var : targetVars) {
-    columnPermutation.push_back(qet_->getVariableColumn(var));
+
+  for (const auto& varAndColIndex : targetVarsAndCols) {
+    AD_CONTRACT_CHECK(varAndColIndex.has_value());
+    targetVars.push_back(varAndColIndex.value().variable_);
+    columnPermutation.push_back(varAndColIndex.value().columnIndex_);
   }
-  return columnPermutation;
+  return {targetVars, columnPermutation};
 }
 
 // _____________________________________________________________________________
@@ -78,7 +89,7 @@ void MaterializedViewWriter::writeViewToDisk(
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
   using MetaData = IndexMetaDataMmap;
 
-  auto columnPermutation = getIdTableColumnPermutation();
+  auto [columns, columnPermutation] = getIdTableColumnNamesAndPermutation();
   size_t numCols = columnPermutation.size();
   auto filename = getFilenameBase();
 
@@ -168,9 +179,6 @@ void MaterializedViewWriter::writeViewToDisk(
   }
 
   // Export column names to view info JSON file
-  std::vector<std::string> columns = ::ranges::to_vector(
-      parsedQuery_.getVisibleVariables() |
-      ql::views::transform([](const Variable& var) { return var.name(); }));
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
                              {"columns", std::move(columns)}};
   {
