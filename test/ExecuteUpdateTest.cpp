@@ -56,6 +56,9 @@ TEST(ExecuteUpdate, executeUpdate) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getMirroringVersion());
               for (auto& pq : pqs) {
+                // Not needed for the first update, but also doesn't break
+                // anything.
+                deltaTriples.updateAugmentedMetadata();
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);
                 ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,

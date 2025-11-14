@@ -123,7 +123,7 @@ class QueryExecutionContext {
   // This function is only needed for chained updates, which have to see the
   // effect of previous updates but use the same execution context. Chained
   // updates are processed strictly sequentially, so this use case works.
-  void setLocatedTriplesForEvaluation(LocatedTriplesVersion&& snapshot) {
+  void setLocatedTriplesForEvaluation(LocatedTriplesVersion snapshot) {
     sharedLocatedTriplesSnapshot_ = snapshot;
   }
 
