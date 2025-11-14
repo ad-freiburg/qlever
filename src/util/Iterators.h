@@ -18,14 +18,16 @@
 
 namespace ad_utility {
 
-/// A lambda that accesses the `i`-th element in a `randomAccessContainer`
+/// A struct that accesses the `i`-th element in a `randomAccessContainer`
 /// using `operator[]`
-inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
-                                          auto i) -> decltype(auto) {
-  return randomAccessContainer[i];
+struct AccessViaBracketOperator {
+  template <typename Container, typename Index>
+  decltype(auto) operator()(Container&& randomAccessContainer, Index i) const {
+    return randomAccessContainer[i];
+  }
 };
 
-using AccessViaBracketOperator = decltype(accessViaBracketOperator);
+inline constexpr AccessViaBracketOperator accessViaBracketOperator{};
 
 template <typename A, typename P>
 CPP_requires(has_valid_accessor_, requires(A& a, P& p, uint64_t i)(&a(*p, i)));
@@ -98,16 +100,22 @@ class IteratorForAccessOperator {
   auto compareThreeWay(const IteratorForAccessOperator& rhs) const {
     return ql::compareThreeWay(index_, rhs.index_);
   }
+
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(IteratorForAccessOperator)
 
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return index_ == rhs.index_;
   }
 
+  bool operator!=(const IteratorForAccessOperator& rhs) const {
+    return index_ != rhs.index_;
+  }
+
   IteratorForAccessOperator& operator+=(difference_type n) {
     index_ += n;
     return *this;
   }
+
   IteratorForAccessOperator operator+(difference_type n) const {
     IteratorForAccessOperator result{*this};
     result += n;
@@ -118,6 +126,7 @@ class IteratorForAccessOperator {
     ++index_;
     return *this;
   }
+
   IteratorForAccessOperator operator++(int) & {
     IteratorForAccessOperator result{*this};
     ++index_;
@@ -128,6 +137,7 @@ class IteratorForAccessOperator {
     --index_;
     return *this;
   }
+
   IteratorForAccessOperator operator--(int) & {
     IteratorForAccessOperator result{*this};
     --index_;
@@ -156,6 +166,7 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
+
   CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
@@ -166,6 +177,7 @@ class IteratorForAccessOperator {
   operator->() {
     return &(*(*this));
   }
+
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
       requires HasValidAccessor<A, P>) auto
   operator->() const {
@@ -525,63 +537,6 @@ InputRangeTypeErased(std::unique_ptr<Range>)
 template <typename ValueType, typename DetailsType = NoDetails>
 InputRangeTypeErased(std::unique_ptr<InputRangeFromGet<ValueType, DetailsType>>)
     -> InputRangeTypeErased<ValueType, DetailsType>;
-
-// A general type-erased input range with details. This combines an
-// InputRangeTypeErased with additional metadata/details of arbitrary type.
-template <typename ValueType, typename DetailsType>
-class InputRangeTypeErasedWithDetails {
- private:
-  InputRangeTypeErased<ValueType> range_;
-  // Use variant to support both owned details and external details pointer
-  std::variant<DetailsType, const DetailsType*> details_;
-
- public:
-  // Constructor that takes the range and owned details
-  template <typename Range>
-  explicit InputRangeTypeErasedWithDetails(Range range, DetailsType details)
-      : range_(std::move(range)), details_(std::move(details)) {}
-
-  // Constructor that takes the range and a pointer to external details
-  template <typename Range>
-  explicit InputRangeTypeErasedWithDetails(Range range,
-                                           const DetailsType* detailsPtr)
-      : range_(std::move(range)), details_(detailsPtr) {}
-
-  // Delegate iterator methods to the underlying range
-  auto begin() { return range_.begin(); }
-  auto end() { return range_.end(); }
-
-  // Provide access to the details
-  const DetailsType& details() const {
-    return std::visit(
-        [](const auto& d) -> const DetailsType& {
-          if constexpr (std::is_same_v<std::decay_t<decltype(d)>,
-                                       DetailsType>) {
-            return d;
-          } else {
-            return *d;
-          }
-        },
-        details_);
-  }
-
-  // Note: Mutable access only available for owned details
-  DetailsType& details() {
-    AD_CONTRACT_CHECK(std::holds_alternative<DetailsType>(details_),
-                      "Cannot get mutable reference to external details");
-    return std::get<DetailsType>(details_);
-  }
-
-  // Additional type aliases for compatibility
-  using value_type = ValueType;
-  using iterator = typename InputRangeTypeErased<ValueType>::iterator;
-};
-
-// Deduction guide
-template <typename Range, typename DetailsType>
-InputRangeTypeErasedWithDetails(Range, DetailsType)
-    -> InputRangeTypeErasedWithDetails<ql::ranges::range_value_t<Range>,
-                                       DetailsType>;
 
 // A view that takes an iterator and a sentinel (similar to
 // `ql::ranges::subrange`, but yields the iterators instead of the values when

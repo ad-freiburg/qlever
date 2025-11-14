@@ -20,13 +20,14 @@ class ExplicitIdTableOperation : public Operation {
   VariableToColumnMap variables_;
   std::vector<ColumnIndex> sortedColumns_;
   LocalVocab localVocab_;
+  std::string cacheKey_;
 
  public:
   ExplicitIdTableOperation(QueryExecutionContext* ctx,
                            std::shared_ptr<const IdTable> table,
                            VariableToColumnMap variables,
                            std::vector<ColumnIndex> sortedColumns,
-                           LocalVocab localVocab);
+                           LocalVocab localVocab, std::string cacheKey);
 
   // Const and public getter for testing.
   size_t sizeEstimate() const { return idTable_->numRows(); }
