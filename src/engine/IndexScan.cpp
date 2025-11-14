@@ -502,6 +502,9 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
   rti.addDetail("num-elements-read", metadata.numElementsRead_);
+  if (scanView_.has_value()) {
+    rti.addDetail("scan-on-materialized-view", scanView_.value()->getName());
+  }
 
   // Add more details, but only if the respective value is non-zero.
   auto updateIfPositive = [&rti](const auto& value, const std::string& key) {
