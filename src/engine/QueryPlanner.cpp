@@ -1255,8 +1255,8 @@ std::vector<SubtreePlan> QueryPlanner::merge(
 
   if (isInTestMode()) {
     std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
-        std::make_move_iterator(candidates.begin()),
-        std::make_move_iterator(candidates.end())};
+        ql::make_move_iterator(candidates.begin()),
+        ql::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
     pruneCandidates(sortedCandidates);
@@ -2919,8 +2919,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
-                            std::make_move_iterator(vec.begin()),
-                            std::make_move_iterator(vec.end()));
+                            ql::make_move_iterator(vec.begin()),
+                            ql::make_move_iterator(vec.end()));
     }
   }
 

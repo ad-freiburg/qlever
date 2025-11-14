@@ -8,6 +8,8 @@
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 
+#include <absl/container/inlined_vector.h>
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -400,9 +402,22 @@ class AddCombinedRowToIdTable {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
-      auto range = currentVocabs_ | ql::views::filter(toBool) |
+
+      absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
+          tmpVocabs;
+      for (const auto& el : currentVocabs_) {
+        if (el != nullptr) {
+          tmpVocabs.push_back(std::cref(*el));
+        }
+      }
+
+      /*
+      auto filter = ql::views::filter(toBool);
+      auto range = currentVocabs_ | filter |
                    ql::views::transform(dereference);
-      mergedVocab_.mergeWith(ql::ranges::ref_view{range});
+                   */
+      // auto range = tmpVocabs | ql::views::transform(dereference);
+      mergedVocab_.mergeWith(ql::ranges::ref_view{tmpVocabs});
     }
   }
   const IdTableView<0>& inputLeft() const {

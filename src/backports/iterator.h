@@ -18,12 +18,18 @@
 // `default_sentinel`, `move_sentinel` and `iter_reference_t`.
 namespace ql {
 
+using ::ranges::move_iterator;
+template <class Iter>
+move_iterator<Iter> make_move_iterator(Iter i) {
+  return move_iterator<Iter>{std::move(i)};
+}
+
 // Backport of `std::default_sentinel[_t]`
 struct default_sentinel_t {};
 inline constexpr default_sentinel_t default_sentinel{};
 
 // A backport of `std::move_sentinel` for C++17. It wraps an iterator or
-// sentinel type and can be compared with a compatible `std::move_iterator`.
+// sentinel type and can be compared with a compatible `ql::move_iterator`.
 CPP_template(typename Sent)(
     requires ql::concepts::semiregular<Sent>) class move_sentinel {
  public:
@@ -64,17 +70,17 @@ CPP_template(typename Sent)(
   }
 
   // Compare with a compatible iterator (typically obtained via
-  // `std::make_move_iterator`.
+  // `ql::make_move_iterator`.
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
-  operator==(const std::move_iterator<It> it, move_sentinel sent) {
+  operator==(const move_iterator<It> it, move_sentinel sent) {
     return it.base() == sent.base();
   }
 
   // Operator != (details same as for `operator==` above).
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
-  operator!=(const std::move_iterator<It> it, move_sentinel sent) {
+  operator!=(const move_iterator<It> it, move_sentinel sent) {
     return it.base() != sent.base();
   }
 
@@ -82,13 +88,13 @@ CPP_template(typename Sent)(
   // first). They are required by the C++17 mode of `range-v3`.
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
-  operator==(move_sentinel sent, const std::move_iterator<It> it) {
+  operator==(move_sentinel sent, const move_iterator<It> it) {
     return it == sent;
   }
 
   CPP_template_2(typename It)(
       requires ql::concepts::sentinel_for<Sent, It>) friend bool
-  operator!=(move_sentinel sent, const std::move_iterator<It> it) {
+  operator!=(move_sentinel sent, const move_iterator<It> it) {
     return it != sent;
   }
 
@@ -98,6 +104,7 @@ CPP_template(typename Sent)(
 
 using ::ranges::iter_reference_t;
 using ::ranges::iter_value_t;
+
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_ITERATOR_H

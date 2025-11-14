@@ -36,8 +36,8 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
   std::vector<Variable> result;
   for (const auto& child : children()) {
     auto childResult = child->getUnaggregatedVariables();
-    result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                  std::make_move_iterator(childResult.end()));
+    result.insert(result.end(), ql::make_move_iterator(childResult.begin()),
+                  ql::make_move_iterator(childResult.end()));
   }
   return result;
 }
@@ -139,8 +139,8 @@ ql::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
 // _____________________________________________________________________________
 std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
   auto span = children();
-  return {std::make_move_iterator(span.begin()),
-          std::make_move_iterator(span.end())};
+  return {ql::make_move_iterator(span.begin()),
+          ql::make_move_iterator(span.end())};
 }
 
 // _____________________________________________________________________________

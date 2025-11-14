@@ -7,7 +7,7 @@ project(QLever C CXX)
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -142,7 +142,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 8eca3989a8466b58f074a6ec09de933b9618cac0 # movable-any_view + non-void iter_difference
+        GIT_TAG 3ddfc6a957b0cf8597e39df4511b8073d4bb1736 # movable-any_view + non-void iter_difference + cache1-fix
 )
 
 

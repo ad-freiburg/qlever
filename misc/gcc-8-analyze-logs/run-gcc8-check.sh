@@ -1,22 +1,25 @@
 #!/bin/bash
-# Script to run GCC8 C++17 compatibility check for QLever
+# Script to run GCC C++17 compatibility check for QLever
 # This script mimics the GitHub Actions workflow for local testing
 
 set -e
 
+# Get GCC version from argument, default to 8
+GCC_VERSION="${1:-8}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-IMAGE_NAME="qlever-gcc8-cpp17"
+IMAGE_NAME="qlever-gcc${GCC_VERSION}-cpp17"
 IMAGE_TAG="latest"
 
 # Check if Docker image exists
 if ! docker image inspect "${IMAGE_NAME}:${IMAGE_TAG}" >/dev/null 2>&1; then
     echo "Error: Docker image ${IMAGE_NAME}:${IMAGE_TAG} not found."
-    echo "Please build it first using: ./build-gcc8-docker.sh"
+    echo "Please build it first using: ./build-gcc8-docker.sh ${GCC_VERSION}"
     exit 1
 fi
 
-echo "Running C++17 compatibility check with GCC8..."
+echo "Running C++17 compatibility check with GCC${GCC_VERSION}..."
 echo "Source directory: ${REPO_ROOT}"
 echo ""
 echo "Starting interactive container..."
@@ -34,4 +37,4 @@ docker run --rm -it \
     -v "${REPO_ROOT}:/qlever" \
     -w /qlever \
     "${IMAGE_NAME}:${IMAGE_TAG}" \
-    bash -c '/qlever/misc/gcc-8-analyze-logs/build-and-analyze.sh; exec bash'
+    bash -c "/qlever/misc/gcc-8-analyze-logs/build-and-analyze.sh ${GCC_VERSION}; exec bash"

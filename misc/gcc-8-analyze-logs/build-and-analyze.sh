@@ -3,12 +3,15 @@
 
 set -o pipefail
 
+# Get GCC version from argument, default to 8
+GCC_VERSION="${1:-8}"
+
 BUILD_LOG="/qlever/build.log"
 
-echo "=== Configuring CMake with GCC8 and C++17 settings ==="
-cmake -B /qlever/build \
+echo "=== Configuring CMake with GCC${GCC_VERSION} and C++17 settings ==="
+cmake -B /qlever/build-gcc-${GCC_VERSION} \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_TOOLCHAIN_FILE=/qlever/toolchains/gcc8.cmake \
+    -DCMAKE_CXX_COMPILER=g++-${GCC_VERSION} \
     -DADDITIONAL_COMPILER_FLAGS="-w" \
     -DUSE_PARALLEL=true \
     -DRUN_EXPENSIVE_TESTS=true \
@@ -20,8 +23,8 @@ cmake -B /qlever/build \
     -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold"
 
 echo ""
-echo "=== Building QLever with GCC8 (this will take a while) ==="
-cmake --build /qlever/build \
+echo "=== Building QLever with GCC${GCC_VERSION} (this will take a while) ==="
+cmake --build /qlever/build-gcc-${GCC_VERSION} \
     --target QleverTest \
     --config Release \
     -- -i -k -j $(nproc) 2>&1 | tee "${BUILD_LOG}"
@@ -31,7 +34,7 @@ BUILD_EXIT_CODE=${PIPESTATUS[0]}
 echo ""
 echo "=== Build completed with exit code: ${BUILD_EXIT_CODE} ==="
 echo ""
-echo "=== Running GCC8 Log Analyzer ==="
+echo "=== Running GCC${GCC_VERSION} Log Analyzer ==="
 python3 /qlever/misc/gcc8_logs_analyzer.py "${BUILD_LOG}"
 
 echo ""

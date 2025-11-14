@@ -38,7 +38,9 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
       return id != Id::makeUndefined() &&
              id.getDatatype() == Datatype::Undefined;
     };
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     AD_CORRECTNESS_CHECK(ql::ranges::all_of(values, undefTypeButNotUndefValue));
+#endif
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
     return result;
