@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
@@ -33,17 +34,21 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     ScanView scanView, VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
+      scanView_(scanView),
+      emptyLocatedTriplesSnapshot_(makeEmptyLocatedTriplesSnapshot()),
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
+      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      varsToKeep_(std::move(varsToKeep)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -64,6 +69,13 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
   for (size_t i = 3 - numVariables_; i < permutedTriple.size(); ++i) {
     AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
   }
+
+  // If scanning a view is requested, check that the permutation matches that of
+  // the view.
+  if (scanView_.has_value()) {
+    AD_CORRECTNESS_CHECK(scanView.value()->getPermutation()->permutation() ==
+                         permutation);
+  }
 }
 
 // _____________________________________________________________________________
@@ -73,13 +85,16 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     ScanView scanView)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
+      scanView_{std::move(scanView)},
+      emptyLocatedTriplesSnapshot_(makeEmptyLocatedTriplesSnapshot()),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
@@ -117,8 +132,14 @@ string IndexScan::getCacheKeyImpl() const {
   graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << "column subset " << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+    os << " column subset "
+       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
   }
+
+  if (scanView_.has_value()) {
+    os << " on materialized view " << scanView_.value()->getName();
+  }
+
   return std::move(os).str();
 }
 
@@ -233,7 +254,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks), true, varsToKeep_);
+      std::move(scanSpecAndBlocks), true, varsToKeep_, scanView_);
 }
 
 // _____________________________________________________________________________
@@ -259,6 +280,10 @@ IdTable IndexScan::materializedIndexScan() const {
 // _____________________________________________________________________________
 Result IndexScan::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "IndexScan result computation...\n";
+  if (scanView_.has_value()) {
+    runtimeInfo().addDetail("scan-on-materialized-view",
+                            scanView_.value()->getName());
+  }
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
@@ -267,6 +292,14 @@ Result IndexScan::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 const Permutation& IndexScan::getScanPermutation() const {
+  // If a materialized view is set, scan its permutation and use an empty
+  // `LocatedTriplesSnapshot` on the metadata of this permutation.
+  if (scanView_.has_value()) {
+    if (!emptyLocatedTriplesSnapshot_.has_value()) {
+      makeEmptyLocatedTriplesSnapshot();
+    }
+    return *(scanView_.value()->getPermutation());
+  }
   return getIndex().getImpl().getPermutation(permutation_);
 }
 
@@ -302,11 +335,12 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
+      return idx.getMultiplicities(*getPermutedTriple()[0],
+                                   getScanPermutation(),
                                    locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(getScanPermutation());
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
@@ -468,6 +502,9 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
   rti.addDetail("num-elements-read", metadata.numElementsRead_);
+  if (scanView_.has_value()) {
+    rti.addDetail("scan-on-materialized-view", scanView_.value()->getName());
+  }
 
   // Add more details, but only if the respective value is non-zero.
   auto updateIfPositive = [&rti](const auto& value, const std::string& key) {
@@ -709,7 +746,8 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_,
+      scanView_);
 }
 
 // _____________________________________________________________________________
@@ -734,7 +772,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, scanView_);
 }
 
 // _____________________________________________________________________________
@@ -758,4 +796,29 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::optional<LocatedTriplesSnapshot>
+IndexScan::makeEmptyLocatedTriplesSnapshot() const {
+  if (!scanView_.has_value()) {
+    return std::nullopt;
+  }
+  LocatedTriplesPerBlockAllPermutations emptyLocatedTriples;
+  emptyLocatedTriples[static_cast<size_t>(
+                          scanView_.value()->getPermutation()->permutation())]
+      .setOriginalMetadata(
+          scanView_.value()->getPermutation()->metaData().blockDataShared());
+  LocalVocab emptyVocab;
+  return LocatedTriplesSnapshot{emptyLocatedTriples,
+                                emptyVocab.getLifetimeExtender(), 0};
+}
+
+// _____________________________________________________________________________
+const LocatedTriplesSnapshot& IndexScan::locatedTriplesSnapshot() const {
+  if (scanView_.has_value()) {
+    AD_CORRECTNESS_CHECK(emptyLocatedTriplesSnapshot_.has_value());
+    return emptyLocatedTriplesSnapshot_.value();
+  }
+  return _executionContext->locatedTriplesSnapshot();
 }

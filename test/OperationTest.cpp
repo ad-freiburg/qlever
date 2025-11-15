@@ -183,12 +183,14 @@ class OperationTestFixture : public testing::Test {
   }();
   QueryResultCache cache;
   NamedResultCache namedCache;
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext qec{
       index,
       &cache,
       makeAllocator(),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -480,12 +482,14 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -510,12 +514,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -556,12 +562,14 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedResultCache namedCache{};
+  MaterializedViewsManager materializedViewsManager;
   QueryExecutionContext context{
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{},
       &namedCache,
+      &materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
