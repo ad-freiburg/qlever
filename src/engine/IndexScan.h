@@ -49,7 +49,8 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
-            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
+            std::optional<size_t> precomputedSizeEstimate = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -58,7 +59,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            std::optional<size_t> precomputedSizeEstimate = std::nullopt);
 
   ~IndexScan() override = default;
 
