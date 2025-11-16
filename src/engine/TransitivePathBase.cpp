@@ -66,9 +66,18 @@ TransitivePathBase::TransitivePathBase(
       lhs_.treeAndCol_.emplace(
           makeEmptyPathSide(qec, activeGraphs_, graphVariable_), 0);
     } else if (!startingSide.isVariable()) {
+      // Use a size estimate larger than the materialization threshold to avoid
+      // expensive block iteration during size computation while preventing Join
+      // from materializing the full scan (which would be catastrophic). The
+      // actual result after DISTINCT is 1, but the intermediate IndexScans are
+      // full scans that must not be materialized.
+      size_t sizeEstimate =
+          getRuntimeParameter<
+              &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>() +
+          1;
       startingSide.treeAndCol_.emplace(
           joinWithIndexScan(qec, activeGraphs_, graphVariable_,
-                            startingSide.value_),
+                            startingSide.value_, sizeEstimate),
           0);
     }
   }
@@ -109,7 +118,8 @@ auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree) {
 std::array<std::shared_ptr<QueryExecutionTree>, 2>
 TransitivePathBase::makeIndexScanPair(
     QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
-    const std::optional<Variable>& graphVariable) {
+    const std::optional<Variable>& graphVariable,
+    std::optional<size_t> precomputedSizeEstimate) {
   // Dummy variables to get a full scan of the index.
   auto a = makeInternalVariable("a");
   auto b = makeInternalVariable("b");
@@ -133,19 +143,19 @@ TransitivePathBase::makeIndexScanPair(
           qec, Permutation::Enum::SPO,
           SparqlTripleSimple{TripleComponent{variable}, std::move(a),
                              TripleComponent{std::move(b)}, additionalColumns},
-          activeGraphs)),
+          activeGraphs, std::nullopt, precomputedSizeEstimate)),
       stripColumns(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
           SparqlTripleSimple{TripleComponent{std::move(c)}, std::move(d),
                              TripleComponent{variable}, additionalColumns},
-          activeGraphs))};
+          activeGraphs, std::nullopt, precomputedSizeEstimate))};
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     QueryExecutionContext* qec, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable,
-    const TripleComponent& tripleComponent) {
+    const TripleComponent& tripleComponent, size_t sizeEstimate) {
   // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
   // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
 
@@ -158,8 +168,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
                                                std::move(valuesClause), 0, 0);
   };
-  auto [leftScan, rightScan] =
-      makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
+  // Pass size estimate to avoid expensive block iteration
+  auto [leftScan, rightScan] = makeIndexScanPair(
+      qec, std::move(activeGraphs), x, graphVariable, sizeEstimate);
   return makeDistinct(ad_utility::makeExecutionTree<Union>(
       qec, joinWithValues(std::move(leftScan)),
       joinWithValues(std::move(rightScan))));

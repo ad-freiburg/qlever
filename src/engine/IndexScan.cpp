@@ -33,7 +33,8 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     std::optional<size_t> precomputedSizeEstimate)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
@@ -51,7 +52,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  if (precomputedSizeEstimate.has_value()) {
+    sizeEstimate_ = precomputedSizeEstimate.value();
+    sizeEstimateIsExact_ = true;
+  } else {
+    std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  }
 
   // Check the following invariant: All the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
@@ -73,7 +79,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
-                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
+                     bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+                     std::optional<size_t> precomputedSizeEstimate)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
@@ -86,7 +93,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
       varsToKeep_{std::move(varsToKeep)} {
-  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  if (precomputedSizeEstimate.has_value()) {
+    sizeEstimate_ = precomputedSizeEstimate.value();
+    sizeEstimateIsExact_ = true;
+  } else {
+    std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  }
   determineMultiplicities();
 }
 
@@ -735,7 +747,7 @@ IndexScan::makeTreeWithStrippedColumns(
       _executionContext, permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)});
+      VarsToKeep{std::move(newVariables)}, sizeEstimate_);
 }
 
 // _____________________________________________________________________________
