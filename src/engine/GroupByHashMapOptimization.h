@@ -84,7 +84,7 @@ struct ExtremumAggregationData {
       return;
     }
 
-    currentValue_ = sparqlExpression::detail::minMaxLambdaForAllTypes<Comp>(
+    currentValue_ = sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>{}(
         value, currentValue_, ctx);
   }
 

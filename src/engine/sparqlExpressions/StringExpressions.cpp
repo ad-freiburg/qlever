@@ -165,23 +165,24 @@ using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<Strlen>>;
 
 // UCase and LCase
 template <auto toLowerOrToUpper>
-auto upperOrLowerCaseImpl =
-    [](std::optional<ad_utility::triple_component::Literal> input)
-    -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
+struct UpperOrLowerCaseImpl {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> input) const {
+    if (!input.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto& literal = input.value();
+    auto newContent =
+        std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+    literal.replaceContent(newContent);
+    return LiteralOrIri(std::move(literal));
   }
-  auto& literal = input.value();
-  auto newContent =
-      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
-  literal.replaceContent(newContent);
-  return LiteralOrIri(std::move(literal));
 };
-auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
-auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
 
-using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
-using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
+using UppercaseExpression =
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
+using LowercaseExpression =
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower>>;
 
 // SUBSTR
 class SubstrImpl {
@@ -619,28 +620,24 @@ struct StrIriDtTag {
 using StrIriTagged = LiteralExpressionImpl<2, StrIriDtTag, IriValueGetter>;
 
 // HASH
-template <auto HashFunc>
-[[maybe_unused]] inline constexpr auto hash =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    std::vector<unsigned char> hashed = HashFunc(input.value());
-    auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
-    return toLiteral(std::move(hexStr));
+template <typename HashFunc>
+struct Hash {
+  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
+    if (!input.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      std::vector<unsigned char> hashed = HashFunc{}(input.value());
+      auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
+      return toLiteral(std::move(hexStr));
+    }
   }
 };
 
-using MD5Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
-using SHA1Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha1>)>;
-using SHA256Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha256>)>;
-using SHA384Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha384>)>;
-using SHA512Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
+using MD5Expression = StringExpressionImpl<1, Hash<ad_utility::HashMd5>>;
+using SHA1Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha1>>;
+using SHA256Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha256>>;
+using SHA384Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha384>>;
+using SHA512Expression = StringExpressionImpl<1, Hash<ad_utility::HashSha512>>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;

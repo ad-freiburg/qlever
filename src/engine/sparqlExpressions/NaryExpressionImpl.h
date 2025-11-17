@@ -140,6 +140,7 @@ struct AreAllSetOfIntervals {
                                          ad_utility::SetOfIntervals>);
   }
 };
+
 template <typename F>
 using SET = SpecializedFunction<F, AreAllSetOfIntervals>;
 
