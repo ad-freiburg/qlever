@@ -692,7 +692,8 @@ ExportQueryExecutionTrees::getLiteralOrNullopt(
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
   auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-  if (idLiteralAndType.has_value()) {
+  if (idLiteralAndType.has_value() &&
+      idLiteralAndType.value().second != nullptr) {
     auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
         idLiteralAndType.value().first);
     lit.addDatatype(
