@@ -142,9 +142,10 @@ class MaterializedViewsManager {
   explicit MaterializedViewsManager(std::string onDiskBase)
       : onDiskBase_{std::move(onDiskBase)} {};
 
-  void setOnDiskBase(const std::string& onDiskBase) {
-    onDiskBase_ = onDiskBase;
-  };
+  // For use with the default constructor: set the index basename after creation
+  // of the `MaterializedViewsManager`. This should only be called once and
+  // before any calls to `loadView` and `getView`.
+  void setOnDiskBase(const std::string& onDiskBase);
 
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,

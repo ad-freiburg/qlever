@@ -127,9 +127,13 @@ void MaterializedViewWriter::writeViewToDisk(
   };
 
   if (isAlreadySorted) {
-    // Results are already sorted correctly
+    // Results are already sorted correctly: we do not need to invoke the
+    // external sorter, but we still need to permute the `IdTable`s to the
+    // desired column ordering and construct a range for the
+    // `CompressedRelationWriter` from them.
     AD_LOG_INFO << "Query result rows for materialized view " << name_
                 << " are already sorted." << std::endl;
+
     if (result->isFullyMaterialized()) {
       // If we have a fully materialized result, we need to copy it for the
       // necessary modifications (permuting columns).
@@ -151,11 +155,12 @@ void MaterializedViewWriter::writeViewToDisk(
                            })};
     }
   } else {
-    // Sort results externally
+    // Results are not yet sorted by the required columns. Sort results
+    // externally.
     AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
                 << " ..." << std::endl;
     size_t totalTriples = 0;
-    ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
+    ad_utility::ProgressBar progressBar{totalTriples, "Triples sorted: "};
 
     auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
       permuteIdTableAndCheckVocab(block, vocab);
@@ -243,8 +248,8 @@ void MaterializedViewWriter::writeViewToDisk(
     viewInfoFile << viewInfo.dump() << std::endl;
   }
 
-  AD_LOG_INFO << "Statistics for view: " << spoMetaData.statistics()
-              << std::endl;
+  AD_LOG_INFO << "Statistics for view " << name_ << ": "
+              << spoMetaData.statistics() << std::endl;
   // TODO<ullingerc> This removes the unnecessary permutation which should not
   // be built in the first place
   std::filesystem::remove(sopFilename);
@@ -411,4 +416,11 @@ void MaterializedView::throwIfInvalidName(const std::string& name) {
                      "' is not a valid name for a materialized view. Only "
                      "alphanumeric characters and hyphens are allowed."));
   }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
+  AD_CORRECTNESS_CHECK(onDiskBase_ == "" && loadedViews_.empty(),
+                       "Changing the on disk basename is not allowed.");
+  onDiskBase_ = onDiskBase;
 }
