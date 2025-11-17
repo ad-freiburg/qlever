@@ -579,11 +579,13 @@ IteratorWithSingleCol convertGenerator(
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(gen));
 
+  using Send = RuntimeInformation::Send;
+
   auto range = CachingTransformInputRange(
       *generatorStorage,
-      [generatorStorage, &scan, first = true](auto& table) mutable {
-        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(), first);
-        first = false;
+      [generatorStorage, &scan, send = Send::Always](auto& table) mutable {
+        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(), send);
+        send = Send::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
         return IdTableAndFirstCol{std::move(table), LocalVocab{}};

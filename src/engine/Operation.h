@@ -242,9 +242,9 @@ class Operation {
   }
 
   // Notify the `QueryExecutionContext` of the latest `RuntimeInformation`. If
-  // `forceTransmission` is set to true, this will ensure the update ends up
+  // `send` is set to true, this will ensure the update ends up
   // being transmitted. Otherwise it might get filtered out by the rate limiter.
-  void signalQueryUpdate(bool forceTransmission) const;
+  void signalQueryUpdate(RuntimeInformation::Send send) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing

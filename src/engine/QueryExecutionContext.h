@@ -148,10 +148,10 @@ class QueryExecutionContext {
   // Function that serializes the given RuntimeInformation to JSON and calls the
   // updateCallback with this JSON string. This is used to broadcast updates of
   // any query to a third party while it's still running. `runtimeInformation`
-  // represents the `RuntimeInformation` to serialize. If `forceTransmission` is
-  // true, this will ignore the rate limiter and just always send the message.
+  // represents the `RuntimeInformation` to serialize. If `send` is set to
+  // `Send::Always`, this will bypass the message throttle.
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
-                         bool forceTransmission) const;
+                         RuntimeInformation::Send send) const;
 
   bool _pinSubtrees;
   bool _pinResult;
