@@ -966,7 +966,8 @@ CPP_template_def(typename IdGetter)(
     CompressedRelationReader::getDistinctColIdsAndCountsImpl(
         IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
         const CancellationHandle& cancellationHandle,
-        const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+        const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+        const LimitOffsetClause& limitOffset) const {
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -974,20 +975,47 @@ CPP_template_def(typename IdGetter)(
   // The current `colId` and its current count.
   std::optional<Id> currentColId;
   size_t currentCount = 0;
+  uint64_t remainingOffset = limitOffset._offset;
+  uint64_t remainingLimit = limitOffset.limitOrDefault();
+
+  // For LIMIT 0 we need to abort early for correctness (and its also more
+  // efficient).
+  if (remainingLimit == 0) {
+    return std::move(table).toDynamic();
+  }
 
   // Helper lambda that processes the next `colId` and a count. If it's new, a
   // row with the previous `currentColId` and its count are added to the
   // result, and `currentColId` and its count are updated to the new `colId`.
-  auto processColId = [&table, &currentColId, &currentCount](
-                          std::optional<Id> colId, size_t colIdCount) {
+  auto processColId = [&table, &currentColId, &currentCount, &remainingOffset,
+                       &remainingLimit](std::optional<Id> colId,
+                                        size_t colIdCount) {
+    bool abort = false;
     if (colId != currentColId) {
       if (currentColId.has_value()) {
-        table.push_back({currentColId.value(), Id::makeFromInt(currentCount)});
+        // Handle `OFFSET` clause correctly.
+        if (currentCount > remainingOffset) {
+          currentCount -= remainingOffset;
+          remainingOffset = 0;
+          // Handle `LIMIT` clause correctly.
+          if (remainingLimit >= currentCount) {
+            remainingLimit -= currentCount;
+          } else {
+            currentCount = remainingLimit;
+            remainingLimit = 0;
+          }
+          abort = remainingLimit == 0;
+          table.push_back(
+              {currentColId.value(), Id::makeFromInt(currentCount)});
+        } else {
+          remainingOffset -= currentCount;
+        }
       }
       currentColId = colId;
       currentCount = 0;
     }
     currentCount += colIdCount;
+    return abort;
   };
 
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
@@ -1006,7 +1034,10 @@ CPP_template_def(typename IdGetter)(
     if (firstColId == lastColId) {
       // The whole block has the same `colId` -> we get all the information
       // from the metadata.
-      processColId(firstColId, blockMetadata.numRows_);
+      bool abort = processColId(firstColId, blockMetadata.numRows_);
+      if (abort) {
+        return std::move(table).toDynamic();
+      }
     } else {
       // Multiple `colId`s -> we have to read the block.
       const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
@@ -1029,10 +1060,13 @@ CPP_template_def(typename IdGetter)(
         continue;
       }
       const auto& block = optionalBlock.value();
-      // TODO<C++23>: use `ql::views::chunkd_by`.
+      // TODO<C++23>: use `ql::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
         Id colId = block(j, 0);
-        processColId(colId, 1);
+        bool abort = processColId(colId, 1);
+        if (abort) {
+          return std::move(table).toDynamic();
+        }
       }
     }
   }
@@ -1045,20 +1079,22 @@ CPP_template_def(typename IdGetter)(
 IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LimitOffsetClause& limitOffset) const {
   return getDistinctColIdsAndCountsImpl(
       &CompressedBlockMetadata::PermutedTriple::col0Id_, scanSpecAndBlocks,
-      cancellationHandle, locatedTriplesPerBlock);
+      cancellationHandle, locatedTriplesPerBlock, limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LimitOffsetClause& limitOffset) const {
   return getDistinctColIdsAndCountsImpl(
       &CompressedBlockMetadata::PermutedTriple::col1Id_, scanSpecAndBlocks,
-      cancellationHandle, locatedTriplesPerBlock);
+      cancellationHandle, locatedTriplesPerBlock, limitOffset);
 }
 
 // ____________________________________________________________________________
