@@ -76,6 +76,12 @@ struct LocalVocabIndexAndSplitVal {
 using ItemAlloc = ql::pmr::polymorphic_allocator<
     std::pair<const std::string_view, LocalVocabIndexAndSplitVal>>;
 
+static_assert(std::is_nothrow_move_constructible_v<ItemAlloc>);
+
+void blubbTest() BOOST_NOEXCEPT;
+
+static_assert(std::is_nothrow_invocable_v<decltype(blubbTest)>);
+
 // The actual hash map type.
 using ItemMap = ad_utility::HashMap<
     std::string_view, LocalVocabIndexAndSplitVal,
@@ -113,6 +119,9 @@ class MonotonicBuffer {
 struct ItemMapAndBuffer {
   ItemMap map_;
   MonotonicBuffer buffer_;
+
+  static_assert(std::is_nothrow_move_constructible_v<ItemMap>);
+  static_assert(std::is_nothrow_move_constructible_v<MonotonicBuffer>);
 
   explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
   ItemMapAndBuffer(ItemMapAndBuffer&&) noexcept = default;

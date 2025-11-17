@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "./GeoSparqlHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
 #include <absl/strings/charconv.h>
 #include <s2/s2earth.h>
