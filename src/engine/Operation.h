@@ -241,8 +241,10 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
-  void signalQueryUpdate() const;
+  // Notify the `QueryExecutionContext` of the latest `RuntimeInformation`. If
+  // `forceTransmission` is set to true, this will ensure the update ends up
+  // being transmitted. Otherwise it might get filtered out by the rate limiter.
+  void signalQueryUpdate(bool forceTransmission) const;
 
   /**
    * @brief Get the result for the subtree rooted at this element. Use existing
@@ -465,18 +467,14 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<std::shared_ptr<RuntimeInformation>> children,
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+      std::vector<std::shared_ptr<RuntimeInformation>> children);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status status =
-          RuntimeInformation::Status::optimizedOut);
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Return true if all values that the `variable` will be bound to by this
   // expression are guaranteed to be contained in the underlying knowledge

@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -144,14 +145,14 @@ class QueryExecutionContext {
     return _allocator;
   }
 
-  /// Function that serializes the given RuntimeInformation to JSON and
-  /// calls the updateCallback with this JSON string.
-  /// This is used to broadcast updates of any query to a third party
-  /// while it's still running.
-  /// \param runtimeInformation The `RuntimeInformation` to serialize
-  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
-    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
-  }
+  // Function that serializes the given RuntimeInformation to JSON and calls the
+  // updateCallback with this JSON string. This is used to broadcast updates of
+  // any query to a third party while it's still running.
+  // `runtimeInformation` represents the `RuntimeInformation` to serialize, if
+  // `forceTransmission` is true, this will ignore the rate limiter and just
+  // send the message anyways.
+  void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
+                         bool forceTransmission) const;
 
   bool _pinSubtrees;
   bool _pinResult;
@@ -210,6 +211,11 @@ class QueryExecutionContext {
   // the query that is executed using this context should be cached. When
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
+
+  // Store the last time point when the last websocket update was sent. This is
+  // used for rate-limiting.
+  mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
+      std::chrono::steady_clock::time_point::min();
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

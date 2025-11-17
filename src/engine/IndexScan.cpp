@@ -461,7 +461,7 @@ IndexScan::lazyScanForJoinOfColumnWithScan(
 
 // _____________________________________________________________________________
 void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
-                                             bool signalUpdate) {
+                                             bool forceUpdate) {
   auto& rti = runtimeInfo();
   rti.status_ = RuntimeInformation::Status::lazilyMaterialized;
   rti.numRows_ = metadata.numElementsYielded_;
@@ -481,9 +481,7 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata,
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
-  if (signalUpdate) {
-    signalQueryUpdate();
-  }
+  signalQueryUpdate(forceUpdate);
 }
 
 // Store a Generator and its corresponding iterator as well as unconsumed values
@@ -644,12 +642,14 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
               getLazyScan());
           scan->details().numBlocksAll_ =
               getMetadataForScan().value().sizeBlockMetadata_;
+          updateRuntimeInfoForLazyScan(scan->details(), true);
           return LoopControl::breakWithYieldAll(
-              ad_utility::CachingTransformInputRange(*scan, [this, scan](
-                                                                auto& table) {
-                updateRuntimeInfoForLazyScan(scan->details());
-                return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
-              }));
+              ad_utility::CachingTransformInputRange(
+                  *scan, [this, scan](auto& table) mutable {
+                    updateRuntimeInfoForLazyScan(scan->details(), false);
+                    return Result::IdTableVocabPair{std::move(table),
+                                                    LocalVocab{}};
+                  }));
         }
 
         auto& pendingBlocks = state->pendingBlocks_;
@@ -657,13 +657,13 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         while (pendingBlocks.empty()) {
           if (state->doneFetching_) {
             metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-            updateRuntimeInfoForLazyScan(metadata);
+            updateRuntimeInfoForLazyScan(metadata, true);
             return LoopControl::makeBreak();
           }
           state->fetch();
         }
         metadata.numBlocksAll_ = state->metaBlocks_.sizeBlockMetadata_;
-        updateRuntimeInfoForLazyScan(metadata);
+        updateRuntimeInfoForLazyScan(metadata, false);
 
         // We now have non-empty pending blocks
         auto scan = getLazyScan(std::move(pendingBlocks));

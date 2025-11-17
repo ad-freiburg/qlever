@@ -565,7 +565,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     auto runTimeInfoChildren =
         child->getRootOperation()->getRuntimeInfoPointer();
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-        {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
+        {runTimeInfoChildren});
   } else {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
@@ -829,8 +829,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
           indexScan->permutation());
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle_, locatedTriplesSnapshot());
-  indexScan->updateRuntimeInformationWhenOptimizedOut(
-      {}, RuntimeInformation::Status::optimizedOut);
+  indexScan->updateRuntimeInformationWhenOptimizedOut({});
 
   return result;
 }
@@ -879,7 +878,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
 
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
@@ -990,8 +989,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
-  threeVarSubtree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {});
+  threeVarSubtree.getRootOperation()
+      ->updateRuntimeInformationWhenOptimizedOut();
 
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfoPointer(),

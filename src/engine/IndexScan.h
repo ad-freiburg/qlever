@@ -182,7 +182,7 @@ class IndexScan final : public Operation {
   // join.
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata,
-      bool signalUpdate = true);
+      bool forceUpdate);
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
