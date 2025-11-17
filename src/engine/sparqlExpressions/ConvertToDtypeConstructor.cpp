@@ -133,33 +133,33 @@ namespace detail::to_datetime {
 
 // Cast to xsd:dateTime or xsd:date (ValueId)
 template <bool ToJustXsdDate>
-inline const auto castStringToDateTimeValueId = [](OptStringOrDate input) {
-  if (!input.has_value()) return Id::makeUndefined();
+struct CastStringToDateTimeValueId {
+  Id operator()(OptStringOrDate input) const {
+    if (!input.has_value()) return Id::makeUndefined();
 
-  using DYD = DateYearOrDuration;
-  std::optional<DYD> optValueId = std::visit(
-      [&](const auto& value) {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (ad_utility::isSimilar<T, DYD>) {
-          return ToJustXsdDate ? DYD::convertToXsdDate(value)
-                               : DYD::convertToXsdDatetime(value);
-        } else {
-          static_assert(ad_utility::isSimilar<T, std::string>);
-          return ToJustXsdDate ? DYD::parseXsdDateGetOptDate(value)
-                               : DYD::parseXsdDatetimeGetOptDate(value);
-        }
-      },
-      input.value());
-  return optValueId.has_value() ? Id::makeFromDate(optValueId.value())
-                                : Id::makeUndefined();
+    using DYD = DateYearOrDuration;
+    std::optional<DYD> optValueId = std::visit(
+        [&](const auto& value) {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (ad_utility::isSimilar<T, DYD>) {
+            return ToJustXsdDate ? DYD::convertToXsdDate(value)
+                                 : DYD::convertToXsdDatetime(value);
+          } else {
+            static_assert(ad_utility::isSimilar<T, std::string>);
+            return ToJustXsdDate ? DYD::parseXsdDateGetOptDate(value)
+                                 : DYD::parseXsdDatetimeGetOptDate(value);
+          }
+        },
+        input.value());
+    return optValueId.has_value() ? Id::makeFromDate(optValueId.value())
+                                  : Id::makeUndefined();
+  }
 };
 
-NARY_EXPRESSION(
-    ToXsdDateTime, 1,
-    FV<decltype(castStringToDateTimeValueId<false>), StringOrDateGetter>);
-NARY_EXPRESSION(
-    ToXsdDate, 1,
-    FV<decltype(castStringToDateTimeValueId<true>), StringOrDateGetter>);
+NARY_EXPRESSION(ToXsdDateTime, 1,
+                FV<CastStringToDateTimeValueId<false>, StringOrDateGetter>);
+NARY_EXPRESSION(ToXsdDate, 1,
+                FV<CastStringToDateTimeValueId<true>, StringOrDateGetter>);
 }  // namespace detail::to_datetime
 
 using namespace detail::to_numeric;
