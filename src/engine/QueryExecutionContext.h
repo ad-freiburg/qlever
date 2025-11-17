@@ -147,10 +147,9 @@ class QueryExecutionContext {
 
   // Function that serializes the given RuntimeInformation to JSON and calls the
   // updateCallback with this JSON string. This is used to broadcast updates of
-  // any query to a third party while it's still running.
-  // `runtimeInformation` represents the `RuntimeInformation` to serialize, if
-  // `forceTransmission` is true, this will ignore the rate limiter and just
-  // send the message anyways.
+  // any query to a third party while it's still running. `runtimeInformation`
+  // represents the `RuntimeInformation` to serialize. If `forceTransmission` is
+  // true, this will ignore the rate limiter and just always send the message.
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
                          bool forceTransmission) const;
 
@@ -185,7 +184,10 @@ class QueryExecutionContext {
   const auto& pinResultWithName() const { return pinResultWithName_; }
 
  private:
+  // Helper functions to avoid including `global/RuntimeParameters.h` in this
+  // header.
   static bool areWebSocketUpdatesEnabled();
+  static std::chrono::milliseconds websocketUpdateInterval();
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -200,9 +202,12 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
-  // Cache the state of that runtime parameter to reduce the contention of the
+
+  // Cache the state of both runtime parameters to reduce the contention of the
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+  std::chrono::milliseconds websocketUpdateInterval_ =
+      websocketUpdateInterval();
 
   // The cache for named results.
   NamedResultCache* namedResultCache_ = nullptr;

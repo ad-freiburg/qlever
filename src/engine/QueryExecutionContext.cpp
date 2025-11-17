@@ -9,8 +9,14 @@
 
 using namespace std::chrono_literals;
 
+// _____________________________________________________________________________
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
   return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled_>();
+}
+
+// _____________________________________________________________________________
+std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
+  return getRuntimeParameter<&RuntimeParameters::websocketUpdateInterval_>();
 }
 
 // _____________________________________________________________________________
@@ -35,7 +41,8 @@ void QueryExecutionContext::signalQueryUpdate(
     const RuntimeInformation& runtimeInformation,
     bool forceTransmission) const {
   auto now = std::chrono::steady_clock::now();
-  if (forceTransmission || (now - lastWebsocketUpdate_) >= 50ms) {
+  if (forceTransmission ||
+      (now - lastWebsocketUpdate_) >= websocketUpdateInterval_) {
     lastWebsocketUpdate_ = now;
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
