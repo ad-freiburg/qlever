@@ -517,7 +517,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut(
     std::vector<std::shared_ptr<RuntimeInformation>> children) {
-  _runtimeInfo->status_ = RuntimeInformation::optimizedOut;
+  _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
   // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
@@ -533,8 +533,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut() {
-  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
-    rti.status_ = RuntimeInformation::optimizedOut;
+  auto setStatus = [](RuntimeInformation& rti, const auto& self) {
+    rti.status_ = RuntimeInformation::Status::optimizedOut;
     rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
       self(*child, self);
