@@ -319,6 +319,7 @@ MmapVector<T>& MmapVector<T>::operator=(MmapVector<T>&& other) noexcept {
 // ________________________________________________________________
 template <class T>
 void MmapVector<T>::advise(AccessPattern pattern) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   switch (pattern) {
     case AccessPattern::Sequential:
       madvise(static_cast<void*>(_ptr), _bytesize, MADV_SEQUENTIAL);
@@ -330,6 +331,9 @@ void MmapVector<T>::advise(AccessPattern pattern) {
       madvise(static_cast<void*>(_ptr), _bytesize, MADV_NORMAL);
       break;
   }
+#else
+  (void)pattern;
+#endif
 }
 
 // ________________________________________________________________
