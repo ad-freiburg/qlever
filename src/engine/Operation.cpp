@@ -533,7 +533,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut() {
-  auto setStatus = [](RuntimeInformation& rti, const auto& self) {
+  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
     rti.status_ = RuntimeInformation::Status::optimizedOut;
     rti.totalTime_ = 0ms;
     for (auto& child : rti.children_) {
