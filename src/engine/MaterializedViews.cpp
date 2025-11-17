@@ -24,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
+#include "util/Views.h"
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
@@ -84,64 +85,107 @@ void MaterializedViewWriter::writeViewToDisk(
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
+  constexpr size_t numSortedColumns = 3;
   // Sorter with a dynamic number of columns (template argument `NumStaticCols
   // == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
   using MetaData = IndexMetaDataMmap;
+  using IdTableRange = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
-  auto [columns, columnPermutation] = getIdTableColumnNamesAndPermutation();
-  size_t numCols = columnPermutation.size();
-  auto filename = getFilenameBase();
+  const auto [columns, columnPermutation] =
+      getIdTableColumnNamesAndPermutation();
+  const size_t numCols = columnPermutation.size();
+  const auto filename = getFilenameBase();
 
   // Run query
   AD_LOG_INFO << "Computing result for materialized view query " << name_
               << "..." << std::endl;
   auto result = qet_->getResult(true);
 
-  // Sort results externally
-  AD_LOG_INFO << "Sorting result rows from query by first column..."
-              << std::endl;
+  // Check if the query result is already sorted by SPO considering the target
+  // column ordering
+  const auto& resultSortedBy = result->sortedBy();
+  bool isAlreadySorted =
+      ql::ranges::equal(resultSortedBy | ql::views::take(numSortedColumns),
+                        columnPermutation | ql::views::take(numSortedColumns));
+
+  // Prepare output range and sorter
+  IdTableRange sortedBlocksSPO;
   Sorter spoSorter{filename + ".spo-sorter.dat", numCols, memoryLimit,
                    allocator};
-  size_t totalTriples = 0;
-  ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
-  auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
+  auto permuteIdTableAndCheckVocab = [&](IdTable& block,
+                                         const LocalVocab& vocab) {
     AD_CORRECTNESS_CHECK(vocab.empty(),
                          "Materialized views cannot contain entries from a "
                          "local vocabulary currently.");
-    totalTriples += block.numRows();
-    // The `IdTable` may have a different column ordering from the `SELECT`
-    // statement, thus we must permute this to the column ordering we want
-    // to have in our materialized view. In particular, the indexed column
-    // should be the first.
+    // The `IdTable` may have a different column ordering from the
+    // `SELECT` statement, thus we must permute this to the column
+    // ordering we want to have in our materialized view. In
+    // particular, the indexed column should be the first.
     block.setColumnSubset(columnPermutation);
-    spoSorter.pushBlock(block);
-    if (progressBar.update()) {
-      AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-    }
   };
 
-  if (result->isFullyMaterialized()) {
-    // If we have a fully materialized result, this is const, so we need to copy
-    // it for the necessary modifications (permuting columns).
-    IdTable idTableCopyForPermutation = result->idTable().clone();
-    processBlock(idTableCopyForPermutation, result->localVocab());
-  } else {
-    // Process lazy result blockwise
-    auto generator = result->idTables();
-    for (auto& [block, vocab] : generator) {
-      processBlock(block, vocab);
+  if (isAlreadySorted) {
+    // Results are already sorted correctly
+    AD_LOG_INFO << "Query result rows for materialized view " << name_
+                << " are already sorted." << std::endl;
+    if (result->isFullyMaterialized()) {
+      // If we have a fully materialized result, we need to copy it for the
+      // necessary modifications (permuting columns).
+      IdTable idTableCopyForPermutation = result->idTable().clone();
+      permuteIdTableAndCheckVocab(idTableCopyForPermutation,
+                                  result->localVocab());
+      std::vector<IdTableStatic<0>> singleIdTable;
+      singleIdTable.push_back(std::move(idTableCopyForPermutation));
+      sortedBlocksSPO = IdTableRange{std::move(singleIdTable)};
+    } else {
+      // Transform the lazy result (permute columns)
+      sortedBlocksSPO =
+          IdTableRange{ad_utility::OwningView{result->idTables()} |
+                       ql::views::transform(
+                           [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
+                             auto& [block, vocab] = idTableAndLocalVocab;
+                             permuteIdTableAndCheckVocab(block, vocab);
+                             return std::move(block);
+                           })};
     }
-  }
+  } else {
+    // Sort results externally
+    AD_LOG_INFO << "Sorting query result rows for materialized view " << name_
+                << " ..." << std::endl;
+    size_t totalTriples = 0;
+    ad_utility::ProgressBar progressBar{totalTriples, "Triples processed: "};
 
-  // for (auto& [block, vocab] : generator)
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+    auto processBlock = [&](IdTable& block, const LocalVocab& vocab) {
+      permuteIdTableAndCheckVocab(block, vocab);
+      totalTriples += block.numRows();
+      spoSorter.pushBlock(block);
+      if (progressBar.update()) {
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+      }
+    };
+
+    if (result->isFullyMaterialized()) {
+      // If we have a fully materialized result, this is const, so we need to
+      // copy it for the necessary modifications (permuting columns).
+      IdTable idTableCopyForPermutation = result->idTable().clone();
+      processBlock(idTableCopyForPermutation, result->localVocab());
+    } else {
+      // Process lazy result blockwise
+      auto generator = result->idTables();
+      for (auto& [block, vocab] : generator) {
+        processBlock(block, vocab);
+      }
+    }
+
+    AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+    sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
+  }
 
   // Write compressed relation to disk
   AD_LOG_INFO << "Writing materialized view " << name_ << " to disk ..."
               << std::endl;
-  auto sortedBlocksSPO = spoSorter.template getSortedBlocks<0>();
   std::string spoFilename = filename + ".index.spo";
   CompressedRelationWriter spoWriter{
       numCols,
@@ -253,8 +297,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   indexedColVariable_ = Variable{columnNames.at(0)};
 
   // Read permutation
-  permutation_->loadFromDisk(
-      filename, [](Id) { return false; }, false);
+  permutation_->loadFromDisk(filename, [](Id) { return false; }, false);
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 

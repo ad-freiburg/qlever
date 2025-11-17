@@ -165,16 +165,38 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
   // Test that the names and ordering of the columns in a newly written view
   // matches the names (including aliases) and ordering requested by the
   // `SELECT` statement
-  const std::string reorderedQuery =
-      "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
-  qlv().writeMaterializedView("testView3", reorderedQuery);
-  MaterializedView view{testIndexBase_, "testView3"};
-  EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
-  const auto& map = view.getVariableToColumnMap();
-  EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
-  EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
-  EXPECT_EQ(map.at(V{"?x"}).columnIndex_, 2);
-  EXPECT_EQ(map.at(V{"?g"}).columnIndex_, 3);
+  {
+    const std::string reorderedQuery =
+        "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
+    qlv().writeMaterializedView("testView3", reorderedQuery);
+    MaterializedView view{testIndexBase_, "testView3"};
+    EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
+    const auto& map = view.getVariableToColumnMap();
+    EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
+    EXPECT_EQ(map.at(V{"?o"}).columnIndex_, 1);
+    EXPECT_EQ(map.at(V{"?x"}).columnIndex_, 2);
+    EXPECT_EQ(map.at(V{"?g"}).columnIndex_, 3);
+  }
+
+  // Test that presorted results are not sorted again and that the presorting
+  // check considers the correct columns
+  {
+    clearLog();
+    const std::string presortedQuery =
+        "SELECT * { SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) } "
+        "INTERNAL SORT BY ?p ?o ?x }";
+    qlv().writeMaterializedView("testView4", presortedQuery);
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr("Query result rows for materialized view "
+                                     "testView4 are already sorted"));
+    MaterializedView view{testIndexBase_, "testView4"};
+    EXPECT_EQ(view.getIndexedColumn(), V{"?p"});
+    auto res = qlv().query(
+        "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
+        "SELECT * { <p1> view:testView4:o ?o }",
+        ad_utility::MediaType::tsv);
+    EXPECT_EQ(res, "?o\n\"abc\"\n\"xyz\"\n");
+  }
 }
 
 // _____________________________________________________________________________
