@@ -18,8 +18,6 @@ jobs:
       image: debian:trixie
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: 'recursive'
     - name: Install dependencies
       run: apt-get update && apt-get install -y build-essential cmake ninja-build mold libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost-dev libboost-program-options-dev libboost-iostreams-dev libboost-url-dev libboost-container-dev
     - name: Configure CMake
