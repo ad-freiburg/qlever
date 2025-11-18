@@ -1,0 +1,30 @@
+name: Debian native build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: debian:trixie
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    - name: Install dependencies
+      run: apt-get update && apt-get install -y build-essential cmake ninja-build mold libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost-dev libboost-program-options-dev libboost-iostreams-dev libboost-url-dev libboost-container-dev
+    - name: Configure CMake
+      run: mkdir build && cd build && cmake -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
+    - name: Compile
+      run: cd build && ninja
+    - name: Run tests
+      run: ctest --rerun-failed --output-on-failure
