@@ -17,9 +17,9 @@ jobs:
     container:
       image: debian:trixie
     steps:
-    - uses: actions/checkout@v4
     - name: Install dependencies
-      run: apt-get update && apt-get install -y build-essential cmake ninja-build mold libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost-dev libboost-program-options-dev libboost-iostreams-dev libboost-url-dev libboost-container-dev
+      run: apt-get update && apt-get install -y git build-essential cmake ninja-build mold libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost-dev libboost-program-options-dev libboost-iostreams-dev libboost-url-dev libboost-container-dev
+    - uses: actions/checkout@v4
     - name: Configure CMake
       run: mkdir build && cd build && cmake -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
     - name: Compile
