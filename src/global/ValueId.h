@@ -103,17 +103,8 @@ class ValueId {
   // types form a consecutive range of IDs when sorted. Within this range, the
   // IDs are ordered by their string values, not by their IDs (and hence also
   // not by their types).
-  static constexpr std::array<Datatype, 2> stringTypes_{
-      Datatype::VocabIndex, Datatype::LocalVocabIndex};
-
-  // Assert that the types in `stringTypes_` are directly adjacent. This is
-  // required to make the comparison of IDs in `ValueIdComparators.h` work.
-  static constexpr Datatype maxStringType_ = ql::ranges::max(stringTypes_);
-  static constexpr Datatype minStringType_ = ql::ranges::min(stringTypes_);
-  static_assert(static_cast<size_t>(maxStringType_) -
-                    static_cast<size_t>(minStringType_) + 1 ==
-                stringTypes_.size());
-
+  static constexpr std::array<Datatype, 3> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex, Datatype::EncodedVal};
   // Assert that the size of an encoded GeoPoint equals the available bits in a
   // ValueId.
   static_assert(numDataBits == GeoPoint::numDataBits);
