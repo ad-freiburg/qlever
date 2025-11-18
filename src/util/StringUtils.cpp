@@ -214,8 +214,13 @@ std::string truncateOperationString(std::string_view operation) {
   if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
     return std::string{operation};
   } else {
-    return absl::StrCat(operation.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
-                        "...");
+    size_t cutoff = MAX_LENGTH_OPERATION_ECHO - 3;
+    // Make sure we don't split a multibyte char in half.
+    while (cutoff > 0 && U8_IS_TRAIL(operation[cutoff])) {
+      --cutoff;
+    }
+    AD_CORRECTNESS_CHECK(U8_IS_LEAD(operation[cutoff]));
+    return absl::StrCat(operation.substr(0, cutoff), "...");
   }
 }
 }  // namespace ad_utility
