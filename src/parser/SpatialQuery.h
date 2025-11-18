@@ -66,7 +66,7 @@ struct SpatialQuery : MagicServiceQuery {
 
   SpatialQuery() = default;
   SpatialQuery(SpatialQuery&& other) noexcept = default;
-  SpatialQuery(const SpatialQuery& other) noexcept = default;
+  SpatialQuery(const SpatialQuery& other) = default;
   SpatialQuery& operator=(const SpatialQuery& other) = default;
   SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
   ~SpatialQuery() noexcept override = default;
