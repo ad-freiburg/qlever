@@ -17,18 +17,19 @@ using Lit = ad_utility::triple_component::Literal;
 using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________
-inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
-  if (!optLangTag.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return LiteralOrIri{Lit::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+struct GetLanguageTag {
+  IdOrLiteralOrIri operator()(OptValue optLangTag) const {
+    if (!optLangTag.has_value()) {
+      return Id::makeUndefined();
+    } else {
+      return LiteralOrIri{Lit::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+    }
   }
 };
 
 //______________________________________________________________________________
-NARY_EXPRESSION(LangExpression, 1,
-                FV<decltype(getLanguageTag), LanguageTagValueGetter>);
+NARY_EXPRESSION(LangExpression, 1, FV<GetLanguageTag, LanguageTagValueGetter>);
 
 }  //  namespace detail::langImpl
 
