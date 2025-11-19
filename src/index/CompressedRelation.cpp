@@ -1683,9 +1683,13 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 }
 
 // _____________________________________________________________________________
+template <typename SecondWriter>
+requires(ad_utility::SameAsAny<SecondWriter,
+                               CompressedRelationWriter::WriterAndCallback,
+                               CompressedRelationWriter::NoWriterAndCallback>)
 auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
-    WriterAndCallback writerAndCallback2,
+    SecondWriter writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
     qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
