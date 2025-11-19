@@ -3,10 +3,11 @@
 
 #include "parser/GraphPattern.h"
 
-// This include is required because of the forward declaration of
+// These includes are required because of the forward declaration of
 // `GraphPatternOperation` in `GraphPattern.h` and its subsequent usage inside
 // `std::vector`.
 #include "parser/GraphPatternOperation.h"
+#include "parser/ParsedQuery.h"
 
 namespace parsedQuery {
 GraphPattern::GraphPattern(GraphPattern&& other) noexcept = default;
