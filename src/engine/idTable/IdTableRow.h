@@ -95,7 +95,7 @@ class Row {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Row, data_)
 
   // Convert from a static `RowReference` to a `std::array` (makes a copy).
-  CPP_template_2(typename = void)(requires(numStaticColumns != 0)) explicit
+  CPP_template_2(typename = void)(requires(NumColumns != 0)) explicit
   operator std::array<T, numStaticColumns>() const {
     std::array<T, numStaticColumns> result;
     ql::ranges::copy(*this, result.begin());
@@ -267,9 +267,16 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
+    template <typename U>
+    // QCC says "U::numStaticColumns is inaccessible in this context".
+    /*
     CPP_template(typename U)(requires(numStaticColumns ==
                                       U::numStaticColumns)) bool
-    operator==(const U& other) const {
+                                      */
+    bool operator==(const U& other) const {
+      if (numStaticColumns != other.numStaticColumns) {
+        AD_FAIL();
+      }
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -282,9 +289,16 @@ class RowReferenceImpl {
       }
       return true;
     }
+    /*
     CPP_template(typename U)(requires(numStaticColumns ==
                                       U::numStaticColumns)) bool
-    operator!=(const U& other) const {
+                                      */
+    // SAME QCC stuff as above.
+    template <typename U>
+    bool operator!=(const U& other) const {
+      if (numStaticColumns != other.numStaticColumns) {
+        AD_FAIL();
+      }
       return !(*this == other);
     }
 
@@ -446,7 +460,6 @@ class RowReference
     this->assignmentImpl(base(), other);
     return *this;
   }
-
   // No need to copy `RowReference`s, because that is also most likely a bug.
   // Currently none of our functions or of the STL-algorithms require it.
   // If necessary, we can still enable it in the future.
