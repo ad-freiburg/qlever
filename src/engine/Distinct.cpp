@@ -198,6 +198,19 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   static_assert(ql::ranges::input_iterator<It>);
   static_assert(ql::ranges::input_or_output_iterator<It>);
   static_assert(ql::ranges::indirectly_readable<It>);
+  {
+    using namespace ql::ranges;
+    using I = It;
+    static_assert(same_as<iter_reference_t<I const>, iter_reference_t<I>>);
+    static_assert(
+        same_as<iter_rvalue_reference_t<I const>, iter_rvalue_reference_t<I>>);
+    static_assert(
+        common_reference_with<iter_reference_t<I>&&, iter_value_t<I>&>);
+    static_assert(common_reference_with<iter_reference_t<I>&&,
+                                        iter_rvalue_reference_t<I>&&>);
+    static_assert(common_reference_with<iter_rvalue_reference_t<I>&&,
+                                        iter_value_t<I> const&>);
+  }
   static_assert(
       CPP_concept_ref(ranges::with_category_, It, std::input_iterator_tag));
   static_assert(ql::ranges::sentinel_for<Sent, It>);
