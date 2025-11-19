@@ -186,6 +186,23 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
 
   auto begin = inputView.begin();
   auto end = inputView.end();
+  using It = decltype(begin);
+  using Sent = decltype(end);
+  using Inserter = decltype(std::back_inserter(output));
+  auto comp = [this](const auto& a, const auto& b) {
+    // Without explicit this clang seems to
+    // think the this capture is redundant.
+    return this->matchesRow(a, b);
+  };
+  using Comp = decltype(comp);
+  static_assert(ql::ranges::input_iterator<It>);
+  static_assert(ql::ranges::sentinel_for<Sent, It>);
+  static_assert(ql::ranges::indirect_relation<
+                Comp, ql::ranges::projected<It, ql::ranges::identity>>);
+  static_assert(ql::ranges::weakly_incrementable<Inserter>);
+  static_assert(ql::ranges::indirectly_copyable<It, Inserter>);
+  static_assert(ql::ranges::forward_iterator<It>);
+  static_assert(ql::ranges::indirectly_copyable_storable<It, Inserter>);
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
     begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
