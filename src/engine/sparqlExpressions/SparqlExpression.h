@@ -80,13 +80,6 @@ class SparqlExpression {
   // Otherwise, return std::nullopt.
   virtual std::optional<::Variable> getVariableOrNullopt() const;
 
-  // For the following three functions (`containsLangExpression`,
-  // `getLanguageFilterExpression`, and `getEstimatesForFilterExpression`, see
-  // the documentation of the functions of the same names in
-  // `SparqlExpressionPimpl.h`. Each of them has a default implementation that
-  // is correct for most of the expressions.
-  virtual bool containsLangExpression() const;
-
   // Helper to identify if this is represents a `YEAR` expression.
   virtual bool isYearExpression() const;
 
