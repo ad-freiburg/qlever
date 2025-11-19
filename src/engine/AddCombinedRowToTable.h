@@ -358,7 +358,9 @@ class AddCombinedRowToIdTable {
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
             Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
-              if constexpr (isColFromLeft) {
+              // TODO<joka921> The `constexpr` doesn't work on QCC, figure out
+              // what is wrong.
+              if /*constexpr*/ (isColFromLeft) {
                 return col[sourceIndex];
               } else {
                 (void)col;
