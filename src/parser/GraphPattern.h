@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "parser/data/SparqlFilter.h"
+#include "rdfTypes/Variable.h"
+#include "util/HashSet.h"
 
 namespace parsedQuery {
 
@@ -38,9 +40,12 @@ class GraphPattern {
   GraphPattern& operator=(GraphPattern&& other) noexcept;
   ~GraphPattern();
 
-  // Modify the query to take care of language filter. `variable` is the
-  // variable, `langTags` represent a whitelist of languages. Return `true` if
-  // it could successfully be applied, false otherwise.
+  // Modify the query to take care of language filter by using a special
+  // predicate that only returns matching literals if applicable. `variable` is
+  // the variable to filter on, `langTags` represent a whitelist of languages,
+  // indicating that the desired literals have to be of any of the specified
+  // languages. Return `true` if it could successfully be applied, false
+  // otherwise.
   bool addLanguageFilter(const Variable& variable,
                          const ad_utility::HashSet<std::string>& langTags);
 
