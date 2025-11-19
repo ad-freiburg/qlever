@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <unicode/unistr.h>
 
 #include <ranges>
 #include <sstream>
@@ -15,7 +16,6 @@
 #include "../test/util/GTestHelpers.h"
 #include "backports/functional.h"
 #include "global/Constants.h"
-#include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
@@ -421,6 +421,27 @@ TEST(StringUtils, truncateOperationString) {
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
   expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
   expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
+
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/2511
+  std::string shortInput;
+  icu::UnicodeString(1671, 0x2E17, 1671).toUTF8String(shortInput);
+  EXPECT_EQ(ad_utility::truncateOperationString(shortInput), shortInput);
+
+  std::string input;
+  std::string expected;
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO + 2, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO + 2)
+      .toUTF8String(input);
+  icu::UnicodeString(MAX_LENGTH_OPERATION_ECHO, 0x2E17,
+                     MAX_LENGTH_OPERATION_ECHO - 3)
+      .toUTF8String(expected);
+  expected += "...";
+  EXPECT_EQ(ad_utility::truncateOperationString(input), expected);
+  // Sanity check that our expected string actually has the same amount of
+  // codepoints.
+  EXPECT_EQ(
+      ad_utility::getUTF8Prefix(expected, MAX_LENGTH_OPERATION_ECHO + 1).first,
+      MAX_LENGTH_OPERATION_ECHO);
 }
 
 // _____________________________________________________________________________

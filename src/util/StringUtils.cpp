@@ -211,16 +211,14 @@ std::string addIndentation(std::string_view str,
 // ___________________________________________________________________________
 std::string truncateOperationString(std::string_view operation) {
   static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
-  if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
+  auto prefix = getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO + 1);
+  if (prefix.first <= MAX_LENGTH_OPERATION_ECHO) {
     return std::string{operation};
-  } else {
-    size_t cutoff = MAX_LENGTH_OPERATION_ECHO - 3;
-    // Make sure we don't split a multibyte char in half.
-    while (cutoff > 0 && U8_IS_TRAIL(operation[cutoff])) {
-      --cutoff;
-    }
-    AD_CORRECTNESS_CHECK(U8_IS_LEAD(operation[cutoff]));
-    return absl::StrCat(operation.substr(0, cutoff), "...");
   }
+  constexpr std::string_view ellipsis = "...";
+  static_assert(ellipsis.size() < MAX_LENGTH_OPERATION_ECHO);
+  auto trimmedPrefix =
+      getUTF8Prefix(operation, MAX_LENGTH_OPERATION_ECHO - ellipsis.length());
+  return absl::StrCat(trimmedPrefix.second, ellipsis);
 }
 }  // namespace ad_utility
