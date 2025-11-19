@@ -2141,7 +2141,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
   AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [](const auto& a, const auto& b) {
     auto tie = [](const auto& x) {
-      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+      return std::make_tuple(x.getSizeEstimate(), x.getSizeEstimate());
     };
     return tie(a) < tie(b);
   };
@@ -2455,7 +2455,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     if (transitiveCol >= graphColIndex) {
       return std::nullopt;
     }
-    return std::tuple{transitiveCol, otherCol};
+    return std::make_tuple(transitiveCol, otherCol);
   }
 
   // At this point, we know that we have exactly two pairs of join columns,
@@ -2468,14 +2468,14 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
     if (transitiveColB == graphColIndex) {
-      return std::tuple{transitiveColA, otherColA};
+      return std::make_tuple(transitiveColA, otherColA);
     }
     // We currently don't support binding two regular columns at once
     return std::nullopt;
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::tuple{transitiveColB, otherColB};
+  return std::make_tuple(transitiveColB, otherColB);
 #endif
 }
 

@@ -268,13 +268,16 @@ class IndexNestedLoopJoin {
     }
     ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
-        [this, &matchTracker, &leftColumns, &rightColumns](auto JOIN_COLUMNS) {
+        [this, &matchTracker, &leftColumns,
+         &rightColumns](auto JOIN_COLUMNS_PAR) {
+          static constexpr size_t JOIN_COLUMNS =
+              static_cast<size_t>(JOIN_COLUMNS_PAR);
           IdTableView<JOIN_COLUMNS> leftTable =
               leftResult_->idTable()
                   .asColumnSubsetView(leftColumns)
                   .template asStaticView<JOIN_COLUMNS>();
-          auto matchHelper = [&matchTracker, &leftTable, &rightColumns,
-                              &JOIN_COLUMNS](const IdTable& idTable) {
+          auto matchHelper = [&matchTracker, &leftTable,
+                              &rightColumns](const IdTable& idTable) {
             matchLeft(matchTracker, leftTable,
                       idTable.asColumnSubsetView(rightColumns)
                           .template asStaticView<JOIN_COLUMNS>());
