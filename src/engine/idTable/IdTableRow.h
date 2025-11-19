@@ -274,14 +274,16 @@ class RowReferenceImpl {
                                       U::numStaticColumns)) bool
                                       */
     bool operator==(const U& other) const {
-      if (numStaticColumns != other.numStaticColumns) {
-        AD_FAIL();
-      }
+      // TODO<joka921> Reinstate
+      /*
       if constexpr (numStaticColumns == 0) {
-        if (numColumns() != other.numColumns()) {
-          return false;
-        }
+      */
+      if (numColumns() != other.numColumns()) {
+        return false;
       }
+      /*
+      }
+      */
       for (size_t i = 0; i < numColumns(); ++i) {
         if ((*this)[i] != other[i]) {
           return false;
@@ -296,9 +298,6 @@ class RowReferenceImpl {
     // SAME QCC stuff as above.
     template <typename U>
     bool operator!=(const U& other) const {
-      if (numStaticColumns != other.numStaticColumns) {
-        AD_FAIL();
-      }
       return !(*this == other);
     }
 
