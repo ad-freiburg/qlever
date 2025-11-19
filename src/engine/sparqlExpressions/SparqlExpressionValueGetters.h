@@ -207,7 +207,7 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
 };
 
 // Boolean value getters for `isIRI`, `isBlank`, and `isLiteral`.
-template <auto isSomethingFunction, auto isLiteralOrIriSomethingFunction>
+template <auto isSomethingFunction, const auto& isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
                                    isLiteralOrIriSomethingFunction>> {
@@ -221,8 +221,8 @@ struct IsSomethingValueGetter
                                             isLiteralOrIriSomethingFunction));
   }
 };
-static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
-static constexpr auto isLiteralPrefix =
+inline constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
+inline constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
@@ -355,7 +355,8 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 
 // `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{5};
+  // Set the size of this cache to at least the number of supported units.
+  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
   using Mixin<UnitOfMeasurementValueGetter>::operator();
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,

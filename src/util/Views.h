@@ -250,7 +250,12 @@ CPP_template(typename V, typename F)(
 
     void operator++(int) { ++(*this); }
 
-    bool operator==(ql::ranges::sentinel_t<V> s) const { return current_ == s; }
+    using Sent = ranges::sentinel_t<V>;
+    bool operator==(Sent s) const { return current_ == s; }
+    bool operator!=(Sent s) const { return current_ != s; }
+
+    friend bool operator==(Sent s, Iterator i) { return i.current_ == s; }
+    friend bool operator!=(Sent s, Iterator i) { return i.current_ != s; }
   };
 
  public:
@@ -391,6 +396,8 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
     DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
     friend bool operator==(const Iterator& it, const Sentinel& s);
     friend bool operator!=(const Iterator& it, const Sentinel& s);
+    friend bool operator==(const Sentinel& s, const Iterator& it);
+    friend bool operator!=(const Sentinel& s, const Iterator& it);
     GCC_REENABLE_WARNINGS
   };
 
@@ -408,6 +415,13 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
     friend bool operator!=(const Iterator& it, const Sentinel& s) {
       return !(it == s);
+    }
+
+    friend bool operator==(const Sentinel& s, const Iterator& it) {
+      return it == s;
+    }
+    friend bool operator!=(const Sentinel& s, const Iterator& it) {
+      return it != s;
     }
   };
 

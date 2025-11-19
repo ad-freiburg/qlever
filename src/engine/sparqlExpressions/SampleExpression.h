@@ -6,13 +6,14 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/keywords.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 /// The (SAMPLE(?x) as ?sample) expression
 class SampleExpression : public SparqlExpression {
  public:
-  SampleExpression([[maybe_unused]] bool distinct, Ptr&& child)
+  SampleExpression(QL_MAYBE_UNUSED bool distinct, Ptr&& child)
       : _child{std::move(child)} {
     setIsInsideAggregate();
   }
