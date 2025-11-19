@@ -15,11 +15,13 @@
 #include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "gmock/gmock.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/GTestHelpers.h"
 #include "util/TypeTraits.h"
 
 namespace valueGetterTestHelpers {
@@ -297,20 +299,9 @@ class ValueGetterTester {
   }
 };
 
-MATCHER_P(GeoInfoMatcher, expected,
-          "Checks a GeometryInfo object using checkGeoInfo") {
-  checkGeoInfo(arg, expected);
-  return true;  // `checkGeoInfo` reports errors on its own
-}
 using GeoInfoTester = ValueGetterTester<
     sparqlExpression::detail::GeometryInfoValueGetter<ad_utility::GeometryInfo>,
     ad_utility::GeometryInfo>;
-
-MATCHER_P(GeoPointOrWktMatcher, expected,
-          "Checks a GeoPointOrWkt using checkGeoPointOrWkt") {
-  checkGeoPointOrWkt(arg, expected);
-  return true;  // `checkGeoPointOrWkt` reports errors on its own
-}
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
                       GeoPointOrWkt>;
