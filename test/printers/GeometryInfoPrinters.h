@@ -11,46 +11,48 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+namespace ad_utility {
+
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::Centroid& centroid, std::ostream* os) {
+inline void PrintTo(const Centroid& centroid, std::ostream* os) {
   auto& s = *os;
   s << "Centroid(" << centroid.centroid().toStringRepresentation() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::BoundingBox& bb, std::ostream* os) {
+inline void PrintTo(const BoundingBox& bb, std::ostream* os) {
   auto& s = *os;
   s << "BoundingBox(Lower Left = " << bb.lowerLeft().toStringRepresentation()
     << ", Upper Right = " << bb.upperRight().toStringRepresentation() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::GeometryType& gt, std::ostream* os) {
+inline void PrintTo(const GeometryType& gt, std::ostream* os) {
   auto& s = *os;
-  s << "GeometryType(" << gt.type() << ", IRI: " << gt.asIri().value_or("-")
-    << ")";
+  s << "GeometryType(" << std::to_string(gt.type())
+    << ", IRI: " << gt.asIri().value_or("-") << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::NumGeometries& gt, std::ostream* os) {
+inline void PrintTo(const NumGeometries& gt, std::ostream* os) {
   auto& s = *os;
   s << "NumGeometries(" << gt.numGeometries() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::MetricLength& gt, std::ostream* os) {
+inline void PrintTo(const MetricLength& gt, std::ostream* os) {
   auto& s = *os;
   s << "MetricLength(" << gt.length() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::MetricArea& gt, std::ostream* os) {
+inline void PrintTo(const MetricArea& gt, std::ostream* os) {
   auto& s = *os;
   s << "MetricArea(" << gt.area() << ")";
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::GeometryInfo& gi, std::ostream* os) {
+inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   auto& s = *os;
   s << "GeometryInfo(";
   PrintTo(gi.getWktType(), os);
@@ -68,7 +70,7 @@ inline void PrintTo(const ad_utility::GeometryInfo& gi, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void PrintTo(const ad_utility::GeoPointOrWkt& g, std::ostream* os) {
+inline void PrintTo(const GeoPointOrWkt& g, std::ostream* os) {
   auto& s = *os;
   s << "GeoPointOrWkt(";
   std::visit(
@@ -84,5 +86,7 @@ inline void PrintTo(const ad_utility::GeoPointOrWkt& g, std::ostream* os) {
       g);
   s << ")";
 }
+
+}  // namespace ad_utility
 
 #endif  // QLEVER_TEST_PRINTERS_GEOMETRYINFOPRINTERS_H
