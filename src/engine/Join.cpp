@@ -573,19 +573,19 @@ using IteratorWithSingleCol = InputRangeTypeErased<IdTableAndFirstCol<IdTable>>;
 // in the join columns below. This also makes sure the runtime information of
 // the passed `IndexScan` is updated properly as the range is consumed.
 IteratorWithSingleCol convertGenerator(
-    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan,
-    bool postUpdates) {
+    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(gen));
 
+  using Send = RuntimeInformation::Send;
+
   auto range = CachingTransformInputRange(
-      *generatorStorage, [generatorStorage, &scan, postUpdates,
-                          first = true](auto& table) mutable {
-        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(),
-                                          first || postUpdates);
-        first = false;
+      *generatorStorage,
+      [generatorStorage, &scan, send = Send::Always](auto& table) mutable {
+        scan.updateRuntimeInfoForLazyScan(generatorStorage->details(), send);
+        send = Send::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
         return IdTableAndFirstCol{std::move(table), LocalVocab{}};
@@ -599,8 +599,7 @@ IteratorWithSingleCol convertGenerator(
 Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
   return createResult(
       requestLaziness,
-      [this,
-       requestLaziness](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+      [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto leftScan =
             std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
         auto rightScan =
@@ -621,10 +620,10 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         // If requestLaziness, we don't need to serialize json for every update
         // of the child. If we serialize it whenever the join operation yields a
         // table that's frequent enough and reduces the overhead.
-        auto leftBlocks = convertGenerator(std::move(leftBlocksInternal),
-                                           *leftScan, !requestLaziness);
-        auto rightBlocks = convertGenerator(std::move(rightBlocksInternal),
-                                            *rightScan, !requestLaziness);
+        auto leftBlocks =
+            convertGenerator(std::move(leftBlocksInternal), *leftScan);
+        auto rightBlocks =
+            convertGenerator(std::move(rightBlocksInternal), *rightScan);
 
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
@@ -646,7 +645,7 @@ Result Join::computeResultForIndexScanAndIdTable(
   auto resultPermutation = joinColMap.permutationResult();
   return createResult(
       requestLaziness,
-      [this, requestLaziness, scan = std::move(scan),
+      [this, scan = std::move(scan),
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
@@ -667,8 +666,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                 .isUndefined();
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
-        auto rightBlocks = [requestLaziness, &scan, idTableHasUndef,
-                            &permutationIdTable,
+        auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
                             &indexScanResult]() -> LazyInputView {
           if (idTableHasUndef) {
             indexScanResult =
@@ -679,8 +677,7 @@ Result Join::computeResultForIndexScanAndIdTable(
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
-            return convertGenerator(std::move(rightBlocksInternal), *scan,
-                                    !requestLaziness);
+            return convertGenerator(std::move(rightBlocksInternal), *scan);
           }
         }();
 
