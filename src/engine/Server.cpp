@@ -1368,14 +1368,15 @@ template <typename RequestT, typename ResponseT>
 requires ad_utility::httpUtils::HttpRequest<RequestT>
 Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
   ResponseT res;
-  co_await process(request, [&](auto response) -> Awaitable<void> {
+  auto mockSend = [&](auto response) -> Awaitable<void> {
     using T = std::decay_t<decltype(response)>;
     // At the moment only non-streamed results are returned
     if constexpr (std::is_same_v<T, NonStreamedResponse>) {
       res = std::optional{response};
     }
     co_return;
-  });
+  };
+  co_await process(request, mockSend);
   co_return res;
 }
 

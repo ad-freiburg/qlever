@@ -440,8 +440,11 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
           server.initialize(indexName, false);
 
           // Simulate receiving the HTTP request
-          co_return co_await server
-              .template onlyForTestingProcess<decltype(request), ResT>(request);
+          auto result =
+              co_await server
+                  .template onlyForTestingProcess<decltype(request), ResT>(
+                      request);
+          co_return result;
         }(request, testIndexBase_),
         boost::asio::use_future);
     io.run();
