@@ -78,11 +78,13 @@ class Permutation {
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesSnapshot,
+      const LimitOffsetClause& limitOffset) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesSnapshot) const;
+      const LocatedTriplesState& locatedTriplesSnapshot,
+      const LimitOffsetClause& limitOffset) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
