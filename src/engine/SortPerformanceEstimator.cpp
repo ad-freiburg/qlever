@@ -49,7 +49,10 @@ auto SortPerformanceEstimator::measureSortingTime(
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
-  CALL_FIXED_SIZE(numColumns, Engine::sort, &randomTable, 0ull);
+  auto doSort = [&](auto WIDTH) {
+    return Engine::sort<static_cast<size_t>(WIDTH)>(&randomTable, 0ull);
+  };
+  ad_utility::callFixedSizeVi(numColumns, doSort);
   return timer.value();
 }
 
