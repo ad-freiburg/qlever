@@ -32,6 +32,10 @@ class VectorWithMemoryLimit
   using Allocator = ad_utility::AllocatorWithLimit<T>;
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
 
+ private:
+  struct CloneTag {};
+
+ public:
   // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
   // Unfortunately, the support for such allocators is not really great in the
   // standard library. In particular, the type trait
@@ -64,13 +68,9 @@ class VectorWithMemoryLimit
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
-  // The copy constructor is not deleted, but private, because it is used
-  // for the explicit clone() function.
- private:
-  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
-
  public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
+  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
@@ -78,10 +78,20 @@ class VectorWithMemoryLimit
   // Allow copying via an explicit clone() function.
   [[nodiscard]] VectorWithMemoryLimit clone() const {
     // Call the private copy constructor.
-    return VectorWithMemoryLimit(*this);
+    return VectorWithMemoryLimit(CloneTag{}, *this);
   }
+
+ private:
+  // Constructor for copying, used to implement the `clone` function.
+  // We use the explicit tag, s.t. this constructor doesn't match the signature
+  // of a copy constructor, because otherwise type traits like `copyable` or
+  // `constructible_form` would be misled (they might return true for certain
+  // compilers in C++17 if the copy constructor is present but private.
+  VectorWithMemoryLimit(CloneTag, const VectorWithMemoryLimit& other)
+      : Base{static_cast<const Base&>(other)} {}
 };
 static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
+static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
@@ -120,16 +130,17 @@ CPP_concept SingleExpressionResult =
 
 // Copy an expression result.
 CPP_template(typename ResultT)(
-    requires ad_utility::SimilarTo<ResultT,
-                                   ExpressionResult>) inline ExpressionResult
+    requires ad_utility::SimilarTo<ResultT, ExpressionResult>) ExpressionResult
     copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable = [](const auto& x)
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
     using R = std::decay_t<decltype(x)>;
-    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
-      return AD_FWD(x);
+    if constexpr (ql::concepts::copyable<R>) {
+      return x;
     } else {
+      static_assert(
+          ad_utility::similarToInstantiation<R, VectorWithMemoryLimit>);
       return x.clone();
     }
   };

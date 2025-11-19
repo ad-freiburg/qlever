@@ -45,7 +45,7 @@ struct PathQuery : MagicServiceQuery {
 
   PathQuery() = default;
   PathQuery(PathQuery&& other) noexcept = default;
-  PathQuery(const PathQuery& other) noexcept = default;
+  PathQuery(const PathQuery& other) = default;
   PathQuery& operator=(const PathQuery& other) = default;
   PathQuery& operator=(PathQuery&& a) noexcept = default;
   ~PathQuery() noexcept override = default;

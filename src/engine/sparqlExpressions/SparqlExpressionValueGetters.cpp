@@ -195,7 +195,7 @@ std::string ReplacementStringGetter::convertToReplacementString(
 }
 
 // ____________________________________________________________________________
-template <auto isSomethingFunction, auto prefix>
+template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
@@ -267,7 +267,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::Double:
       return id.getDouble();
     case Datatype::Bool:
-      return static_cast<int>(id.getBool());
+      return static_cast<int64_t>(id.getBool());
     case Datatype::GeoPoint:
       return id.getGeoPoint().toStringRepresentation();
     case Datatype::VocabIndex:

@@ -129,8 +129,9 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + subject_.toString() + " " + predicate_.toString() +
-         " " + object_.toString();
+  return absl::StrCat("IndexScan ", Permutation::toString(permutation_), " ",
+                      subject_.toString(), " ", predicate_.toString(), " ",
+                      object_.toString());
 }
 
 // _____________________________________________________________________________
