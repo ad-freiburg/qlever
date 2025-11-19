@@ -5,11 +5,9 @@
 #define QLEVER_SRC_PARSER_GRAPHPATTERN_H
 
 #include <cstddef>
-#include <sstream>
 #include <string>
 #include <vector>
 
-#include "parser/TripleComponent.h"
 #include "parser/data/SparqlFilter.h"
 
 namespace parsedQuery {
@@ -34,17 +32,15 @@ class GraphPattern {
   // The constructor has to be implemented in the .cpp file because of the
   // circular dependencies of `GraphPattern` and `GraphPatternOperation`.
   GraphPattern();
-  GraphPattern(GraphPattern&& other);
+  GraphPattern(GraphPattern&& other) noexcept;
   GraphPattern(const GraphPattern& other);
   GraphPattern& operator=(const GraphPattern& other);
   GraphPattern& operator=(GraphPattern&& other) noexcept;
   ~GraphPattern();
-  // Traverse the graph pattern tree and assigns a unique ID to every graph
-  // pattern.
 
-  // Modify query to take care of language filter. `variable` is the variable,
-  // `langTags` are the associated languages. Return `true` if it could
-  // successfully be applied, false otherwise.
+  // Modify the query to take care of language filter. `variable` is the
+  // variable, `langTags` represent a whitelist of languages. Return `true` if
+  // it could successfully be applied, false otherwise.
   bool addLanguageFilter(const Variable& variable,
                          const ad_utility::HashSet<std::string>& langTags);
 
