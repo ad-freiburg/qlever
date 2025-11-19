@@ -301,9 +301,11 @@ inline void runParsingAndSweeper(
   ASSERT_EQ(sweeper.numElements(), 0);
 
   // Run first parsing step (left side)
-  auto [aggBoundingBoxLeft, numGeomAddedLeft] = sjAlgo.libspatialjoinParse(
-      false, {prepared.idTableLeft_, prepared.leftJoinCol_}, sweeper, 1,
-      std::nullopt);
+  auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
+        numThreadsLeft] =
+      sjAlgo.libspatialjoinParse(false,
+                                 {prepared.idTableLeft_, prepared.leftJoinCol_},
+                                 sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -312,21 +314,16 @@ inline void runParsingAndSweeper(
   if (usePrefilter) {
     prefilterBox = sweeper.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
-  auto [aggBoundingBoxRight, numGeomAddedRight] = sjAlgo.libspatialjoinParse(
-      true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
-      prefilterBox);
+  auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
+        numThreadsRight] =
+      sjAlgo.libspatialjoinParse(
+          true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
+          prefilterBox);
 
   sweeper.flush();
 
   // Check counters
-  size_t numSkipped = 0;
-  ASSERT_EQ(spatialJoin->runtimeInfo().details_.contains(
-                "num-geoms-dropped-by-prefilter"),
-            usePrefilter);
-  if (usePrefilter) {
-    numSkipped = static_cast<size_t>(
-        spatialJoin->runtimeInfo().details_["num-geoms-dropped-by-prefilter"]);
-  }
+  size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
 
   size_t numEl = sweeper.numElements();
   if (numGeomAddedLeft && numGeomAddedRight) {
