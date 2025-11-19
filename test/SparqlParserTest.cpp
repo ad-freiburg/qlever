@@ -1186,6 +1186,10 @@ TEST(ParserTest, Group) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
+  auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
+    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+        iri(iriString), std::move(langTag)));
+  };
   {
     ParsedQuery q = parseQuery(
         "SELECT * WHERE {?x <label> ?y . FILTER (LANG(?y) = \"en\")}");
@@ -1193,12 +1197,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"},
-                            PropertyPath::fromIri(
-                                ad_utility::convertToLanguageTaggedPredicate(
-                                    iri("<label>"), "en")),
-                            Var{"?y"}}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
   }
   {
     // The empty language tag can't be optimized.
@@ -1217,13 +1218,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
-    EXPECT_THAT(
-        triples,
-        ::testing::ElementsAre(SparqlTriple{
-            Var{"?x"},
-            PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                iri("<label>"), "en")),
-            Var{"?y"}}));
+    EXPECT_THAT(triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}));
   }
   {
     ParsedQuery q = parseQuery(
@@ -1236,18 +1233,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     SparqlTriple variantA{
         Var{"?x"},
         PropertyPath::makeAlternative(
-            {PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "de")),
-             PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "en"))}),
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
         Var{"?y"}};
     SparqlTriple variantB{
         Var{"?x"},
         PropertyPath::makeAlternative(
-            {PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "en")),
-             PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "de"))}),
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
         Var{"?y"}};
     EXPECT_THAT(triples,
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
@@ -1264,18 +1255,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     SparqlTriple variantA{
         Var{"?x"},
         PropertyPath::makeAlternative(
-            {PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "de")),
-             PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "en"))}),
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
         Var{"?y"}};
     SparqlTriple variantB{
         Var{"?x"},
         PropertyPath::makeAlternative(
-            {PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "en")),
-             PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-                 iri("<label>"), "de"))}),
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
         Var{"?y"}};
     EXPECT_THAT(triples,
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
