@@ -1349,12 +1349,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"},
-                            PropertyPath::fromIri(
-                                ad_utility::convertToLanguageTaggedPredicate(
-                                    iri("<label>"), "en")),
-                            Var{"?y"}}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
     ASSERT_EQ(
         (SparqlTriple{Var{"?text"},
                       PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
