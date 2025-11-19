@@ -450,7 +450,10 @@ class RowReference
   // No need to copy `RowReference`s, because that is also most likely a bug.
   // Currently none of our functions or of the STL-algorithms require it.
   // If necessary, we can still enable it in the future.
-  RowReference(const RowReference&) = delete;
+
+  // TODO<joka921> Analyze this further, QCC from BMW requires this for concept
+  // checks, can we leave it unimplemented for now for increased safety?
+  RowReference(const RowReference&);
 };
 
 }  // namespace columnBasedIdTable
