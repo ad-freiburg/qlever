@@ -166,7 +166,7 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   GeoInfoTester t;
-  auto nullopt = GeoInfoMatcher(std::nullopt);
+  auto noGeoInfo = GeoInfoMatcher(std::nullopt);
   static constexpr std::string_view line =
       "\"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -189,18 +189,19 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {1},
                                               getLengthForTesting(polygon),
                                               getAreaForTesting(polygon)}));
-  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", nullopt);
-  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", nullopt);
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noGeoInfo);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
-                                           nullopt);
+                                           noGeoInfo);
 }
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;
-  auto nullopt = GeoInfoMatcher(std::nullopt);
+  auto noGeoInfo = GeoInfoMatcher(std::nullopt);
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 2}),
                      GeoInfoMatcher(GeometryInfo{1,
                                                  {{3, 2}, {3, 2}},
@@ -208,20 +209,20 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
                                                  {1},
                                                  ad_utility::MetricLength{0},
                                                  MetricArea{0}}));
-  t.checkFromValueId(ValueId::makeUndefined(), nullopt);
-  t.checkFromValueId(ValueId::makeFromBool(true), nullopt);
-  t.checkFromValueId(ValueId::makeFromInt(42), nullopt);
-  t.checkFromValueId(ValueId::makeFromDouble(42.01), nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfo);
 }
 
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
   GeoInfoTester t;
-  auto nullopt = GeoInfoMatcher(std::nullopt);
-  t.checkFromValueId(ValueId::makeUndefined(), nullopt);
-  t.checkFromValueId(ValueId::makeFromBool(true), nullopt);
-  t.checkFromValueId(ValueId::makeFromInt(42), nullopt);
-  t.checkFromValueId(ValueId::makeFromDouble(42.01), nullopt);
+  auto noGeoInfo = GeoInfoMatcher(std::nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfo);
 }
 
 // _____________________________________________________________________________
@@ -236,11 +237,11 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithIdGeoPoint) {
   auto p2id = ValueId::makeFromGeoPoint(p2);
   t.checkFromValueId(p2id, GeoPointOrWktMatcher(p2));
 
-  auto nullopt = GeoPointOrWktMatcher(std::nullopt);
-  t.checkFromValueId(ValueId::makeUndefined(), nullopt);
-  t.checkFromValueId(ValueId::makeFromBool(true), nullopt);
-  t.checkFromValueId(ValueId::makeFromInt(42), nullopt);
-  t.checkFromValueId(ValueId::makeFromDouble(42.01), nullopt);
+  auto noGeoInfoOrWkt = GeoPointOrWktMatcher(std::nullopt);
+  t.checkFromValueId(ValueId::makeUndefined(), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfoOrWkt);
+  t.checkFromValueId(ValueId::makeFromDouble(42.01), noGeoInfoOrWkt);
 }
 
 // _____________________________________________________________________________
@@ -253,13 +254,15 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   GeoPointOrWktTester t;
-  auto nullopt = GeoPointOrWktMatcher(std::nullopt);
-  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", nullopt);
+  auto noGeoInfoOrWkt = GeoPointOrWktMatcher(std::nullopt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", nullopt);
-  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", nullopt);
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      noGeoInfoOrWkt);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
-                                           nullopt);
+                                           noGeoInfoOrWkt);
 }
 
 };  // namespace
