@@ -12,6 +12,7 @@
 // TODO<joka921> Rename `VocabIndex` to `RdfVocabIndex` at a point in time where
 // this (very intrusive) renaming doesn't interfere with too many open pull
 // requests.
-using VocabIndex = ad_utility::TypedIndex<uint64_t, "VocabIndex">;
+inline constexpr ad_utility::IndexTag vocabIndexTag = "VocabIndex";
+using VocabIndex = ad_utility::TypedIndex<uint64_t, vocabIndexTag>;
 
 #endif  // QLEVER_SRC_GLOBAL_VOCABINDEX_H
