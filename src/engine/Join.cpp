@@ -534,12 +534,11 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 // ______________________________________________________________________________
 void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
-  auto doCall = [&](auto l, auto r, auto o) {
-    return Join::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes);
-  };
   ad_utility::callFixedSizeVi(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      doCall);
+      [&](auto l, auto r, auto o) {
+        return Join::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes);
+      });
 }
 
 // ___________________________________________________________________________
