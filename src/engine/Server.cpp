@@ -462,11 +462,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
     logCommand(cmd, "write materialized view");
+
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
         parameters, "view-name");
     AD_CONTRACT_CHECK(name.has_value(),
                       "Writing a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
+    AD_CONTRACT_CHECK(name.value() != "",
+                      "The name for the view may not be empty");
+
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     auto query = std::visit(
@@ -482,8 +486,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           }
         },
         parsedHttpRequest.operation_);
-    AD_CONTRACT_CHECK(name.value() != "",
-                      "The name for the view may not be empty");
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
