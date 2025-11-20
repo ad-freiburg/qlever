@@ -745,14 +745,16 @@ class CompressedRelationReader {
   IdTable getDistinctCol1IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LimitOffsetClause& limitOffset) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
@@ -884,7 +886,8 @@ class CompressedRelationReader {
       getDistinctColIdsAndCountsImpl(
           IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
           const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+          const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

@@ -51,9 +51,8 @@ struct GetLanguageTag {
 inline constexpr GetLanguageTag getLanguageTag{};
 
 //______________________________________________________________________________
-using LangExpression = detail::langImpl::LangExpressionImpl<
-    detail::Operation<1, detail::FV<decltype(detail::langImpl::getLanguageTag),
-                                    detail::LanguageTagValueGetter>>>;
+using LangExpression = detail::langImpl::LangExpressionImpl<detail::Operation<
+    1, detail::FV<GetLanguageTag, detail::LanguageTagValueGetter>>>;
 
 }  //  namespace detail::langImpl
 

@@ -80,7 +80,6 @@ struct RegexImpl {
     return Id::makeFromBool(RE2::PartialMatch(input.value(), *pattern));
   }
 };
-[[maybe_unused]] inline constexpr RegexImpl regexImpl{};
 
 using RegexExpression =
     string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
@@ -237,9 +236,9 @@ ExpressionResult PrefixRegexExpression::evaluate(
       }
       checkCancellation(context);
     }
-    return std::accumulate(
-        resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
-        ad_utility::SetOfIntervals{}, ad_utility::SetOfIntervals::Union{});
+    return ::ranges::accumulate(resultSetOfIntervals,
+                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals::Union{});
   }
 
   // If the input is not sorted by the variable, we have to check each row

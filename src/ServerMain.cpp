@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
 
   std::string indexBasename;
   std::string accessToken;
+  bool noAccessCheck = false;
   bool text = false;
   unsigned short port;
   NonNegative numSimultaneousQueries = 1;
@@ -70,6 +71,10 @@ int main(int argc, char** argv) {
       "The port on which HTTP requests are served (required).");
   add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
       "Access token for restricted API calls (default: no access).");
+  add("no-access-check,n",
+      po::bool_switch(&noAccessCheck)->default_value(false),
+      "If set to true, no access-token check is performed for restricted API "
+      "calls (default: false).");
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
@@ -186,7 +191,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatterns);
+                  std::move(accessToken), noAccessCheck, !noPatterns);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates);
   } catch (const std::exception& e) {

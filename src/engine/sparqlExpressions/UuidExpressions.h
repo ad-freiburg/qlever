@@ -72,12 +72,12 @@ class UuidExpressionImpl : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
+using UuidExpression = UuidExpressionImpl<fromIri, iriUuidKey>;
+using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 }  //  namespace detail::uuidExpression
 
-using UuidExpression = detail::uuidExpression::UuidExpressionImpl<
-    detail::uuidExpression::fromIri, detail::uuidExpression::iriUuidKey>;
-using StrUuidExpression = detail::uuidExpression::UuidExpressionImpl<
-    detail::uuidExpression::fromLiteral, detail::uuidExpression::litUuidKey>;
+using UuidExpression = detail::uuidExpression::UuidExpression;
+using StrUuidExpression = detail::uuidExpression::StrUuidExpression;
 
 }  // namespace sparqlExpression
 
