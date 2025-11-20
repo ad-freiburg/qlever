@@ -39,10 +39,10 @@ class ExecuteUpdate {
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
-  transformTriplesTemplate(const EncodedIriManager& encodedIriManager,
-                           const Index::Vocab& vocab,
-                           const VariableToColumnMap& variableColumns,
-                           std::vector<SparqlTripleSimpleWithGraph>&& triples);
+  transformTriplesTemplate(
+      const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
+      const VariableToColumnMap& variableColumns,
+      const std::vector<SparqlTripleSimpleWithGraph>& triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the
