@@ -488,12 +488,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
 
-    co_await [name, query, requestTimer, cancellationHandle, timeLimit,
-              this]() -> Awaitable<void> {
-      // TODO<ullingerc> Add support for cancellation
-      co_return writeMaterializedView(name.value(), query, requestTimer,
-                                      cancellationHandle, timeLimit.value());
-    }();
+    auto coroutine = computeInNewThread(
+        queryThreadPool_,
+        [name, query, requestTimer, cancellationHandle, timeLimit, this] {
+          writeMaterializedView(name.value(), query, requestTimer,
+                                cancellationHandle, timeLimit.value());
+        },
+        cancellationHandle);
+    co_await std::move(coroutine);
 
     nlohmann::json json{{"materialized-view-written", name.value()}};
     response = createJsonResponse(json, request);
