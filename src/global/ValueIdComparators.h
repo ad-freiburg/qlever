@@ -14,6 +14,7 @@
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
+
 namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
