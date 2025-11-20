@@ -33,6 +33,9 @@ class NamedResultCache {
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
+    // This allocator is only used during the `readFromDisk` member function.
+    using Allocator = ad_utility::AllocatorWithLimit<Id>;
+    std::optional<Allocator> allocatorForSerialization_;
   };
 
   // The size of a cached result, which currently is just a dummy value of 1,
@@ -50,7 +53,7 @@ class NamedResultCache {
   using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
 
  private:
-  ad_utility::Synchronized<Cache> cache_;
+  mutable ad_utility::Synchronized<Cache> cache_;
 
  public:
   // Store the given `result` under the given `name`. If a result with the same
@@ -76,6 +79,13 @@ class NamedResultCache {
   // `QueryExecutionTree`.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
+
+  // Serialize the complete cache to disk at the given `path`.
+  void writeToDisk(const std::string& path) const;
+
+  // Deserialize and load the cache from disk at the given `path`.
+  // This will clear any existing cache entries before loading.
+  void readFromDisk(const std::string& path, Value::Allocator allocator);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

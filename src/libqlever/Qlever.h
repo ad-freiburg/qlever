@@ -231,7 +231,13 @@ class Qlever {
 
   // Clear the result with the given `name` from the cache.
   void eraseResultWithName(std::string name);
+  // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
+
+  // Serialize the contents of the `NamedResultCache` to or from a file
+  // specified by the `filename`.
+  void writeNamedResultCacheToDisk(const std::string& filename) const;
+  void readNamedResultCacheFromDisk(const std::string& filename);
 };
 }  // namespace qlever
 

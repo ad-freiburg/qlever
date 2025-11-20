@@ -6,11 +6,17 @@
 
 #include "engine/NamedResultCache.h"
 
+#include <algorithm>
+
+#include "engine/NamedResultCacheSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+
 // _____________________________________________________________________________
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(
     const Key& name, QueryExecutionContext* qec) {
   const auto& result = get(name);
-  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex] = *result;
+  const auto& [table, map, sortedOn, localVocab, cacheKey, geoIndex,
+               allocator] = *result;
   auto resultAsOperation = std::make_shared<ExplicitIdTableOperation>(
       qec, table, map, sortedOn, localVocab.clone(), cacheKey);
   return resultAsOperation;
@@ -29,12 +35,13 @@ auto NamedResultCache::get(const Key& name) -> std::shared_ptr<const Value> {
 
 // _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
-  auto lock = cache_.wlock();
+  auto cacheLock = cache_.wlock();
+
   // The underlying cache throws on insert if the key is already present. We
   // therefore first call `erase`, which silently ignores keys that are not
   // present to avoid this behavior.
-  lock->erase(name);
-  lock->insert(name, std::move(result));
+  cacheLock->erase(name);
+  cacheLock->insert(name, std::move(result));
 }
 
 // _____________________________________________________________________________
@@ -46,4 +53,54 @@ void NamedResultCache::clear() { cache_.wlock()->clearAll(); }
 // _____________________________________________________________________________
 size_t NamedResultCache::numEntries() const {
   return cache_.rlock()->numNonPinnedEntries();
+}
+
+// _____________________________________________________________________________
+void NamedResultCache::writeToDisk(const std::string& path) const {
+  ad_utility::serialization::FileWriteSerializer serializer{path.c_str()};
+
+  auto lock = cache_.wlock();
+  std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
+  for (const auto& key : lock->getAllNonpinnedKeys()) {
+    entries.emplace_back(key, (*lock)[key]);
+    AD_CORRECTNESS_CHECK(entries.back().second != nullptr);
+  }
+
+  // Serialize the number of entries
+  serializer << entries.size();
+
+  // Serialize each entry
+  for (const auto& [key, value] : entries) {
+    serializer << key;
+    serializer << *value;
+  }
+}
+
+// _____________________________________________________________________________
+void NamedResultCache::readFromDisk(const std::string& path,
+                                    Value::Allocator allocator) {
+  ad_utility::serialization::FileReadSerializer serializer{path.c_str()};
+
+  // Clear the cache first
+  clear();
+
+  // Deserialize the number of entries
+  size_t numEntries;
+  serializer >> numEntries;
+
+  // Deserialize each entry and add to the cache
+  for (size_t i = 0; i < numEntries; ++i) {
+    // Deserialize the key
+    Key key;
+    serializer >> key;
+
+    // Deserialize the value
+    Value value;
+    value.allocatorForSerialization_ = allocator;
+    serializer >> value;
+    allocator = std::move(value.allocatorForSerialization_.value());
+
+    // Use the store method to maintain consistency
+    store(key, std::move(value));
+  }
 }

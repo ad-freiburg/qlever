@@ -197,4 +197,14 @@ void IndexBuilderConfig::validate() const {
   }
 }
 
+// _____________________________________________________________________________
+void Qlever::writeNamedResultCacheToDisk(const std::string& filename) const {
+  namedResultCache_.writeToDisk(filename);
+}
+
+// _____________________________________________________________________________
+void Qlever::readNamedResultCacheFromDisk(const std::string& filename) {
+  namedResultCache_.readFromDisk(filename, allocator_);
+}
+
 }  // namespace qlever

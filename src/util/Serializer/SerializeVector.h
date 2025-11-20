@@ -11,6 +11,7 @@
 
 #include "../TypeTraits.h"
 #include "./Serializer.h"
+#include "backports/span.h"
 #include "backports/type_traits.h"
 
 namespace ad_utility::serialization {
@@ -23,6 +24,29 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
   if constexpr (ReadSerializer<S>) {
     arg.resize(size);
+  }
+  if constexpr (TriviallySerializable<V>) {
+    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
+                              arg.size() * sizeof(V));
+  } else {
+    for (size_t i = 0; i < size; ++i) {
+      serializer | arg[i];
+    }
+  }
+}
+
+// Serialization for `ql::span`. When writing to a `span` from a serializer, the
+// span has to have the correct size, else an `AD_CONTRACT_CHECK` will fail.
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
+  using V = typename std::decay_t<T>::value_type;
+  auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
+  serializer | size;
+
+  if constexpr (ReadSerializer<S>) {
+    AD_CONTRACT_CHECK(
+        arg.size() == size,
+        "To serialize into a span, it must be properly sized in advance");
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
