@@ -31,11 +31,17 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec,
+                     Permutation::Enum permutationType,
+                     const Permutation& permutation,
+                     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     VarsToKeep varsToKeep)
     : Operation(qec),
+      permutationType_(permutationType),
       permutation_(permutation),
+      locatedTriplesSnapshot_(locatedTriplesSnapshot),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
@@ -43,7 +49,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
+      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      varsToKeep_(varsToKeep) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -67,7 +74,20 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 }
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+IndexScan::IndexScan(QueryExecutionContext* qec,
+                     Permutation::Enum permutationType,
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter,
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
+    : IndexScan(qec, permutationType,
+                qec->getIndex().getImpl().getPermutation(permutationType),
+                qec->locatedTriplesSnapshot(), triple, graphsToFilter,
+                scanSpecAndBlocks) {}
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec,
+                     Permutation::Enum permutationType,
+                     const Permutation& permutation,
+                     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
@@ -75,7 +95,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep)
     : Operation(qec),
+      permutationType_(permutationType),
       permutation_(permutation),
+      locatedTriplesSnapshot_(locatedTriplesSnapshot),
       subject_(s),
       predicate_(p),
       object_(o),
@@ -93,7 +115,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
-  auto permutationString = Permutation::toString(permutation_);
+  auto permutationString = Permutation::toString(permutationType_);
 
   if (numVariables_ == 3) {
     os << "SCAN FOR FULL INDEX " << permutationString;
@@ -129,8 +151,8 @@ bool IndexScan::canResultBeCachedImpl() const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return absl::StrCat("IndexScan ", Permutation::toString(permutation_), " ",
-                      subject_.toString(), " ", predicate_.toString(), " ",
+  return absl::StrCat("IndexScan ", Permutation::toString(permutationType_),
+                      " ", subject_.toString(), " ", predicate_.toString(), " ",
                       object_.toString());
 }
 
@@ -232,7 +254,8 @@ std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), permutation_, subject_, predicate_, object_,
+      getExecutionContext(), permutationType_, permutation_,
+      locatedTriplesSnapshot_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       std::move(scanSpecAndBlocks), true, varsToKeep_);
 }
@@ -268,7 +291,7 @@ Result IndexScan::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 const Permutation& IndexScan::getScanPermutation() const {
-  return getIndex().getImpl().getPermutation(permutation_);
+  return permutation_;
 }
 
 // _____________________________________________________________________________
@@ -303,11 +326,12 @@ void IndexScan::determineMultiplicities() {
       // There are no duplicate triples in RDF and two elements are fixed.
       return {1.0f};
     } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
+      // TODO<ullingerc> fix multiplicities
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutationType_,
                                    locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(permutationType_);
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
@@ -329,7 +353,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
                                                      &object_};
   // TODO<joka921> This place has to be changed once we have a permutation
   // that is primarily sorted by G (the graph id).
-  return Permutation::toKeyOrder(permutation_).permuteTriple(triple);
+  return Permutation::toKeyOrder(permutationType_).permuteTriple(triple);
 }
 
 // _____________________________________________________________________________
@@ -708,7 +732,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
-      _executionContext, permutation_, subject_, predicate_, object_,
+      _executionContext, permutationType_, permutation_,
+      locatedTriplesSnapshot_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_, varsToKeep_);
 }
@@ -732,7 +757,8 @@ IndexScan::makeTreeWithStrippedColumns(
   }
 
   return ad_utility::makeExecutionTree<IndexScan>(
-      _executionContext, permutation_, subject_, predicate_, object_,
+      _executionContext, permutationType_, permutation_,
+      locatedTriplesSnapshot_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       VarsToKeep{std::move(newVariables)});

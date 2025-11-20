@@ -21,7 +21,9 @@ class IndexScan final : public Operation {
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
-  Permutation::Enum permutation_;
+  Permutation::Enum permutationType_;
+  const Permutation& permutation_;
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
@@ -46,13 +48,26 @@ class IndexScan final : public Operation {
   VarsToKeep varsToKeep_;
 
  public:
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
+            const Permutation& permutation,
+            const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+            const SparqlTripleSimple& triple,
+            Graphs graphsToFilter = Graphs::All(),
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt,
+            VarsToKeep varsToKeep = std::nullopt);
+
+  // For backward compatibility: construct an `IndexScan` from a
+  // `Permutation::Enum`. The actual permutation is then retrieved from the
+  // `QueryExecutionContext` automatically.
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
   // Constructor to simplify copy creation of an `IndexScan`.
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutationType,
+            const Permutation& permutation,
+            const LocatedTriplesSnapshot& locatedTriplesSnapshot,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
@@ -169,7 +184,17 @@ class IndexScan final : public Operation {
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
-  Permutation::Enum permutation() const { return permutation_; }
+  Permutation::Enum permutationType() const { return permutationType_; }
+
+  const Permutation& permutation() const { return permutation_; }
+
+  // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
+  // class, which accesses the one stored in the `QueryExecutionContext`, use
+  // the `LocatedTriplesSnapshot` held in this object. This might be a different
+  // one if a custom permuation is used.
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const override {
+    return locatedTriplesSnapshot_;
+  };
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is
