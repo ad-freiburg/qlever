@@ -330,18 +330,18 @@ std::shared_ptr<const Permutation> MaterializedView::permutation() const {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::loadView(const std::string& name) const {
-  if (loadedViews_.contains(name)) {
+  auto lock = loadedViews_.wlock();
+  if (lock->contains(name)) {
     return;
   }
-  loadedViews_.insert(
-      {name, std::make_shared<MaterializedView>(onDiskBase_, name)});
+  lock->insert({name, std::make_shared<MaterializedView>(onDiskBase_, name)});
 };
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
   loadView(name);
-  return loadedViews_.at(name);
+  return loadedViews_.rlock()->at(name);
 }
 
 // _____________________________________________________________________________
@@ -435,7 +435,7 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
-  AD_CORRECTNESS_CHECK(onDiskBase_ == "" && loadedViews_.empty(),
+  AD_CORRECTNESS_CHECK(onDiskBase_ == "" && loadedViews_.rlock()->empty(),
                        "Changing the on disk basename is not allowed.");
   onDiskBase_ = onDiskBase;
 }

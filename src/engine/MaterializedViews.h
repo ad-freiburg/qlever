@@ -161,7 +161,8 @@ class MaterializedView {
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
-  mutable ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>
+  mutable ad_utility::Synchronized<
+      ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
       loadedViews_;
 
  public:
