@@ -123,7 +123,8 @@ class MaterializedView {
 
   // Return a pointer to the open `Permutation` object for this view. Note that
   // this is always an SPO permutation because materialized views are indexed on
-  // the first column.
+  // the first column. The result of this function is guaranteed to never be
+  // `nullptr`.
   std::shared_ptr<const Permutation> permutation() const;
 
   // Return a reference to the `LocatedTriplesSnapshot` for the permutation. For
@@ -148,7 +149,7 @@ class MaterializedView {
 
   // Given a `QueryExecutionContext` and the arguments for `makeScanConfig`
   // construct an `IndexScan` operation for scanning the requested columns of
-  // this view.
+  // this view. The result of this function is guaranteed to never be `nullptr`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery,
@@ -180,7 +181,8 @@ class MaterializedViewsManager {
   // because the views themselves aren't changed (only loaded on-demand).
   void loadView(const std::string& name) const;
 
-  // Load the given view if it is not already loaded and return it.
+  // Load the given view if it is not already loaded and return it. This pointer
+  // is never `nullptr`. If the view does not exist, the function throws.
   std::shared_ptr<const MaterializedView> getView(
       const std::string& name) const;
 
